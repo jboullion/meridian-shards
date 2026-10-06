@@ -26,8 +26,12 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 | Path | What it holds |
 |---|---|
 | `packages/protocol/` | Wire protocol: framing, LCG security word, redbook token, message builders and parsers, the `Connection` state machine. Transport-agnostic; the same code runs in Node and the browser. |
-| `packages/formats/` | Readers for the original files: `.rsb` now; `.roo`, `.bgf` and the palette next. |
-| `tools/gateway/` | WebSocket-to-TCP bridge in front of blakserv (zero dependencies). |
+| `packages/formats/` | Readers for the original files: `.roo` (ported from `bspload.c`), `.bgf`, `.rsb`, `.bsf` sky boxes, and the palette. No Node APIs. |
+| `packages/render/` | Three.js rendering: room geometry exactly as `d3drender.c` builds it (`roomGeometry.ts`, renderer-agnostic), the palette + original lighting shader (`lighting.ts`), `RoomView` and the sky box. |
+| `apps/client/` | The browser client (Vite + React). It has the room viewer for now (`?rid=301`); the game comes next. |
+| `tools/assets/` | `build-assets.ts`: copies the original files into `dist/assets` (git-ignored) with a manifest. |
+| `tools/dev/` | `dev.ts`: the one-command dev stack. |
+| `tools/gateway/` | WebSocket-to-TCP bridge in front of blakserv (`ws`). |
 | `tools/headless/` | Headless protocol client for spikes and soak tests. |
 | `tools/maint/` | Sends commands to blakserv's maintenance port (localhost:9998). |
 | `server/config/blakserv.cfg` | Our server config, the source of truth. Copied into the run folder by `server/setup-run.cmd`. |
@@ -38,16 +42,19 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 ## Running the local stack
 
 ```bash
+npm install                 # workspaces + dependencies
 server\build.cmd            # first time, or after Kod/C changes (VS 2026 x86 toolset)
 server\setup-run.cmd        # creates run folders, installs server/config/blakserv.cfg
-server\src\run\server\blakserv.exe   # Windows GUI app; run with the working directory set to that folder
-npm run gateway             # ws://localhost:8059 -> 127.0.0.1:5959
+npm run assets              # dist/assets from our server build + the installed 104 client
+npm run dev                 # blakserv (if not running) + gateway (ws://localhost:8059) + Vite (http://localhost:5173)
 npm run headless -- --user shardbot --pass shardbot --walk "8.5,7.5 9.05,6.5" --go --stay 10
+npm run check               # typecheck + lint + tests
 ```
 
 - Our build of the original Windows client (for parity tests): `server\build.cmd Bclient Bmodules`, then `server\setup-client.cmd`, then run `server\src\run\localclient\meridian.exe /U:<user> /W:<pass> /H:localhost /P:5959`. Never use the installed 104 client's `rsc0000.rsb` or rooms with our server.
 - blakserv takes about 35 s to load a fresh game. It's ready when ports 5959 and 9998 listen.
-- Run `npm test` for the unit tests (Node's built-in runner, no dependencies).
+- `npm test` runs Vitest. The format tests read the real files in `dist/assets` and are skipped if you haven't built the assets.
+- The room viewer is at `http://localhost:5173/?rid=<RID>`. In dev, `window.shards.roomScene.lookFrom(row, col, eyeHeight, compassYaw)` places the camera, which is handy for comparing against original-client screenshots.
 
 ## Code conventions
 
@@ -63,3 +70,10 @@ npm run headless -- --user shardbot --pass shardbot --walk "8.5,7.5 9.05,6.5" --
 - `BP_CHARACTERS` flag `1` means "needs creation", whatever `blakserv/game.c` says in its comment.
 - The maintenance port ends commands with CR (`\r`), not LF.
 - The server snaps you back with `BP_MOVE` when a move lands outside the room. Exits need `BP_REQ_GO` while standing on the exit square.
+- **Rendering: trust the C code over the Python tools.**
+  - Grid textures are stored transposed in the `.bgf`, and the client's s/t coordinates already account for that, so upload the pixels as stored and use u = s, v = t.
+  - Wall `length` and the texture offsets are in Kod units (64 per square); heights and positions are in client units (1024 per square). `PETER_FUDGE` (16) bridges them.
+- Client coordinates are x east, y south, z up. The scene uses X = x, Y = z, Z = y, in squares, which mirrors handedness, so `RoomView` reverses the triangle winding.
+- The room checksum the server sends goes through a 28-bit Kod integer. Compare the low 28 bits only.
+- The Browser pane throttles `requestAnimationFrame` while it's hidden, so FPS readouts there are meaningless. Time `renderer.render` instead.
+- On Windows, never `spawn` with `shell: true` when the command path has spaces (Node's own path does). Use the shell only for `.cmd` shims such as `npx`.

@@ -98,7 +98,7 @@ export class Connection {
         this.token.desecure(f.body);
         this.stats.received++;
         this.dispatch(f.body);
-        if (this.state === "closed") return;
+        if ((this.state as ConnState) === "closed") return;
       }
     } catch (err) {
       this.events.error?.(err as Error);

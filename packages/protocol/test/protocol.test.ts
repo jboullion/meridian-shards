@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import {
   BP, ByteReader, Connection, FrameDecoder, RandomStreams, ServerToken, buildReqMove, crc32, encodeFrame, md5,
   passwordDigest, readMove,

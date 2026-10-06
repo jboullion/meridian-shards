@@ -12,7 +12,7 @@
 import { createServer } from "node:http";
 import { connect } from "node:net";
 import { parseArgs } from "node:util";
-import { acceptWebSocket } from "./ws.ts";
+import { WebSocketServer } from "ws";
 
 const { values: args } = parseArgs({
   options: {
@@ -27,6 +27,8 @@ const [SERVER_HOST, SERVER_PORT] = (args.server ?? process.env.BLAKSERV_ADDR ?? 
 const MAX_PER_IP = Number(args["max-per-ip"] ?? process.env.GATEWAY_MAX_PER_IP ?? 4);
 const ORIGINS = (process.env.GATEWAY_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 const TRUST_PROXY = process.env.GATEWAY_TRUST_PROXY === "1";
+/** The protocol's biggest frames are a few KB; anything far bigger is abuse. */
+const MAX_MESSAGE = 1 << 20;
 
 const perIp = new Map<string, number>();
 let nextId = 1;
@@ -36,6 +38,13 @@ const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
 const http = createServer((_req, res) => {
   res.writeHead(200, { "content-type": "text/plain" });
   res.end("Meridian Shards gateway. Connect with a WebSocket.\n");
+});
+
+const wss = new WebSocketServer({
+  noServer: true,
+  maxPayload: MAX_MESSAGE,
+  perMessageDeflate: false,
+  handleProtocols: (protocols) => (protocols.has("binary") ? "binary" : false),
 });
 
 http.on("upgrade", (req, socket, head) => {
@@ -53,50 +62,53 @@ http.on("upgrade", (req, socket, head) => {
     socket.end("HTTP/1.1 429 Too Many Requests\r\n\r\n");
     return;
   }
-
-  const ws = acceptWebSocket(req, socket, head);
-  if (!ws) return;
-  const id = nextId++;
   perIp.set(ip, count + 1);
-  let up = 0,
-    down = 0;
-  log(`#${id} open from ${ip} -> ${SERVER_HOST}:${SERVER_PORT}`);
 
-  const tcp = connect({ host: SERVER_HOST, port: Number(SERVER_PORT) });
-  tcp.setNoDelay(true);
-  const pending: Uint8Array[] = [];
-  let tcpReady = false;
-  let done = false;
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    const id = nextId++;
+    let up = 0,
+      down = 0;
+    log(`#${id} open from ${ip} -> ${SERVER_HOST}:${SERVER_PORT}`);
 
-  const finish = (why: string) => {
-    if (done) return;
-    done = true;
-    const n = (perIp.get(ip) ?? 1) - 1;
-    if (n <= 0) perIp.delete(ip);
-    else perIp.set(ip, n);
-    log(`#${id} closed (${why}); up ${up} B, down ${down} B`);
-    tcp.destroy();
-    ws.close(1000);
-  };
+    const tcp = connect({ host: SERVER_HOST, port: Number(SERVER_PORT) });
+    tcp.setNoDelay(true);
+    const pending: Buffer[] = [];
+    let tcpReady = false;
+    let done = false;
 
-  tcp.on("connect", () => {
-    tcpReady = true;
-    for (const p of pending) tcp.write(p);
-    pending.length = 0;
+    const finish = (why: string) => {
+      if (done) return;
+      done = true;
+      const n = (perIp.get(ip) ?? 1) - 1;
+      if (n <= 0) perIp.delete(ip);
+      else perIp.set(ip, n);
+      log(`#${id} closed (${why}); up ${up} B, down ${down} B`);
+      tcp.destroy();
+      ws.close(1000);
+    };
+
+    tcp.on("connect", () => {
+      tcpReady = true;
+      for (const p of pending) tcp.write(p);
+      pending.length = 0;
+    });
+    tcp.on("data", (d) => {
+      down += d.length;
+      ws.send(d, { binary: true });
+    });
+    tcp.on("close", () => finish("server closed"));
+    tcp.on("error", (e) => finish(`server error: ${e.message}`));
+
+    ws.on("message", (data, isBinary) => {
+      if (!isBinary) return finish("text frame");
+      const buf = Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data as ArrayBuffer);
+      up += buf.length;
+      if (tcpReady) tcp.write(buf);
+      else pending.push(buf);
+    });
+    ws.on("close", () => finish("client closed"));
+    ws.on("error", (e) => finish(`client error: ${e.message}`));
   });
-  tcp.on("data", (d) => {
-    down += d.length;
-    ws.sendBinary(d);
-  });
-  tcp.on("close", () => finish("server closed"));
-  tcp.on("error", (e) => finish(`server error: ${e.message}`));
-
-  ws.onMessage = (data) => {
-    up += data.length;
-    if (tcpReady) tcp.write(data);
-    else pending.push(data);
-  };
-  ws.onClose = () => finish("client closed");
 });
 
 http.listen(PORT, () => {

@@ -82,7 +82,7 @@ let finished = false;
 
 const ws = new WebSocket(opt.url!, ["binary"]);
 ws.binaryType = "arraybuffer";
-const conn = new Connection((b) => ws.send(b), {
+const conn = new Connection((b) => ws.send(b as Uint8Array<ArrayBuffer>), {
   state: (s) => log(`state -> ${s}`),
   error: (e) => {
     log("protocol error:", e.message);
@@ -197,7 +197,7 @@ function onGame(type: number, r: ByteReader): void {
       const name = rs(player.roomNameRes);
       if (prev !== undefined && prev !== player.roomId) roomChanges++;
       roomsVisited.push(name);
-      log(`BP_PLAYER: I am ${rs(player.nameRes)} #${player.id}; room "${name}" (roo ${rs(player.roomRes)}, room obj #${player.roomId}, security ${player.roomSecurity})`);
+      log(`BP_PLAYER: I am ${rs(player.nameRes)} #${player.id}; room "${name}" (roo ${rs(player.roomRes)}, room obj #${player.roomId}, security ${player.roomSecurity}, ambient ${player.ambientLight}, player light ${player.playerLight}, bg ${rs(player.backgroundRes)})`);
       break;
     }
     case BP.ROOM_CONTENTS: {
@@ -237,6 +237,13 @@ function onGame(type: number, r: ByteReader): void {
       }
       break;
     }
+    case BP.LIGHT_SHADING: {
+      log(`BP_LIGHT_SHADING: intensity ${r.u8()}, sun angle ${r.u16()}, ${r.u16()}`);
+      break;
+    }
+    case BP.LIGHT_AMBIENT:
+      log(`BP_LIGHT_AMBIENT: ${r.u8()}`);
+      break;
     case BP.CHANGE_RESOURCE: {
       const id = r.u32();
       dynamicRsc.set(id, r.string());

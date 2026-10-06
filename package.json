@@ -8,9 +8,34 @@
   "engines": {
     "node": ">=24"
   },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
+    "dev": "node tools/dev/dev.ts",
+    "assets": "node tools/assets/build-assets.ts",
     "gateway": "node tools/gateway/gateway.ts",
     "headless": "node tools/headless/client.ts",
-    "test": "node --test \"packages/*/test/*.test.ts\""
+    "maint": "node tools/maint/maint.ts",
+    "build": "npm run build -w @shards/client",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/client/tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run lint && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.4",
+    "@types/ws": "^8.18.2",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.1",
+    "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
   }
 }

@@ -10,22 +10,28 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 
 - [x] Copy the Server 104 source into `server/src`, then build `blakserv`, the Kod and `rsc0000.rsb` (`server/build.cmd`, VS 2026).
 - [x] Run it locally (`server/setup-run.cmd`, then `server/src/run/server/blakserv.exe`).
-- [ ] Log in with the **original Windows client** pointed at localhost. Our own `clientd3d` build with our `SecretKey` is ready in `server/src/run/localclient` (`server/build.cmd Bclient Bmodules`, then `server\setup-client.cmd`); it needs a hands-on test.
+- [x] Log in with the **original Windows client** pointed at localhost: our own `clientd3d` build with our `SecretKey` (`server/build.cmd Bclient Bmodules`, then `server\setup-client.cmd`). On 2026-10-06 the user saw Shardbot (the headless bot) standing in the Inn of Raza from the original client.
 - [x] Headless Node client logs in **through the gateway**, creates a character, enters the game and receives `BP_PLAYER` and `BP_ROOM_CONTENTS` (the Inn of Raza).
 - [x] Walks to an exit and changes room: Inn → Raza via `BP_REQ_GO`.
 - [x] LCG and redbook handling survive 5+ minutes of play: a 330 s soak sent 1,321 game messages (walking a loop in Raza, chatting every 3 s) and got 65 pings / 65 echoes, with no resync or hang-up.
 
-### 1. Repo and pipeline
+### 1. Repo and pipeline (done 2026-10-06)
 
-- Workspace packages, lint and tests (npm dependencies need the user's OK).
-- The asset build script (`.bgf`, `.roo`, `.rsb`, `.ogg` → `dist/assets/` with a manifest).
-- One command starts the local dev stack: blakserv, the gateway and Vite.
+- [x] npm workspaces (`packages/protocol`, `packages/formats`, `packages/render`, `apps/client`); `npm run check` = `tsc` + ESLint + Vitest.
+- [x] The asset build script, `npm run assets`. It writes `.bgf`, `.roo`, `.rsb`, `.ogg`/`.wav`/`.mp3` and the `.bsf` sky boxes to `dist/assets/` with a manifest and content hashes, plus the palette as `palette.bin`.
+- [x] One command for the local dev stack, `npm run dev`. It starts blakserv if needed, then the gateway and Vite.
 
-### 2. Formats and room viewer
+### 2. Formats and room viewer (core done 2026-10-06)
 
-- TS parsers for BGF (port `meridian-unreal/tools/bgf2png/bgf2png.py`), ROO (`roofile.py` plus `bspload.c`), RSB (done: `packages/formats/src/rsb.ts`) and the palette.
-- Render Raza with textures, sector light, the WF_* wall UV flags, animated textures and sky, with a free camera.
-- Compare against original-client screenshots.
+- [x] TS readers ported from the client's own loaders: ROO (`bspload.c`; all 362 rooms parse and pass their checksums), BGF (`dibutil.c`), RSB, the palette and the `.bsf` sky boxes.
+- [x] Room geometry built exactly like the D3D client (`d3drender.c`): wall sections and heights, bowties, the WF_* flags (top-down/bottom-up, backwards, no-vtile, transparent), floor and ceiling texture origins, sloped planes.
+- [x] Palette rendering: 8-bit index textures through the palette, transparent index 254, nearest filtering.
+- [x] The D3D client's lighting: `GetLightPaletteIndex` brightness, sun shading on walls and sloped planes, and the per-sector black fog. Room ambient comes from the Kod formula (base light + outside factor × time of day).
+- [x] Animated textures (cycling groups) and scrolling walls and floors, the sky box, and the original 50° × 32° view (Hor+ for widescreen) at the original eye height.
+- [x] The room viewer (`apps/client`, `?rid=301`) shows every slice room, with no missing textures.
+- [ ] Sloped-texture rotation (the slope's texture angle). Sloped planes currently use the flat mapping.
+- [ ] Dynamic lights (the light maps around torches and lamps). These need objects, so they come in milestone 3.
+- [ ] A side-by-side check against original-client screenshots from the same spot. The user's inn screenshot matches in layout, texture orientation and proportions; the remaining brightness difference is the torch light maps.
 
 ### 3. Into the world
 
@@ -58,7 +64,7 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 
 ## What the slice must prove
 
-- [ ] An unmodified Server 104 `blakserv` (plus config changes only) serves browser players through the gateway.
+- [x] An unmodified Server 104 `blakserv` (plus config changes only) serves browser players through the gateway (the protocol side; proven with the headless client).
 - [ ] Raza looks like the original: the same textures, colours, light and sprites, crisp at 1440p and in widescreen.
 - [ ] Movement and collision match the original. No wall clipping, and original clients see browser players move normally.
 - [ ] Chat, shops, combat, death and respawn, and room changes work end to end.
@@ -81,3 +87,5 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
   - The bot logged in through the gateway, created "Shardbot", spawned in the Inn of Raza, and walked through the door to Raza.
   - Found two corrections to the plan (see [protocol.md](research/protocol.md)): fresh connections skip the beacon handshake, and the server rejects moves to spots outside the room.
   - Ran the 5.5-minute soak (passed), and built our own Windows client (`meridian.exe` plus the char, merintr and mailnews modules) for the parity test.
+  - The user saw Shardbot from the original client, so milestone 0 is done.
+  - Milestone 1 (workspaces, checks, asset build, `npm run dev`) and the core of milestone 2 (the room viewer) are done. All 13 slice rooms render with textures, the original lighting model, animations and sky.

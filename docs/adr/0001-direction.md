@@ -51,6 +51,17 @@ The name comes from the lore: every server or world is a "shard" of one original
 - **Zero dependencies so far:** Node 24 runs TypeScript directly (type stripping) and has a WebSocket client. The gateway has a minimal RFC 6455 server (`tools/gateway/ws.ts`), so milestone 0 needed no npm downloads. We can swap in `ws` later behind the same interface.
 - Our TS sources must use **erasable syntax only** (no enums, no parameter properties, no namespaces), so Node can run them without a build step. Vite handles them the same way later.
 
+## Implementation notes (milestones 1–2, 2026-10-06)
+
+- **The rendering target is the D3D client** (the one 104 players use), not the old software renderer:
+  - Brightness is a per-vertex grey from `GetLightPaletteIndex` at a fixed distance, times the palette colour.
+  - Distance falloff is black linear fog whose end depends on each sector's light (`D3DRenderFogEndCalc`).
+  - We don't use the 64 palette shading rows from the plan; the D3D path doesn't use them for world geometry.
+- **Port the C code, not the Python tools.** Room geometry and texture coordinates come straight from `d3drender.c` / `bspload.c`. The meridian-unreal Python tools were useful maps, but they differ in details (e.g. transposed images).
+- **The original 50° × 32° view** (`FovHorizontal`/`FovVertical`) is the default, keeping 32° vertical and widening for widescreen. Other FOVs are an option.
+- **Asset priority:** our server build's `rsc0000.rsb` and rooms always win (the protocol depends on them), then the installed 104 client's art (what live players see; about 8% of sprites differ from the source tree), then the Server 104 source tree for gaps.
+- **Room ambient** follows Kod `GetRoomLight`: base light + outside factor × (brightness − 50) / 4.
+
 ## Consequences
 
 - The browser can play with original Windows clients on the same server. That gives us a parity test.
