@@ -1,0 +1,16 @@
+{
+  "name": "meridian-shards",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Meridian Shards: a faithful browser port of the Meridian 59 client.",
+  "license": "GPL-2.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "gateway": "node tools/gateway/gateway.ts",
+    "headless": "node tools/headless/client.ts",
+    "test": "node --test \"packages/*/test/*.test.ts\""
+  }
+}

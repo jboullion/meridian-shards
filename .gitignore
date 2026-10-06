@@ -1,0 +1,33 @@
+# --- Server: copied Server 104 source, build output and the live run folder (savegames, logs)
+/server/src/
+/server/*.log
+
+# --- Original game assets: never in git (served from the asset build)
+/dist/
+*.bgf
+*.roo
+*.rsb
+*.rsc
+*.ogg
+*.wav
+*.bof
+
+# --- Node
+node_modules/
+*.tsbuildinfo
+
+# --- Secrets
+.env
+.env.*
+!.env.example
+
+# --- Editors / OS
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# --- Claude Code local state
+.claude/settings.local.json
+.claude/worktrees/
