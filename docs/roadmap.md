@@ -121,7 +121,7 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
   - The desktop app ships the game files and downloads only what the server changed, with a health-bar-style progress bar.
   - The client reloads if the server was updated before you log in.
 - [x] Hosting: installers on GitHub Releases (`npm run desktop:release`, or the workflow on a `v*` tag); a download page at `/download/` on the VM.
-- [ ] Make the repo public, deploy to the VM (`app://shards` in `GATEWAY_ORIGINS`), then tag v0.1.0 and publish the draft release.
+- [x] Released (2026-10-07): the repo is public, the VM is deployed, and `npm run release -- <x.y.z>` bumps, tags and pushes. The workflow builds all three platforms into one draft and publishes it. v0.1.3 is the first full release: Windows, macOS (universal) and Linux (AppImage, deb).
 - [ ] Check auto-update end to end: install 0.1.0, publish 0.1.1, and see "Restart to update".
 - [ ] macOS and Linux builds from CI, tried on real machines (pointer lock, sound, WebGL).
 - [ ] Signing before going public: Windows (Azure Trusted Signing) and macOS (an Apple Developer account and notarization).
