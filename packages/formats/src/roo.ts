@@ -465,8 +465,9 @@ export function leafAt(room: Room, x: number, y: number): BspLeaf | null {
   while (idx >= 0) {
     const n = room.nodes[idx];
     if (n.type === "leaf") return n;
+    // drawbsp.c BSPFindLeafByPoint: on the plane, take pos if it exists, else neg
     const side = n.a * x + n.b * y + n.c;
-    const next = side >= 0 ? n.pos : n.neg;
+    const next = side === 0 ? n.pos || n.neg : side > 0 ? n.pos : n.neg;
     if (!next) return null;
     idx = next - 1;
   }

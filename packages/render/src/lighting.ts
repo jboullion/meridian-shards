@@ -34,6 +34,11 @@ export const lightingUniforms = () => ({
   uFinePerUnit: { value: 1024 },
   /** texture scroll offset (s, t) for scrolling walls/floors */
   uScroll: { value: [0, 0] as [number, number] },
+  /** Light sources (light maps): xyz in client fine units, w = reach (DLIGHT_SCALE / 2) */
+  uLightPos: { value: new Float32Array(32 * 4) },
+  /** Light colours 0..1 */
+  uLightColor: { value: new Float32Array(32 * 3) },
+  uLightCount: { value: 0 },
 });
 
 export const roomVertexShader = /* glsl */ `
@@ -43,6 +48,8 @@ out vec2 vUv;
 out float vLight;
 out float vScale;
 out float vDepth;
+out vec3 vClient;
+out vec2 vNormal2;
 uniform vec2 uSun;
 uniform float uShade;
 uniform float uFinePerUnit;
@@ -61,6 +68,9 @@ void main() {
   vScale = scale;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDepth = -mv.z * uFinePerUnit;
+  vec4 world = modelMatrix * vec4(position, 1.0);
+  vClient = vec3(world.x, world.z, world.y) * uFinePerUnit; // scene (x, z up, y) -> client (x, y, z)
+  vNormal2 = aShade.xy;
   gl_Position = projectionMatrix * mv;
 }
 `;
@@ -71,7 +81,12 @@ in vec2 vUv;
 in float vLight;
 in float vScale;
 in float vDepth;
+in vec3 vClient;
+in vec2 vNormal2;
 out vec4 fragColor;
+uniform vec4 uLightPos[32];
+uniform vec3 uLightColor[32];
+uniform int uLightCount;
 uniform sampler2D uMap;
 uniform sampler2D uPalette;
 uniform float uViewerLight;
@@ -100,6 +115,22 @@ void main() {
     ? 16384.0 + light * 1024.0 + uViewerLight * 64.0
     : 32768.0 + max(0.0, light - 192.0) * 1024.0 + uViewerLight * 64.0 + uAmbient * 1024.0;
   float fog = uFog > 0.5 ? clamp((fogEnd - vDepth) / fogEnd, 0.0, 1.0) : 1.0;
-  fragColor = vec4(rgb * grey * fog, 1.0);
+  // Light maps (d3dlighting.c D3DRenderLMapPost*Add): each light adds
+  // radial(in-plane distance) * falloff(distance off the plane) * colour * texel.
+  vec3 added = vec3(0.0);
+  bool wall = length(vNormal2) > 0.5;
+  bool xMajor = abs(vNormal2.x) > abs(vNormal2.y);
+  for (int i = 0; i < 32; i++) {
+    if (i >= uLightCount) break;
+    vec3 d = vClient - uLightPos[i].xyz;
+    float reach = uLightPos[i].w;
+    float off, radial;
+    if (!wall) { off = abs(d.z); radial = length(d.xy); }
+    else if (xMajor) { off = abs(d.x); radial = length(d.yz); }
+    else { off = abs(d.y); radial = length(d.xz); }
+    float k = max(0.0, 1.0 - radial / reach) * max(0.0, 1.0 - off / reach);
+    added += k * uLightColor[i];
+  }
+  fragColor = vec4(min(vec3(1.0), rgb * grey + rgb * added) * fog, 1.0);
 }
 `;

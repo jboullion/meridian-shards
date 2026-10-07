@@ -9,6 +9,7 @@ import * as THREE from "three";
 import { FINENESS, paletteRgba, type Bgf, type Palette, type Room } from "@shards/formats";
 import { buildRoomGeometry, type Batch, type RoomGeometry, type TextureInfo } from "./roomGeometry.ts";
 import { lightingUniforms, roomFragmentShader, roomVertexShader } from "./lighting.ts";
+import type { LightSource } from "./objectLighting.ts";
 
 export function paletteTexture(p: Palette): THREE.DataTexture {
   const tex = new THREE.DataTexture(paletteRgba(p), 256, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
@@ -124,6 +125,21 @@ export class RoomView {
         t = (-steps * a.dy) / FINENESS;
       }
       material.uniforms.uScroll.value = [s - Math.floor(s), t - Math.floor(t)];
+    }
+  }
+
+  /** Light sources for the light maps (see objectLighting.ts). At most 32 are used. */
+  setLights(lights: LightSource[]): void {
+    const n = Math.min(32, lights.length);
+    for (const m of this.materials) {
+      const pos = m.uniforms.uLightPos.value as Float32Array;
+      const col = m.uniforms.uLightColor.value as Float32Array;
+      for (let i = 0; i < n; i++) {
+        const l = lights[i];
+        pos.set([l.x, l.y, l.z, l.scale / 2], i * 4);
+        col.set([l.r / 255, l.g / 255, l.b / 255], i * 3);
+      }
+      m.uniforms.uLightCount.value = n;
     }
   }
 

@@ -62,6 +62,13 @@ The name comes from the lore: every server or world is a "shard" of one original
 - **Asset priority:** our server build's `rsc0000.rsb` and rooms always win (the protocol depends on them), then the installed 104 client's art (what live players see; about 8% of sprites differ from the source tree), then the Server 104 source tree for gaps.
 - **Room ambient** follows Kod `GetRoomLight`: base light + outside factor × (brightness − 50) / 4.
 
+## Implementation notes (milestone 3, 2026-10-06)
+
+- **Sprites are composited on the CPU per object.** The D3D client draws the base and each overlay as separate coplanar quads separated by z-bias. We composite base and overlays into one palette-index image instead, in the same layer order, with each part's xlat applied. Then each object is a single billboard. The pixels and colours are the same, with no z-fighting and one draw per object. The composite is rebuilt only when the frame, animation group or look changes.
+- **Name labels are HTML overlays** projected from the sprite tops. They're crisp at any resolution, and later we can click them. Colour and dimming follow `D3DRenderNamesDraw3D`.
+- **Keep-alive pings run in a Web Worker**, because the server hangs up after 30 s and background tabs throttle timers.
+- **The login secret key** is read from `server/config/blakserv.cfg` at build time (Vite `define`), so there's one source of truth.
+
 ## Consequences
 
 - The browser can play with original Windows clients on the same server. That gives us a parity test.

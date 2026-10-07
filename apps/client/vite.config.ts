@@ -1,5 +1,11 @@
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
+
+// The login SecretKey must match the server's [Login] SecretKey. It isn't a real
+// secret (it ships in the JS); server/config/blakserv.cfg is the one source of truth.
+const cfg = readFileSync(new URL("../../server/config/blakserv.cfg", import.meta.url), "utf8");
+const secretKey = /^SecretKey\s+(\S+)/m.exec(cfg)?.[1] ?? "";
 
 // The original game files (dist/assets, built by `npm run assets`) are served at
 // /assets/* in development. Production serves them separately (Caddy), so they
@@ -7,6 +13,9 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [react()],
   publicDir: "../../dist",
+  define: {
+    __SECRET_KEY__: JSON.stringify(secretKey),
+  },
   server: {
     port: 5173,
     proxy: {

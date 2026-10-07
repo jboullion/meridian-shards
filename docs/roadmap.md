@@ -30,26 +30,50 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 - [x] Animated textures (cycling groups) and scrolling walls and floors, the sky box, and the original 50° × 32° view (Hor+ for widescreen) at the original eye height.
 - [x] The room viewer (`apps/client`, `?rid=301`) shows every slice room, with no missing textures.
 - [ ] Sloped-texture rotation (the slope's texture angle). Sloped planes currently use the flat mapping.
-- [ ] Dynamic lights (the light maps around torches and lamps). These need objects, so they come in milestone 3.
+- [x] Dynamic lights (the light maps around torches and lamps), done in milestone 3.
 - [ ] A side-by-side check against original-client screenshots from the same spot. The user's inn screenshot matches in layout, texture orientation and proportions; the remaining brightness difference is the torch light maps.
 
-### 3. Into the world
+### 3. Into the world (done 2026-10-06)
 
-- Login, character select, and entering the game.
-- Objects as camera-facing sprites with view-angle frames (`clientd3d/draw.c:108-148`), animation groups, hotspot overlays, xlat colours and name labels.
+- [x] Login, character select (plus a minimal "create with default looks" form until the real creator in milestone 6), and entering the game, all in the browser through the gateway. Keep-alive pings run from a Web Worker.
+- [x] `packages/world`: `GameSession` (login → characters → game) and `WorldState` (player, room objects, lighting, sky, dynamic resources), fed by the protocol.
+- [x] Objects as camera-facing sprites:
+  - frames chosen by view angle (`draw.c GetObjectPdib`) and bitmap-group animations (`animate.c`);
+  - overlays placed at hotspots, in the D3D layer order;
+  - every xlat ported (`xlat.c`, including guild colours; the light-based ones use the client's own `light_palettes`, extracted from our build's `pal.c`);
+  - draw effects (translucent, black, invisible), water depth and hanging objects.
+- [x] Object lighting (`D3DObjectLightingCalc`: sector light plus the nearest light source) and the light maps on walls and floors (the warm glow around the inn's torches).
+- [x] Name labels (`OF_DISPLAY_NAME`, name colour, dimmed by the object's light, 15-square range).
+- Checked in the browser with a second headless player: body, head, hair, arms and legs line up, with skin and clothing xlats.
 
-### 4. Moving and talking
+### 4. Moving and talking (done 2026-10-06)
 
-- Movement and collision ported from `move.c`; `REQ_MOVE` and `REQ_TURN`; interpolation for other movers.
-- Exits (`REQ_GO` on door squares, edge exits), room changes and teleports.
-- Look, use, get and drop. Chat with `BP_MESSAGE` formatting ported from `srvrstr.c`.
-- Ping from a Web Worker, because background tabs throttle timers and the server hangs up after 30 s.
+- [x] Movement and collision ported from `move.c` (`packages/world/src/movement.ts`):
+  - steps, wall sliding and sideways nudges;
+  - step-up and headroom limits, passable walls;
+  - wading slowdown, blocking objects, teleporter pads and hot plates;
+  - climbing and falling.
+- [x] Server updates follow `MoveUpdateServer`: `REQ_MOVE` every 250 ms when moved, `REQ_TURN` on angle change. Server corrections and teleports move us back.
+- [x] Other movers glide (`moveobj.c MoveObject2` and its catch-up rule), switch to their walking look, and turn to face their direction.
+- [x] Exits: doors with Space or E (`BP_REQ_GO` on the exit square); edge exits by walking off the map (off-room `REQ_MOVE` once a second); room changes and teleports. Tested: inn ↔ Raza both ways, and Raza → Outskirts over the north edge.
+- [x] Look (description panel), pick up, drop, use and activate (click, F, right-click menu, a simple inventory list on I).
+- [x] Chat: the server-text formatter (`srvrstr.c`: `%s %i %q %r %%`, `$N` reordering) and the `~` colour/style codes, in the original grey chat box. Typed commands: say (default), emote / `:`, yell, broadcast.
+- [x] Keep-alive pings from a Web Worker (done in milestone 3).
+- Server and client agree on position (checked against `show object` on the maintenance port).
 
-### 5. The game UI
+### 5. The game UI (done 2026-10-06)
 
-- Stat bars, inventory, spells, skills and enchantments; NPC buy and sell; the minimap.
-- Sound and music via `BP_PLAY_WAVE`, `STOP_WAVE` and `PLAY_MUSIC`, following meridian-unreal ADR 0006.
-- Settings and keybinds.
+- [x] The original's right-hand column (`module/merintr`), drawn on its own background bitmaps (`ui/*.bmp` from the asset build):
+  - our face (`userarea.c`: the face overlays only) and our enchantments;
+  - the health, mana, vigor and experience bars (`statmain.c`, `graphctl.c`: value, limit bar, low-vigor red);
+  - the minimap (`map.c`): walls on the map paper, object dots by minimap flags, the player's arrow, zoom with +/-, room enchantments in its corner;
+  - the tabs (`statbtn.c` bitmaps): Inventory (40 px boxes, "in use" sun, amounts, double click to use, right click for a menu, drag onto the view to drop), Stats, Spells, Skills and Quests.
+- [x] Item and object pictures as `DrawObject` draws them: base plus overlays, front view, xlats, stretched to fit.
+- [x] Buying (`BP_BUY_LIST` dialog), selling by offer (`BP_OFFERED`/`COUNTEROFFER`, accept or cancel), the vault (withdraw and deposit lists), bank money commands (`deposit N`, `withdraw N`, `balance`), and an amount prompt for dropping part of a stack. Tested with Tomas the smith, Gamos the banker and Bentu the vaultman.
+- [x] Sound and music (`audio.c` rules on Web Audio): one music track per room, up to 24 sounds, 2D or 3D with the original's rolloff and stereo pan, loops stopped on leaving a room, the wading splash. Settings: music and sound on/off and volume, looping and random sounds.
+- [x] Settings (O or F10): sound, mouselook speed and inversion, and key bindings with two presets. **Modern** is WASD plus mouselook. **Original** is the original's table: arrows, Alt+arrows to strafe, PgUp/PgDn/Home/End, Space, Enter to look, and typing a letter starts a chat line. Every key can be rebound.
+- Not yet: `tell`, the who list and the players window, mail, guilds, and casting at a chosen target (with combat, in milestone 6). Double clicking a spell casts it now; a spell that needs a target is cast on yourself.
+- To judge by ear against the original: how loud far-away sounds are. `audio.c` gives irrKlang a 32-square max distance, which in irrKlang means "stop getting quieter" (not "silent"), so Raza's country ambience at square (1, 1) plays at about 16% across the town.
 
 ### 6. Combat and creation
 
@@ -67,7 +91,7 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 - [x] An unmodified Server 104 `blakserv` (plus config changes only) serves browser players through the gateway (the protocol side; proven with the headless client).
 - [ ] Raza looks like the original: the same textures, colours, light and sprites, crisp at 1440p and in widescreen.
 - [ ] Movement and collision match the original. No wall clipping, and original clients see browser players move normally.
-- [ ] Chat, shops, combat, death and respawn, and room changes work end to end.
+- [ ] Chat, shops, combat, death and respawn, and room changes work end to end. (Chat, shops and room changes: done.)
 - [ ] Original-client and browser players play together on one server.
 - [ ] The first room loads in under 5 s on broadband, and sessions stay stable for 1+ hour, including background tabs.
 - [ ] The modern controls feel better than the original's, and the original preset still works.
@@ -89,3 +113,7 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
   - Ran the 5.5-minute soak (passed), and built our own Windows client (`meridian.exe` plus the char, merintr and mailnews modules) for the parity test.
   - The user saw Shardbot from the original client, so milestone 0 is done.
   - Milestone 1 (workspaces, checks, asset build, `npm run dev`) and the core of milestone 2 (the room viewer) are done. All 13 slice rooms render with textures, the original lighting model, animations and sky.
+  - Milestone 3 is done. You can log in from the browser, pick or create a character, and stand in the Inn of Raza or Raza with every object drawn, lit and labelled like the D3D client.
+  - Milestone 4 is done. You can walk with the original collision, open doors, cross edge exits, chat, look, and pick up and drop items. Other players move smoothly.
+  - Milestone 5 is done: the original's interface column (bars, face, enchantments, minimap, inventory, stats, spells, skills, quests), shops, selling, the bank and vault, sound and music, and settings with rebindable keys.
+  - Found along the way: the client must ask for its inventory, plain id fields drop the number tag, and `BP_CHANGE` updates inventory stacks (see [protocol.md](research/protocol.md)).

@@ -47,9 +47,21 @@ export class Connection {
   private readonly sendRaw: (bytes: Uint8Array) => void;
   private readonly events: ConnectionEvents;
 
-  constructor(sendRaw: (bytes: Uint8Array) => void, events: ConnectionEvents = {}) {
+  /**
+   * Built-in ping timer interval in game mode (the original client pings every 5 s,
+   * clientd3d/ping.c). Set 0 to drive ping() yourself, e.g. from a Web Worker so a
+   * background tab's throttled timers don't let the server's 30 s timeout hit.
+   */
+  readonly pingIntervalMs: number;
+
+  constructor(
+    sendRaw: (bytes: Uint8Array) => void,
+    events: ConnectionEvents = {},
+    options: { pingIntervalMs?: number } = {},
+  ) {
     this.sendRaw = sendRaw;
     this.events = events;
+    this.pingIntervalMs = options.pingIntervalMs ?? PING_INTERVAL_MS;
   }
 
   /** Call once the transport is open. The server speaks first (AP_GETLOGIN). */
@@ -122,7 +134,7 @@ export class Connection {
     if (this.state === s) return;
     this.state = s;
     if (s === "game") {
-      this.pingTimer = setInterval(() => this.ping(), PING_INTERVAL_MS);
+      if (this.pingIntervalMs > 0) this.pingTimer = setInterval(() => this.ping(), this.pingIntervalMs);
     }
     this.events.state?.(s);
   }

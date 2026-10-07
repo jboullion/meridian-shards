@@ -30,6 +30,13 @@ export class AssetStore {
     return !!this.manifest?.files[name.toLowerCase()];
   }
 
+  /** URL of an asset for the page to load directly (interface bitmaps: "ui/bkgnd.bmp"). */
+  url(name: string): string {
+    const key = name.toLowerCase();
+    const entry = this.manifest?.files[key];
+    return entry ? `${this.base}${key}?v=${entry.hash}` : `${this.base}${key}`;
+  }
+
   fetchBytes(name: string): Promise<Uint8Array> {
     const key = name.toLowerCase();
     let p = this.bytes.get(key);
@@ -62,6 +69,11 @@ export class AssetStore {
 
   async palette(): Promise<Palette> {
     return parsePaletteBin(await this.fetchBytes("palette.bin"));
+  }
+
+  /** clientd3d light_palettes (65 x 256), or null if the asset build couldn't make them. */
+  async lightPalettes(): Promise<Uint8Array | null> {
+    return this.has("lightpal.bin") ? this.fetchBytes("lightpal.bin") : null;
   }
 
   async rsb(): Promise<RsbBundle> {

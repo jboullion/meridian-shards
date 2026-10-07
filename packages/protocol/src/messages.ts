@@ -3,7 +3,7 @@
 // server parses them) and clientd3d/server.c (how the client reads replies).
 
 import { ByteReader, ByteWriter } from "./bytes.ts";
-import { AP, ANIMATE, BP, CLIENT_MAJOR, CLIENT_MINOR, CLIENT_TAG_NUMBER, objTag } from "./constants.ts";
+import { AP, ANIMATE, BP, CLIENT_MAJOR, CLIENT_MINOR, CLIENT_TAG_NUMBER, objId, objTag } from "./constants.ts";
 
 // ---------------------------------------------------------------- login mode
 
@@ -93,7 +93,7 @@ export function buildReqMove(kodRow: number, kodCol: number, speed: number, room
 }
 
 export function buildReqTurn(id: number, angle: number): Uint8Array {
-  return new ByteWriter().u8(BP.REQ_TURN).u32(id).u16(angle).finish();
+  return new ByteWriter().u8(BP.REQ_TURN).u32(objId(id)).u16(angle).finish();
 }
 
 /** Say types (include/proto.h SAY_*). */
@@ -104,7 +104,7 @@ export function buildSay(text: string, info: number = SAY.NORMAL): Uint8Array {
 }
 
 export function buildReqLook(id: number): Uint8Array {
-  return new ByteWriter().u8(BP.REQ_LOOK).u32(id).finish();
+  return new ByteWriter().u8(BP.REQ_LOOK).u32(objId(id)).finish();
 }
 
 // ---------------------------------------------------------------- game mode: server -> client
@@ -281,6 +281,20 @@ export function readMove(r: ByteReader): { id: number; kodRow: number; kodCol: n
   return { id, kodRow, kodCol, speed: s & 0x7f, turnToFace: (s & 0x80) !== 0 };
 }
 
+/** BP_CHANGE (server.c HandleChange): an object's new look plus its motion state. */
+export function readChange(r: ByteReader): { object: ObjectInfo; motion: RoomObject["motion"] } {
+  const object = readObject(r);
+  const { translation, effect } = readTranslation(r);
+  const animation = readAnimation(r);
+  const overlays = readOverlays(r);
+  return { object, motion: { translation, effect, animation, overlays } };
+}
+
+/** BP_TURN: id, angle. */
+export function readTurn(r: ByteReader): { id: number; angle: number } {
+  return { id: r.u32(), angle: r.u16() };
+}
+
 export interface CharacterSlot {
   id: number;
   name: string;
@@ -295,6 +309,241 @@ export function readCharacters(r: ByteReader): { characters: CharacterSlot[]; mo
   for (let i = 0; i < n; i++) characters.push({ id: r.u32(), name: r.string(), flags: r.u8() });
   const motd = r.string();
   return { characters, motd };
+}
+
+/** BP_INVENTORY / offers / BP_OFFERED etc. (server.c ExtractObjectList): u16 count, objects. */
+export function readObjectList(r: ByteReader): ObjectInfo[] {
+  const n = r.u16();
+  const out: ObjectInfo[] = [];
+  for (let i = 0; i < n; i++) out.push(readObject(r));
+  return out;
+}
+
+// ---------------------------------------------------------------- stats, spells, skills (module/merintr)
+
+/** Stat kinds (include/proto.h STATS_NUMERIC / STATS_LIST) and numeric tags (STAT_INT / STAT_RES). */
+export const STATS = { NUMERIC: 1, LIST: 2 } as const;
+export const STAT_TAG = { INT: 1, RES: 2 } as const;
+/** Stat groups (module/merintr/stats.h). Group 1 is the main bars (health, mana, vigor). */
+export const STAT_GROUP = { MAIN: 1, STATS: 2, SPELLS: 3, SKILLS: 4, QUESTS: 5, INVENTORY: 6 } as const;
+/** Enchantment kinds (include/proto.h ENCHANT_*). */
+export const ENCHANT = { PLAYER: 1, ROOM: 2 } as const;
+
+export interface Statistic {
+  /** Ordinal within the group (1-based). */
+  num: number;
+  nameRes: number;
+  type: number;
+  /** STATS_NUMERIC: an integer with limits (tag INT) or a resource string (tag RES). */
+  numeric?: { tag: number; value: number; min: number; max: number; currentMax: number };
+  /** STATS_LIST: an object (spell, skill) with a value (percent) and icon. */
+  list?: { id: number; value: number; icon: number };
+}
+
+/** merintr.c ExtractStatistic. */
+export function readStatistic(r: ByteReader): Statistic {
+  const num = r.u8();
+  const nameRes = r.u32();
+  const type = r.u8();
+  if (type === STATS.NUMERIC) {
+    const tag = r.u8();
+    const value = r.i32();
+    const numeric = { tag, value, min: 0, max: 0, currentMax: 0 };
+    if (tag === STAT_TAG.INT) {
+      numeric.min = r.i32();
+      numeric.max = r.i32();
+      numeric.currentMax = r.i32();
+    }
+    return { num, nameRes, type, numeric };
+  }
+  if (type === STATS.LIST) return { num, nameRes, type, list: { id: r.u32(), value: r.i32(), icon: r.u32() } };
+  throw new Error(`unknown stat type ${type}`);
+}
+
+/** BP_STAT: group, one statistic. */
+export function readStat(r: ByteReader): { group: number; stat: Statistic } {
+  const group = r.u8();
+  return { group, stat: readStatistic(r) };
+}
+
+/** BP_STAT_GROUP: group, u8 count, statistics. */
+export function readStatGroup(r: ByteReader): { group: number; stats: Statistic[] } {
+  const group = r.u8();
+  const n = r.u8();
+  const stats: Statistic[] = [];
+  for (let i = 0; i < n; i++) stats.push(readStatistic(r));
+  return { group, stats };
+}
+
+/** BP_STAT_GROUPS: u8 count, name resources. */
+export function readStatGroups(r: ByteReader): number[] {
+  const n = r.u8();
+  const names: number[] = [];
+  for (let i = 0; i < n; i++) names.push(r.u32());
+  return names;
+}
+
+export interface Spell {
+  object: ObjectInfo;
+  numTargets: number;
+  /** 0-based school (the server sends it 1-based). */
+  school: number;
+}
+
+/** merintr.c ExtractNewSpell. */
+export function readSpell(r: ByteReader): Spell {
+  const object = readObject(r);
+  const numTargets = r.u8();
+  return { object, numTargets, school: r.u8() - 1 };
+}
+
+/** BP_SPELLS: u16 count, spells. */
+export function readSpells(r: ByteReader): Spell[] {
+  const n = r.u16();
+  const out: Spell[] = [];
+  for (let i = 0; i < n; i++) out.push(readSpell(r));
+  return out;
+}
+
+/** BP_ADD_ENCHANTMENT: kind, object. */
+export function readAddEnchantment(r: ByteReader): { kind: number; object: ObjectInfo } {
+  const kind = r.u8();
+  return { kind, object: readObject(r) };
+}
+
+/** BP_REMOVE_ENCHANTMENT: kind, id. */
+export function readRemoveEnchantment(r: ByteReader): { kind: number; id: number } {
+  return { kind: r.u8(), id: r.u32() };
+}
+
+/** BP_USE_LIST: u16 count, ids of the items in use (wielded, worn). */
+export function readUseList(r: ByteReader): number[] {
+  const n = r.u16();
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) out.push(r.u32());
+  return out;
+}
+
+export const buildSendStatGroups = (): Uint8Array => Uint8Array.of(BP.SEND_STAT_GROUPS);
+export const buildSendStats = (group: number): Uint8Array => Uint8Array.of(BP.SEND_STATS, group);
+export const buildSendSpells = (): Uint8Array => Uint8Array.of(BP.SEND_SPELLS);
+export const buildSendSkills = (): Uint8Array => Uint8Array.of(BP.SEND_SKILLS);
+export const buildSendEnchantments = (kind: number): Uint8Array => Uint8Array.of(BP.SEND_ENCHANTMENTS, kind);
+
+// ---------------------------------------------------------------- trade (buy.c, offer.c)
+
+export interface BuyItem {
+  object: ObjectInfo;
+  cost: number;
+}
+
+/** BP_BUY_LIST / BP_WITHDRAWAL_LIST (server.c HandleBuyList): seller, u16 count, (object, u32 cost). */
+export function readBuyList(r: ByteReader): { seller: ObjectInfo; items: BuyItem[] } {
+  const seller = readObject(r);
+  const n = r.u16();
+  const items: BuyItem[] = [];
+  for (let i = 0; i < n; i++) items.push({ object: readObject(r), cost: r.u32() });
+  return { seller, items };
+}
+
+/** BP_OFFER (someone offers us items): the offerer, then the object list. */
+export function readOffer(r: ByteReader): { offerer: ObjectInfo; items: ObjectInfo[] } {
+  const offerer = readObject(r);
+  return { offerer, items: readObjectList(r) };
+}
+
+/** An object reference in a request (protocol.c PARAM_OBJECT): id, plus the amount for number items. */
+export interface ObjectRef {
+  id: number;
+  amount?: number;
+}
+
+function writeObjectList(w: ByteWriter, items: ObjectRef[]): void {
+  // protocol.c PARAM_OBJECT_LIST: number items with no amount are left out.
+  const sent = items.filter((o) => objTag(o.id) !== CLIENT_TAG_NUMBER || (o.amount ?? 0) > 0);
+  w.u16(sent.length);
+  for (const o of sent) {
+    w.u32(o.id);
+    if (objTag(o.id) === CLIENT_TAG_NUMBER) w.u32(o.amount ?? 0);
+  }
+}
+
+export const buildReqBuy = (seller: number): Uint8Array => new ByteWriter().u8(BP.REQ_BUY).u32(objId(seller)).finish();
+
+export function buildReqBuyItems(seller: number, items: ObjectRef[]): Uint8Array {
+  const w = new ByteWriter().u8(BP.REQ_BUY_ITEMS).u32(objId(seller));
+  writeObjectList(w, items);
+  return w.finish();
+}
+
+export const buildReqWithdrawal = (banker: number): Uint8Array => new ByteWriter().u8(BP.REQ_WITHDRAWAL).u32(objId(banker)).finish();
+
+export function buildReqWithdrawalItems(banker: number, items: ObjectRef[]): Uint8Array {
+  const w = new ByteWriter().u8(BP.REQ_WITHDRAWAL_ITEMS).u32(objId(banker));
+  writeObjectList(w, items);
+  return w.finish();
+}
+
+export function buildReqDeposit(banker: number, items: ObjectRef[]): Uint8Array {
+  const w = new ByteWriter().u8(BP.REQ_DEPOSIT).u32(objId(banker));
+  writeObjectList(w, items);
+  return w.finish();
+}
+
+/** BP_REQ_OFFER: give items to someone (selling to an NPC starts here). */
+export function buildReqOffer(target: number, items: ObjectRef[]): Uint8Array {
+  const w = new ByteWriter().u8(BP.REQ_OFFER).u32(objId(target));
+  writeObjectList(w, items);
+  return w.finish();
+}
+
+export function buildReqCounteroffer(items: ObjectRef[]): Uint8Array {
+  const w = new ByteWriter().u8(BP.REQ_COUNTEROFFER);
+  writeObjectList(w, items);
+  return w.finish();
+}
+
+/** BP_REQ_CAST: spell, target objects. */
+export function buildReqCast(spell: number, targets: ObjectRef[]): Uint8Array {
+  const w = new ByteWriter().u8(BP.REQ_CAST).u32(objId(spell));
+  writeObjectList(w, targets);
+  return w.finish();
+}
+
+// ---------------------------------------------------------------- user commands (BP_USERCOMMAND)
+
+/** Some user command types (include/proto.h UC_*). */
+export const UC = { REST: 5, STAND: 6, REQ_PREFERENCES: 7, SEND_PREFERENCES: 9, DEPOSIT: 35, WITHDRAW: 36, BALANCE: 37 } as const;
+
+/** BP_USERCOMMAND, the command type, then its int parameters (protocol.c ToServer). */
+export function buildUserCommand(uc: number, ...ints: number[]): Uint8Array {
+  const w = new ByteWriter().u8(BP.USERCOMMAND).u8(uc);
+  for (const v of ints) w.i32(v);
+  return w.finish();
+}
+
+// ---------------------------------------------------------------- sound (server.c HandlePlayWave etc.)
+
+/** BP_PLAY_WAVE flags (include/proto.h SF_*). */
+export const SF = { LOOP: 0x01, RANDOM_PITCH: 0x02, RANDOM_PLACE: 0x04 } as const;
+
+export interface PlayWave {
+  resource: number;
+  /** Source object (0 = none). */
+  object: number;
+  flags: number;
+  /** 1-based big-grid row/col, 0 = at the player. */
+  row: number;
+  col: number;
+  radius: number;
+  maxVolume: number;
+}
+
+export function readPlayWave(r: ByteReader): PlayWave {
+  return {
+    resource: r.u32(), object: r.u32(), flags: r.u8(),
+    row: r.i32(), col: r.i32(), radius: r.i32(), maxVolume: r.i32(),
+  };
 }
 
 export { AP, BP };

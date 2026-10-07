@@ -27,9 +27,10 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 |---|---|
 | `packages/protocol/` | Wire protocol: framing, LCG security word, redbook token, message builders and parsers, the `Connection` state machine. Transport-agnostic; the same code runs in Node and the browser. |
 | `packages/formats/` | Readers for the original files: `.roo` (ported from `bspload.c`), `.bgf`, `.rsb`, `.bsf` sky boxes, and the palette. No Node APIs. |
-| `packages/render/` | Three.js rendering: room geometry exactly as `d3drender.c` builds it (`roomGeometry.ts`, renderer-agnostic), the palette + original lighting shader (`lighting.ts`), `RoomView` and the sky box. |
-| `apps/client/` | The browser client (Vite + React). It has the room viewer for now (`?rid=301`); the game comes next. |
-| `tools/assets/` | `build-assets.ts`: copies the original files into `dist/assets` (git-ignored) with a manifest. |
+| `packages/render/` | Three.js rendering: room geometry exactly as `d3drender.c` builds it (`roomGeometry.ts`, renderer-agnostic), the palette + original lighting shader with light maps (`lighting.ts`), `RoomView`, the sky box, xlats (`xlat.ts`), sprite compositing (`sprites.ts`), object lighting and `ObjectsView`. |
+| `packages/world/` | `GameSession` (login, characters, game actions, chat and look events), `WorldState` (player, room objects with interpolated motion, inventory, online players, lighting), `PlayerMover` (the `move.c` port), the server-text formatter (`text.ts`) and bitmap-group animation. No DOM or Three.js. |
+| `apps/client/` | The browser client (Vite + React): login, character select and the game view (`/`); the room viewer is at `/?viewer` or `/?rid=301`. In `src/game/`: `gameScene.ts` (3D view and input), `audio.ts` (sound, after `audio.c`), `icons.ts` (item pictures), `settings.ts` (sound and key settings, the two key presets), and `ui/` (the interface column, minimap and dialogs). |
+| `tools/assets/` | `build-assets.ts`: copies the original files into `dist/assets` (git-ignored) with a manifest, plus the client's interface bitmaps as `ui/*.bmp`. |
 | `tools/dev/` | `dev.ts`: the one-command dev stack. |
 | `tools/gateway/` | WebSocket-to-TCP bridge in front of blakserv (`ws`). |
 | `tools/headless/` | Headless protocol client for spikes and soak tests. |
@@ -76,4 +77,18 @@ npm run check               # typecheck + lint + tests
 - Client coordinates are x east, y south, z up. The scene uses X = x, Y = z, Z = y, in squares, which mirrors handedness, so `RoomView` reverses the triangle winding.
 - The room checksum the server sends goes through a 28-bit Kod integer. Compare the low 28 bits only.
 - The Browser pane throttles `requestAnimationFrame` while it's hidden, so FPS readouts there are meaningless. Time `renderer.render` instead.
+- **Sprites:** each object's base bitmap and overlays are composited on the CPU into one palette-index image (with each part's xlat applied), then drawn as a single billboard. That keeps exact palette colours and avoids z-fighting between coplanar overlays.
+- **Handedness:** the D3D client's projection uses a *negative* horizontal FOV (`FovHorizontal`), which mirrors its left-handed view back. Our right-handed scene with X = x, Y = height, Z = y matches what players see, both the world and the sprites (bitmap column 0 on the left). Don't "fix" it.
+- **Controls** come from `apps/client/src/game/settings.ts` (rebindable in the settings, O or F10). The modern preset:
+  - Click the view to capture the mouse; Esc releases it.
+  - WASD or arrows to move (left/right arrows turn), Shift to run, Space/E to open a door.
+  - Click to look, F or double click to pick up or activate, right-click for the actions menu.
+  - PgUp/PgDn/Home to look up, down and straight, End to turn around, +/- to zoom the map, I for the inventory tab, Enter to chat.
+  - The original preset follows `merintr.c interface_key_table` (Alt+arrows strafe, typing starts a chat line).
+  - In dev, `window.shards` has `gameScene`, `session` and `audio` (`audio.log` lists what played). `gameScene.frame(dt, t)` lets a script drive movement while the Browser pane is hidden (its rAF is throttled).
+- **Object ids:** number items (shillings) carry a tag in the id's top 4 bits. Send plain id fields without it (`objId`, as `protocol.c GetObjId` does) and object-list fields with it plus the amount. Look ids up through `WorldState`'s maps, which ignore the tag like the client's `CompareIdObject`.
+- **Settings** live in `localStorage`. Hot reloading `settings.ts` makes a second copy of its listeners, so reload the page after editing it.
+- **Trying shops and rooms quickly:** `node tools/maint/maint.ts "send object <player id> TeleportTo RID int 303"` moves a logged-in character on our server (303 smithy, 332 vault, 333 bank, 330 Outskirts).
+- **Movement is client-authoritative but checked:** keep `PlayerMover` byte-for-byte faithful to `move.c` (units, step sizes, thresholds). The server only rejects off-map destinations, and other players' original clients see our moves.
+- **Uniform arrays** in Three.js `ShaderMaterial`s must be flat typed arrays (or `Vector` objects), not nested JS arrays.
 - On Windows, never `spawn` with `shell: true` when the command path has spaces (Node's own path does). Use the shell only for `.cmd` shims such as `npx`.

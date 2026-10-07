@@ -8,7 +8,9 @@
 //      running server (redbook token, room checksums), so they always win.
 //   2. the Server 104 resource tree in server/src/resource (104-only additions)
 //   3. the installed 104 client's resource folder (%LOCALAPPDATA%\Meridian-104\resource)
-// Plus the palette (blakston.pal, parsed to a 768-byte binary palette.bin).
+// Plus the palette (blakston.pal, parsed to a 768-byte binary palette.bin), and the
+// interface bitmaps compiled into the client (clientd3d/bitmap and module/merintr/bitmap:
+// backgrounds, stat tab buttons, the map paper) as ui/<name>.bmp.
 //
 // Output: dist/assets/<name> and dist/assets/manifest.json:
 //   { generated, rsbHash, files: { name: { size, hash } } }
@@ -33,12 +35,23 @@ const SERVER = join(ROOT, "server", "src");
 const RUN = join(SERVER, "run", "server");
 const EXTS = new Set([".bgf", ".roo", ".rsb", ".ogg", ".wav", ".mp3", ".bsf"]);
 
-type Source = { label: string; dir: string; recursive: boolean; filter?: (name: string) => boolean };
+type Source = {
+  label: string;
+  dir: string;
+  recursive: boolean;
+  filter?: (name: string) => boolean;
+  /** Output name prefix (a sub-folder of dist/assets) */
+  prefix?: string;
+  exts?: Set<string>;
+};
+const BMP = new Set([".bmp"]);
 const sources: Source[] = [
   { label: "server rsb", dir: join(RUN, "rsc"), recursive: false, filter: (n) => n === "rsc0000.rsb" },
   { label: "server rooms", dir: join(RUN, "rooms"), recursive: false },
   { label: "installed client", dir: opt.client!, recursive: true },
   { label: "server resource tree", dir: join(SERVER, "resource"), recursive: true },
+  { label: "client UI bitmaps", dir: join(SERVER, "clientd3d", "bitmap"), recursive: false, prefix: "ui/", exts: BMP },
+  { label: "interface UI bitmaps", dir: join(SERVER, "module", "merintr", "bitmap"), recursive: false, prefix: "ui/", exts: BMP },
 ];
 
 function* walk(dir: string, recursive: boolean): Generator<string> {
@@ -58,8 +71,8 @@ for (const s of sources) {
   }
   let n = 0;
   for (const p of walk(s.dir, s.recursive)) {
-    const base = basename(p).toLowerCase();
-    if (!EXTS.has(extname(base))) continue;
+    const base = (s.prefix ?? "") + basename(p).toLowerCase();
+    if (!(s.exts ?? EXTS).has(extname(base))) continue;
     if (s.filter && !s.filter(base)) continue;
     if (chosen.has(base)) continue;
     chosen.set(base, { path: p, source: s.label });
@@ -72,7 +85,7 @@ if (!chosen.has("rsc0000.rsb")) {
   process.exit(1);
 }
 
-mkdirSync(OUT, { recursive: true });
+mkdirSync(join(OUT, "ui"), { recursive: true });
 const manifestPath = join(OUT, "manifest.json");
 const old: Record<string, { size: number; hash: string; mtime?: number }> = existsSync(manifestPath)
   ? JSON.parse(readFileSync(manifestPath, "utf8")).files
@@ -109,6 +122,24 @@ files["palette.bin"] = {
   hash: createHash("sha1").update(palBin).digest("hex").slice(0, 16),
   mtime: 0,
 };
+
+// Light palettes (65 x 256): light_palettes[level][index] = the palette index closest
+// to `index` at that light level; row 64 is the inverted palette. The client build
+// generates them with makepal into clientd3d/<debug|release>/pal.c; the light-based
+// xlats (xlat.c CalcLightXlat) need them.
+const palC = ["debug", "release"].map((d) => join(SERVER, "clientd3d", d, "pal.c")).find((p) => existsSync(p));
+if (palC) {
+  const src = readFileSync(palC, "latin1");
+  const start = src.indexOf("light_palettes[NUM_PALETTES][NUM_COLORS]");
+  const body = src.slice(src.indexOf("{", start), src.indexOf("};", start));
+  const nums = (body.replace(/\/\/.*$/gm, "").match(/\d+/g) ?? []).map(Number);
+  if (nums.length !== 65 * 256) throw new Error(`pal.c light_palettes has ${nums.length} entries, expected ${65 * 256}`);
+  const lightPal = Uint8Array.from(nums);
+  writeFileSync(join(OUT, "lightpal.bin"), lightPal);
+  files["lightpal.bin"] = { size: lightPal.length, hash: createHash("sha1").update(lightPal).digest("hex").slice(0, 16), mtime: 0 };
+} else {
+  console.warn("!! no clientd3d pal.c (build the client: server\\build.cmd Bclient); light-based xlats will be approximate");
+}
 
 writeFileSync(
   manifestPath,

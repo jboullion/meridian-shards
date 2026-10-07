@@ -145,9 +145,75 @@ A room object then adds:
   - The original client sends `REQ_GO` on the "go" action, after `MoveUpdatePosition` (`clientd3d/intrface.c:440`).
 - **Room edges (`plEdge_exits`):** moving outside the room's thing-box triggers `StandardLeaveDir` (`room.kod` `SomethingMoved`). The client sends a move to the off-room position at most once a second (`move.c:372`).
 
-## Messages we haven't decoded yet
+## World updates (milestone 3)
 
-`BP_MESSAGE` and `BP_SAID` formatting (`srvrstr.c`), stats, spells and skills, enchantments, sounds and the background are all still to decode. The handler list is `clientd3d/server.c:51` `game_handler_table`, plus `module/merintr` and `module/char`. Formats on the server side come from Kod `AddPacket` calls.
+- **`BP_CREATE`:** one room object (same layout as in `BP_ROOM_CONTENTS`). **`BP_REMOVE`:** `u32 id`.
+- **`BP_CHANGE`** (`server.c` HandleChange, `game.c` ChangeObject): an object (as above) followed by the optional palette prefix, an animation and overlays for its motion state. The position stays the same.
+- **`BP_MOVE`:** `u32 id, u16 row, u16 col, u8 speed` (bit 7 = turn to face). **`BP_TURN`:** `u32 id, u16 angle`.
+- **Lighting:**
+  - `BP_LIGHT_AMBIENT`: `u8`.
+  - `BP_LIGHT_PLAYER`: `u8`.
+  - `BP_LIGHT_SHADING`: `u8 intensity, u16 sun angle, u16 (unused)`.
+  - `BP_BACKGROUND`: `u32` sky resource; `2skyX.bgf` selects `skyX.bsf`.
+- **Room ambient** comes from Kod `room.kod GetRoomLight`: `base light + outside factor × (brightness − 50) / 4`. The "brightness" is the time of day.
+- **Object light** (`ExtractDLighting`): `u16 flags`; if non-zero, then `u8 intensity, u16 colour` (5:5:5, red in the high bits). Every object with a colour and intensity is a light source: invisible `blank.bgf` lights mark the inn's torches. Its reach is `DLIGHT_SCALE(intensity) / 2` = `(intensity × 14000 / 255 + 4000) / 2` fine units (`d3dlighting.h`).
+- **`BP_CHANGE_RESOURCE`:** `u32 id, string`. Dynamic resources such as player names arrive this way, so look names up there before the `.rsb`.
+- **Xlat ids:** objects and overlays carry `xlat.h` translation ids. Player bodies use the guild-colour range (0x87–0xFF = `0x87 + i × 11 + j`, red ramp → ramp i, blue ramp → ramp j), e.g. 236 = grey shirt with a skin-coloured blue ramp.
+
+## Actions and text (milestone 4)
+
+- **Client → server:**
+  - `BP_REQ_GO` (empty: open the door / take the exit on our square)
+  - `BP_REQ_LOOK u32 id`, `BP_REQ_GET u32 id`
+  - `BP_REQ_DROP u32 id [u32 amount for number items]`
+  - `BP_REQ_USE / UNUSE / ACTIVATE u32 id`
+  - `BP_REQ_INVENTORY`
+  - `BP_SAY_TO u8 kind, string` (kinds: 1 say, 2 yell, 3 broadcast, 6 emote)
+- **Server → client, text:**
+  - `BP_MESSAGE` / `BP_SYS_MESSAGE`: `u32 format resource` + parameters.
+  - `BP_SAID`: `u32 sender, u32 sender name rsc, u8 say type, u32 format resource` + parameters.
+  - `BP_LOOK`: an object, `u8 flags`, a format resource + parameters, and an inscription message if `flags & 3`.
+  - The formatter is `srvrstr.c CheckServerMessage`, ported in `packages/world/src/text.ts`. Text then carries `~`/`` ` `` colour and style codes (`~B` bold, `~I` italic, `~U` underline, `~n` reset, letters for colours).
+- **Inventory and players:**
+  - `BP_INVENTORY`: `u16 n` + objects; `INVENTORY_ADD`: an object; `INVENTORY_REMOVE`: `u32 id`.
+  - `BP_PLAYERS`: `u16 n` + (`u32 id, u32 name rsc, string name, u32 flags, u8 drawing type, u32 minimap flags, u32 name colour, u8 object type, u8 moveon type`). `PLAYER_ADD` is one of those; `PLAYER_REMOVE` is `u32 id`.
+- **Movement units:** `MOVEUNITS` = 256 fine units per 85 ms (walk; run ×2), divided into steps of up to 20 for wall checks. The player's half-width is 248 and the step-up limit is 384. `movement.ts` cites each constant.
+
+## The interface (milestone 5)
+
+- **What the client asks for on entering** (the server sends the player and room by itself):
+  - `BP_REQ_INVENTORY` (`game.c` GameInit). Without it the inventory stays empty until something changes.
+  - `BP_SEND_STAT_GROUPS`, `BP_SEND_SKILLS`, `BP_SEND_SPELLS` (`mermain.c` InterfaceInit).
+  - `BP_SEND_ENCHANTMENTS u8 1` (player enchantments, `enchant.c`).
+  - When `BP_STAT_GROUPS` arrives, `BP_SEND_STATS u8 1` (the main bars). The other groups are asked for when their tab opens (`BP_SEND_STATS u8 group`).
+- **Ids: tagged and untagged.**
+  - A number item's id has `CLIENT_TAG_NUMBER` (1) in its top 4 bits. Plain id fields (`PARAM_ID`: look, get, use, buy, offer target, cast...) are sent **without the tag** (`protocol.c` `GetObjId`). Sending the tagged id for `BP_REQ_GET` makes the server ignore it.
+  - Object fields (`PARAM_OBJECT`, `PARAM_OBJECT_LIST`: drop, buy items, offer items) send the full tagged id plus a `u32 amount` for number items. List entries with amount 0 are left out.
+  - The server is inconsistent too: it removes a dropped stack of shillings with an untagged `BP_REMOVE`. The client compares ids with the tag masked (`object.c` CompareIdObject); `WorldState`'s `ObjectMap` does the same.
+- **`BP_CHANGE` also updates the inventory** (`game.c` ChangeObject): that's how a stack of shillings learns its new amount after you buy something.
+- **Stats** (`merintr.c`):
+  - `BP_STAT_GROUPS`: `u8 n` + `n × u32` name resources (Condition, Stats, Spells, Skills, Quests).
+  - `BP_STAT_GROUP`: `u8 group, u8 n` + statistics.
+  - `BP_STAT`: `u8 group` + one statistic, replacing the one with the same number.
+  - **Statistic:** `u8 num, u32 name rsc, u8 type`. For type 1 (numeric): `u8 tag, i32 value`, then if tag 1 (int) `i32 min, i32 max, i32 current max`; tag 2 means the value is a resource string. For type 2 (list): `u32 object id, i32 value, u32 icon rsc`.
+  - **Group 1 (the main bars):** 1 health, 2 mana, 3 vigor, 4 experience. Their name resources are the icons (`heal.bgf`, `ankh.bgf`, `bolticon.bgf`, `exp.bgf`). Health and mana run from min to *current max*; vigor shows its limit bar (current max) in red and turns red below 10; experience reads "N XP / M XP".
+  - **Group 2** is the numeric stats (Might... resistances). **Groups 3 and 4** list spells and skills with their percentage. **Group 5** is quests: entries with value 0 are headers.
+- **Spells:** `BP_SPELLS u16 n` + (an object, `u8 targets, u8 school` 1-based); `SPELL_ADD` is one spell; `SPELL_REMOVE u32 id`. **Skills:** `BP_SKILLS u16 n` + objects. `BP_REQ_CAST u32 spell` + an object list of targets.
+- **Enchantments:** `BP_ADD_ENCHANTMENT u8 kind` + object (1 = on the player, 2 = on the room); `BP_REMOVE_ENCHANTMENT u8 kind, u32 id`. Room enchantments (Safe Room, PvP Combat Allowed) arrive with each room.
+- **Use list:** `BP_USE_LIST u16 n` + ids; `BP_USE u32 id`; `BP_UNUSE u32 id`.
+- **Trade** (`buy.c`, `offer.c`):
+  - **Buying:** `BP_REQ_BUY u32 seller` → `BP_BUY_LIST`: the seller object, `u16 n`, then (object, `u32 cost`). Shopkeepers with nothing for sale (Marcus the innkeeper) don't answer. `BP_REQ_BUY_ITEMS u32 seller` + object list.
+  - **Selling** is an offer: `BP_REQ_OFFER u32 target` + object list → `BP_OFFERED` (our items back) → `BP_COUNTEROFFER` (their object list, e.g. shillings) → `BP_ACCEPT_OFFER` or `BP_CANCEL_OFFER`. Tomas the smith pays 27 for a torch he sells for 36.
+  - **Vaults:** `BP_REQ_WITHDRAWAL u32 banker` → `BP_WITHDRAWAL_LIST` (same layout as the buy list); `BP_REQ_WITHDRAWAL_ITEMS` and `BP_REQ_DEPOSIT u32 banker` + object lists. Bentu charges 60 shillings to store gear.
+  - **Bank money** goes through user commands typed in chat: `deposit N`, `withdraw N`, `balance`.
+- **User commands:** `BP_USERCOMMAND u8 command` + parameters (`include/proto.h` UC_*: 5 rest, 6 stand, 35 deposit `i32`, 36 withdraw `i32`, 37 balance).
+- **Sound** (`server.c` HandlePlayWave):
+  - `BP_PLAY_WAVE`: `u32 rsc, u32 object, u8 flags, i32 row, i32 col, i32 radius, i32 max volume`. The resource string is a file name in the client's resource folder.
+  - Flags: 1 loop until you leave the room, 2 random pitch (ignored), 4 Kod chose a random spot.
+  - Position: the object's, else the middle of big square (row, col), else at the player (2D).
+  - `BP_STOP_WAVE u32 rsc, u32 object`. `BP_PLAY_MUSIC` / `BP_PLAY_MIDI u32 rsc`.
+  - Raza sends `ambcntry.ogg` as a loop at square (1, 1), then random birds, gulls and waves every few seconds. The smithy sends `smithy.ogg` music and the fireplace loop.
+- **Still not decoded:** guilds, mail and news, `BP_EFFECT` (screen effects), background overlays (`BP_ADD_BG_OVERLAY`: the sun and moon), and `BP_USERCOMMAND` replies such as preferences.
 
 ## Sources
 

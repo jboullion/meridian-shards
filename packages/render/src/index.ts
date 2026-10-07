@@ -2,3 +2,7 @@ export * from "./roomGeometry.ts";
 export * from "./lighting.ts";
 export * from "./roomView.ts";
 export * from "./skybox.ts";
+export * from "./xlat.ts";
+export * from "./sprites.ts";
+export * from "./objectLighting.ts";
+export * from "./objectsView.ts";
