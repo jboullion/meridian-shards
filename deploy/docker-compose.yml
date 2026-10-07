@@ -1,5 +1,5 @@
 # The hosted Meridian Shards stack: blakserv, the WebSocket gateway, and Caddy
-# (HTTPS, the client, the game assets, /ws). Run from the repo root:
+# (HTTPS, the client, the game assets, /ws, the download page). Run from the repo root:
 #
 #   node tools/deploy/stage.ts
 #   docker compose -f deploy/docker-compose.yml up -d --build
@@ -51,6 +51,7 @@ services:
       - ./web/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./.stage/client:/srv/client:ro
       - ./.stage/assets:/srv/assets:ro
+      - ./web/site:/srv/site:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:

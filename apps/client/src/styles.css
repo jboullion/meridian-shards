@@ -34,6 +34,15 @@ body,
   color: var(--error);
 }
 
+.server-error {
+  max-width: 36em;
+  text-align: center;
+}
+
+.server-error button {
+  margin: 0 0.4em;
+}
+
 .viewer {
   display: flex;
   height: 100%;
@@ -895,4 +904,31 @@ button.link {
 .portrait.selecting {
   cursor: crosshair;
   outline: 1px dashed rgb(240, 208, 25);
+}
+
+/* The desktop app's game file download (AssetDownload.tsx): the health bar's look, wider */
+.asset-download {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  z-index: 40;
+  width: min(520px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.asset-download .label {
+  margin-bottom: 4px;
+  font: 13px "Times New Roman", Times, serif;
+  color: rgb(231, 231, 231);
+  text-align: center;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.asset-download .stat-bar {
+  height: 16px;
+}
+
+.asset-download .stat-bar .num {
+  line-height: 16px;
 }

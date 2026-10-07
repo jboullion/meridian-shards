@@ -18,7 +18,8 @@ import {
 } from "@shards/render";
 import { PlayerMover, animStep, type GameSession, type WorldObject } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
-import { loadRoomView, loadSkybox } from "../render/roomLoader.ts";
+import { RoomCache } from "../render/roomCache.ts";
+import { loadSkybox } from "../render/roomLoader.ts";
 import { ORIGINAL_FOV } from "../viewer/roomScene.ts";
 import type { GameAudio } from "./audio.ts";
 import { ScreenOverlays } from "./screenOverlays.ts";
@@ -59,6 +60,9 @@ export interface ObjectAction {
   y: number;
 }
 
+/** The longest the view waits for a new room's sprites and sky before showing it anyway. */
+const ENTER_TIMEOUT_MS = 4000;
+
 export class GameScene {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -74,9 +78,21 @@ export class GameScene {
   private room: Room | null = null;
   private roomView: RoomView | null = null;
   private roomRes = 0;
+  /** This room and the ones next to it, loaded ahead */
+  private rooms: RoomCache | null = null;
+  /**
+   * Between leaving a room and having the next one ready (its geometry, the sprites of
+   * what's in it and its sky), the view keeps its last picture instead of drawing the
+   * objects in a half-loaded room.
+   */
+  private entering = false;
+  /** Resolves when the server has sent the current room's contents (BP_ROOM_CONTENTS). */
+  private contentsArrived: Promise<void> = Promise.resolve();
+  private contentsResolve: (() => void) | null = null;
   private sky: THREE.Group | null = null;
   private skyName = "";
   private readonly bgfs = new Map<number, Bgf | null | undefined>();
+  private readonly bgfLoads = new Map<number, Promise<void>>();
   private lights: LightSource[] = [];
   private pitch = 0;
   private readonly keys = new Set<string>();
@@ -145,15 +161,21 @@ export class GameScene {
       const self = session.world.self;
       switch (e.type) {
         case "player":
+          if (e.roomChanged) {
+            // BP_ROOM_CONTENTS follows BP_PLAYER on entering a room
+            this.contentsArrived = new Promise((r) => (this.contentsResolve = r));
+            // game.c EnterNewRoom: SetUserTargetID(INVALID_ID)
+            this.setTarget(null);
+          }
           // BP_PLAYER carries the room's background too (teleports change both)
-          void this.syncRoom().then(() => this.syncSky());
-          // game.c EnterNewRoom: SetUserTargetID(INVALID_ID)
-          if (e.roomChanged) this.setTarget(null);
+          void this.syncRoom();
           break;
         case "background":
           void this.syncSky();
           break;
         case "roomContents":
+          this.contentsResolve?.();
+          this.contentsResolve = null;
           if (self) {
             this.mover.place(self.x, self.y, performance.now());
             this.mover.setAngle(self.angle);
@@ -189,12 +211,12 @@ export class GameScene {
     const [pal, lightPal] = await Promise.all([this.assets.palette(), this.assets.lightPalettes()]);
     if (this.disposed) return;
     this.palette = paletteTexture(pal);
+    this.rooms = new RoomCache(this.assets, this.palette);
     this.xlats = new XlatTable(pal.rgb, lightPal);
     this.objects = new ObjectsView(this.palette, this.xlats, (id) => this.bgf(id), (id) => this.session.resource(id));
     this.scene.add(this.objects.group);
     this.overlays = new ScreenOverlays(this.labelsEl.parentElement!, pal.rgb, this.xlats, (id) => this.bgf(id));
     await this.syncRoom();
-    await this.syncSky();
     const loop = (t: number) => {
       this.frame(Math.min(250, t - this.last), t);
       this.last = t;
@@ -205,36 +227,61 @@ export class GameScene {
 
   /** The .bgf for an icon resource: loads on first use, undefined while loading. */
   private bgf(resource: number): Bgf | null | undefined {
-    if (this.bgfs.has(resource)) return this.bgfs.get(resource);
-    this.bgfs.set(resource, undefined);
-    const name = this.session.resource(resource);
-    if (!name) {
-      this.bgfs.set(resource, null);
-      return null;
+    if (!this.bgfLoads.has(resource)) void this.loadBgf(resource);
+    return this.bgfs.get(resource);
+  }
+
+  /** Loads an icon resource's .bgf once; resolves when it's there (or known missing). */
+  private loadBgf(resource: number): Promise<void> {
+    let p = this.bgfLoads.get(resource);
+    if (!p) {
+      this.bgfs.set(resource, undefined);
+      const name = this.session.resource(resource);
+      if (!name) {
+        this.bgfs.set(resource, null);
+        p = Promise.resolve();
+      } else
+        p = this.assets.bgf(name).then(
+          (b) => void this.bgfs.set(resource, b),
+          () => void this.bgfs.set(resource, null),
+        );
+      this.bgfLoads.set(resource, p);
     }
-    this.assets
-      .bgf(name)
-      .then((b) => this.bgfs.set(resource, b))
-      .catch(() => this.bgfs.set(resource, null));
-    return undefined;
+    return p;
+  }
+
+  /** The sprites of everything in the room, once the server has said what's in it. */
+  private async objectsReady(): Promise<void> {
+    await this.contentsArrived;
+    const res = new Set<number>();
+    for (const o of this.session.world.objects.values()) {
+      res.add(o.info.iconRes);
+      for (const ov of o.look.overlays) res.add(ov.iconRes);
+    }
+    await Promise.all([...res].map((r) => this.loadBgf(r)));
   }
 
   private async syncRoom(): Promise<void> {
     const p = this.session.world.player;
-    if (!p || !this.palette || p.roomRes === this.roomRes) return;
+    if (!p || !this.rooms || p.roomRes === this.roomRes) return void this.syncSky();
     this.roomRes = p.roomRes;
     const name = this.session.resource(p.roomRes);
-    this.status(true);
     if (!name) return;
-    const loaded = await loadRoomView(this.assets, name, this.palette);
-    if (this.disposed || this.roomRes !== p.roomRes) {
-      loaded.view.dispose();
+    this.entering = true;
+    this.status(true);
+    void this.rooms.enter(name);
+    let loaded;
+    try {
+      loaded = await this.rooms.get(name);
+    } catch (e) {
+      console.error(`room ${name}: ${(e as Error).message}`);
+      this.entering = false;
+      this.status(false);
       return;
     }
-    if (this.roomView) {
-      this.scene.remove(this.roomView.group);
-      this.roomView.dispose();
-    }
+    if (this.disposed || this.roomRes !== p.roomRes) return;
+    // The cache owns room views: neighbours stay loaded for when you walk back
+    if (this.roomView) this.scene.remove(this.roomView.group);
     this.room = loaded.room;
     this.roomView = loaded.view;
     this.scene.add(loaded.view.group);
@@ -244,6 +291,10 @@ export class GameScene {
       this.mover.place(self.x, self.y, performance.now());
       this.mover.setAngle(self.angle);
     }
+    // Show it all at once; a slow sprite or sky can't hold the view for more than a few seconds
+    await Promise.race([Promise.all([this.objectsReady(), this.syncSky()]), new Promise((r) => setTimeout(r, ENTER_TIMEOUT_MS))]);
+    if (this.disposed || this.roomRes !== p.roomRes) return;
+    this.entering = false;
     this.status(false);
   }
 
@@ -268,6 +319,8 @@ export class GameScene {
     const world = this.session.world;
     const self = world.self;
     const room = this.room;
+    // Entering a room: keep the last picture until the new room is ready
+    if (this.entering) return;
     if (!(room && this.roomView && this.objects && self && this.mover.room === room)) {
       this.renderer.render(this.scene, this.camera);
       return;
@@ -584,8 +637,19 @@ export class GameScene {
     }
     // Clicking an object selects it as the target (gameuser.c SetUserTargetID)
     if (this.hovered !== null) this.setTarget(this.hovered);
-    else if (!this.locked) this.canvas.requestPointerLock();
+    else if (!this.locked) this.lockPointer();
   };
+
+  /**
+   * Raw mouse movement (no OS acceleration) where the platform has it, like the original's
+   * DirectInput mouselook; otherwise a plain lock. Chromium refuses a re-lock for about a
+   * second after Esc, which is harmless here.
+   */
+  private lockPointer(): void {
+    this.canvas.requestPointerLock({ unadjustedMovement: true }).catch((e: DOMException) => {
+      if (e.name === "NotSupportedError") this.canvas.requestPointerLock().catch(() => {});
+    });
+  }
 
   /** Double click: pick up or activate (merintr EventMouseClick: A_ACTIVATEMOUSE). */
   private readonly onDoubleClick = () => {
@@ -742,7 +806,7 @@ export class GameScene {
     if (this.locked) document.exitPointerLock();
     this.objects?.dispose();
     this.overlays?.dispose();
-    this.roomView?.dispose();
+    this.rooms?.dispose();
     if (this.sky) disposeSkybox(this.sky);
     this.renderer.dispose();
     this.labelsEl.replaceChildren();

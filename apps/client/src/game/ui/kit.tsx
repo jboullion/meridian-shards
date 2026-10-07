@@ -267,6 +267,28 @@ export function TextArea({
   );
 }
 
+/** COMBOBOX with CBS_DROPDOWNLIST: a native drop-down in the edit treatment. */
+export function Select<K extends string>({
+  at: r, value, options, onChange,
+}: {
+  at?: Rect;
+  value: K;
+  options: readonly { key: K; label: string }[];
+  onChange: (v: K) => void;
+}) {
+  return (
+    <span className="mk-edit" style={r ? at(r) : undefined}>
+      <select value={value} onChange={(e) => onChange(e.target.value as K)}>
+        {options.map((o) => (
+          <option key={o.key} value={o.key}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </span>
+  );
+}
+
 export interface ListItem<K> {
   key: K;
   label: ReactNode;

@@ -12,6 +12,8 @@
 // interface bitmaps compiled into the client (clientd3d/bitmap and module/merintr/bitmap:
 // backgrounds, stat tab buttons, the map paper) as ui/<name>.bmp, the login dialog's icon
 // (ui/icon1.ico) and the Heidelberg title font (ui/heidelb1.ttf, font.c FONT_TITLES).
+// And roomlinks.json, which rooms connect to which, from the Kod source (roomLinks.ts), so
+// the client can load the rooms next to yours ahead of time.
 //
 // Output: dist/assets/<name> and dist/assets/manifest.json:
 //   { generated, rsbHash, files: { name: { size, hash } } }
@@ -22,6 +24,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSyn
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { buildRoomLinks } from "./roomLinks.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const { values: opt } = parseArgs({
@@ -145,6 +148,25 @@ if (palC) {
   files["lightpal.bin"] = { size: lightPal.length, hash: createHash("sha1").update(lightPal).digest("hex").slice(0, 16), mtime: 0 };
 } else {
   console.warn("!! no clientd3d pal.c (build the client: server\\build.cmd Bclient); light-based xlats will be approximate");
+}
+
+// Room links from the Kod room classes and the RID_* constants
+const KOD = join(SERVER, "kod");
+if (existsSync(join(KOD, "object")) && existsSync(join(KOD, "include"))) {
+  const kodFiles = [...walk(join(KOD, "object"), true)]
+    .filter((p) => extname(p).toLowerCase() === ".kod")
+    .map((path) => ({ path, text: readFileSync(path, "latin1") }));
+  const khd = readdirSync(join(KOD, "include"))
+    .filter((f) => extname(f).toLowerCase() === ".khd")
+    .map((f) => readFileSync(join(KOD, "include", f), "latin1"))
+    .join("\n");
+  const links = buildRoomLinks(kodFiles, khd);
+  const json = Buffer.from(JSON.stringify(links));
+  writeFileSync(join(OUT, "roomlinks.json"), json);
+  files["roomlinks.json"] = { size: json.length, hash: createHash("sha1").update(json).digest("hex").slice(0, 16), mtime: 0 };
+  console.log(`roomlinks.json: ${Object.keys(links).length} rooms`);
+} else {
+  console.warn("!! no Kod source in server/src/kod; the client won't load neighbouring rooms ahead");
 }
 
 writeFileSync(

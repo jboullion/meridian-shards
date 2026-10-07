@@ -1,0 +1,23 @@
+{
+  "name": "@shards/desktop",
+  "version": "0.1.0",
+  "productName": "Meridian Shards",
+  "private": true,
+  "description": "Meridian Shards: the desktop client (Electron around the browser client).",
+  "author": "Meridian Shards",
+  "license": "GPL-2.0-only",
+  "type": "module",
+  "main": "out/main.cjs",
+  "scripts": {
+    "build": "vite build --mode main && vite build --mode preload",
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --publish never",
+    "release": "electron-builder --publish always"
+  },
+  "devDependencies": {
+    "electron": "44.6.0",
+    "electron-builder": "^26.15.3",
+    "electron-updater": "^6.8.9"
+  }
+}

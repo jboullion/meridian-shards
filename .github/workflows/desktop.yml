@@ -1,0 +1,55 @@
+# Builds the desktop installers on Windows, macOS and Linux and uploads them, with the update
+# feeds, to a draft GitHub release for v<version> (apps/desktop/package.json). Publishing
+# that release (on GitHub) ships it: the download page and installed apps use the latest
+# published release.
+#
+# Run it from the Actions tab, or push a tag: git tag v0.2.0 && git push origin v0.2.0
+#
+# The installers carry the game files. Raw art is never in git, so each build copies them
+# from the hosted server's /assets/ (tools/assets/fetch-assets.ts), cached between runs by
+# the server's manifest. Deploy the server first, so its files are the ones being shipped.
+
+name: Desktop builds
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  ASSETS_FROM: https://35-206-75-121.sslip.io
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: The server's manifest (the cache key for its files)
+        run: curl -fsSL "$ASSETS_FROM/assets/manifest.json" -o server-manifest.json
+        shell: bash
+      - uses: actions/cache@v4
+        with:
+          path: dist/assets
+          key: game-files-${{ hashFiles('server-manifest.json') }}
+          restore-keys: game-files-
+      - name: Game files from the server
+        run: node tools/assets/fetch-assets.ts --from "$ASSETS_FROM"
+        shell: bash
+      - name: Build and upload to the draft release
+        run: npm run desktop:release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Unsigned for now (docs/adr/0002-desktop-shell.md); stops macOS looking for a certificate
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"

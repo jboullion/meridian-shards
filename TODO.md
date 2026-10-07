@@ -9,5 +9,7 @@
   - I am happy to still keep a testable deploy on the VM so we can rapidly test changes without having to redownload the client
   - We will need to build a website to serve this packaged client
 
+
+## UI
 - We need to build out our options / settings interface
 - 

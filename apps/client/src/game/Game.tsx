@@ -3,8 +3,10 @@ import type { CharInfo, CharacterSlot } from "@shards/protocol";
 import { GameSession, type ChatLine, type LookResult, type OfferEvent, type SessionPhase, type TradeList } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
+import { desktop, gameSocketUrl } from "../host.ts";
 import { GameAudio } from "./audio.ts";
 import { CharacterCreator } from "./CharacterCreator.tsx";
+import { AssetDownload } from "./AssetDownload.tsx";
 import { CharacterSelect } from "./CharacterSelect.tsx";
 import { GameView, MAX_CHAT_LINES } from "./GameView.tsx";
 import { IconRenderer } from "./icons.ts";
@@ -33,7 +35,18 @@ interface Live {
   offers: Relay<OfferEvent>;
 }
 
-const wsUrl = () => `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
+/** Set before reloading for a server update, so the login screen can say why. */
+const UPDATED_KEY = "shards.serverUpdated";
+
+function takeUpdatedNotice(): string | null {
+  try {
+    const was = sessionStorage.getItem(UPDATED_KEY);
+    sessionStorage.removeItem(UPDATED_KEY);
+    return was ? "The server was updated while you were away. Please log in again." : null;
+  } catch {
+    return null;
+  }
+}
 
 export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   const [live, setLive] = useState<Live | null>(null);
@@ -41,11 +54,14 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   const [phase, setPhase] = useState<SessionPhase | "offline">("offline");
   const [characters, setCharacters] = useState<CharacterSlot[]>([]);
   const [motd, setMotd] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(takeUpdatedNotice);
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [look, setLook] = useState<LookResult | null>(null);
   /** The creator is open for this empty slot once BP_CHARINFO arrives */
   const [creating, setCreating] = useState<{ slotId: number; info: CharInfo | null } | null>(null);
+
+  // The desktop app asks before closing the window mid-game
+  useEffect(() => desktop?.setPhase(phase), [phase]);
 
   // Keep-alive pings from a worker, so background tabs stay connected.
   useEffect(() => {
@@ -70,10 +86,28 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     }
     // Created on the login click, so the browser lets the page play sound.
     const audio = new GameAudio(assets);
+    // A server updated since this page loaded has new files (rsc0000.rsb, rooms) that the
+    // login depends on: reload to get them, and the client that goes with them
+    void assets
+      .changedOnServer()
+      .catch(() => false)
+      .then((changed) => {
+        if (!changed) return connect(username, password, audio);
+        audio.dispose();
+        try {
+          sessionStorage.setItem(UPDATED_KEY, "1");
+        } catch {
+          // no notice then
+        }
+        location.reload();
+      });
+  };
+
+  const connect = (username: string, password: string, audio: GameAudio) => {
     const trades = new Relay<TradeList>();
     const offers = new Relay<OfferEvent>();
     const s = new GameSession(
-      { url: wsUrl(), username, password, secretKey: __SECRET_KEY__, lookupResource: (id) => rsb.get(id), pingIntervalMs: 0 },
+      { url: gameSocketUrl(), username, password, secretKey: __SECRET_KEY__, lookupResource: (id) => rsb.get(id), pingIntervalMs: 0 },
       {
         phase: (p) => {
           setPhase(p);
@@ -104,39 +138,56 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   };
 
   if (!live || !session || phase === "offline" || phase === "closed")
-    return <LoginScreen assets={assets} onLogin={login} error={error} onClearError={() => setError(null)} />;
-  if (phase === "connecting" || phase === "login") return <ConnectingScreen />;
+    return (
+      <>
+        <LoginScreen assets={assets} onLogin={login} error={error} onClearError={() => setError(null)} />
+        <AssetDownload />
+      </>
+    );
+  if (phase === "connecting" || phase === "login")
+    return (
+      <>
+        <ConnectingScreen />
+        <AssetDownload />
+      </>
+    );
   if (phase === "characters" && creating?.info)
     return (
-      <CharacterCreator
-        info={creating.info}
-        slotId={creating.slotId}
-        session={session}
-        icons={live.icons}
-        error={error}
-        onCancel={() => {
-          setCreating(null);
-          setError(null);
-        }}
-        onClearError={() => setError(null)}
-      />
+      <>
+        <CharacterCreator
+          info={creating.info}
+          slotId={creating.slotId}
+          session={session}
+          icons={live.icons}
+          error={error}
+          onCancel={() => {
+            setCreating(null);
+            setError(null);
+          }}
+          onClearError={() => setError(null)}
+        />
+        <AssetDownload />
+      </>
     );
   if (phase === "characters")
     return (
-      <CharacterSelect
-        characters={characters}
-        motd={motd}
-        error={error}
-        session={session}
-        onLogout={logout}
-        onClearError={() => setError(null)}
-        onCreate={(slotId) => {
-          // charpick.c: picking "<New character>" asks the server for the creator's choices
-          setError(null);
-          setCreating({ slotId, info: null });
-          session.requestCharInfo();
-        }}
-      />
+      <>
+        <CharacterSelect
+          characters={characters}
+          motd={motd}
+          error={error}
+          session={session}
+          onLogout={logout}
+          onClearError={() => setError(null)}
+          onCreate={(slotId) => {
+            // charpick.c: picking "<New character>" asks the server for the creator's choices
+            setError(null);
+            setCreating({ slotId, info: null });
+            session.requestCharInfo();
+          }}
+        />
+        <AssetDownload />
+      </>
     );
   return (
     <GameView

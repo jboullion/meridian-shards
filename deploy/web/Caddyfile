@@ -1,5 +1,6 @@
-# Caddy: HTTPS for the site, the client build, the game assets, and the WebSocket
-# gateway at /ws. SITE_ADDRESS is the hostname (e.g. 34-123-45-67.sslip.io); Caddy
+# Caddy: HTTPS for the site, the client build, the game assets, the WebSocket gateway at
+# /ws, and the desktop app's download page at /download/ (the installers themselves are on
+# GitHub Releases). SITE_ADDRESS is the hostname (e.g. 34-123-45-67.sslip.io); Caddy
 # gets its certificate from Let's Encrypt by itself. For a local test without TLS,
 # set SITE_ADDRESS=http://localhost.
 
@@ -21,6 +22,14 @@
 	handle /assets/* {
 		root * /srv
 		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# The download page (deploy/web/site)
+	redir /download /download/
+	handle /download/* {
+		root * /srv/site
+		header Cache-Control "no-cache"
 		file_server
 	}
 

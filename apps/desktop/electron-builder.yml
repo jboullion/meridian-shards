@@ -1,0 +1,84 @@
+# Packaging for the desktop client: npm run desktop:dist (installers for this OS) or
+# npm run desktop:build (an unpacked app in dist/<os>-unpacked, for testing).
+# The app holds the client build, our main process, and the asset build (dist/assets: the
+# original game files, so a fresh install downloads nothing). Only files the server has
+# changed since are downloaded at run time (src/assetCache.ts). On a machine without our
+# server build, get dist/assets from a server first: tools/assets/fetch-assets.ts.
+
+appId: net.meridianshards.client
+productName: Meridian Shards
+copyright: Copyright © Meridian Shards contributors. Licensed under the GPL, version 2.
+
+directories:
+  output: dist
+  buildResources: build
+
+# Everything is bundled into out/ (vite.config.ts), so no node_modules are packaged
+files:
+  - out/**
+  - "!out/**/*.map"
+  - build/icon.png
+  - package.json
+  # the root workspace's own dependencies (the gateway's ws) aren't the app's
+  - "!**/node_modules/**"
+extraResources:
+  - from: ../client/dist
+    to: client
+  - from: ../../LICENSE
+    to: LICENSE.txt
+  - from: ../../dist/assets
+    to: assets
+npmRebuild: false
+asar: true
+
+# Turn off Electron features a game client never needs (running as plain Node, NODE_OPTIONS,
+# --inspect) and only load the signed-off app.asar
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+
+# Installers and the update feeds (latest*.yml) go to a GitHub release of this repo:
+# npm run desktop:release (or the Desktop builds workflow) uploads them to a draft release
+# for v<version>, and publishing that release ships it. Installed apps update from the
+# latest published release, downloading only the changed blocks (the .blockmap files).
+publish:
+  provider: github
+  owner: jboullion
+  repo: meridian-shards
+  releaseType: draft
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: Meridian-Shards-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: Meridian Shards
+  license: ../../LICENSE
+
+mac:
+  category: public.app-category.role-playing-games
+  target:
+    - target: dmg
+      arch: [universal]
+    - target: zip
+      arch: [universal]
+  artifactName: Meridian-Shards-${version}-mac.${ext}
+
+linux:
+  category: Game
+  synopsis: Meridian Shards, a client for Meridian 59
+  target:
+    - AppImage
+    - deb
+  artifactName: Meridian-Shards-${version}-${arch}.${ext}
+  maintainer: Meridian Shards

@@ -1,0 +1,204 @@
+<!doctype html>
+<!-- The download page, served by Caddy at /download/ (deploy/web/Caddyfile). It lists the
+     installers of the latest published GitHub release (npm run desktop:release). -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Download Meridian Shards</title>
+    <link rel="icon" href="icon.png" />
+    <style>
+      :root {
+        --bg: #1b1916;
+        --panel: #2a2622;
+        --edge: #5e4d2a;
+        --text: #e6dcc8;
+        --muted: #a89c86;
+        --gold: #f2c14e;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at 50% 30%, #3a3530, var(--bg) 70%);
+        color: var(--text);
+        font: 17px/1.5 Georgia, "Times New Roman", serif;
+        display: grid;
+        place-items: center;
+        padding: 32px 16px;
+      }
+      main {
+        width: 100%;
+        max-width: 640px;
+        text-align: center;
+      }
+      img.icon {
+        width: 112px;
+        height: 112px;
+      }
+      h1 {
+        margin: 8px 0 4px;
+        color: var(--gold);
+        font-size: 44px;
+        font-weight: normal;
+        text-shadow: 2px 2px 0 #000;
+      }
+      .lead {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+      .downloads {
+        display: grid;
+        gap: 12px;
+      }
+      .os {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 18px;
+        background: var(--panel);
+        border: 2px solid var(--edge);
+        text-align: left;
+      }
+      .os.mine {
+        border-color: var(--gold);
+      }
+      .os h2 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: normal;
+      }
+      .os small {
+        color: var(--muted);
+      }
+      .os .links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+      a.button {
+        display: inline-block;
+        padding: 8px 16px;
+        background: #4a3b1c;
+        border: 1px solid var(--gold);
+        color: var(--gold);
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      a.button:hover {
+        background: #5e4a22;
+      }
+      .none {
+        color: var(--muted);
+        font-style: italic;
+      }
+      .notes {
+        margin-top: 28px;
+        color: var(--muted);
+        font-size: 15px;
+        text-align: left;
+      }
+      .notes a {
+        color: var(--text);
+      }
+      @media (max-width: 480px) {
+        .os {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .os .links {
+          justify-content: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img class="icon" src="icon.png" alt="" />
+      <h1>Meridian Shards</h1>
+      <p class="lead">The desktop client: the whole game in one download. It keeps itself up to date.</p>
+      <div class="downloads">
+        <section class="os" data-os="win">
+          <div><h2>Windows</h2><small>Windows 10 or later, 64-bit</small></div>
+          <div class="links"><span class="none">Checking…</span></div>
+        </section>
+        <section class="os" data-os="mac">
+          <div><h2>macOS</h2><small>macOS 12 or later, Apple silicon or Intel</small></div>
+          <div class="links"><span class="none">Checking…</span></div>
+        </section>
+        <section class="os" data-os="linux">
+          <div><h2>Linux</h2><small>64-bit AppImage or Debian package</small></div>
+          <div class="links"><span class="none">Checking…</span></div>
+        </section>
+      </div>
+      <div class="notes">
+        <p>Or <a href="/">play in your browser</a>, no download needed.</p>
+        <p>
+          The builds aren't signed yet. On Windows, choose <em>More info → Run anyway</em> if SmartScreen
+          stops the installer. On macOS, right-click the app and choose <em>Open</em> the first time.
+          On Linux, make the AppImage executable (<code>chmod +x</code>) and run it.
+        </p>
+        <p>
+          Meridian Shards is free software under the GNU General Public License, version 2:
+          <a href="https://github.com/jboullion/meridian-shards">the source code</a> and
+          <a href="https://github.com/jboullion/meridian-shards/releases">every release</a> are on GitHub.
+        </p>
+      </div>
+    </main>
+    <script>
+      // The latest published release's installers (apps/desktop/electron-builder.yml artifactName)
+      const RELEASE = "https://api.github.com/repos/jboullion/meridian-shards/releases/latest";
+      const PICK = {
+        win: [[/\.exe$/, "Download"]],
+        mac: [[/-mac\.dmg$/, "Download"]],
+        linux: [[/\.AppImage$/, "AppImage"], [/\.deb$/, ".deb"]],
+      };
+
+      function show(os, links) {
+        const box = document.querySelector(`[data-os="${os}"] .links`);
+        if (links.length) return box.replaceChildren(...links);
+        const none = document.createElement("span");
+        none.className = "none";
+        none.textContent = "Not available yet";
+        box.replaceChildren(none);
+      }
+
+      async function fill() {
+        let release = null;
+        try {
+          const res = await fetch(RELEASE, { headers: { Accept: "application/vnd.github+json" } });
+          if (res.ok) release = await res.json();
+        } catch {
+          // offline or rate limited: shown as not available
+        }
+        const version = release?.tag_name?.replace(/^v/, "") ?? "";
+        for (const [os, rules] of Object.entries(PICK)) {
+          const links = [];
+          for (const [re, label] of rules)
+            for (const a of release?.assets ?? [])
+              if (re.test(a.name) && !a.name.includes("__uninstaller")) {
+                const link = document.createElement("a");
+                link.className = "button";
+                link.href = a.browser_download_url;
+                link.textContent = `${label} ${version}`.trim();
+                links.push(link);
+              }
+          show(os, links);
+        }
+      }
+
+      const ua = navigator.userAgent;
+      const mine = /Windows/.test(ua) ? "win" : /Mac OS X|Macintosh/.test(ua) ? "mac" : /Linux|X11/.test(ua) ? "linux" : null;
+      if (mine) {
+        const el = document.querySelector(`[data-os="${mine}"]`);
+        el.classList.add("mine");
+        el.parentElement.prepend(el);
+      }
+      fill();
+    </script>
+  </body>
+</html>

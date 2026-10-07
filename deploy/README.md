@@ -6,7 +6,7 @@ The hosted stack is three containers on one small Linux VM:
 |---|---|
 | `blakserv` | The unmodified Server 104 server, built for Linux (32-bit), with the compiled Kod, resources and rooms from our build. Game state lives on the `savegame` volume. |
 | `gateway` | The WebSocket-to-TCP gateway (`tools/gateway/gateway.ts`). |
-| `web` | Caddy: HTTPS (Let's Encrypt), the client, the game assets at `/assets/`, and the gateway at `/ws`. |
+| `web` | Caddy: HTTPS (Let's Encrypt), the client, the game assets at `/assets/`, the gateway at `/ws`, and the desktop app's download page (`/download/`; the installers are on GitHub Releases). |
 
 Port 5959 is also open for original Windows clients built with our `SecretKey`. Browser players only need 443.
 
@@ -80,8 +80,10 @@ Put this in `.env`, using **your** static IP with dashes (34.123.45.67 becomes `
 
 ```
 SITE_ADDRESS=34-123-45-67.sslip.io
-GATEWAY_ORIGINS=https://34-123-45-67.sslip.io
+GATEWAY_ORIGINS=https://34-123-45-67.sslip.io,app://shards
 ```
+
+`app://shards` is the desktop app's page origin; without it the gateway turns the desktop app away.
 
 ## 5. Deploy (and redeploy)
 
@@ -92,6 +94,23 @@ node tools/deploy/push.ts --host shards@<EXTERNAL_IP> --key $HOME/.ssh/meridian_
 ```
 
 The first push uploads about 450 MB (mostly the game assets). For code-only updates add `--skip-assets`. The first start takes a minute: Docker builds blakserv, and Caddy fetches the certificate. Then open `https://<dashed-ip>.sslip.io`.
+
+## 6. The desktop app
+
+The desktop app (`apps/desktop`, [ADR 0002](../docs/adr/0002-desktop-shell.md)) carries the game files in its installer and asks the server only for files that changed since. Its installers and updates come from GitHub Releases, not the VM. The server needs nothing new except `app://shards` in `GATEWAY_ORIGINS` (above). To release:
+
+1. Deploy the server first (section 5). The release build copies the game files from the VM's `/assets/`.
+2. Bump `version` in `apps/desktop/package.json`, commit, then tag and push:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+3. The **Desktop builds** workflow builds Windows, macOS and Linux and uploads them to a draft release named for the tag. Check it on GitHub, then **Publish release**.
+
+Installed apps find the new release at their next launch, download the changed blocks in the background, and offer "Restart to update" on the login screen. Unsigned macOS builds can't update themselves. The download page at `https://<dashed-ip>.sslip.io/download/` always lists the latest published release.
+
+To build only Windows locally: `npm run desktop:dist` makes the installer in `apps/desktop/dist/`. `npm run desktop:release` uploads it to the draft release too, with a token in `GH_TOKEN`.
 
 ## Running it
 

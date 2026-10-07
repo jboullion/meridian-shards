@@ -101,6 +101,31 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 - [ ] Test Chrome, Firefox and Safari against the hosted server.
 - [ ] A friends playtest mixing original-client and browser players.
 
+### 8. Desktop client (2026-10-07)
+
+- [x] The decision: Electron over Tauri, game files in the installer with only server changes downloaded, releases on GitHub, and WSS kept ([ADR 0002](adr/0002-desktop-shell.md)).
+- [x] `apps/desktop`: the page is `app://shards/`, with the client build and a caching proxy for the selected server's `/assets/`.
+  - No reload or close shortcuts, no background throttling, sound without a click, F11 / Alt+Enter fullscreen, and the window remembered.
+  - "Log off and quit?" when closing mid-game.
+- [x] The login dialog's Server field (the original `IDD_LOGIN` had one): Shards VM, Local (Docker), Local (dev), plus any in `servers.json`.
+- [x] Tested on Windows on 2026-10-07:
+  - logged in through the dev app and the packaged app (`app://`) and entered the Inn of Raza on the local server;
+  - the VM's files load and the cache serves them on the next launch;
+  - a gateway limited to `GATEWAY_ORIGINS=app://shards` accepts the app;
+  - timers keep their rate while minimized;
+  - closing mid-game asks first.
+- [x] Packaging: the Windows NSIS installer (112 MB, unsigned) and `latest.yml`. Electron fuses are on. CI for all three OSes (`.github/workflows/desktop.yml`).
+- [x] Loading (2026-10-07):
+  - The rooms next to yours load ahead (`roomlinks.json` from the Kod exits, `roomCache.ts`).
+  - A new room appears at once with its objects and sky.
+  - The desktop app ships the game files and downloads only what the server changed, with a health-bar-style progress bar.
+  - The client reloads if the server was updated before you log in.
+- [x] Hosting: installers on GitHub Releases (`npm run desktop:release`, or the workflow on a `v*` tag); a download page at `/download/` on the VM.
+- [ ] Make the repo public, deploy to the VM (`app://shards` in `GATEWAY_ORIGINS`), then tag v0.1.0 and publish the draft release.
+- [ ] Check auto-update end to end: install 0.1.0, publish 0.1.1, and see "Restart to update".
+- [ ] macOS and Linux builds from CI, tried on real machines (pointer lock, sound, WebGL).
+- [ ] Signing before going public: Windows (Azure Trusted Signing) and macOS (an Apple Developer account and notarization).
+
 ## What the slice must prove
 
 - [x] An unmodified Server 104 `blakserv` (plus config changes only) serves browser players through the gateway (the protocol side; proven with the headless client).
@@ -133,5 +158,6 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
   - Milestone 5 is done: the original's interface column (bars, face, enchantments, minimap, inventory, stats, spells, skills, quests), shops, selling, the bank and vault, sound and music, and settings with rebindable keys.
   - Found along the way: the client must ask for its inventory, plain id fields drop the number tag, and `BP_CHANGE` updates inventory stacks (see [protocol.md](research/protocol.md)).
 - **2026-10-07:**
+  - Milestone 8 began: the desktop app (Electron) runs the same client, with the game files in its installer and only server changes downloaded. There's a Windows installer, an update feed, a download page and CI for macOS and Linux.
   - Milestone 6 is done: targeting with the original halo, attacking, the weapon hand, screen effects, projectiles, casting at targets, death and the Underworld, and the full character creator.
   - Death and respawn need nothing special from the client: the server moves you to the Underworld and you walk out through its rip in space.
