@@ -12,7 +12,8 @@
 export const ACTIONS = [
   "forward", "backward", "strafeLeft", "strafeRight", "turnLeft", "turnRight", "run",
   "lookUp", "lookDown", "lookStraight", "flip",
-  "go", "interact", "lookAt", "chat", "inventory", "mapZoomIn", "mapZoomOut", "settings",
+  "go", "interact", "lookAt", "attack", "targetNext", "targetPrevious", "targetSelf", "targetClear",
+  "chat", "inventory", "mapZoomIn", "mapZoomOut", "settings",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -31,6 +32,11 @@ export const ACTION_LABELS: Record<Action, string> = {
   go: "Open door / use exit",
   interact: "Pick up / activate",
   lookAt: "Look at target",
+  attack: "Attack",
+  targetNext: "Next target",
+  targetPrevious: "Previous target",
+  targetSelf: "Target yourself",
+  targetClear: "Clear target",
   chat: "Chat",
   inventory: "Inventory tab",
   mapZoomIn: "Map zoom in",
@@ -62,9 +68,14 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     lookDown: k("PageDown"),
     lookStraight: k("Home"),
     flip: k("End"),
-    go: k("Space", "KeyE"),
+    go: k("Space"),
     interact: k("KeyF"),
     lookAt: k("KeyR"),
+    attack: k("KeyE"),
+    targetNext: k("BracketRight", "Tab"),
+    targetPrevious: k("BracketLeft"),
+    targetSelf: k("Backslash"),
+    targetClear: k("Escape"),
     chat: k("Enter", "NumpadEnter"),
     inventory: k("KeyI"),
     mapZoomIn: k("NumpadAdd", "Equal"),
@@ -86,6 +97,12 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     go: k("Space"),
     interact: [],
     lookAt: k("Enter", "NumpadEnter"),
+    // merintr.c: VK_CONTROL attacks the target or the closest attackable; [ ] \ Esc target
+    attack: k("ControlLeft", "ControlRight"),
+    targetNext: k("BracketRight"),
+    targetPrevious: k("BracketLeft"),
+    targetSelf: k("Backslash"),
+    targetClear: k("Escape"),
     chat: k("Quote"),
     inventory: [],
     mapZoomIn: k("NumpadAdd"),
@@ -95,6 +112,8 @@ export const PRESETS: Record<PresetName, KeyMap> = {
 };
 
 export interface Settings {
+  /** Bumped when saved settings need migrating */
+  version: number;
   preset: PresetName;
   /** The preset's keys with the player's changes. */
   keys: KeyMap;
@@ -112,9 +131,14 @@ export interface Settings {
   invertMouse: boolean;
   /** Minimap zoom (map.c zoom: 0.5 .. 8) */
   mapZoom: number;
+  /** Right click looks at an object (the original); otherwise it opens the actions menu */
+  rightClickLooks: boolean;
 }
 
+const SETTINGS_VERSION = 2;
+
 export const DEFAULT_SETTINGS: Settings = {
+  version: SETTINGS_VERSION,
   preset: "modern",
   keys: PRESETS.modern,
   typeToChat: false,
@@ -127,6 +151,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mouseSpeed: 1,
   invertMouse: false,
   mapZoom: 1,
+  rightClickLooks: false,
 };
 
 const STORAGE_KEY = "shards.settings";
@@ -139,7 +164,9 @@ function load(): Settings {
     const preset: PresetName = s.preset === "original" ? "original" : "modern";
     // Keep any actions added since the settings were saved.
     const keys = { ...PRESETS[preset], ...(s.keys ?? {}) };
-    return { ...DEFAULT_SETTINGS, ...s, preset, keys };
+    // Version 2 (milestone 6): E attacks in the modern preset; it no longer opens doors
+    if ((s.version ?? 1) < 2 && preset === "modern") keys.go = keys.go.filter((b) => b.code !== "KeyE");
+    return { ...DEFAULT_SETTINGS, ...s, version: SETTINGS_VERSION, preset, keys };
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -169,7 +196,7 @@ export function onSettings(fn: (s: Settings) => void): () => void {
 
 /** Switch presets; the original preset also turns on type-to-chat. */
 export function applyPreset(preset: PresetName): void {
-  updateSettings({ preset, keys: PRESETS[preset], typeToChat: preset === "original" });
+  updateSettings({ preset, keys: PRESETS[preset], typeToChat: preset === "original", rightClickLooks: preset === "original" });
 }
 
 /**
@@ -191,7 +218,7 @@ export function isHeld(keys: KeyMap, action: Action, down: ReadonlySet<string>, 
 export function bindingLabel(b: KeyBinding): string {
   const names: Record<string, string> = {
     ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→", Space: "Space", Quote: "'",
-    Equal: "=", Minus: "-", NumpadAdd: "Num +", NumpadSubtract: "Num -", NumpadEnter: "Num Enter",
+    Equal: "=", Minus: "-", BracketLeft: "[", BracketRight: "]", Backslash: "\\", ControlLeft: "Ctrl", ControlRight: "Right Ctrl", NumpadAdd: "Num +", NumpadSubtract: "Num -", NumpadEnter: "Num Enter",
     ShiftLeft: "Shift", ShiftRight: "Right Shift",
   };
   const name = names[b.code] ?? b.code.replace(/^Key/, "").replace(/^Digit/, "").replace(/^Numpad/, "Num ");

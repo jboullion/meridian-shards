@@ -4,20 +4,24 @@
 //   click the view: capture the mouse (mouselook); Esc releases it
 //   WASD / arrows: move and strafe (arrows left/right turn); Shift runs
 //   Space or E: open a door / take the exit you stand on (BP_REQ_GO)
-//   left click: look at the object under the cursor (crosshair when captured)
-//   F or double click: pick up / activate;  right click: actions menu
+//   left click: select the object under the cursor as your target (crosshair when captured)
+//   E: attack the target (or the closest thing you can attack); [ ] \ Esc: next, previous,
+//   yourself, no target;  R: look at the target;  F or double click: pick up / activate
+//   right click: actions menu (the original preset: look)
 //   PgUp/PgDn/Home: look up, down, straight; End: turn around;  Enter: chat
 
 import * as THREE from "three";
-import { FINENESS, skyboxForBackground, type Bgf, type Room } from "@shards/formats";
+import { FINENESS, leafAt, skyboxForBackground, type Bgf, type Room } from "@shards/formats";
 import {
-  OF, ObjectsView, RoomView, XlatTable, disposeSkybox, paletteTexture, type LightSource, type NameLabel,
+  DRAWFX, OF, ObjectsView, RoomView, XlatTable, disposeSkybox, objectBrightness, paletteTexture, type LightSource,
+  type NameLabel, type ViewObject,
 } from "@shards/render";
 import { PlayerMover, animStep, type GameSession, type WorldObject } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import { loadRoomView, loadSkybox } from "../render/roomLoader.ts";
 import { ORIGINAL_FOV } from "../viewer/roomScene.ts";
 import type { GameAudio } from "./audio.ts";
+import { ScreenOverlays } from "./screenOverlays.ts";
 import { actionsFor, getSettings, isHeld, onSettings, type Action, type Settings } from "./settings.ts";
 
 /** Eye height above the floor (clientd3d/game.c player.height = 3/4 square). */
@@ -29,6 +33,12 @@ const PITCH_RATE = 1.2;
 const MAX_PITCH = 1.2;
 const OF_GETTABLE = 0x10;
 const OF_ACTIVATABLE = 0x800;
+const OF_ATTACKABLE = 0x8;
+/** gameuser.c: at most one attack every 250 ms; the closest target must be this near */
+const ATTACK_DELAY = 250;
+const CLOSE_DISTANCE = 5 * FINENESS;
+/** effect.c SHAKE_AMPLITUDE */
+const SHAKE_AMPLITUDE = FINENESS / 4;
 
 export interface GameSceneStatus {
   roomName: string;
@@ -77,6 +87,12 @@ export class GameScene {
   private readonly resizeObserver: ResizeObserver;
   private labelPool: HTMLDivElement[] = [];
   private readonly raycaster = new THREE.Raycaster();
+  private overlays: ScreenOverlays | null = null;
+  /** The selected target (gameuser.c idTarget), or null */
+  target: number | null = null;
+  /** Waiting for the user to pick a spell target (GAME_SELECT); called with the pick */
+  private selectCallback: ((id: number) => void) | null = null;
+  private lastAttack = 0;
   private settings: Settings = getSettings();
   private altDown = false;
   readonly audio: GameAudio;
@@ -91,6 +107,12 @@ export class GameScene {
   onAction?: (a: Action) => void;
   /** Type-to-chat: a printable key starts a chat line with this text */
   onTypeChat?: (text: string) => void;
+  /** The target changed (the interface shows it) */
+  onTarget?: (id: number | null) => void;
+  /** Selecting a spell target started (true) or ended (false) */
+  onSelecting?: (on: boolean) => void;
+  /** A line for the chat window from the client itself */
+  onMessage?: (text: string) => void;
 
   constructor(canvas: HTMLCanvasElement, labels: HTMLElement, session: GameSession, assets: AssetStore, audio: GameAudio) {
     this.canvas = canvas;
@@ -121,6 +143,8 @@ export class GameScene {
         case "player":
           // BP_PLAYER carries the room's background too (teleports change both)
           void this.syncRoom().then(() => this.syncSky());
+          // game.c EnterNewRoom: SetUserTargetID(INVALID_ID)
+          if (e.roomChanged) this.setTarget(null);
           break;
         case "background":
           void this.syncSky();
@@ -138,6 +162,10 @@ export class GameScene {
         case "selfTurned":
           this.mover.setAngle(e.angle);
           break;
+        case "objectRemoved":
+          if (this.target !== null && e.id === this.target) this.setTarget(null);
+          break;
+
       }
     });
     canvas.addEventListener("mousedown", this.onMouseDown);
@@ -160,6 +188,7 @@ export class GameScene {
     this.xlats = new XlatTable(pal.rgb, lightPal);
     this.objects = new ObjectsView(this.palette, this.xlats, (id) => this.bgf(id), (id) => this.session.resource(id));
     this.scene.add(this.objects.group);
+    this.overlays = new ScreenOverlays(this.labelsEl.parentElement!, pal.rgb, this.xlats, (id) => this.bgf(id));
     await this.syncRoom();
     await this.syncSky();
     const loop = (t: number) => {
@@ -241,8 +270,10 @@ export class GameScene {
     }
     // --- movement (move.c) ---
     const held = (a: Action) => (isHeld(this.settings.keys, a, this.keys, this.altDown) ? 1 : 0);
-    const forward = held("forward") - held("backward");
-    const strafe = held("strafeRight") - held("strafeLeft");
+    // EFFECT_PARALYZE: no motion
+    const still = world.effects.paralyzed;
+    const forward = still ? 0 : held("forward") - held("backward");
+    const strafe = still ? 0 : held("strafeRight") - held("strafeLeft");
     const turn = held("turnRight") - held("turnLeft");
     const run = held("run") === 1;
     this.mover.turnKeys(turn, run, dt);
@@ -260,10 +291,19 @@ export class GameScene {
     // --- camera: our eyes ---
     const a = (this.mover.angle * 2 * Math.PI) / 4096;
     const yaw = Math.atan2(-Math.cos(a), -Math.sin(a)); // client (cos a, sin a) -> scene (X, Z)
+    // effect.c EffectShake: jiggle the view by up to a quarter square
+    let jx = 0,
+      jy = 0,
+      jz = 0;
+    if (world.effects.shake > 0) {
+      const amp = Math.min(SHAKE_AMPLITUDE, world.effects.shake / 3) + 1;
+      const jiggle = () => Math.floor(Math.random() * amp) - amp / 2;
+      [jx, jy, jz] = [jiggle(), jiggle(), jiggle()];
+    }
     this.camera.position.set(
-      this.mover.x / FINENESS,
-      (this.mover.z + EYE_HEIGHT + this.mover.bounce) / FINENESS,
-      this.mover.y / FINENESS,
+      (this.mover.x + jx) / FINENESS,
+      (this.mover.z + EYE_HEIGHT + this.mover.bounce + jz) / FINENESS,
+      (this.mover.y + jy) / FINENESS,
     );
     this.camera.rotation.set(this.pitch, yaw, 0, "YXZ");
 
@@ -279,7 +319,8 @@ export class GameScene {
       yaw,
       fog: this.fog,
     };
-    this.lights = this.objects.lights(world.objects.values(), ctx);
+    const drawn = [...world.objects.values(), ...this.projectileViews()];
+    this.lights = this.objects.lights(drawn, ctx);
     this.roomView.setLights(this.lights);
     this.roomView.setLighting({
       viewerLight: lighting.playerLight,
@@ -289,12 +330,135 @@ export class GameScene {
       fog: this.fog,
     });
     this.roomView.update(now);
-    const labels = this.objects.update(world.objects.values(), ctx, this.lights, self.id);
+    const labels = this.objects.update(drawn, ctx, this.lights, self.id);
     this.sky?.position.copy(this.camera.position);
     this.camera.updateMatrixWorld();
     this.updateHover();
+    this.objects.setTarget(this.target);
     this.renderer.render(this.scene, this.camera);
     this.drawLabels(labels);
+    this.drawOverlays(room, lighting);
+  }
+
+  /** The player's light for the hand overlays (D3DObjectLightingCalc on the player). */
+  private drawOverlays(room: Room, lighting: { ambient: number; playerLight: number }): void {
+    const world = this.session.world;
+    const self = world.self;
+    if (!this.overlays || !self) return;
+    const leaf = leafAt(room, this.mover.x, this.mover.y);
+    const sectorLight = leaf?.sector ? room.sectors[leaf.sector - 1].light : 0;
+    const dt = self.info.drawingType;
+    const light: [number, number, number] =
+      dt === DRAWFX.BLACK
+        ? [0, 0, 0]
+        : objectBrightness({ x: this.mover.x, y: this.mover.y, z: this.mover.z }, sectorLight, lighting.playerLight, lighting.ambient, this.lights);
+    const alpha = dt === DRAWFX.TRANSLUCENT25 ? 0.25 : dt === DRAWFX.TRANSLUCENT75 ? 0.75 : dt === DRAWFX.TRANSLUCENT50 || dt === DRAWFX.DITHERTRANS || dt === DRAWFX.DITHERINVIS || dt === DRAWFX.DITHERGREY ? 0.5 : dt === DRAWFX.INVISIBLE ? 0.2 : 1;
+    this.overlays.draw(world.playerOverlays, world.effects, light, alpha);
+  }
+
+  /** Projectiles as sprites for ObjectsView: fully lit, no name. */
+  private projectileViews(): ViewObject[] {
+    return [...this.session.world.projectiles.values()].map((p) => ({
+      id: p.id, x: Math.round(p.x), y: Math.round(p.y), angle: p.angle, version: 0, fullBright: true,
+      info: { iconRes: p.info.iconRes, nameRes: 0, flags: 0, drawingType: 0, nameColor: 0, light: p.info.light },
+      look: p.look,
+    }));
+  }
+
+  // ---- targeting and combat (gameuser.c) ----
+
+  setTarget(id: number | null): void {
+    if (id === this.target) return;
+    this.target = id;
+    this.objects?.setTarget(id);
+    this.onTarget?.(id);
+  }
+
+  /** Objects on screen with a flag, nearest first (client3d.c GetObjects3D over the drawn objects). */
+  private visibleObjects(flag: number, maxDistance = 0): WorldObject[] {
+    const world = this.session.world;
+    const self = world.self;
+    if (!self || world.effects.blind) return [];
+    this.camera.updateMatrixWorld();
+    const frustum = new THREE.Frustum().setFromProjectionMatrix(
+      new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse),
+    );
+    // "on screen": any part of a body-sized sphere around the object is in view
+    const sphere = new THREE.Sphere(new THREE.Vector3(), 0.6);
+    const out: { o: WorldObject; d: number }[] = [];
+    for (const o of world.objects.values()) {
+      if (o.id === self.id || (flag && !(o.info.flags & flag)) || o.info.drawingType === DRAWFX.INVISIBLE) continue;
+      const d = Math.hypot(o.x - self.x, o.y - self.y);
+      if (maxDistance > 0 && d > maxDistance) continue;
+      sphere.center.set(o.x / FINENESS, (this.mover.z + EYE_HEIGHT / 2) / FINENESS, o.y / FINENESS);
+      if (!frustum.intersectsSphere(sphere)) continue;
+      out.push({ o, d });
+    }
+    return out.sort((a, b) => a.d - b.d).map((e) => e.o);
+  }
+
+  private isVisible(id: number): boolean {
+    return this.visibleObjects(0).some((o) => o.id === id);
+  }
+
+  /** gameuser.c UserTargetNextOrPrevious: cycle through attackable objects on screen. */
+  private cycleTarget(next: boolean): void {
+    const list = this.visibleObjects(OF_ATTACKABLE);
+    if (!list.length) return this.setTarget(null);
+    const i = this.target === null ? -1 : list.findIndex((o) => o.id === this.target);
+    if (next) this.setTarget(list[i < 0 || i + 1 === list.length ? 0 : i + 1].id);
+    else this.setTarget(list[i <= 0 ? list.length - 1 : i - 1].id);
+  }
+
+  /** gameuser.c UserAttackClosest: the target if we can see it, else the closest attackable thing. */
+  attack(): void {
+    const now = performance.now();
+    if (now - this.lastAttack < ATTACK_DELAY) return;
+    this.lastAttack = now;
+    this.mover.flush(now); // MoveUpdatePosition: attack from where we really stand
+    if (this.target !== null && this.target !== this.session.world.player?.id) {
+      if (this.isVisible(this.target)) this.session.attack(this.target);
+      else this.onMessage?.("You can't see your selected target.");
+      return;
+    }
+    const closest = this.visibleObjects(OF_ATTACKABLE, CLOSE_DISTANCE)[0];
+    if (closest) this.session.attack(closest.id);
+  }
+
+  /**
+   * spells.c SpellCast: a spell that needs a target goes to the selected one (if it can be
+   * seen), else the user picks one (GAME_SELECT).
+   */
+  castSpell(spell: number, numTargets: number): void {
+    if (numTargets === 0) return this.session.cast(spell, []);
+    const self = this.session.world.player?.id;
+    if (this.target !== null) {
+      if (this.target === self || this.isVisible(this.target)) this.session.cast(spell, [{ id: this.target, amount: 1 }]);
+      else this.onMessage?.("You can't see your selected target.");
+      return;
+    }
+    this.beginSelect((id) => this.session.cast(spell, [{ id, amount: 1 }]));
+  }
+
+  /** Enter target selection (GAME_SELECT): the next object clicked is passed to `cb`. */
+  beginSelect(cb: (id: number) => void): void {
+    if (this.locked) document.exitPointerLock();
+    this.selectCallback = cb;
+    this.canvas.style.cursor = "crosshair";
+    this.onSelecting?.(true);
+  }
+
+  get selecting(): boolean {
+    return this.selectCallback !== null;
+  }
+
+  /** Finish selection with an object (the view, our portrait or an inventory item); null cancels. */
+  select(id: number | null): void {
+    const cb = this.selectCallback;
+    this.selectCallback = null;
+    this.canvas.style.cursor = "";
+    this.onSelecting?.(false);
+    if (cb && id !== null) cb(id);
   }
 
   /** Step bitmap-group animations (animate.c) for the look each object shows now. */
@@ -303,6 +467,13 @@ export class GameScene {
       // a group change shows up in ObjectsView's sprite key, which re-composites
       animStep(o.look.anim, this.bgf(o.info.iconRes)?.groups.length ?? 0, dt);
       for (const ov of o.look.overlays) animStep(ov.anim, this.bgf(ov.iconRes)?.groups.length ?? 0, dt);
+    }
+    for (const p of this.session.world.projectiles.values()) animStep(p.look.anim, this.bgf(p.info.iconRes)?.groups.length ?? 0, dt);
+    // the hands: a weapon swing is an animation on the player overlay
+    for (const p of this.session.world.playerOverlays) {
+      if (!p) continue;
+      animStep(p.look.anim, this.bgf(p.info.iconRes)?.groups.length ?? 0, dt);
+      for (const ov of p.look.overlays) animStep(ov.anim, this.bgf(ov.iconRes)?.groups.length ?? 0, dt);
     }
   }
 
@@ -328,7 +499,7 @@ export class GameScene {
     if (id !== this.hovered) {
       this.hovered = id;
       this.objects.setHighlight(id);
-      this.canvas.style.cursor = id !== null && !this.locked ? "pointer" : "";
+      this.canvas.style.cursor = this.selecting ? "crosshair" : id !== null && !this.locked ? "pointer" : "";
     }
   }
 
@@ -342,7 +513,7 @@ export class GameScene {
       if (v.z > 1 || v.z < -1) continue;
       const el = this.labelPool[n] ?? this.labelsEl.appendChild(document.createElement("div"));
       this.labelPool[n++] = el;
-      el.className = l.id === this.hovered ? "name-label hovered" : "name-label";
+      el.className = `name-label${l.id === this.hovered ? " hovered" : ""}${l.id === this.target ? " target" : ""}`;
       el.textContent = l.name;
       el.style.color = l.color;
       el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -110%)`;
@@ -391,10 +562,14 @@ export class GameScene {
   // ---- input ----
 
   private readonly onMouseDown = (e: MouseEvent) => {
-    if (e.button === 0) {
-      if (this.hovered !== null) this.session.look(this.hovered);
-      else if (!this.locked) this.canvas.requestPointerLock();
+    if (e.button !== 0) return;
+    if (this.selecting) {
+      if (this.hovered !== null) this.select(this.hovered);
+      return;
     }
+    // Clicking an object selects it as the target (gameuser.c SetUserTargetID)
+    if (this.hovered !== null) this.setTarget(this.hovered);
+    else if (!this.locked) this.canvas.requestPointerLock();
   };
 
   /** Double click: pick up or activate (merintr EventMouseClick: A_ACTIVATEMOUSE). */
@@ -404,6 +579,12 @@ export class GameScene {
 
   private readonly onContextMenu = (e: MouseEvent) => {
     e.preventDefault();
+    if (this.selecting) return this.select(null);
+    if (this.settings.rightClickLooks && this.hovered !== null) {
+      // the original: right click examines an object
+      this.session.look(this.hovered);
+      return;
+    }
     if (this.locked) document.exitPointerLock();
     if (this.hovered === null) return;
     const a = this.actionFor(this.hovered, e.clientX, e.clientY);
@@ -435,7 +616,8 @@ export class GameScene {
     // Alt alone would focus the browser menu; Alt+arrows would navigate back/forward.
     if (e.key === "Alt" || actions.length || e.code === "Space" || e.code.startsWith("Arrow")) e.preventDefault();
     for (const a of actions) {
-      if (e.repeat && a !== "mapZoomIn" && a !== "mapZoomOut") continue;
+      // held keys repeat: zooming, and attacking (rate-limited like the original)
+      if (e.repeat && a !== "mapZoomIn" && a !== "mapZoomOut" && a !== "attack") continue;
       this.trigger(a);
     }
     const printable = e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey && !e.altKey;
@@ -453,13 +635,32 @@ export class GameScene {
   private trigger(a: Action): void {
     switch (a) {
       case "go":
+        this.mover.flush(performance.now()); // A_GO: MoveUpdatePosition first
         this.session.go();
+        break;
+      case "attack":
+        this.attack();
+        break;
+      case "targetNext":
+        this.cycleTarget(true);
+        break;
+      case "targetPrevious":
+        this.cycleTarget(false);
+        break;
+      case "targetSelf":
+        this.setTarget(this.session.world.player?.id ?? null);
+        break;
+      case "targetClear":
+        if (this.selecting) this.select(null);
+        else this.setTarget(null);
         break;
       case "interact":
         if (this.hovered !== null) this.interact(this.hovered);
         break;
       case "lookAt":
-        if (this.hovered !== null) this.session.look(this.hovered);
+        // A_LOOK: the target, else what's under the cursor
+        if (this.target !== null) this.session.look(this.target);
+        else if (this.hovered !== null) this.session.look(this.hovered);
         break;
       case "lookStraight":
         this.pitch = 0;
@@ -525,6 +726,7 @@ export class GameScene {
     window.removeEventListener("blur", this.onBlur);
     if (this.locked) document.exitPointerLock();
     this.objects?.dispose();
+    this.overlays?.dispose();
     this.roomView?.dispose();
     if (this.sky) disposeSkybox(this.sky);
     this.renderer.dispose();

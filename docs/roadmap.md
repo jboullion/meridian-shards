@@ -75,10 +75,17 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 - Not yet: `tell`, the who list and the players window, mail, guilds, and casting at a chosen target (with combat, in milestone 6). Double clicking a spell casts it now; a spell that needs a target is cast on yourself.
 - To judge by ear against the original: how loud far-away sounds are. `audio.c` gives irrKlang a 32-square max distance, which in irrKlang means "stop getting quieter" (not "silent"), so Raza's country ambience at square (1, 1) plays at about 16% across the town.
 
-### 6. Combat and creation
+### 6. Combat and creation (done 2026-10-07)
 
-- Attack and cast against the 330/331 creatures and the mummies; death and respawn; loot.
-- The character creator (`module/char`).
+- [x] Targeting (`gameuser.c`): click an object to target it; `]` / `[` cycle through attackable things on screen, `\` targets yourself, Esc clears. The target gets the D3D client's green halo (its silhouette, enlarged, behind it) and its name shows under the room name. Entering a room or the target leaving clears it.
+- [x] Attacking (`UserAttackClosest`): E (Ctrl in the original preset) attacks the target if it's on screen ("You can't see your selected target." otherwise), or the closest attackable thing within 5 squares; at most every 250 ms, after sending our exact position. Also "Attack" in the right-click menu.
+- [x] The first-person hands (`BP_PLAYER_OVERLAY`, `D3DRenderPlayerOverlaysDraw`): the weapon and shield bitmaps at their screen hotspot, sized as the D3D client sizes them on its 800 × 600 back buffer, lit like the player, with the swing animations.
+- [x] Screen effects (`BP_EFFECT`, `effect.c`): the red pain flash, whiteout, colour flashes, blindness, shake, invert and paralysis.
+- [x] Projectiles (`BP_SHOOT`, `BP_RADIUS_SHOOT`, `project.c`): fully lit sprites flying source to target, or in a ring.
+- [x] Casting at targets (`spells.c SpellCast`): no-target spells cast at once; others go to the target, or you pick one (an object in the view, your face, or an inventory item; Esc or right click cancels).
+- [x] Tested on our server: killed baby spiders in the Outskirts with the mace (hits, misses, damage messages, XP, unbound energy, auto-loot); died (death sound, the Underworld with its music and lava), walked into the rip in space and came back in the Inn of Raza.
+- [x] The character creator (`module/char`): Name, Appearance (the face from the server's parts, gender, hair, eyes, nose, mouth, hair and skin colour), Statistics (1–50, 70 points, the four suggestions), Spells and Skills (45 shared points, Shal'ille and Qor exclusive). Created "Shardmage" with it.
+- Not yet: weather (rain, snow, sand), blur and waver, `EFFECT_XLATOVERRIDE`, and the "attack on click" option. The mummies in the crypt aren't fought yet, only the forest creatures.
 
 ### 7. Host and playtest
 
@@ -91,7 +98,7 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 - [x] An unmodified Server 104 `blakserv` (plus config changes only) serves browser players through the gateway (the protocol side; proven with the headless client).
 - [ ] Raza looks like the original: the same textures, colours, light and sprites, crisp at 1440p and in widescreen.
 - [ ] Movement and collision match the original. No wall clipping, and original clients see browser players move normally.
-- [ ] Chat, shops, combat, death and respawn, and room changes work end to end. (Chat, shops and room changes: done.)
+- [x] Chat, shops, combat, death and respawn, and room changes work end to end.
 - [ ] Original-client and browser players play together on one server.
 - [ ] The first room loads in under 5 s on broadband, and sessions stay stable for 1+ hour, including background tabs.
 - [ ] The modern controls feel better than the original's, and the original preset still works.
@@ -117,3 +124,6 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
   - Milestone 4 is done. You can walk with the original collision, open doors, cross edge exits, chat, look, and pick up and drop items. Other players move smoothly.
   - Milestone 5 is done: the original's interface column (bars, face, enchantments, minimap, inventory, stats, spells, skills, quests), shops, selling, the bank and vault, sound and music, and settings with rebindable keys.
   - Found along the way: the client must ask for its inventory, plain id fields drop the number tag, and `BP_CHANGE` updates inventory stacks (see [protocol.md](research/protocol.md)).
+- **2026-10-07:**
+  - Milestone 6 is done: targeting with the original halo, attacking, the weapon hand, screen effects, projectiles, casting at targets, death and the Underworld, and the full character creator.
+  - Death and respawn need nothing special from the client: the server moves you to the Underworld and you walk out through its rip in space.

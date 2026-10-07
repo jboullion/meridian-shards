@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { GENDER, type CharacterSlot } from "@shards/protocol";
+import type { CharInfo, CharacterSlot } from "@shards/protocol";
 import { GameSession, type ChatLine, type LookResult, type OfferEvent, type SessionPhase, type TradeList } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
 import { GameAudio } from "./audio.ts";
+import { CharacterCreator } from "./CharacterCreator.tsx";
 import { GameView, MAX_CHAT_LINES } from "./GameView.tsx";
 import { IconRenderer } from "./icons.ts";
 
@@ -49,6 +50,8 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   const [error, setError] = useState<string | null>(null);
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [look, setLook] = useState<LookResult | null>(null);
+  /** The creator is open for this empty slot once BP_CHARINFO arrives */
+  const [creating, setCreating] = useState<{ slotId: number; info: CharInfo | null } | null>(null);
 
   // Keep-alive pings from a worker, so background tabs stay connected.
   useEffect(() => {
@@ -87,6 +90,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
           if (m) setMotd(m);
         },
         error: setError,
+        charInfo: (info) => setCreating((c) => (c ? { ...c, info } : c)),
         chat: (line) => setChat((c) => [...c.slice(-(MAX_CHAT_LINES - 1)), line]),
         look: setLook,
         trade: trades.emit,
@@ -101,6 +105,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   const logout = () => {
     session?.close();
     setLive(null);
+    setCreating(null);
     setPhase("offline");
   };
 
@@ -108,8 +113,36 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     return <LoginScreen onLogin={login} error={error} />;
   if (phase === "connecting" || phase === "login")
     return <div className="splash">Connecting…</div>;
+  if (phase === "characters" && creating?.info)
+    return (
+      <CharacterCreator
+        info={creating.info}
+        slotId={creating.slotId}
+        session={session}
+        icons={live.icons}
+        error={error}
+        onCancel={() => {
+          setCreating(null);
+          setError(null);
+        }}
+      />
+    );
   if (phase === "characters")
-    return <CharacterSelect characters={characters} motd={motd} error={error} session={session} onLogout={logout} />;
+    return (
+      <CharacterSelect
+        characters={characters}
+        motd={motd}
+        error={error}
+        session={session}
+        onLogout={logout}
+        onCreate={(slotId) => {
+          // charpick.c: picking "<New character>" asks the server for the creator's choices
+          setError(null);
+          setCreating({ slotId, info: null });
+          session.requestCharInfo();
+        }}
+      />
+    );
   return (
     <GameView
       session={session}
@@ -160,16 +193,17 @@ function LoginScreen({ onLogin, error }: { onLogin: (u: string, p: string) => vo
 }
 
 function CharacterSelect({
-  characters, motd, error, session, onLogout,
-}: { characters: CharacterSlot[]; motd: string; error: string | null; session: GameSession; onLogout: () => void }) {
+  characters, motd, error, session, onLogout, onCreate,
+}: {
+  characters: CharacterSlot[];
+  motd: string;
+  error: string | null;
+  session: GameSession;
+  onLogout: () => void;
+  onCreate: (slotId: number) => void;
+}) {
   const created = characters.filter((c) => c.flags !== 1);
   const free = characters.filter((c) => c.flags === 1);
-  const [name, setName] = useState("");
-  const [gender, setGender] = useState<number>(GENDER.MALE);
-  const create = (e: FormEvent) => {
-    e.preventDefault();
-    if (free.length && name.trim()) session.createCharacter(free[0].id, name.trim(), gender);
-  };
   return (
     <div className="screen">
       <div className="card wide">
@@ -181,28 +215,18 @@ function CharacterSelect({
               <button onClick={() => session.useCharacter(c.id)}>{c.name}</button>
             </li>
           ))}
+          {free.length > 0 && (
+            <li>
+              <button className="new-character" onClick={() => onCreate(free[0].id)}>
+                &lt;New character&gt;
+              </button>
+            </li>
+          )}
         </ul>
         {free.length > 0 && (
-          <form onSubmit={create} className="create">
-            <h2>New character</h2>
-            <p className="sub">
-              Default looks and stats for now; the full character creator comes later. {free.length} free slot
-              {free.length === 1 ? "" : "s"}.
-            </p>
-            <label>
-              Name
-              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={20} />
-            </label>
-            <label>
-              <select value={gender} onChange={(e) => setGender(Number(e.target.value))}>
-                <option value={GENDER.MALE}>Male</option>
-                <option value={GENDER.FEMALE}>Female</option>
-              </select>
-            </label>
-            <button type="submit" disabled={!name.trim()}>
-              Create and enter
-            </button>
-          </form>
+          <p className="sub">
+            {free.length} free slot{free.length === 1 ? "" : "s"}.
+          </p>
         )}
         {error && <p className="error">{error}</p>}
         <button className="link" onClick={onLogout}>

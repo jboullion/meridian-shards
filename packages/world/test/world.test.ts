@@ -112,3 +112,46 @@ describe("interface state (milestone 5)", () => {
     expect(world.enchantments.room.size).toBe(0);
   });
 });
+
+describe("combat state (milestone 6)", () => {
+  /** server.c ExtractNewRoomObject: plain object at (row, col) in Kod fine units */
+  const roomObj = (w: ByteWriter, id: number, row: number, col: number) =>
+    w.u32(id).u32(100).u32(200).u32(8).u8(0).u32(0).u32(0).u8(0).u8(0).u16(0).u8(1).u16(1).u8(0)
+      .u16(row).u16(col).u16(0).u8(1).u16(1).u8(0);
+  const feed = (world: WorldState, type: number, w: ByteWriter) => world.handle(type, new ByteReader(w.finish()));
+
+  test("a shot flies from source to dest at speed squares per second (project.c)", () => {
+    const world = new WorldState();
+    const rc = new ByteWriter().u32(1).u16(2);
+    roomObj(rc, 10, 64 * 2, 64 * 2);
+    roomObj(rc, 11, 64 * 2, 64 * 6);
+    feed(world, BP.ROOM_CONTENTS, rc);
+    // icon, animation NONE group 1, source, dest, speed 8 sq/s, flags, no light
+    feed(world, BP.SHOOT, new ByteWriter().u32(555).u8(1).u16(1).u32(10).u32(11).u8(8).u16(0).u16(0));
+    const [p] = [...world.projectiles.values()];
+    expect(p.id).toBeLessThan(0);
+    world.tick(250); // 4 squares at 8/s = 500 ms
+    expect(p.x).toBeCloseTo(kodToFine(64 * 2) + 2 * 1024, 0);
+    world.tick(300);
+    expect(world.projectiles.size).toBe(0);
+  });
+
+  test("effects count down; paralyze lasts until released", () => {
+    const world = new WorldState();
+    feed(world, BP.EFFECT, new ByteWriter().u16(7).i32(1500)); // pain
+    feed(world, BP.EFFECT, new ByteWriter().u16(3)); // paralyze
+    world.tick(1000);
+    expect(world.effects.pain).toBe(500);
+    expect(world.effects.paralyzed).toBe(true);
+    feed(world, BP.EFFECT, new ByteWriter().u16(4));
+    expect(world.effects.paralyzed).toBe(false);
+  });
+
+  test("player overlays fill their slot (overlay.c SetPlayerOverlay)", () => {
+    const world = new WorldState();
+    // hotspot SE (5), object id 2 = slot 2, no lighting
+    feed(world, BP.PLAYER_OVERLAY, new ByteWriter().u8(5).u32(2).u32(300).u32(0).u32(0).u8(0).u32(0).u32(0).u8(0).u8(0).u8(1).u16(5).u8(0));
+    expect(world.playerOverlays[1]?.hotspot).toBe(5);
+    expect(world.playerOverlays[1]?.look.anim.group).toBe(4);
+  });
+});

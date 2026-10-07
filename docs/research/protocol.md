@@ -213,7 +213,21 @@ A room object then adds:
   - Position: the object's, else the middle of big square (row, col), else at the player (2D).
   - `BP_STOP_WAVE u32 rsc, u32 object`. `BP_PLAY_MUSIC` / `BP_PLAY_MIDI u32 rsc`.
   - Raza sends `ambcntry.ogg` as a loop at square (1, 1), then random birds, gulls and waves every few seconds. The smithy sends `smithy.ogg` music and the fireplace loop.
-- **Still not decoded:** guilds, mail and news, `BP_EFFECT` (screen effects), background overlays (`BP_ADD_BG_OVERLAY`: the sun and moon), and `BP_USERCOMMAND` replies such as preferences.
+- **Still not decoded:** guilds, mail and news, background overlays (`BP_ADD_BG_OVERLAY`: the sun and moon), and `BP_USERCOMMAND` replies such as preferences.
+
+## Combat and creation (milestone 6)
+
+- **`BP_REQ_ATTACK`:** `u8 kind (1 = normal), u32 target` (untagged id). The server answers with messages ("Your mace bashes the baby spider for 4 damage."), sounds and `BP_PLAYER_OVERLAY` swing animations. Kills give XP, unbound energy and auto-loot shillings.
+- **`BP_PLAYER_OVERLAY`:** `i8 hotspot`, then an object without lighting whose id is the slot (1 or 2). Wielding the mace sends slot 2, hotspot 5 (south-east), `povmace.bgf` group 5. Each swing sends the overlay again with a new animation.
+- **`BP_EFFECT`:** `u16 effect` + parameters: `i32 duration` for invert, shake, pain, whiteout, blur and waver; `i32 duration, i32 xlat` for the flash; `i32 xlat` for the override; nothing for paralyze, release, blind, see and the weather switches. Dying sends clear-weather, clear-sand and pain.
+- **`BP_SHOOT`:** `u32 icon`, translation, animation, `u32 source, u32 dest, u8 speed (squares per second), u16 flags`, then lighting. **`BP_RADIUS_SHOOT`:** `u32 icon`, translation, animation, `u32 source, u8 speed, u16 flags, u8 range, u8 number`, lighting; the ring reaches `range × 1000` fine units.
+- **`BP_REQ_CAST`:** the spell's object id, then an object list of targets (amount 1).
+- **Death:** `pdeath.ogg`, then `BP_PLAYER` for the Underworld (`undrwrld.ogg`, a lava loop). Walking into its "rip in space" (a teleporter) brings you back, in the Inn of Raza for a new character.
+- **The creator:** `BP_SYSTEM, BP_SEND_CHARINFO` → `BP_CHARINFO`:
+  - `u8 n` hair translations, `u8 n` face (skin) translations;
+  - per gender (male, female): `i32 n` hair rscs, `u32` head, `i32 n` eyes, `i32 n` noses, `i32 n` mouths;
+  - `i32 n` spells and `i32 n` skills, each `i32 id, u32 name rsc, u32 description rsc, i32 cost, u8 school`.
+  - `BP_NEW_CHARINFO` sends the face parts in the order head, hair, eyes, nose, mouth, then the hair and skin translations, the six stats, and the chosen spell and skill ids (Kod numbers, not objects).
 
 ## Sources
 

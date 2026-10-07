@@ -2,7 +2,7 @@
 // (clientd3d/server.c handlers -> game.c / object.c / moveobj.c). Renderer-agnostic.
 
 import {
-  BP, ByteReader, CLIENT_TAG_NUMBER, ENCHANT, objId, objTag, readAddEnchantment, readChange, readMove, readObject,
+  BP, ByteReader, CLIENT_TAG_NUMBER, EFFECT, ENCHANT, objId, objTag, readEffect, readPlayerOverlay, readRadiusShoot, readShoot, type Shot, readAddEnchantment, readChange, readMove, readObject,
   readObjectList, readPlayer, readRemoveEnchantment, readRoomContents, readRoomObject, readSpells, readStat,
   readStatGroup, readStatGroups, readTurn, readUseList, readSpell, type Animation, type ObjectInfo, type Overlay,
   type PlayerInfo, type RoomObject, type Spell, type Statistic,
@@ -85,7 +85,64 @@ export type WorldEvent =
   | { type: "skills" }
   | { type: "enchantments" }
   /** Which inventory items are in use (wielded, worn) changed. */
-  | { type: "inUse" };
+  | { type: "inUse" }
+  /** Our first-person overlays (weapon and shield hands) changed. */
+  | { type: "playerOverlays" }
+  /** A screen effect started or stopped (blind, paralyzed, pain...). */
+  | { type: "effect"; effect: number };
+
+/** A projectile in flight (project.c Projectile): a sprite moving from source to dest. */
+export interface Projectile {
+  /** Negative, so it never collides with an object id */
+  id: number;
+  info: { iconRes: number; light: Shot["light"]; flags: number };
+  look: Look;
+  x: number;
+  y: number;
+  sourceX: number;
+  sourceY: number;
+  destX: number;
+  destY: number;
+  progress: number;
+  /** progress per ms */
+  increment: number;
+  angle: number;
+  flags: number;
+}
+
+/** A first-person overlay (overlay.c PlayerOverlay): drawn at a screen hotspot. */
+export interface PlayerOverlayState {
+  hotspot: number;
+  info: ObjectInfo;
+  look: Look;
+}
+
+/**
+ * Screen effects (clientd3d effect.c `effects`). Times are milliseconds left, counted
+ * down by tick() like AnimateEffects.
+ */
+export interface Effects {
+  paralyzed: boolean;
+  blind: boolean;
+  pain: number;
+  whiteout: number;
+  invert: number;
+  shake: number;
+  blur: number;
+  waver: number;
+  /** EFFECT_FLASHXLAT: a colour flash by xlat id, for `flashTime` ms */
+  flashXlat: number;
+  flashTime: number;
+  xlatOverride: number;
+  raining: boolean;
+  snowing: boolean;
+  sand: boolean;
+}
+
+const noEffects = (): Effects => ({
+  paralyzed: false, blind: false, pain: 0, whiteout: 0, invert: 0, shake: 0, blur: 0, waver: 0,
+  flashXlat: 0, flashTime: 0, xlatOverride: 0, raining: false, snowing: false, sand: false,
+});
 
 /**
  * A map keyed by object id that ignores the id's tag bits, as the client's lookups do
@@ -141,6 +198,12 @@ export class WorldState {
   skills: ObjectInfo[] = [];
   /** Enchantments on us (ENCHANT_PLAYER) and on the room (ENCHANT_ROOM), by object id. */
   readonly enchantments = { player: new ObjectMap<ObjectInfo>(), room: new ObjectMap<ObjectInfo>() };
+  /** First-person overlays, slots 1 and 2 (index 0 and 1). */
+  readonly playerOverlays: (PlayerOverlayState | null)[] = [null, null];
+  effects: Effects = noEffects();
+  /** Projectiles flying in the room (current_room.projectiles) */
+  readonly projectiles = new Map<number, Projectile>();
+  private nextProjectile = -1;
   /** Inventory items in use (BP_USE_LIST, BP_USE, BP_UNUSE). */
   readonly inUse = new ObjectIdSet();
   /** Resource ids whose strings changed at runtime (BP_CHANGE_RESOURCE: player names etc.). */
@@ -163,6 +226,28 @@ export class WorldState {
 
   /** Advance interpolated motion (moveobj.c ObjectsMove / MoveSingle). */
   tick(dt: number): void {
+    // effect.c AnimateEffects
+    const fx = this.effects;
+    const down = (v: number) => Math.max(0, v - dt);
+    fx.pain = down(fx.pain);
+    fx.whiteout = down(fx.whiteout);
+    fx.invert = down(fx.invert);
+    fx.shake = down(fx.shake);
+    fx.blur = down(fx.blur);
+    fx.waver = down(fx.waver);
+    if (fx.flashXlat) {
+      fx.flashTime -= dt;
+      if (fx.flashTime <= 0) fx.flashXlat = fx.flashTime = 0;
+    }
+    // project.c ProjectilesMove: drop the ones that arrived
+    for (const p of this.projectiles.values()) {
+      p.progress += p.increment * dt;
+      if (p.progress >= 1) this.projectiles.delete(p.id);
+      else {
+        p.x = p.sourceX + p.progress * (p.destX - p.sourceX);
+        p.y = p.sourceY + p.progress * (p.destY - p.sourceY);
+      }
+    }
     for (const o of this.objects.values()) {
       const m = o.motion;
       if (!m) continue;
@@ -196,6 +281,7 @@ export class WorldState {
       case BP.ROOM_CONTENTS: {
         const rc = readRoomContents(r);
         this.objects.clear();
+        this.projectiles.clear();
         for (const o of rc.objects) this.objects.set(o.id, fromRoomObject(o));
         this.emit({ type: "roomContents" });
         return true;
@@ -363,6 +449,65 @@ export class WorldState {
         this.emit({ type: "enchantments" });
         return true;
       }
+      case BP.SHOOT: {
+        // project.c ProjectileAdd
+        const shot = readShoot(r);
+        const src = this.objects.get(shot.source),
+          dst = this.objects.get(shot.dest);
+        if (src && dst && src !== dst) this.addProjectile(shot, src.x, src.y, dst.x, dst.y);
+        return true;
+      }
+      case BP.RADIUS_SHOOT: {
+        // project.c RadiusProjectileAdd: a ring of shots out to range * 1000 fine units
+        const shot = readRadiusShoot(r);
+        const src = this.objects.get(shot.source);
+        if (src) {
+          for (let i = 0; i < shot.number; i++) {
+            const a = (((360 / shot.number) * i) * Math.PI) / 180;
+            this.addProjectile(shot, src.x, src.y, src.x + shot.range * 1000 * Math.cos(a), src.y + shot.range * 1000 * Math.sin(a));
+          }
+        }
+        return true;
+      }
+      case BP.PLAYER_OVERLAY: {
+        // overlay.c SetPlayerOverlay: the object's id is the slot (1-based)
+        const { hotspot, object } = readPlayerOverlay(r);
+        const slot = object.id - 1;
+        if (slot >= 0 && slot < this.playerOverlays.length) {
+          this.playerOverlays[slot] = { hotspot, info: object, look: lookFrom(object.animation, object.overlays, object.translation) };
+          this.emit({ type: "playerOverlays" });
+        }
+        return true;
+      }
+      case BP.EFFECT: {
+        const e = readEffect(r);
+        const fx = this.effects;
+        const capped = (d: number, fallback: number) => (d > 10000 || d < 0 ? fallback : d);
+        switch (e.type) {
+          case EFFECT.XLATOVERRIDE: fx.xlatOverride = e.xlat; break;
+          case EFFECT.INVERT: fx.invert = e.duration; break;
+          case EFFECT.SHAKE: fx.shake = e.duration; break;
+          case EFFECT.PARALYZE: fx.paralyzed = true; break;
+          case EFFECT.RELEASE: fx.paralyzed = false; break;
+          case EFFECT.BLIND: fx.blind = true; break;
+          case EFFECT.SEE: fx.blind = false; break;
+          case EFFECT.RAINING: fx.raining = true; break;
+          case EFFECT.SNOWING: fx.snowing = true; break;
+          case EFFECT.CLEARWEATHER: fx.raining = fx.snowing = false; break;
+          case EFFECT.SAND: fx.sand = true; break;
+          case EFFECT.CLEARSAND: fx.sand = false; break;
+          case EFFECT.PAIN: fx.pain = capped(e.duration, 10000); break;
+          case EFFECT.WHITEOUT: fx.whiteout = capped(e.duration, 10000); break;
+          case EFFECT.BLUR: fx.blur = Math.min(200000, fx.blur + (e.duration < 0 ? 10000 : e.duration)); break;
+          case EFFECT.WAVER: fx.waver = Math.min(200000, fx.waver + (e.duration < 0 ? 10000 : e.duration)); break;
+          case EFFECT.FLASHXLAT:
+            fx.flashTime = capped(e.duration, 1000);
+            fx.flashXlat = e.xlat < 0 || e.xlat > 0xff ? 0 : e.xlat;
+            break;
+        }
+        this.emit({ type: "effect", effect: e.type });
+        return true;
+      }
       case BP.USE_LIST:
         this.inUse.clear();
         for (const id of readUseList(r)) this.inUse.add(id);
@@ -379,6 +524,20 @@ export class WorldState {
       default:
         return false;
     }
+  }
+
+  private addProjectile(shot: Shot, sx: number, sy: number, dx: number, dy: number): void {
+    const dist = Math.hypot(dx - sx, dy - sy) / 1024;
+    const id = this.nextProjectile--;
+    this.projectiles.set(id, {
+      id,
+      info: { iconRes: shot.iconRes, light: shot.light, flags: 0 },
+      look: lookFrom(shot.animation, [], shot.translation),
+      x: sx, y: sy, sourceX: sx, sourceY: sy, destX: dx, destY: dy, progress: 0,
+      increment: shot.speed === 0 || dist === 0 ? 1 : shot.speed / 1000 / dist,
+      angle: Math.round((Math.atan2(dy - sy, dx - sx) * 4096) / (2 * Math.PI)) & 4095,
+      flags: shot.flags,
+    });
   }
 
   /** moveobj.c MoveObject2: the server moved an object. */

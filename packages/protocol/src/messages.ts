@@ -302,6 +302,65 @@ export interface CharacterSlot {
   flags: number;
 }
 
+/** Face parts the creator offers for one gender (module/char char.h FaceInfo). */
+export interface FaceParts {
+  hair: number[];
+  head: number;
+  eyes: number[];
+  noses: number[];
+  mouths: number[];
+}
+
+/** A spell or skill the creator offers (char.h Spell / Skill): `id` is the Kod number, not an object. */
+export interface CreatorChoice {
+  id: number;
+  nameRes: number;
+  descRes: number;
+  cost: number;
+  school: number;
+}
+
+export interface CharInfo {
+  hairTranslations: number[];
+  faceTranslations: number[];
+  /** [male, female] */
+  parts: [FaceParts, FaceParts];
+  spells: CreatorChoice[];
+  skills: CreatorChoice[];
+}
+
+/** BP_CHARINFO (module/char/char.c HandleCharInfo): what the character creator offers. */
+export function readCharInfo(r: ByteReader): CharInfo {
+  const bytes = () => {
+    const n = r.u8();
+    const out: number[] = [];
+    for (let i = 0; i < n; i++) out.push(r.u8());
+    return out;
+  };
+  const ids = () => {
+    const n = r.i32();
+    const out: number[] = [];
+    for (let i = 0; i < n; i++) out.push(r.u32());
+    return out;
+  };
+  const hairTranslations = bytes();
+  const faceTranslations = bytes();
+  const face = (): FaceParts => {
+    const hair = ids();
+    const head = r.u32();
+    return { hair, head, eyes: ids(), noses: ids(), mouths: ids() };
+  };
+  const parts: [FaceParts, FaceParts] = [face(), face()];
+  const choices = () => {
+    const n = r.i32();
+    const out: CreatorChoice[] = [];
+    for (let i = 0; i < n; i++) out.push({ id: r.i32(), nameRes: r.u32(), descRes: r.u32(), cost: r.i32(), school: r.u8() });
+    return out;
+  };
+  const spells = choices();
+  return { hairTranslations, faceTranslations, parts, spells, skills: choices() };
+}
+
 /** BP_CHARACTERS (module/char/char.c HandleCharacters). */
 export function readCharacters(r: ByteReader): { characters: CharacterSlot[]; motd: string } {
   const n = r.u16();
@@ -508,6 +567,116 @@ export function buildReqCast(spell: number, targets: ObjectRef[]): Uint8Array {
   const w = new ByteWriter().u8(BP.REQ_CAST).u32(objId(spell));
   writeObjectList(w, targets);
   return w.finish();
+}
+
+// ---------------------------------------------------------------- combat and effects (milestone 6)
+
+/** include/proto.h ATTACK_NORMAL */
+export const ATTACK_NORMAL = 1;
+
+/** BP_REQ_ATTACK: attack kind, target (protocol.c PARAM_ATTACK_INFO, PARAM_ID). */
+export function buildReqAttack(target: number, kind = ATTACK_NORMAL): Uint8Array {
+  return new ByteWriter().u8(BP.REQ_ATTACK).u8(kind).u32(objId(target)).finish();
+}
+
+/** Player overlay hotspots (include/proto.h HOTSPOT_*): where on the screen it's drawn. */
+export const HOTSPOT = { NW: 1, N: 2, NE: 3, E: 4, SE: 5, S: 6, SW: 7, W: 8, CENTER: 9 } as const;
+
+/**
+ * BP_PLAYER_OVERLAY (server.c HandlePlayerOverlay): i8 hotspot, then an object with no
+ * lighting whose id is the overlay slot (1 or 2: weapon hand and shield hand). Hotspot 0
+ * hides the slot.
+ */
+export function readPlayerOverlay(r: ByteReader): { hotspot: number; object: ObjectInfo } {
+  const hs = r.u8();
+  return { hotspot: hs > 127 ? hs - 256 : hs, object: readObject(r, false) };
+}
+
+export interface Shot {
+  iconRes: number;
+  translation: number;
+  animation: Animation;
+  source: number;
+  /** BP_SHOOT: the target; BP_RADIUS_SHOOT: 0 */
+  dest: number;
+  /** squares per second */
+  speed: number;
+  /** PROJ_FLAG_* (1 = follow the ground) */
+  flags: number;
+  light: { flags: number; intensity: number; color: number };
+  /** BP_RADIUS_SHOOT: range in thousands of fine units, and how many in the ring */
+  range: number;
+  number: number;
+}
+
+function readLight(r: ByteReader): Shot["light"] {
+  const flags = r.u16();
+  return flags === 0 ? { flags: 0, intensity: 0, color: 0 } : { flags, intensity: r.u8(), color: r.u16() };
+}
+
+/** BP_SHOOT (server.c HandleShoot): a projectile from one object to another. */
+export function readShoot(r: ByteReader): Shot {
+  const iconRes = r.u32();
+  const { translation } = readTranslation(r);
+  const animation = readAnimation(r);
+  const source = r.u32();
+  const dest = r.u32();
+  const speed = r.u8();
+  const flags = r.u16();
+  return { iconRes, translation, animation, source, dest, speed, flags, light: readLight(r), range: 0, number: 1 };
+}
+
+/** BP_RADIUS_SHOOT (server.c HandleRadiusShoot): `number` projectiles in a ring out to `range`. */
+export function readRadiusShoot(r: ByteReader): Shot {
+  const iconRes = r.u32();
+  const { translation } = readTranslation(r);
+  const animation = readAnimation(r);
+  const source = r.u32();
+  const speed = r.u8();
+  const flags = r.u16();
+  const range = r.u8();
+  const number = r.u8();
+  return { iconRes, translation, animation, source, dest: 0, speed, flags, light: readLight(r), range, number };
+}
+
+/** Screen effects (include/proto.h EFFECT_*). */
+export const EFFECT = {
+  INVERT: 1, SHAKE: 2, PARALYZE: 3, RELEASE: 4, BLIND: 5, SEE: 6, PAIN: 7, BLUR: 8, RAINING: 9, SNOWING: 10,
+  CLEARWEATHER: 11, SAND: 12, CLEARSAND: 13, WAVER: 14, FLASHXLAT: 15, WHITEOUT: 16, XLATOVERRIDE: 17, FIREWORKS: 18,
+} as const;
+
+export interface Effect {
+  type: number;
+  /** milliseconds, for the timed effects */
+  duration: number;
+  /** FLASHXLAT / XLATOVERRIDE */
+  xlat: number;
+}
+
+/** BP_EFFECT (effect.c PerformEffect): u16 effect, then parameters by type. */
+export function readEffect(r: ByteReader): Effect {
+  const type = r.u16();
+  const e: Effect = { type, duration: 0, xlat: 0 };
+  switch (type) {
+    case EFFECT.XLATOVERRIDE:
+      e.xlat = r.i32();
+      break;
+    case EFFECT.INVERT:
+    case EFFECT.SHAKE:
+    case EFFECT.PAIN:
+    case EFFECT.WHITEOUT:
+    case EFFECT.BLUR:
+    case EFFECT.WAVER:
+      e.duration = r.i32();
+      break;
+    case EFFECT.FLASHXLAT:
+      e.duration = r.i32();
+      e.xlat = r.i32();
+      break;
+    default:
+      break;
+  }
+  return e;
 }
 
 // ---------------------------------------------------------------- user commands (BP_USERCOMMAND)

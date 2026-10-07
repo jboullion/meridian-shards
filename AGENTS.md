@@ -82,11 +82,14 @@ npm run check               # typecheck + lint + tests
 - **Controls** come from `apps/client/src/game/settings.ts` (rebindable in the settings, O or F10). The modern preset:
   - Click the view to capture the mouse; Esc releases it.
   - WASD or arrows to move (left/right arrows turn), Shift to run, Space/E to open a door.
-  - Click to look, F or double click to pick up or activate, right-click for the actions menu.
+  - Click an object to target it; E attacks; `]` `[` `\` Esc pick the next, previous, yourself or no target; R looks at the target.
+  - F or double click to pick up or activate, right-click for the actions menu (the original preset: right click looks).
   - PgUp/PgDn/Home to look up, down and straight, End to turn around, +/- to zoom the map, I for the inventory tab, Enter to chat.
   - The original preset follows `merintr.c interface_key_table` (Alt+arrows strafe, typing starts a chat line).
   - In dev, `window.shards` has `gameScene`, `session` and `audio` (`audio.log` lists what played). `gameScene.frame(dt, t)` lets a script drive movement while the Browser pane is hidden (its rAF is throttled).
 - **Object ids:** number items (shillings) carry a tag in the id's top 4 bits. Send plain id fields without it (`objId`, as `protocol.c GetObjId` does) and object-list fields with it plus the amount. Look ids up through `WorldState`'s maps, which ignore the tag like the client's `CompareIdObject`.
+- **Testing combat on our server:** `send object <id> SetHealth amount int 1` and `send object <id> Killed` on the maintenance port force a death; the Underworld's "rip in space" brings you back. Never do this on a server with real players.
+- **The first-person hands** are sized like the D3D client's 800 × 600 back buffer: a bitmap pixel is 1.75/800 of the view's width and 2.25/600 of its height (`screenOverlays.ts`).
 - **Settings** live in `localStorage`. Hot reloading `settings.ts` makes a second copy of its listeners, so reload the page after editing it.
 - **Trying shops and rooms quickly:** `node tools/maint/maint.ts "send object <player id> TeleportTo RID int 303"` moves a logged-in character on our server (303 smithy, 332 vault, 333 bank, 330 Outskirts).
 - **Movement is client-authoritative but checked:** keep `PlayerMover` byte-for-byte faithful to `move.c` (units, step sizes, thresholds). The server only rejects off-map destinations, and other players' original clients see our moves.

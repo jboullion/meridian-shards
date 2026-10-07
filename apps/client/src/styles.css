@@ -938,3 +938,268 @@ button.link {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- milestone 6: targeting and the screen overlays ---- */
+.screen-overlays {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.name-label.target {
+  outline: 1px solid rgba(0, 255, 0, 0.6);
+  outline-offset: 1px;
+}
+
+.view .target-name,
+.view .select-hint {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font: bold 13px Georgia, "Times New Roman", serif;
+  text-shadow: 0 0 3px #000, 1px 1px 0 #000;
+  pointer-events: none;
+}
+
+.view .target-name {
+  top: 26px;
+  color: rgb(120, 255, 120);
+}
+
+.view .select-hint {
+  bottom: 12px;
+  color: rgb(240, 208, 25);
+}
+
+.portrait {
+  position: relative;
+}
+
+.portrait .self-target {
+  position: absolute;
+  inset: 0;
+  width: 64px;
+  height: 64px;
+}
+
+.portrait > img:not(.self-target) {
+  position: relative;
+}
+
+.portrait.selecting {
+  cursor: crosshair;
+  outline: 1px dashed rgb(240, 208, 25);
+}
+
+/* ---- milestone 6: the character creator (module/char) ---- */
+.card.creator {
+  width: min(720px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+}
+
+.creator-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--panel-edge);
+}
+
+.creator-tabs button {
+  border-bottom: none;
+  color: var(--muted);
+}
+
+.creator-tabs button.active {
+  color: var(--gold);
+  background: #2b2418;
+}
+
+.creator-page {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 300px;
+}
+
+.creator-page textarea {
+  padding: 8px;
+  background: #241d16;
+  color: var(--text);
+  border: 1px solid var(--panel-edge);
+  font: inherit;
+  resize: vertical;
+}
+
+.creator-page .row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.creator-page .row span {
+  min-width: 90px;
+  text-align: center;
+}
+
+.appearance {
+  flex-direction: row;
+  gap: 24px;
+}
+
+.face-preview {
+  width: 220px;
+  height: 260px;
+  display: grid;
+  place-items: center;
+  background: #241d16;
+  border: 1px solid var(--panel-edge);
+}
+
+.face-preview .face {
+  width: 200px;
+  height: 240px;
+}
+
+.face-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card .radio {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+.card .slider,
+.card .stat-slider {
+  display: flex;
+  gap: 4px;
+}
+
+.card .stat-slider {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.stat-slider span:first-child {
+  width: 80px;
+  text-align: right;
+}
+
+.stat-slider input {
+  flex: 1;
+  accent-color: rgb(0, 128, 0);
+}
+
+.stat-slider .val {
+  width: 28px;
+}
+
+.creator .points {
+  margin: 0;
+  color: var(--gold);
+}
+
+.creator fieldset {
+  border: 1px solid var(--panel-edge);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.creator legend {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.choice-lists {
+  display: grid;
+  grid-template-columns: 1fr 150px 1fr;
+  gap: 8px;
+}
+
+.choice-lists h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.choice-lists ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  height: 240px;
+  overflow-y: auto;
+  background: #000;
+  border: 1px solid var(--panel-edge);
+  font-size: 13px;
+}
+
+.choice-lists li {
+  padding: 1px 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.choice-lists li.selected {
+  background: #fff;
+  color: #000;
+}
+
+.choice-lists li.blocked {
+  color: #6b5f4d;
+}
+
+.choice-middle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.choice-info {
+  margin: 0;
+  color: var(--muted);
+}
+
+.creator-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.creator-nav .spacer {
+  flex: 1;
+}
+
+.creator .confirm {
+  border: 1px solid var(--gold);
+  padding: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.creator .confirm p {
+  margin: 0;
+  flex-basis: 100%;
+}
+
+.new-character {
+  color: var(--muted) !important;
+  font-style: italic;
+}
+
+@media (max-width: 640px) {
+  .appearance {
+    flex-direction: column;
+  }
+  .choice-lists {
+    grid-template-columns: 1fr;
+  }
+}

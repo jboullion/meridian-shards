@@ -4,11 +4,11 @@
 
 import {
   AP, BP, ByteReader, ByteWriter, Connection, ENCHANT, GENDER, SAY, apName, bpName, buildLogin, buildNewCharInfo,
-  buildReqBuy, buildReqBuyItems, buildReqCast, buildReqDeposit, buildReqGame, buildReqLook, buildReqMove,
+  buildReqAttack, buildReqBuy, buildReqBuyItems, buildReqCast, buildReqDeposit, buildReqGame, buildReqLook, buildReqMove,
   buildReqOffer, buildReqTurn, buildReqWithdrawal, buildReqWithdrawalItems, buildSay, buildSendEnchantments,
   buildSendSkills, buildSendSpells, buildSendStatGroups, buildSendStats, buildSimple, buildUseCharacter, buildUserCommand,
-  objId, passwordDigest, readBuyList, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
-  type BuyItem, type CharacterSlot, type ObjectInfo, type ObjectRef, type PlayWave,
+  buildSendCharInfo, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
+  type BuyItem, type CharInfo, type CharacterSlot, type NewCharInfo, type ObjectInfo, type ObjectRef, type PlayWave,
 } from "@shards/protocol";
 import { WorldState, fineToKod } from "./state.ts";
 import { formatServerMessage, parseMarkup, type TextSpan } from "./text.ts";
@@ -82,6 +82,8 @@ export interface SessionOptions {
 export interface SessionEvents {
   phase?: (phase: SessionPhase) => void;
   characters?: (characters: CharacterSlot[], motd: string) => void;
+  /** The character creator's choices (BP_CHARINFO), after requestCharInfo() */
+  charInfo?: (info: CharInfo) => void;
   error?: (message: string) => void;
   chat?: (line: ChatLine) => void;
   look?: (look: LookResult) => void;
@@ -137,18 +139,26 @@ export class GameSession {
     this.conn.sendGame(buildUseCharacter(id));
   }
 
+  /** BP_SEND_CHARINFO: ask for what the character creator offers (answered with BP_CHARINFO). */
+  requestCharInfo(): void {
+    this.conn.sendGame(buildSendCharInfo());
+  }
+
   /**
-   * Create a character in an empty slot with default looks and stats; the real
-   * character creator (module/char) comes later.
+   * BP_NEW_CHARINFO: create the character in an empty slot (module/char charmake.c
+   * VerifySettings). The server answers CHARINFO_OK (we then enter) or CHARINFO_NOT_OK.
    */
-  createCharacter(slotId: number, name: string, gender: number = GENDER.MALE, description = ""): void {
+  createCharacter(info: NewCharInfo): void {
     this.setPhase("entering");
-    this.conn.sendGame(
-      buildNewCharInfo({
-        id: slotId, name, description, gender, faceParts: [], hairTranslation: 0, skinTranslation: 3,
-        stats: [35, 35, 35, 35, 35, 35], spells: [], skills: [],
-      }),
-    );
+    this.conn.sendGame(buildNewCharInfo(info));
+  }
+
+  /** A character with default looks and even stats (for tools and tests). */
+  createDefaultCharacter(slotId: number, name: string, gender: number = GENDER.MALE): void {
+    this.createCharacter({
+      id: slotId, name, description: "", gender, faceParts: [], hairTranslation: 0, skinTranslation: 3,
+      stats: [35, 35, 35, 35, 35, 35], spells: [], skills: [],
+    });
   }
 
   // ---- game actions (clientd3d/protocol.h Request*) ----
@@ -245,6 +255,16 @@ export class GameSession {
 
   cast(spell: number, targets: ObjectRef[] = []): void {
     this.send(buildReqCast(spell, targets));
+  }
+
+  /** A line from the client itself in the chat window (system colour, like GameMessage). */
+  localMessage(text: string): void {
+    this.chatLine("system", text);
+  }
+
+  /** BP_REQ_ATTACK (gameuser.c UserAttackClosest sends ATTACK_NORMAL at the target). */
+  attack(target: number): void {
+    this.send(buildReqAttack(target));
   }
 
   /** BP_USERCOMMAND (UC_DEPOSIT amount, UC_WITHDRAW amount, UC_BALANCE, UC_REST ...). */
@@ -373,6 +393,9 @@ export class GameSession {
           this.events.characters?.(characters, motd);
           break;
         }
+        case BP.CHARINFO:
+          this.events.charInfo?.(readCharInfo(r));
+          break;
         case BP.CHARINFO_OK:
           this.conn.sendGame(buildUseCharacter(r.u32()));
           break;

@@ -11,6 +11,7 @@ import { Sidebar, type ItemMenu, type Tab } from "./ui/Sidebar.tsx";
 
 const MAX_LINES = 300;
 const OF_PLAYER = 0x4;
+const OF_ATTACKABLE = 0x8;
 /** include/proto.h: objects you can offer to (sell to, deposit with) and buy from */
 const OF_OFFERABLE = 0x200;
 const OF_BUYABLE = 0x400;
@@ -98,6 +99,8 @@ export function GameView({
   const [modal, setModal] = useState<Modal | null>(null);
   const [offer, setOffer] = useState<ReturnType<typeof reduceOffer>>(null);
   const [settings, setSettings] = useState<Settings>(getSettings);
+  const [target, setTarget] = useState<number | null>(null);
+  const [selecting, setSelecting] = useState(false);
 
   useEffect(() => onSettings(setSettings), []);
 
@@ -110,6 +113,9 @@ export function GameView({
       setText((v) => v + t);
       inputRef.current?.focus();
     };
+    scene.onTarget = setTarget;
+    scene.onSelecting = setSelecting;
+    scene.onMessage = (t) => session.localMessage(t);
     scene.onObjectMenu = (a: ObjectAction) => setMenu({ ...a, inventory: false, object: session.world.objects.get(a.id)?.info ?? null });
     scene.onAction = (a) => {
       if (a === "inventory") setTab("inventory");
@@ -189,6 +195,20 @@ export function GameView({
       object: m.object, canGet: false, canActivate: false,
     });
 
+  /** Our face, an inventory item or a menu: pick it as the spell target, or make it the target. */
+  const selectObject = (id: number) => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    if (scene.selecting) scene.select(id);
+    else scene.setTarget(id);
+  };
+
+  const targetName = (() => {
+    if (target === null) return null;
+    const o = session.world.objects.get(target);
+    return o ? (session.resource(o.info.nameRes) ?? null) : null;
+  })();
+
   const f = menu?.object?.flags ?? 0;
   const inUse = menu ? session.world.inUse.has(menu.id) : false;
 
@@ -208,6 +228,8 @@ export function GameView({
         <div ref={labelsRef} className="labels" />
         <div className="crosshair" />
         <div className="room-name">{status?.roomName}</div>
+        {targetName && <div className="target-name">Target: {targetName}</div>}
+        {selecting && <div className="select-hint">Choose a target (Esc or right click cancels)</div>}
         {(phase === "entering" || status?.loading) && <div className="loading">Entering…</div>}
         {look && (
           <div className="look-panel" onClick={(e) => e.stopPropagation()}>
@@ -251,6 +273,21 @@ export function GameView({
             </>
           ) : (
             <>
+              {f & OF_ATTACKABLE ? (
+                <li>
+                  <button
+                    onClick={() =>
+                      act(() => {
+                        sceneRef.current?.setTarget(menu.id);
+                        sceneRef.current?.attack();
+                      })
+                    }
+                  >
+                    Attack
+                  </button>
+                </li>
+              ) : null}
+              <li><button onClick={() => act(() => selectObject(menu.id))}>{selecting ? "Choose as target" : "Target"}</button></li>
               {menu.canGet && <li><button onClick={() => act(() => session.pickUp(menu.id))}>Pick up</button></li>}
               {menu.canActivate && <li><button onClick={() => act(() => session.activate(menu.id))}>Activate</button></li>}
               {f & OF_BUYABLE ? (
@@ -313,12 +350,16 @@ export function GameView({
         mapZoom={settings.mapZoom}
         onItemMenu={itemMenu}
         onDropItem={drop}
+        target={target}
+        selecting={selecting}
+        onSelectObject={selectObject}
+        onCast={(spell, n) => sceneRef.current?.castSpell(spell, n)}
       />
       <div className="hud" style={{ backgroundImage: `url(${assets.url("ui/bkgnd.bmp")})` }}>
         <span className="muted">
           {settings.preset === "original"
-            ? "Arrows move · Alt+arrows strafe · Space door · double click use · right click actions · F10 settings"
-            : "Click to look around · WASD move · Shift run · Space door · F/double click use · right click actions · F10 settings"}
+            ? "Arrows move · Alt+arrows strafe · Ctrl attack · Space door · right click look · F10 settings"
+            : "Click to target · E attack · WASD move · Shift run · Space door · F/double click use · right click actions · O settings"}
         </span>
         <button className="link" onClick={() => setModal({ type: "settings" })}>
           Settings

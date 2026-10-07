@@ -6,6 +6,7 @@ A faithful browser port of the classic Meridian 59 client: the original 2.5D loo
 - **Milestone 0 (the de-risk spike) is done.** The server builds and runs locally. A headless client logs in through the WebSocket gateway, creates a character, enters the Inn of Raza and walks out into Raza, and the original Windows client sees it there.
 - **The browser client logs in and enters the world.** You can pick or create a character, then stand in the Inn of Raza or Raza with every object (NPCs, players, signs, trees, torches) drawn, lit and labelled like the original D3D client. Walking uses the original collision code, and you can open doors, cross into neighbouring zones, chat, look at things, and pick up and drop items.
 - **The original's interface works:** the health, mana and vigor bars, your face and enchantments, the minimap, and the inventory, stats, spells, skills and quests tabs. You can buy from shopkeepers, sell to them, use the bank and vault, and hear the original music and sounds. Settings (O or F10) cover sound and key bindings, with a modern (WASD) preset and the original's keys.
+- **Combat and character creation work:** target and fight the forest creatures with your weapon in hand, cast spells at a target, die and walk out of the Underworld, and make new characters with the original's full creator (face, stats, spells and skills).
 - **The room viewer (`/?viewer`) renders every Raza slice room** from the original files.
 
 See [docs/roadmap.md](docs/roadmap.md).

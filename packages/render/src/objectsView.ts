@@ -36,6 +36,8 @@ export interface ViewObject {
     nameColor: number;
     light: { flags: number; intensity: number; color: number };
   };
+  /** Drawn at full brightness, unaffected by light or fog (projectiles: d3drender.c COLOR_MAX) */
+  fullBright?: boolean;
   /** The look to draw now (normal, or the motion look while moving). */
   look: {
     anim: { group: number };
@@ -99,7 +101,28 @@ void main() {
 }
 `;
 
+/**
+ * The target halo (d3drender.c, isTargeted chunks): the sprite's shape, stretched 96 /
+ * shrink fine units further on each side, drawn behind it in one colour (green by
+ * default, config.halocolor) at twice the object's light.
+ */
+const haloFragment = /* glsl */ `
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uMap;
+uniform vec3 uColor;
+void main() {
+  float index = floor(texture(uMap, vUv).r * 255.0 + 0.5);
+  if (index == 254.0) discard;
+  fragColor = vec4(uColor, 1.0);
+}
+`;
+/** config.halocolor: 0 green (default), 1 red, 2 blue */
+export const HALO_COLORS = [new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1)];
+
 interface Entry {
+  halo: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial> | null;
   mesh: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   key: string;
   composite: Composite | null;
@@ -117,6 +140,8 @@ export class ObjectsView {
   private readonly xlats: XlatTable;
   private readonly getBgf: (resource: number) => Bgf | null | undefined;
   private readonly resourceName: (resource: number) => string | undefined;
+  private target: number | null = null;
+  haloColor = 0;
 
   /**
    * @param getBgf the loaded .bgf for an icon resource; undefined while loading (the
@@ -220,7 +245,7 @@ export class ObjectsView {
         const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
         mesh.name = `object ${o.id}`;
         this.group.add(mesh);
-        e = { mesh, key: "", composite: null, texture: null, x, y, z: 0 };
+        e = { mesh, halo: null, key: "", composite: null, texture: null, x, y, z: 0 };
         this.entries.set(o.id, e);
       }
       if (e.key !== key) {
@@ -254,17 +279,21 @@ export class ObjectsView {
       const sectorLight = leaf?.sector ? ctx.room.sectors[leaf.sector - 1].light : 0;
       const u = e.mesh.material.uniforms;
       const dt = o.info.drawingType;
-      const [r, g, b] =
-        dt === DRAWFX.BLACK ? [0, 0, 0] : objectBrightness({ x, y, z: e.z }, sectorLight, ctx.viewerLight, ctx.ambient, lights);
+      const [r, g, b] = o.fullBright
+        ? [1, 1, 1]
+        : dt === DRAWFX.BLACK
+          ? [0, 0, 0]
+          : objectBrightness({ x, y, z: e.z }, sectorLight, ctx.viewerLight, ctx.ambient, lights);
       (u.uBrightness.value as THREE.Vector3).set(r, g, b);
       u.uFogEnd.value = fogEnd(sectorLight, ctx.viewerLight, ctx.ambient);
-      u.uFog.value = ctx.fog ? 1 : 0;
+      u.uFog.value = ctx.fog && !o.fullBright ? 1 : 0;
       const alpha =
         dt === DRAWFX.TRANSLUCENT25 ? 0.25 : dt === DRAWFX.TRANSLUCENT75 ? 0.75
         : dt === DRAWFX.TRANSLUCENT50 || dt === DRAWFX.DITHERTRANS || dt === DRAWFX.DITHERINVIS || dt === DRAWFX.DITHERGREY ? 0.5 : 1;
       u.uAlpha.value = alpha;
       e.mesh.material.transparent = alpha < 1;
       e.mesh.material.depthWrite = alpha >= 1;
+      this.updateHalo(e, o.id === this.target, r);
 
       // Name labels (d3drender.c D3DRenderNamesDraw3D)
       if (o.info.flags & OF.DISPLAY_NAME) {
@@ -299,6 +328,7 @@ export class ObjectsView {
     const meshes = [...this.entries.values()].filter((e) => e.mesh.visible && e.composite).map((e) => e.mesh);
     for (const hit of raycaster.intersectObjects(meshes, false)) {
       const id = Number(hit.object.name.split(" ")[1]);
+      if (id < 0) continue; // projectiles can't be clicked
       const e = this.entries.get(id);
       const c = e?.composite;
       if (!c || !hit.uv) continue;
@@ -309,7 +339,52 @@ export class ObjectsView {
     return null;
   }
 
-  /** Highlight one object (the target) with a brighter tint; null clears. */
+  /** The user's selected target (gameuser.c SetUserTargetID); null clears. */
+  setTarget(id: number | null): void {
+    this.target = id;
+  }
+
+  private updateHalo(e: Entry, on: boolean, light: number): void {
+    if (!on || !e.composite) {
+      if (e.halo) e.halo.visible = false;
+      return;
+    }
+    if (!e.halo) {
+      const mat = new THREE.ShaderMaterial({
+        glslVersion: THREE.GLSL3,
+        vertexShader: spriteVertex,
+        fragmentShader: haloFragment,
+        uniforms: { uMap: { value: e.texture }, uColor: { value: new THREE.Vector3() } },
+        side: THREE.DoubleSide,
+      });
+      e.halo = new THREE.Mesh(new THREE.BufferGeometry(), mat);
+      e.halo.name = e.mesh.name; // picking the halo picks the object
+      e.halo.position.z = -0.01; // just behind the sprite (ZBIAS_TARGETED)
+      e.mesh.add(e.halo);
+      this.setHaloGeometry(e);
+    }
+    e.halo.visible = true;
+    const k = Math.min(1, light * 2);
+    (e.halo.material.uniforms.uColor.value as THREE.Vector3).copy(HALO_COLORS[this.haloColor] ?? HALO_COLORS[0]).multiplyScalar(k);
+  }
+
+  private setHaloGeometry(e: Entry): void {
+    const c = e.composite;
+    if (!e.halo || !c) return;
+    e.halo.material.uniforms.uMap.value = e.texture;
+    const shrink = (16 * c.width) / c.widthFine;
+    const grow = 96 / shrink;
+    const l = (c.left - grow) / FINENESS,
+      r = (c.left + c.widthFine + grow) / FINENESS;
+    const t = (c.top + grow) / FINENESS,
+      b = (c.top - c.heightFine - grow) / FINENESS;
+    const g = e.halo.geometry;
+    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array([l, t, 0, l, b, 0, r, b, 0, l, t, 0, r, b, 0, r, t, 0]), 3));
+    g.setAttribute("uv", new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0]), 2));
+    g.computeBoundingSphere();
+  }
+
+  /** Highlight the object under the mouse with a brighter tint; null clears. */
   setHighlight(id: number | null): void {
     for (const [eid, e] of this.entries) e.mesh.material.uniforms.uHighlight.value = eid === id ? 1 : 0;
   }
@@ -337,9 +412,14 @@ export class ObjectsView {
     // texture row 0 is the image's top row (v = 0)
     g.setAttribute("uv", new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0]), 2));
     g.computeBoundingSphere();
+    this.setHaloGeometry(e);
   }
 
   private disposeEntry(e: Entry): void {
+    if (e.halo) {
+      e.halo.geometry.dispose();
+      e.halo.material.dispose();
+    }
     this.group.remove(e.mesh);
     e.mesh.geometry.dispose();
     e.mesh.material.dispose();

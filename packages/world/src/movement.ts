@@ -278,6 +278,23 @@ export class PlayerMover {
     } else this.vZ += (GRAVITY * dt) / 1000;
   }
 
+  /**
+   * move.c MoveUpdatePosition: send our exact position now (if it moved past the
+   * threshold), before attacking or going through a door, so the server judges range
+   * from where we really stand.
+   */
+  flush(now: number): void {
+    if (!this.valid) return;
+    const ddx = this.serverX - this.x,
+      ddy = this.serverY - this.y;
+    if (ddx * ddx + ddy * ddy > MOVE_THRESHOLD) {
+      this.sink.move(this.x, this.y, this.lastFast ? SPEED_RUN : SPEED_WALK);
+      this.serverX = this.x;
+      this.serverY = this.y;
+      this.serverTime = now;
+    }
+  }
+
   private updateServer(now: number): void {
     if (now - this.serverTime < MOVE_INTERVAL || !this.valid) return;
     const ddx = this.serverX - this.x,

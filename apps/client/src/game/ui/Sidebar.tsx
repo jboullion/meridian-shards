@@ -12,6 +12,7 @@ import { isNumberItem, type GameSession } from "@shards/world";
 import type { AssetStore } from "../../assets.ts";
 import { bareIcon, type Drawable, type IconOptions, type IconRenderer } from "../icons.ts";
 import { useAsyncImage, useWorld } from "./hooks.ts";
+import { useKeyedImage } from "./keyed.ts";
 import { MiniMap } from "./MiniMap.tsx";
 
 /** statmain.c: main stat numbers */
@@ -75,7 +76,7 @@ function StatBar({ stat, main = false }: { stat: Statistic; main?: boolean }) {
 }
 
 export function Sidebar({
-  session, icons, assets, getRoom, tab, onTab, mapZoom, onItemMenu, onDropItem,
+  session, icons, assets, getRoom, tab, onTab, mapZoom, onItemMenu, onDropItem, target, selecting, onSelectObject, onCast,
 }: {
   session: GameSession;
   icons: IconRenderer;
@@ -86,8 +87,16 @@ export function Sidebar({
   mapZoom: number;
   onItemMenu: (m: ItemMenu) => void;
   onDropItem: (o: ObjectInfo) => void;
+  /** The selected target, for the self-target ring behind our face */
+  target: number | null;
+  /** Picking a spell target (GAME_SELECT): clicks on our face or an item pick it */
+  selecting: boolean;
+  /** Our face or an item was clicked as a target */
+  onSelectObject: (id: number) => void;
+  onCast: (spell: number, numTargets: number) => void;
 }) {
   const world = session.world;
+  const selfTargetImg = useKeyedImage(assets.url("ui/selftrgt.bmp"));
   useWorld(world, ["stats", "enchantments", "inventory", "inUse", "spells", "skills", "roomContents", "objectChanged"]);
   const ui = (name: string) => `url(${assets.url(`ui/${name}`)})`;
   const main = (world.stats.get(STAT_GROUP.MAIN) ?? []).filter((s) => s.type === STATS.NUMERIC && s.numeric?.tag === STAT_TAG.INT);
@@ -104,10 +113,13 @@ export function Sidebar({
     <aside className="sidebar" style={{ backgroundImage: ui("bkgnd.bmp") }}>
       <div className="user-area">
         <div
-          className="portrait"
+          className={selecting ? "portrait selecting" : "portrait"}
           title={self ? rs(self.info.nameRes) : ""}
-          onClick={() => self && session.look(self.id)}
+          // userarea.c: a click targets us (or picks us as a spell target); a double click looks
+          onClick={() => self && onSelectObject(self.id)}
+          onDoubleClick={() => self && session.look(self.id)}
         >
+          {self && target === self.id && selfTargetImg && <img className="self-target" src={selfTargetImg} alt="" draggable={false} />}
           {self && <PortraitIcon icons={icons} object={self.info} />}
         </div>
         <div className="main-stats">
@@ -149,7 +161,15 @@ export function Sidebar({
       </div>
       <div className="stat-area" style={{ backgroundImage: ui("invbkgnd.bmp") }}>
         {tab === "inventory" ? (
-          <Inventory session={session} icons={icons} assets={assets} onItemMenu={onItemMenu} onDropItem={onDropItem} />
+          <Inventory
+            session={session}
+            icons={icons}
+            assets={assets}
+            onItemMenu={onItemMenu}
+            onDropItem={onDropItem}
+            selecting={selecting}
+            onSelectObject={onSelectObject}
+          />
         ) : tab === "stats" ? (
           <NumericStats stats={world.stats.get(STAT_GROUP.STATS) ?? []} rs={rs} />
         ) : (
@@ -158,6 +178,7 @@ export function Sidebar({
             icons={icons}
             group={tab === "spells" ? STAT_GROUP.SPELLS : tab === "skills" ? STAT_GROUP.SKILLS : STAT_GROUP.QUESTS}
             onItemMenu={onItemMenu}
+            onCast={onCast}
           />
         )}
       </div>
@@ -173,16 +194,19 @@ function PortraitIcon({ icons, object }: { icons: IconRenderer; object: ObjectIn
 
 /** inventry.c: a grid of 40x40 boxes; in-use items sit on the yellow sun (inuse.bmp). */
 function Inventory({
-  session, icons, assets, onItemMenu, onDropItem,
+  session, icons, assets, onItemMenu, onDropItem, selecting, onSelectObject,
 }: {
   session: GameSession;
   icons: IconRenderer;
   assets: AssetStore;
   onItemMenu: (m: ItemMenu) => void;
   onDropItem: (o: ObjectInfo) => void;
+  selecting: boolean;
+  onSelectObject: (id: number) => void;
 }) {
   const world = session.world;
   const [selected, setSelected] = useState<number | null>(null);
+  const inUseImg = useKeyedImage(assets.url("ui/inuse.bmp"));
   const items = [...world.inventory.values()];
   const rs = (id: number) => session.resource(id) ?? "";
   const toggleUse = (o: ObjectInfo) => (world.inUse.has(o.id) ? session.unuse(o.id) : session.use(o.id));
@@ -199,8 +223,9 @@ function Inventory({
             e.dataTransfer.setData("application/x-shards-item", String(o.id));
             e.dataTransfer.effectAllowed = "move";
           }}
-          onClick={() => setSelected(o.id)}
-          onDoubleClick={() => toggleUse(o)}
+          // inventry.c: in GAME_SELECT a click picks the item as a spell target
+          onClick={() => (selecting ? onSelectObject(o.id) : setSelected(o.id))}
+          onDoubleClick={() => !selecting && toggleUse(o)}
           onContextMenu={(e: ReactMouseEvent) => {
             e.preventDefault();
             setSelected(o.id);
@@ -211,7 +236,7 @@ function Inventory({
           }}
           tabIndex={0}
         >
-          {world.inUse.has(o.id) && <img className="in-use" src={assets.url("ui/inuse.bmp")} alt="" draggable={false} />}
+          {world.inUse.has(o.id) && inUseImg && <img className="in-use" src={inUseImg} alt="" draggable={false} />}
           <ObjIcon icons={icons} object={o} />
           {isNumberItem(o.id) && <span className="inv-num">{o.amount}</span>}
         </div>
@@ -242,12 +267,13 @@ function NumericStats({ stats, rs }: { stats: Statistic[]; rs: (id: number) => s
 
 /** statlist.c: icon and "name NN%" (quests: name only; headers green). */
 function StatList({
-  session, icons, group, onItemMenu,
+  session, icons, group, onItemMenu, onCast,
 }: {
   session: GameSession;
   icons: IconRenderer;
   group: number;
   onItemMenu: (m: ItemMenu) => void;
+  onCast: (spell: number, numTargets: number) => void;
 }) {
   const world = session.world;
   const [selected, setSelected] = useState<number | null>(null);
@@ -266,12 +292,8 @@ function StatList({
         className={`stat-list-row${header ? " header" : ""}${selected === i ? " selected" : ""}`}
         onClick={() => setSelected(i)}
         onDoubleClick={() => {
-          if (group === STAT_GROUP.SPELLS && l.id) {
-            const sp = spellFor(l.id);
-            // A spell needing a target is aimed at ourselves until targeting arrives (milestone 6)
-            const self = world.player?.id;
-            session.cast(l.id, sp && sp.numTargets > 0 && self ? [{ id: self }] : []);
-          } else if (l.id) session.look(l.id);
+          if (group === STAT_GROUP.SPELLS && l.id) onCast(l.id, spellFor(l.id)?.numTargets ?? 0);
+          else if (l.id) session.look(l.id);
         }}
         onContextMenu={(e) => {
           e.preventDefault();

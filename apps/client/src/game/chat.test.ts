@@ -41,3 +41,20 @@ describe("key bindings", () => {
     expect(isHeld(k, "forward", new Set(["ArrowUp", "KeyD"]), false)).toBe(true);
   });
 });
+
+describe("character creator", () => {
+  test("names: trimmed, 3 to 30 legal characters (charname.c VerifyCharName)", async () => {
+    const { verifyCharName } = await import("./CharacterCreator.tsx");
+    expect(verifyCharName("  Shardmage ")).toBe("Shardmage");
+    expect(verifyCharName("Al")).toBeNull();
+    expect(verifyCharName("Bad#Name")).toBeNull();
+    expect(verifyCharName("Sir [Lance] O'Lot!")).toBe("Sir [Lance] O'Lot!");
+    expect(verifyCharName("x".repeat(31))).toBeNull();
+  });
+
+  test("combat keys: E attacks in the modern preset, Ctrl in the original", () => {
+    expect(actionsFor(PRESETS.modern, "KeyE", false)).toEqual(["attack"]);
+    expect(actionsFor(PRESETS.original, "ControlLeft", false)).toEqual(["attack"]);
+    expect(actionsFor(PRESETS.original, "BracketRight", false)).toEqual(["targetNext"]);
+  });
+});

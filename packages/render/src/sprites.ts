@@ -50,6 +50,9 @@ export interface Composite {
   heightFine: number;
   /** The base bitmap's top (for name labels and light sources) */
   baseTop: number;
+  /** Where the base bitmap's top-left pixel sits in the image (screen overlays place by it) */
+  originX: number;
+  originY: number;
 }
 
 /** draw.c GetObjectPdib: the bitmap of `group` seen from `angle`, or null. */
@@ -177,5 +180,7 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
     widthFine: width * px,
     heightFine: height * px,
     baseTop,
+    originX: -minX,
+    originY: -minY,
   };
 }
