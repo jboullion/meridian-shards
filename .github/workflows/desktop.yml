@@ -34,6 +34,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "Meridian Shards $GITHUB_REF_NAME" --generate-notes
+      # Drafts are never public; one left over is a run that failed before publishing
+      - name: Delete drafts of earlier versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName' | while read -r tag; do
+            if [ "$tag" != "$GITHUB_REF_NAME" ]; then
+              echo "deleting the draft for $tag"
+              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes
+            fi
+          done
 
   build:
     needs: draft
@@ -71,16 +83,30 @@ jobs:
       - name: Game files from the server
         run: node tools/assets/fetch-assets.ts --from "$ASSETS_FROM"
         shell: bash
+      # On a failure the log's last lines become an error annotation: unlike the log,
+      # annotations can be read without signing in, so tools/deploy/release.ts prints them
       - name: Build and upload to the draft release
         if: startsWith(github.ref, 'refs/tags/v')
-        run: npm run desktop:release
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! npm run desktop:release 2>&1 | tee build.log; then
+            echo "::error title=Build failed::$(tail -n 40 build.log | tr -d '\r' | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')"
+            exit 1
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Unsigned for now (docs/adr/0002-desktop-shell.md); stops macOS looking for a certificate
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
       - name: Build only (not a tag)
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        run: npm run desktop:dist
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! npm run desktop:dist 2>&1 | tee build.log; then
+            echo "::error title=Build failed::$(tail -n 40 build.log | tr -d '\r' | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')"
+            exit 1
+          fi
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 

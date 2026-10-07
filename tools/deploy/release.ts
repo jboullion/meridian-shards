@@ -76,6 +76,7 @@ interface Run {
   html_url: string;
 }
 interface Job {
+  id: number;
   name: string;
   status: string;
   conclusion: string | null;
@@ -142,6 +143,10 @@ async function watch(): Promise<void> {
     for (const j of jobs.filter((j) => j.conclusion !== "success" && j.conclusion !== "skipped")) {
       const step = j.steps?.find((s) => s.conclusion === "failure")?.name;
       console.error(`!! ${j.name}: ${j.conclusion}${step ? ` at "${step}"` : ""}`);
+      // The workflow puts a failed build's last log lines in an annotation (readable without signing in)
+      const notes = await api<{ annotation_level: string; title?: string; message: string }[]>(`/check-runs/${j.id}/annotations`).catch(() => []);
+      for (const n of notes.filter((n) => n.annotation_level === "failure" && n.title))
+        console.error(`   ${n.title}:\n${n.message.replace(/^/gm, "   | ")}`);
     }
     fail(`the run ${run.conclusion}. Logs: ${run.html_url} (or gh run view ${run.id} --log-failed). The release stays an unpublished draft.`);
   }
