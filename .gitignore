@@ -36,3 +36,8 @@ Thumbs.db
 /deploy/.stage/
 /apps/client/dist/
 /.deploy.tgz
+
+
+# references
+
+docs/research/reference-images/

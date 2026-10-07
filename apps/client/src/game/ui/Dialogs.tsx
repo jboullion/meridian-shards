@@ -1,6 +1,8 @@
 // Dialogs: buying from a shopkeeper (buy.c), the bank vault (buy.c withdrawal), offering
 // items (offer.c: selling to a shopkeeper is an offer they answer with shillings),
-// depositing, an amount prompt for number items, and the settings.
+// depositing, an amount prompt for number items, and the settings. Drawn with the Meridian
+// dialog kit; item lists are the client's owner-drawn lists (white on black, the chosen rows
+// black on white).
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { ObjectInfo, ObjectRef } from "@shards/protocol";
@@ -9,21 +11,14 @@ import type { IconRenderer } from "../icons.ts";
 import {
   ACTION_LABELS, ACTIONS, PRESETS, applyPreset, bindingLabel, updateSettings, type Action, type KeyBinding, type Settings,
 } from "../settings.ts";
+import { Button, Check, GroupBox, Tabs, TextField, Trackbar, Window } from "./kit.tsx";
 import { ObjIcon } from "./Sidebar.tsx";
 
 function Dialog({ title, children, onClose, wide }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
   return (
-    <div className={wide ? "dialog wide" : "dialog"} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
-      <h3>{title}</h3>
+    <Window title={title} onClose={onClose} className={wide ? "game-dialog wide" : "game-dialog"}>
       {children}
-    </div>
+    </Window>
   );
 }
 
@@ -45,35 +40,38 @@ function ItemPicker({
     setChosen(m);
   };
   return (
-    <ul className="item-picker">
-      {items.map((o) => {
-        const on = chosen.has(o.id);
-        const c = cost?.(o);
-        return (
-          <li key={o.id} className={on ? "chosen" : ""} onClick={() => toggle(o)}>
-            <input type="checkbox" checked={on} readOnly />
-            <ObjIcon icons={icons} object={o} className="pick-icon" />
-            <span className="pick-name">
-              {isNumberItem(o.id) && o.amount ? `${o.amount} ` : ""}
-              {rs(o.nameRes)}
-            </span>
-            {c !== undefined && <span className="pick-cost">{c}</span>}
-            {on && isNumberItem(o.id) && (
-              <input
-                type="number"
-                className="pick-amount"
-                min={1}
-                max={o.amount || undefined}
-                value={chosen.get(o.id)}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => setChosen(new Map(chosen).set(o.id, Math.max(1, Number(e.target.value) || 1)))}
-              />
-            )}
-          </li>
-        );
-      })}
-      {items.length === 0 && <li className="muted">Nothing.</li>}
-    </ul>
+    <span className="mk-edit list item-frame">
+      <ul className="mk-list item-picker">
+        {items.map((o) => {
+          const on = chosen.has(o.id);
+          const c = cost?.(o);
+          return (
+            <li key={o.id} className={on ? "selected" : ""} onClick={() => toggle(o)}>
+              <input type="checkbox" checked={on} readOnly tabIndex={-1} />
+              <ObjIcon icons={icons} object={o} className="pick-icon" />
+              <span className="pick-name">
+                {isNumberItem(o.id) && o.amount ? `${o.amount} ` : ""}
+                {rs(o.nameRes)}
+              </span>
+              {c !== undefined && <span className="pick-cost">{c}</span>}
+              {on && isNumberItem(o.id) && (
+                <span onClick={(e) => e.stopPropagation()}>
+                  <TextField
+                    className="pick-amount"
+                    type="number"
+                    min={1}
+                    max={o.amount || undefined}
+                    value={chosen.get(o.id) ?? 1}
+                    onChange={(v) => setChosen(new Map(chosen).set(o.id, Math.max(1, Number(v) || 1)))}
+                  />
+                </span>
+              )}
+            </li>
+          );
+        })}
+        {items.length === 0 && <li className="muted">Nothing.</li>}
+      </ul>
+    </span>
   );
 }
 
@@ -111,11 +109,11 @@ export function TradeDialog({
         setChosen={setChosen}
       />
       {buying && <p className="total">Total cost: {total} shillings</p>}
-      <div className="buttons">
-        <button onClick={ok} disabled={!chosen.size}>
+      <div className="mk-buttons">
+        <Button isDefault onClick={ok} disabled={!chosen.size}>
           {buying ? "Buy" : "Withdraw"}
-        </button>
-        <button onClick={onClose}>Cancel</button>
+        </Button>
+        <Button onClick={onClose}>Cancel</Button>
       </div>
     </Dialog>
   );
@@ -143,11 +141,11 @@ export function GiveDialog({
   return (
     <Dialog title={`${kind === "offer" ? "Offer to" : "Deposit with"} ${target.name}`} onClose={onClose}>
       <ItemPicker items={items} icons={icons} rs={rs} chosen={chosen} setChosen={setChosen} />
-      <div className="buttons">
-        <button onClick={ok} disabled={!chosen.size}>
+      <div className="mk-buttons">
+        <Button isDefault onClick={ok} disabled={!chosen.size}>
           {kind === "offer" ? "Offer" : "Deposit"}
-        </button>
-        <button onClick={onClose}>Cancel</button>
+        </Button>
+        <Button onClick={onClose}>Cancel</Button>
       </div>
     </Dialog>
   );
@@ -167,18 +165,20 @@ export function OfferDialog({
 }) {
   const rs = (id: number) => session.resource(id) ?? "";
   const list = (items: ObjectInfo[]) => (
-    <ul className="item-picker readonly">
-      {items.map((o) => (
-        <li key={o.id}>
-          <ObjIcon icons={icons} object={o} className="pick-icon" />
-          <span className="pick-name">
-            {isNumberItem(o.id) ? `${o.amount} ` : ""}
-            {rs(o.nameRes)}
-          </span>
-        </li>
-      ))}
-      {items.length === 0 && <li className="muted">Nothing.</li>}
-    </ul>
+    <span className="mk-edit list item-frame">
+      <ul className="mk-list item-picker readonly">
+        {items.map((o) => (
+          <li key={o.id}>
+            <ObjIcon icons={icons} object={o} className="pick-icon" />
+            <span className="pick-name">
+              {isNumberItem(o.id) ? `${o.amount} ` : ""}
+              {rs(o.nameRes)}
+            </span>
+          </li>
+        ))}
+        {items.length === 0 && <li className="muted">Nothing.</li>}
+      </ul>
+    </span>
   );
   const cancel = () => {
     session.cancelOffer();
@@ -192,9 +192,11 @@ export function OfferDialog({
     return (
       <Dialog title={`${rs(state.from.nameRes)} offers you`} onClose={cancel}>
         {list(state.theirs ?? [])}
-        <div className="buttons">
-          <button onClick={accept}>Accept</button>
-          <button onClick={cancel}>Decline</button>
+        <div className="mk-buttons">
+          <Button isDefault onClick={accept}>
+            Accept
+          </Button>
+          <Button onClick={cancel}>Decline</Button>
         </div>
       </Dialog>
     );
@@ -202,13 +204,13 @@ export function OfferDialog({
   return (
     <Dialog title="Your offer" onClose={cancel}>
       {list(state.mine)}
-      <h4>In return</h4>
+      <h4 className="dialog-heading">In return</h4>
       {state.theirs ? list(state.theirs) : <p className="muted">Waiting for an answer…</p>}
-      <div className="buttons">
-        <button onClick={accept} disabled={!state.theirs}>
+      <div className="mk-buttons">
+        <Button isDefault onClick={accept} disabled={!state.theirs}>
           Accept
-        </button>
-        <button onClick={cancel}>Cancel</button>
+        </Button>
+        <Button onClick={cancel}>Cancel</Button>
       </div>
     </Dialog>
   );
@@ -250,19 +252,23 @@ export function AmountDialog({
           onDone(Math.max(1, Math.min(object.amount, n)));
         }}
       >
-        <input autoFocus type="number" min={1} max={object.amount} value={n} onChange={(e) => setN(Number(e.target.value) || 1)} />
-        <div className="buttons">
-          <button type="submit">{verb}</button>
-          <button type="button" onClick={onClose}>
-            Cancel
-          </button>
+        <TextField className="amount-field" autoFocus type="number" min={1} max={object.amount} value={n} onChange={(v) => setN(Number(v) || 1)} />
+        <div className="mk-buttons">
+          <Button type="submit" isDefault>
+            {verb}
+          </Button>
+          <Button onClick={onClose}>Cancel</Button>
         </div>
       </form>
     </Dialog>
   );
 }
 
+const SETTINGS_TABS = ["Preferences", "Keys"] as const;
+
+/** Our settings, as a sheet like the original's Preferences (preferences.c): sound and mouse, and the keys. */
 export function SettingsDialog({ settings, onClose }: { settings: Settings; onClose: () => void }) {
+  const [tab, setTab] = useState<(typeof SETTINGS_TABS)[number]>("Preferences");
   const [listening, setListening] = useState<{ action: Action; index: number } | null>(null);
   useEffect(() => {
     if (!listening) return;
@@ -285,100 +291,78 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
   const set = (patch: Partial<Settings>) => updateSettings(patch);
   const remove = (a: Action, i: number) =>
     set({ keys: { ...settings.keys, [a]: settings.keys[a].filter((_, j) => j !== i) } });
+  const volume = (label: string, value: number, onChange: (v: number) => void) => (
+    <label className="settings-range">
+      <span>{label}</span>
+      <Trackbar min={0} max={100} value={value} onChange={onChange} label={label} ticks={false} />
+    </label>
+  );
 
   return (
-    <Dialog title="Settings" onClose={() => !listening && onClose()} wide>
-      <div className="settings">
-        <section>
-          <h4>Sound</h4>
-          <label className="check">
-            <input type="checkbox" checked={settings.music} onChange={(e) => set({ music: e.target.checked })} /> Music
-          </label>
-          <label className="range">
-            Music volume
-            <input type="range" min={0} max={100} value={settings.musicVolume} onChange={(e) => set({ musicVolume: Number(e.target.value) })} />
-          </label>
-          <label className="check">
-            <input type="checkbox" checked={settings.sound} onChange={(e) => set({ sound: e.target.checked })} /> Sound effects
-          </label>
-          <label className="range">
-            Sound volume
-            <input type="range" min={0} max={100} value={settings.soundVolume} onChange={(e) => set({ soundVolume: Number(e.target.value) })} />
-          </label>
-          <label className="check">
-            <input type="checkbox" checked={settings.loopSounds} onChange={(e) => set({ loopSounds: e.target.checked })} /> Looping
-            sounds (ambience)
-          </label>
-          <label className="check">
-            <input type="checkbox" checked={settings.randomSounds} onChange={(e) => set({ randomSounds: e.target.checked })} /> Random
-            sounds (birds, waves)
-          </label>
-          <h4>Mouse</h4>
-          <label className="range">
-            Mouselook speed
-            <input
-              type="range"
-              min={0.25}
-              max={3}
-              step={0.05}
-              value={settings.mouseSpeed}
-              onChange={(e) => set({ mouseSpeed: Number(e.target.value) })}
-            />
-          </label>
-          <label className="check">
-            <input type="checkbox" checked={settings.invertMouse} onChange={(e) => set({ invertMouse: e.target.checked })} /> Invert
-            mouse up/down
-          </label>
-        </section>
-        <section>
-          <h4>Keys</h4>
-          <div className="preset">
-            <button className={settings.preset === "modern" ? "active" : ""} onClick={() => applyPreset("modern")}>
-              Modern (WASD)
-            </button>
-            <button className={settings.preset === "original" ? "active" : ""} onClick={() => applyPreset("original")}>
-              Original
-            </button>
+    <Dialog title="Meridian Shards Preferences" onClose={() => !listening && onClose()} wide>
+      <Tabs tabs={SETTINGS_TABS} active={tab} onChange={setTab} />
+      <div className="mk-page settings-page">
+        {tab === "Preferences" ? (
+          <div className="settings">
+            <GroupBox label="Audio Effects" className="flow">
+              <Check label="Music" checked={settings.music} onChange={(v) => set({ music: v })} />
+              {volume("Music volume", settings.musicVolume, (v) => set({ musicVolume: v }))}
+              <Check label="Sounds" checked={settings.sound} onChange={(v) => set({ sound: v })} />
+              {volume("Sound volume", settings.soundVolume, (v) => set({ soundVolume: v }))}
+              <Check label="Steady sounds (ambience)" checked={settings.loopSounds} onChange={(v) => set({ loopSounds: v })} />
+              <Check label="Atmospheric sounds (birds, waves)" checked={settings.randomSounds} onChange={(v) => set({ randomSounds: v })} />
+            </GroupBox>
+            <GroupBox label="Mouse" className="flow">
+              <label className="settings-range">
+                <span>Mouselook speed</span>
+                <Trackbar min={0.25} max={3} step={0.05} value={settings.mouseSpeed} onChange={(v) => set({ mouseSpeed: v })} label="Mouselook speed" ticks={false} />
+              </label>
+              <Check label="Invert mouse up/down" checked={settings.invertMouse} onChange={(v) => set({ invertMouse: v })} />
+            </GroupBox>
           </div>
-          <label className="check">
-            <input type="checkbox" checked={settings.typeToChat} onChange={(e) => set({ typeToChat: e.target.checked })} /> Typing a
-            letter starts a chat line
-          </label>
-          <table className="keys">
-            <tbody>
-              {ACTIONS.map((a) => (
-                <tr key={a}>
-                  <td>{ACTION_LABELS[a]}</td>
-                  <td>
-                    {settings.keys[a].map((b, i) => (
-                      <span key={i} className="key">
-                        <button onClick={() => setListening({ action: a, index: i })}>
-                          {listening?.action === a && listening.index === i ? "press a key…" : bindingLabel(b)}
-                        </button>
-                        <button className="x" title="Remove" onClick={() => remove(a, i)}>
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                    <button
-                      className="add"
-                      title="Add a key"
-                      onClick={() => setListening({ action: a, index: settings.keys[a].length })}
-                    >
-                      {listening?.action === a && listening.index === settings.keys[a].length ? "press a key…" : "+"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <button className="link" onClick={() => set({ keys: PRESETS[settings.preset] })}>
-            Reset keys to the {settings.preset} preset
-          </button>
-        </section>
+        ) : (
+          <div className="settings-keys">
+            <div className="preset">
+              <Button className={settings.preset === "modern" ? "active" : ""} onClick={() => applyPreset("modern")}>
+                Modern (WASD)
+              </Button>
+              <Button className={settings.preset === "original" ? "active" : ""} onClick={() => applyPreset("original")}>
+                Original
+              </Button>
+              <Check label="Typing a letter starts a chat line" checked={settings.typeToChat} onChange={(v) => set({ typeToChat: v })} />
+            </div>
+            <table className="keys">
+              <tbody>
+                {ACTIONS.map((a) => (
+                  <tr key={a}>
+                    <td>{ACTION_LABELS[a]}</td>
+                    <td>
+                      {settings.keys[a].map((b, i) => (
+                        <span key={i} className="key">
+                          <Button onClick={() => setListening({ action: a, index: i })}>
+                            {listening?.action === a && listening.index === i ? "press a key…" : bindingLabel(b)}
+                          </Button>
+                          <Button className="x" title="Remove" onClick={() => remove(a, i)}>
+                            ×
+                          </Button>
+                        </span>
+                      ))}
+                      <Button className="add" title="Add a key" onClick={() => setListening({ action: a, index: settings.keys[a].length })}>
+                        {listening?.action === a && listening.index === settings.keys[a].length ? "press a key…" : "+"}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Button onClick={() => set({ keys: PRESETS[settings.preset] })}>Reset keys to the {settings.preset} preset</Button>
+          </div>
+        )}
       </div>
-      <div className="buttons">
-        <button onClick={onClose}>Close</button>
+      <div className="mk-buttons">
+        <Button isDefault onClick={onClose}>
+          OK
+        </Button>
       </div>
     </Dialog>
   );

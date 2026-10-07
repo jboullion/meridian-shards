@@ -43,6 +43,7 @@ export interface RoomLighting {
 export class RoomView {
   readonly group = new THREE.Group();
   readonly geometry: RoomGeometry;
+  private readonly meshes: THREE.Mesh[] = [];
   private readonly materials: THREE.ShaderMaterial[] = [];
   private readonly animated: { batch: Batch; material: THREE.ShaderMaterial; frames: THREE.DataTexture[]; bgf: Bgf }[] = [];
 
@@ -100,7 +101,26 @@ export class RoomView {
       const mesh = new THREE.Mesh(g, mat);
       mesh.name = `grd${batch.textureId}`;
       this.group.add(mesh);
+      this.meshes.push(mesh);
     }
+  }
+
+  /**
+   * Whether the room hides what's along `raycaster` (up to its far): the first hit on a pixel
+   * the shader draws (roomFragmentShader discards index 254), as the depth test would see it.
+   * The D3D client depth-tests the name labels against the room (D3DRenderNamesDraw3D).
+   */
+  occludes(raycaster: THREE.Raycaster): boolean {
+    const fract = (v: number) => v - Math.floor(v);
+    for (const hit of raycaster.intersectObjects(this.meshes, false)) {
+      if (!hit.uv) return true;
+      const map = ((hit.object as THREE.Mesh).material as THREE.ShaderMaterial).uniforms.uMap.value as THREE.DataTexture;
+      const { data, width, height } = map.image as { data: Uint8Array; width: number; height: number };
+      const x = Math.min(width - 1, Math.floor(fract(hit.uv.x) * width));
+      const y = Math.min(height - 1, Math.floor(fract(hit.uv.y) * height));
+      if (data[y * width + x] !== 254) return true;
+    }
+    return false;
   }
 
   /** Advance texture animations to `timeMs` (any monotonic clock). */

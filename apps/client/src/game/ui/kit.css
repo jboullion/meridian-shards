@@ -1,0 +1,521 @@
+/* The Meridian dialog kit (kit.tsx). Bitmaps come from installUiTheme as --ui-* variables;
+   dialog units scale with --s per window. */
+:root {
+  --font-title: "Heidelberg", Georgia, "Times New Roman", serif;
+  --font-ui: "Times New Roman", Times, serif;
+  /* color.c COLOR_HIGHLITE */
+  --hl: rgb(240, 208, 25);
+  --ui-text: rgb(231, 231, 231);
+}
+
+.mk-backdrop {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px;
+  overflow: auto;
+  background: #000 var(--ui-bkgnd) repeat;
+}
+
+.mk-shard-title {
+  margin: 0;
+  font: 44px var(--font-title);
+  font-weight: normal;
+  color: var(--hl);
+  text-align: center;
+  text-shadow: 2px 2px 0 #000, 0 0 8px #000;
+  letter-spacing: 0.02em;
+}
+
+.mk-footnote {
+  font: 13px var(--font-ui);
+  color: var(--ui-text);
+  text-shadow: 1px 1px 0 #000;
+}
+
+.mk-footnote a {
+  color: var(--ui-text);
+}
+
+.mk-window {
+  --s: 1;
+  --dx: calc(1.5px * var(--s));
+  --dy: calc(1.625px * var(--s));
+  position: relative;
+  flex: none;
+  min-width: 176px;
+  min-height: 176px;
+  max-width: 100%;
+  padding: 16px 20px 20px;
+  background: #3a3a3a var(--ui-bkgnd) repeat;
+  color: var(--ui-text);
+  font: calc(var(--dy) * 6.9) / 1.2 var(--font-ui);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.75);
+}
+
+/* The dark stone inside the edge treatment; the cyan parts of the frame show bkgnd.bmp */
+.mk-window::before {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  background: #2c2c2c var(--ui-invbkgnd) repeat;
+  box-shadow: inset 0 0 0 1px #000;
+}
+
+/* drawint.c ELEMENT_E* placement: corners of two halves, repeat strips between them */
+.mk-edge {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.mk-edge i {
+  position: absolute;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+
+.mk-e-ultop { left: 0; top: 0; width: 80px; height: 15px; background-image: var(--ui-e-ultop); }
+.mk-e-ulleft { left: 0; top: 15px; width: 15px; height: 65px; background-image: var(--ui-e-ulleft); }
+.mk-e-urtop { right: 0; top: 0; width: 80px; height: 15px; background-image: var(--ui-e-urtop); }
+.mk-e-urright { right: 0; top: 15px; width: 15px; height: 65px; background-image: var(--ui-e-urright); }
+.mk-e-llbottom { left: 0; bottom: 0; width: 80px; height: 15px; background-image: var(--ui-e-llbottom); }
+.mk-e-llleft { left: 0; bottom: 15px; width: 15px; height: 65px; background-image: var(--ui-e-llleft); }
+.mk-e-lrbottom { right: 0; bottom: 0; width: 80px; height: 15px; background-image: var(--ui-e-lrbottom); }
+.mk-e-lrright { right: 0; bottom: 15px; width: 15px; height: 65px; background-image: var(--ui-e-lrright); }
+.mk-edge .mk-e-urepeat { left: 80px; right: 80px; top: 0; height: 10px; background: var(--ui-e-urepeat) repeat-x; }
+.mk-edge .mk-e-brepeat { left: 80px; right: 80px; bottom: 0; height: 10px; background: var(--ui-e-brepeat) repeat-x; }
+.mk-edge .mk-e-lrepeat { left: 0; top: 80px; bottom: 80px; width: 10px; background: var(--ui-e-lrepeat) repeat-y; }
+.mk-edge .mk-e-rrepeat { right: 0; top: 80px; bottom: 80px; width: 10px; background: var(--ui-e-rrepeat) repeat-y; }
+
+.mk-title {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  margin: 0 0 6px;
+  font: 24px / 1 var(--font-title);
+  color: var(--hl);
+  text-shadow: 1px 1px 0 #000, 0 0 4px #000;
+}
+
+.mk-title span {
+  flex: 1;
+  padding: 0 22px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mk-close {
+  position: absolute;
+  right: -4px;
+  top: 2px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 2px solid;
+  border-color: #a8a8a8 #1c1c1c #1c1c1c #a8a8a8;
+  background: #4a4a4a var(--ui-bkgnd);
+  color: var(--ui-text);
+  font: bold 14px / 1 Arial, sans-serif;
+  text-shadow: 1px 1px 0 #000;
+  cursor: pointer;
+}
+
+.mk-close:hover {
+  color: var(--hl);
+}
+
+.mk-close:active {
+  border-color: #1c1c1c #a8a8a8 #a8a8a8 #1c1c1c;
+}
+
+.mk-body {
+  position: relative;
+  z-index: 1;
+  font-size: 15px;
+}
+
+.mk-body.dlu {
+  font-size: inherit;
+}
+
+.mk-text {
+  white-space: nowrap;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.mk-text.wrap {
+  white-space: normal;
+}
+
+.mk-btn {
+  min-height: calc(var(--dy) * 12);
+  padding: 0 calc(var(--dx) * 4);
+  border: 2px solid;
+  border-color: #a8a8a8 #1c1c1c #1c1c1c #a8a8a8;
+  background: #4a4a4a var(--ui-bkgnd) repeat;
+  color: var(--ui-text);
+  font: inherit;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 1px 1px 0 #000;
+  cursor: pointer;
+}
+
+.mk-btn:hover:not(:disabled) {
+  color: var(--hl);
+}
+
+.mk-btn:active:not(:disabled) {
+  border-color: #1c1c1c #a8a8a8 #a8a8a8 #1c1c1c;
+  padding-top: 2px;
+}
+
+.mk-btn:focus-visible {
+  outline: 1px dotted var(--hl);
+  outline-offset: -5px;
+}
+
+/* DEFPUSHBUTTON's extra black ring */
+.mk-btn.default {
+  box-shadow: 0 0 0 1px #000;
+}
+
+.mk-btn:disabled {
+  color: #9c9c9c;
+  text-shadow: 1px 1px 0 #3a3a3a;
+  border-color: #808080 #2a2a2a #2a2a2a #808080;
+  filter: brightness(0.85);
+  cursor: default;
+}
+
+/* drawint.c ELEMENT_B*: the edit box treatment, 2 px all round. The original strips the
+   bottom off (its bitmap is plain blue), so the bottom is the light bevel of the sides. */
+.mk-edit {
+  display: block;
+  padding: 2px;
+  background:
+    var(--ui-b-ulleft) left top / 2px 12px no-repeat,
+    var(--ui-b-llleft) left bottom / 2px 12px no-repeat,
+    var(--ui-b-urright) right top / 2px 12px no-repeat,
+    var(--ui-b-lrright) right bottom / 2px 12px no-repeat,
+    var(--ui-b-urepeat) left top / 4px 2px repeat-x,
+    linear-gradient(rgb(213, 213, 213), #fff) left bottom / 100% 2px no-repeat,
+    var(--ui-b-lrepeat) left top / 2px 4px repeat-y,
+    var(--ui-b-rrepeat) right top / 2px 4px repeat-y,
+    #000;
+  image-rendering: pixelated;
+}
+
+/* color.c COLOR_EDITFGD / COLOR_EDITBGD, font.c FONT_INPUT (Times 14) */
+.mk-edit > input,
+.mk-edit > textarea {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  background: #e8e4d8;
+  color: #000;
+  font: calc(var(--dy) * 8.6) / 1.2 var(--font-ui);
+  outline: none;
+}
+
+.mk-edit > textarea {
+  padding: 2px 4px;
+  resize: none;
+  scrollbar-width: thin;
+}
+
+.mk-edit > input:focus,
+.mk-edit > textarea:focus {
+  background: #f4f0e4;
+}
+
+.mk-edit.readonly > textarea {
+  background: #d8d4c8;
+}
+
+/* ownerdrw.c lists: FONT_LIST on black, the selection black on white */
+.mk-list {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  background: #000;
+  color: #fff;
+  font: calc(var(--dy) * 8.2) / 1.25 var(--font-ui);
+  outline: none;
+  user-select: none;
+  scrollbar-width: thin;
+  scrollbar-color: #6a6a6a #1a1a1a;
+}
+
+.mk-list li {
+  padding: 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.mk-list li.selected {
+  background: #fff;
+  color: #000;
+}
+
+.mk-list:focus-visible li.selected {
+  outline: 1px dotted #000;
+  outline-offset: -1px;
+}
+
+.mk-list li.blocked {
+  color: #7a7a7a;
+}
+
+.mk-group {
+  margin: 0;
+  padding: 0;
+  border: 2px groove #8a8a8a;
+  min-width: 0;
+}
+
+.mk-group legend {
+  margin-left: calc(var(--dx) * 4);
+  padding: 0 3px;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.mk-check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  text-shadow: 1px 1px 0 #000;
+  cursor: pointer;
+}
+
+.mk-check input {
+  flex: none;
+  width: max(12px, calc(var(--dy) * 7));
+  height: max(12px, calc(var(--dy) * 7));
+  margin: 0;
+  accent-color: var(--hl);
+}
+
+.mk-track {
+  display: block;
+}
+
+.mk-track input {
+  display: block;
+  width: 100%;
+  margin: 0;
+  accent-color: var(--hl);
+}
+
+.mk-track .ticks {
+  position: relative;
+  display: block;
+  height: 4px;
+  margin: 1px 8px 0;
+}
+
+.mk-track .ticks i {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 4px;
+  background: #c8c8c8;
+  box-shadow: 1px 1px 0 #000;
+}
+
+/* Property sheet tabs: raised (outset) on the stone, the active one taller and joined to its page */
+.mk-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.mk-tabs button {
+  position: relative;
+  height: calc(var(--dy) * 15);
+  padding: 0 calc(var(--dx) * 7);
+  border: 2px outset #8a8a8a;
+  border-bottom: none;
+  background: #4a4a4a var(--ui-bkgnd) repeat;
+  color: rgb(215, 215, 215);
+  font: inherit;
+  /* a fifth bigger than the dialog text, for legibility */
+  font-size: 120%;
+  line-height: 1;
+  text-shadow: 1px 1px 0 #000;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mk-tabs button:hover {
+  color: #fff;
+}
+
+/* The open tab takes the page's darker stone and covers the page's top edge, joining them */
+.mk-tabs button.active {
+  z-index: 1;
+  height: calc(var(--dy) * 18 + 2px);
+  margin-bottom: -2px;
+  border-color: #8a8a8a #141414 #141414 #8a8a8a;
+  background: linear-gradient(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.18)), #2c2c2c var(--ui-invbkgnd) repeat;
+  color: var(--hl);
+}
+
+.mk-tabs button:focus-visible {
+  outline: 1px dotted var(--hl);
+  outline-offset: -4px;
+}
+
+/* graphctl.c: COLOR_BAR3 behind the bar, a black frame, the number in white Arial bold */
+.mk-graph {
+  position: relative;
+  outline: none;
+}
+
+.mk-graph.input {
+  cursor: pointer;
+  touch-action: none;
+}
+
+.mk-graph-bar {
+  position: absolute;
+  inset: 0;
+  border: 1px solid #000;
+  background: rgb(48, 0, 0);
+  overflow: hidden;
+}
+
+.mk-graph-bar .fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--bar);
+}
+
+.mk-graph-bar .num {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font: bold max(10px, calc(var(--dy) * 6)) / 1 Arial, Helvetica, sans-serif;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.mk-graph .slider {
+  position: absolute;
+  bottom: 0;
+  margin-left: -3.5px;
+  overflow: visible;
+}
+
+.mk-graph .slider polygon {
+  fill: none;
+  stroke: #d8d8d8;
+  stroke-width: 1;
+}
+
+.mk-graph:focus .slider polygon {
+  fill: var(--bar);
+}
+
+.mk-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.mk-message {
+  width: min(420px, calc(100vw - 24px));
+  min-height: 0;
+}
+
+.mk-message-text {
+  margin: 4px 6px 16px;
+  white-space: pre-line;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.mk-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.mk-buttons.center {
+  justify-content: center;
+}
+
+.mk-buttons .mk-btn {
+  min-width: 80px;
+  height: 26px;
+}
+
+.mk-status {
+  margin: 4px 24px 8px;
+  font-size: 16px;
+  text-align: center;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.mk-login-icon {
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.mk-text.right {
+  text-align: right;
+}
+
+/* A property sheet page: a raised panel joined to the tabs over it */
+.mk-page {
+  border: 2px solid;
+  border-color: #8a8a8a #141414 #141414 #8a8a8a;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+/* charface.c: the face drawn stretched on the button face */
+.mk-face {
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: inset 1px 1px 0 #141414, inset -1px -1px 0 #6a6a6a;
+}
+
+.mk-face .face {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 4%;
+}
+
+.mk-face .face img {
+  display: block;
+}
+
+.mk-choice-info {
+  overflow: hidden;
+}

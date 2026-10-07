@@ -5,12 +5,17 @@
 //     drawn from the server's parts (head plus overlays on hotspots 12, 11, 14, 13)
 //   Statistics: six stats from 1 to 50, starting at 25, with 70 points to spend
 //   Spells and Skills: 45 points shared; Shal'ille and Qor spells can't be mixed
-// Done sends BP_NEW_CHARINFO; the server answers CHARINFO_OK or CHARINFO_NOT_OK.
+// OK sends BP_NEW_CHARINFO; the server answers CHARINFO_OK or CHARINFO_NOT_OK.
+// Drawn as the property sheet (charmake.c MakeChar) with each page laid out from its char.rc
+// template, in dialog units, with the Meridian dialog kit.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { ANIMATE, GENDER, type CharInfo, type CreatorChoice } from "@shards/protocol";
 import type { GameSession } from "@shards/world";
 import type { IconRenderer } from "./icons.ts";
+import {
+  Backdrop, Button, Check, GraphBar, GroupBox, ListBox, MessageBox, Tabs, Text, TextArea, TextField, Trackbar, Window, at, type Rect,
+} from "./ui/kit.tsx";
 import { ObjIcon } from "./ui/Sidebar.tsx";
 
 const TABS = ["Name", "Appearance", "Statistics", "Spells", "Skills"] as const;
@@ -22,13 +27,25 @@ const STAT_MIN = 1,
   STAT_START = 25;
 const STAT_POINTS = 70; // char.h STAT_POINTS_INITIAL
 const SPELL_POINTS = 45; // char.h SPELL_POINTS_INITIAL
-/** charstat.c suggested_stats */
+/** charstat.c suggested_stats and CharStatsCommand; the notes are char.rc IDD_CHARSTATS's */
 const PRESETS: { label: string; note: string; stats: number[] }[] = [
   { label: "Mage", note: "Pure mage", stats: [40, 50, 45, 15, 45, 25] },
   { label: "Warrior", note: "Pure fighter", stats: [40, 10, 50, 50, 20, 50] },
   { label: "Hybrid", note: "Three school bower", stats: [35, 25, 40, 30, 45, 45] },
-  { label: "Trickster", note: "Riija warrior", stats: [35, 35, 40, 30, 30, 50] },
+  { label: "Trickster", note: "Riija pure fighter", stats: [35, 35, 40, 30, 30, 50] },
 ];
+/** char.rc IDD_CHARSTATS: each stat's label row, bar row, and its two description lines */
+const STAT_ROWS: { y: number; bar: number; textY: number; text: [string, string] }[] = [
+  { y: 26, bar: 24, textY: 23, text: ["Might affects how much you can carry and the", "damage you inflict. Important for warriors."] },
+  { y: 44, bar: 43, textY: 42, text: ["With a high intellect, you can learn more spells and", "skills faster than others. Used for advanced magics."] },
+  { y: 64, bar: 62, textY: 61, text: ["Stamina helps you weather the rough times when", "you are hurt and tired. Used for Kraanan spells."] },
+  { y: 83, bar: 81, textY: 80, text: ["An agile fighter dodges his opponent's attacks and", "is more skilled in certain fighting and defensive arts."] },
+  { y: 101, bar: 100, textY: 99, text: ["Mysticism is important for gaining and restoring your", "magical energy. Used for Faren, Shal'ille, and Qor."] },
+  { y: 122, bar: 120, textY: 119, text: ["A true aim guides an attack to its target. Vital for", "high skill with ranged weapons."] },
+];
+/** The sheet: tabs over a 316 x 232 DLU page, OK and Cancel under it */
+const SHEET: readonly [number, number] = [320, 278];
+const PAGE: Rect = [2, 22, 316, 236];
 /** char.h School / char.rc school names */
 const SCHOOLS: Record<number, string> = {
   1: "Shal'ille", 2: "Qor", 3: "Kraanan", 4: "Faren", 5: "Riija", 6: "Jala", 7: "Crafting", 8: "DMSchool",
@@ -49,8 +66,17 @@ export function verifyCharName(name: string): string | null {
   return n.length >= 3 && n.length <= 30 && LEGAL_NAME.test(n) ? n : null;
 }
 
+/** A right-aligned label (the .rc LTEXTs that end at their control). */
+function Label({ at: r, children }: { at: Rect; children: ReactNode }) {
+  return (
+    <Text at={r} className="right">
+      {children}
+    </Text>
+  );
+}
+
 export function CharacterCreator({
-  info, slotId, session, icons, error, onCancel,
+  info, slotId, session, icons, error, onCancel, onClearError,
 }: {
   info: CharInfo;
   slotId: number;
@@ -58,6 +84,7 @@ export function CharacterCreator({
   icons: IconRenderer;
   error: string | null;
   onCancel: () => void;
+  onClearError: () => void;
 }) {
   const rs = (id: number) => session.resource(id) ?? "";
   const [tab, setTab] = useState<TabName>("Name");
@@ -75,7 +102,8 @@ export function CharacterCreator({
   const [stats, setStats] = useState<number[]>(() => STAT_NAMES.map(() => STAT_START));
   const [spells, setSpells] = useState<number[]>([]);
   const [skills, setSkills] = useState<number[]>([]);
-  const [confirm, setConfirm] = useState<string | null>(null);
+  /** charmake.c VerifySettings: the question being asked, and whether the stat points were already accepted */
+  const [confirm, setConfirm] = useState<{ text: string; statsOk: boolean } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
   const parts = info.parts[face.gender];
@@ -87,7 +115,7 @@ export function CharacterCreator({
     nose: parts.noses[pick(face.nose, parts.noses.length)],
     mouth: parts.mouths[pick(face.mouth, parts.mouths.length)],
   };
-  const hairT = info.hairTranslations[face.hairT] ?? 0;
+  const hairT = info.hairTranslations[pick(face.hairT, info.hairTranslations.length)] ?? 0;
   const faceT = info.faceTranslations[face.faceT] ?? 0;
   const none = { type: ANIMATE.NONE, group: 1 };
   const faceObject = useMemo(
@@ -118,23 +146,22 @@ export function CharacterCreator({
 
   const step = (key: "hair" | "eyes" | "nose" | "mouth" | "hairT", d: number) => setFace({ ...face, [key]: face[key] + d });
 
-  const done = () => {
+  /** charmake.c VerifySettings, then BP_NEW_CHARINFO */
+  const done = (statsOk = false, spellsOk = false) => {
     const n = verifyCharName(name);
     if (!n) {
-      setProblem("Your name must be at least 3 characters long, and must consist of legal characters.");
+      setProblem("Your name must be at least 3 characters long,\nand must consist of legal characters.");
       setTab("Name");
       return;
     }
-    if (!confirm && statPoints > 0) {
-      setConfirm("You have some points remaining to allocate to statistics; are you sure you want to discard these points?");
+    if (!statsOk && statPoints > 0) {
+      setConfirm({ text: "You have some points remaining to allocate to statistics; are you sure you want to discard these points?", statsOk: false });
       return;
     }
-    if (!confirm?.includes("spells") && spellPoints > 0) {
-      setConfirm("You have some points remaining to allocate to spells and skills; are you sure you want to discard these points?");
+    if (!spellsOk && spellPoints > 0) {
+      setConfirm({ text: "You have some points remaining to allocate to spells and skills; are you sure you want to discard these points?", statsOk: true });
       return;
     }
-    setConfirm(null);
-    setProblem(null);
     session.createCharacter({
       id: slotId, name: n, description: desc, gender: face.gender === 0 ? GENDER.MALE : GENDER.FEMALE,
       faceParts: [parts.head, sel.hair, sel.eyes, sel.nose, sel.mouth],
@@ -143,137 +170,168 @@ export function CharacterCreator({
   };
 
   const ti = TABS.indexOf(tab);
+  /** Every page's << Prev and Next >> (charmake.c CharTabPageCommand) */
+  const prevNext = (y: number) => (
+    <>
+      <Button at={[231, y, 34, 12]} disabled={ti === 0} onClick={() => setTab(TABS[ti - 1])}>
+        &lt;&lt; Prev
+      </Button>
+      <Button at={[270, y, 34, 12]} disabled={ti === TABS.length - 1} onClick={() => setTab(TABS[ti + 1])}>
+        Next &gt;&gt;
+      </Button>
+    </>
+  );
+
+  let page: ReactNode;
+  if (tab === "Name") {
+    // char.rc IDD_CHARNAME
+    page = (
+      <>
+        <Text at={[2, 2, 300, 8]}>Choose your character's name. It must be from 3 to 30 letters long.</Text>
+        <Text at={[2, 12, 312, 8]}>
+          You may use upper- or lowercase letters, numbers, spaces, or these symbols: {"!@$^&*+=:()[]{}<>;/?|"}
+        </Text>
+        <TextField at={[2, 26, 108, 16]} value={name} onChange={setName} maxLength={30} autoFocus />
+        <Text at={[2, 52, 200, 8]}>Enter a description of your character here:</Text>
+        <TextArea at={[2, 64, 302, 138]} value={desc} onChange={setDesc} maxLength={1000} />
+        {prevNext(214)}
+      </>
+    );
+  } else if (tab === "Appearance") {
+    // char.rc IDD_CHARAPPEARANCE
+    const arrows = (y: number, text: string, key: "hair" | "eyes" | "nose" | "mouth" | "hairT") => (
+      <>
+        <Label at={[140, y + 1, 55, 8]}>{text}</Label>
+        <Button at={[213, y, 17, 11]} onClick={() => step(key, -1)} title={`Previous ${text.slice(0, -1).toLowerCase()}`}>
+          &lt;
+        </Button>
+        <Button at={[230, y, 17, 11]} onClick={() => step(key, 1)} title={`Next ${text.slice(0, -1).toLowerCase()}`}>
+          &gt;
+        </Button>
+      </>
+    );
+    page = (
+      <>
+        <GroupBox at={[3, 0, 150, 158]} label="Face" />
+        <div className="mk-face" style={at([14, 18, 127, 127])}>
+          <ObjIcon icons={icons} object={faceObject} className="face" />
+        </div>
+        <Text at={[175, 5, 135, 8]}>Choose your character's appearance.</Text>
+        <Label at={[140, 22, 55, 8]}>Gender:</Label>
+        <Check at={[213, 21, 45, 10]} radio name="gender" label="Male" checked={face.gender === 0} onChange={() => setFace({ ...face, gender: 0 })} />
+        <Check at={[263, 21, 45, 10]} radio name="gender" label="Female" checked={face.gender === 1} onChange={() => setFace({ ...face, gender: 1 })} />
+        <Label at={[140, 42, 55, 8]}>Skin color:</Label>
+        <Trackbar
+          at={[213, 35, 90, 15]}
+          label="Skin color"
+          min={0}
+          max={Math.max(0, info.faceTranslations.length - 1)}
+          value={face.faceT}
+          onChange={(v) => setFace({ ...face, faceT: v })}
+        />
+        <Text at={[215, 55, 20, 8]}>Light</Text>
+        <Text at={[287, 55, 20, 8]}>Dark</Text>
+        {arrows(69, "Hair:", "hair")}
+        {arrows(84, "Hair color:", "hairT")}
+        {arrows(99, "Eyes:", "eyes")}
+        {arrows(114, "Nose:", "nose")}
+        {arrows(129, "Mouth:", "mouth")}
+        {prevNext(146)}
+      </>
+    );
+  } else if (tab === "Statistics") {
+    // char.rc IDD_CHARSTATS
+    page = (
+      <>
+        <Text at={[21, 6, 290, 8]}>Set your character's statistics. Choose wisely; changing them is possible but difficult.</Text>
+        {STAT_ROWS.map((r, i) => [
+          <Label key="l" at={[0, r.y, 38, 8]}>
+            {STAT_NAMES[i]}
+          </Label>,
+          <GraphBar key="g" at={[42, r.bar, 102, 14]} label={STAT_NAMES[i]} min={STAT_MIN} max={STAT_MAX} value={stats[i]} onChange={(v) => setStat(i, v)} />,
+          <Text key="t1" at={[149, r.textY, 165, 8]}>
+            {r.text[0]}
+          </Text>,
+          <Text key="t2" at={[149, r.textY + 8, 165, 8]}>
+            {r.text[1]}
+          </Text>,
+        ])}
+        <GroupBox at={[24, 139, 269, 68]} label="Suggestions for newcomers" />
+        {PRESETS.map((p, i) => [
+          <Button key={`b${p.label}`} at={[43, 150 + i * 14, 50, 11]} onClick={() => setStats(p.stats)}>
+            {p.label}
+          </Button>,
+          <Text key={`t${p.label}`} at={[98, 150 + i * 14, 168, 8]}>
+            {p.note}
+          </Text>,
+        ])}
+        <Text at={[24, 215, 60, 8]}>Stat points left</Text>
+        <GraphBar at={[87, 214, 98, 11]} kind="points" label="Stat points left" min={0} max={STAT_POINTS} value={statPoints} />
+        {prevNext(214)}
+      </>
+    );
+  } else {
+    page = (
+      <>
+        <ChoiceLists
+          key={tab}
+          kind={tab}
+          list={tab === "Spells" ? info.spells : info.skills}
+          chosen={tab === "Spells" ? spells : skills}
+          setChosen={tab === "Spells" ? setSpells : setSkills}
+          points={spellPoints}
+          rs={rs}
+        />
+        {prevNext(214)}
+      </>
+    );
+  }
+
   return (
-    <div className="screen">
-      <div className="card creator">
-        <h1>Customize your character</h1>
-        <div className="creator-tabs">
-          {TABS.map((t) => (
-            <button key={t} className={t === tab ? "active" : ""} onClick={() => setTab(t)}>
-              {t}
-            </button>
-          ))}
+    <Backdrop>
+      <Window title="Customize your character" dlu={SHEET} onClose={onCancel}>
+        <Tabs at={[2, 0, 316, 22]} tabs={TABS} active={tab} onChange={setTab} />
+        <div className="mk-page" style={at(PAGE)}>
+          <div className="mk-page-inner" style={at([0, 2, 316, 232])}>
+            {page}
+          </div>
         </div>
-
-        {tab === "Name" && (
-          <div className="creator-page">
-            <p className="sub">Choose your character's name. It must be from 3 to 30 letters long.</p>
-            <p className="sub">You may use upper- or lowercase letters, numbers, spaces, or these symbols: !@$^&*+=:()[]{"{}"}&lt;&gt;;/?|</p>
-            <label>
-              Name
-              <input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={30} />
-            </label>
-            <label>
-              Enter a description of your character here:
-              <textarea value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={1000} rows={5} />
-            </label>
-          </div>
-        )}
-
-        {tab === "Appearance" && (
-          <div className="creator-page appearance">
-            <div className="face-preview">
-              <ObjIcon icons={icons} object={faceObject} className="face" />
-            </div>
-            <div className="face-controls">
-              <div className="row">
-                <label className="radio">
-                  <input type="radio" checked={face.gender === 0} onChange={() => setFace({ ...face, gender: 0 })} /> Male
-                </label>
-                <label className="radio">
-                  <input type="radio" checked={face.gender === 1} onChange={() => setFace({ ...face, gender: 1 })} /> Female
-                </label>
-              </div>
-              {(
-                [
-                  ["Hair", "hair"],
-                  ["Eyes", "eyes"],
-                  ["Nose", "nose"],
-                  ["Mouth", "mouth"],
-                  ["Hair color", "hairT"],
-                ] as const
-              ).map(([label, key]) => (
-                <div className="row" key={key}>
-                  <button onClick={() => step(key, -1)}>&lt;</button>
-                  <span>{label}</span>
-                  <button onClick={() => step(key, 1)}>&gt;</button>
-                </div>
-              ))}
-              <label className="slider">
-                Skin color
-                <input
-                  type="range"
-                  min={0}
-                  max={info.faceTranslations.length - 1}
-                  value={face.faceT}
-                  onChange={(e) => setFace({ ...face, faceT: Number(e.target.value) })}
-                />
-              </label>
-            </div>
-          </div>
-        )}
-
-        {tab === "Statistics" && (
-          <div className="creator-page">
-            <p className="sub">Set your character's statistics. Choose wisely; changing them is possible but difficult.</p>
-            {STAT_NAMES.map((n, i) => (
-              <label className="stat-slider" key={n}>
-                <span>{n}</span>
-                <input type="range" min={STAT_MIN} max={STAT_MAX} value={stats[i]} onChange={(e) => setStat(i, Number(e.target.value))} />
-                <span className="val">{stats[i]}</span>
-              </label>
-            ))}
-            <p className="points">Points left: {statPoints}</p>
-            <fieldset>
-              <legend>Suggestions for newcomers</legend>
-              {PRESETS.map((p) => (
-                <div className="row" key={p.label}>
-                  <button onClick={() => setStats(p.stats)}>{p.label}</button>
-                  <span className="sub">{p.note}</span>
-                </div>
-              ))}
-            </fieldset>
-          </div>
-        )}
-
-        {(tab === "Spells" || tab === "Skills") && (
-          <ChoiceLists
-            kind={tab}
-            list={tab === "Spells" ? info.spells : info.skills}
-            chosen={tab === "Spells" ? spells : skills}
-            setChosen={tab === "Spells" ? setSpells : setSkills}
-            points={spellPoints}
-            rs={rs}
-          />
-        )}
-
-        {(problem || error) && <p className="error">{problem ?? error}</p>}
-        {confirm && (
-          <div className="confirm">
-            <p>{confirm}</p>
-            <button onClick={done}>Yes</button>
-            <button onClick={() => setConfirm(null)}>No</button>
-          </div>
-        )}
-        <div className="creator-nav">
-          <button disabled={ti === 0} onClick={() => setTab(TABS[ti - 1])}>
-            &lt;&lt; Prev
-          </button>
-          <button disabled={ti === TABS.length - 1} onClick={() => setTab(TABS[ti + 1])}>
-            Next &gt;&gt;
-          </button>
-          <span className="spacer" />
-          <button onClick={onCancel}>Cancel</button>
-          <button className="primary" onClick={done}>
-            Done
-          </button>
-        </div>
-      </div>
-    </div>
+        <Button at={[214, 263, 50, 14]} isDefault onClick={() => done()}>
+          OK
+        </Button>
+        <Button at={[268, 263, 50, 14]} onClick={onCancel}>
+          Cancel
+        </Button>
+      </Window>
+      {confirm && (
+        <MessageBox
+          text={confirm.text}
+          kind="yesno"
+          onResult={(yes) => {
+            const c = confirm;
+            setConfirm(null);
+            if (yes) done(true, c.statsOk);
+          }}
+        />
+      )}
+      {(problem ?? error) && !confirm && (
+        <MessageBox
+          text={problem ?? error}
+          onResult={() => {
+            setProblem(null);
+            onClearError();
+          }}
+        />
+      )}
+    </Backdrop>
   );
 }
 
-/** charspel.c / charskil.c: available and chosen lists, the cost and description of the selection. */
+/**
+ * charspel.c / charskil.c: the available and chosen lists (sorted, LBS_SORT), each with its
+ * own selection; Add moves the selection across and selects the next row; the info text and
+ * cost show the last selected item. A chosen Shal'ille spell rules out Qor ones and the reverse.
+ */
 function ChoiceLists({
   kind, list, chosen, setChosen, points, rs,
 }: {
@@ -284,70 +342,90 @@ function ChoiceLists({
   points: number;
   rs: (id: number) => string;
 }) {
-  const [selected, setSelected] = useState<number | null>(null);
+  const one = kind === "Spells" ? "spell" : "skill";
+  // char.c: the list string is the school, the level and the name
   const label = (c: CreatorChoice) => `${SCHOOLS[c.school] ?? "?"} ${c.cost < 25 ? 1 : 2}: ${rs(c.nameRes)}`;
-  // charspel.c: a chosen Shal'ille spell rules out Qor ones and the reverse
-  const school = kind === "Spells" ? list.find((c) => chosen.includes(c.id) && (c.school === SS_QOR || c.school === SS_SHALILLE))?.school : undefined;
-  const blocked = (c: CreatorChoice) =>
-    (school === SS_QOR && c.school === SS_SHALILLE) || (school === SS_SHALILLE && c.school === SS_QOR) || c.cost > points;
-  const sel = list.find((c) => c.id === selected);
-  const available = list.filter((c) => !chosen.includes(c.id));
-  const mine = list.filter((c) => chosen.includes(c.id));
-  const add = () => sel && !chosen.includes(sel.id) && !blocked(sel) && setChosen([...chosen, sel.id]);
-  const remove = () => sel && setChosen(chosen.filter((id) => id !== sel.id));
+  const byLabel = (a: CreatorChoice, b: CreatorChoice) => label(a).localeCompare(label(b), undefined, { sensitivity: "base" });
+  const available = list.filter((c) => !chosen.includes(c.id)).sort(byLabel);
+  const mine = list.filter((c) => chosen.includes(c.id)).sort(byLabel);
+  // charspel.c CharSpellsInit: ListBox_SetCurSel(hList1, 0)
+  const [sel1, setSel1] = useState<number | null>(available[0]?.id ?? null);
+  const [sel2, setSel2] = useState<number | null>(null);
+  const [shown, setShown] = useState<number | null>(available[0]?.id ?? null);
+  // MaybeEnableAddButton: a chosen Qor or Shal'ille spell decides the school
+  const school = kind === "Spells" ? mine.find((c) => c.school === SS_QOR || c.school === SS_SHALILLE)?.school : undefined;
+  const conflicts = (c: CreatorChoice) => (school === SS_QOR && c.school === SS_SHALILLE) || (school === SS_SHALILLE && c.school === SS_QOR);
+  const cur1 = available.find((c) => c.id === sel1);
+  const cur2 = mine.find((c) => c.id === sel2);
+  const info = list.find((c) => c.id === shown);
+
+  const add = (id = sel1) => {
+    const i = available.findIndex((c) => c.id === id);
+    const c = available[i];
+    // IDC_ADDSPELL: nothing happens without the points
+    if (!c || conflicts(c) || c.cost > points) return;
+    setChosen([...chosen, c.id]);
+    const rest = available.filter((x) => x.id !== c.id);
+    const next = rest[Math.min(i, rest.length - 1)]?.id ?? null;
+    setSel1(next);
+    setShown(next ?? c.id);
+  };
+  const remove = (id = sel2) => {
+    const i = mine.findIndex((c) => c.id === id);
+    const c = mine[i];
+    if (!c) return;
+    setChosen(chosen.filter((x) => x !== c.id));
+    const rest = mine.filter((x) => x.id !== c.id);
+    const next = rest[Math.min(i, rest.length - 1)]?.id ?? null;
+    setSel2(next);
+    setShown(next ?? c.id);
+  };
+  const items = (cs: CreatorChoice[], blocked: (c: CreatorChoice) => boolean) =>
+    cs.map((c) => ({ key: c.id, label: label(c), className: blocked(c) ? "blocked" : "" }));
+
   return (
-    <div className="creator-page">
-      <p className="sub">
-        {kind === "Spells" ? "Select the spells that you will be able to cast initially." : "Select the skills that you will start with."}
-      </p>
-      <div className="choice-lists">
-        <div>
-          <h4>Available {kind.toLowerCase()}:</h4>
-          <ul>
-            {available.map((c) => (
-              <li
-                key={c.id}
-                className={`${selected === c.id ? "selected" : ""}${blocked(c) ? " blocked" : ""}`}
-                onClick={() => setSelected(c.id)}
-                onDoubleClick={() => !blocked(c) && setChosen([...chosen, c.id])}
-              >
-                {label(c)}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="choice-middle">
-          <button onClick={add} disabled={!sel || chosen.includes(sel.id) || blocked(sel)}>
-            Add {kind === "Spells" ? "spell" : "skill"} &gt;&gt;
-          </button>
-          <button onClick={remove} disabled={!sel || !chosen.includes(sel.id)}>
-            &lt;&lt; Remove
-          </button>
-          {sel && (
-            <>
-              <p className="choice-info">{rs(sel.descRes)}</p>
-              <p>Cost: {sel.cost}</p>
-            </>
-          )}
-        </div>
-        <div>
-          <h4>{kind} you have:</h4>
-          <ul>
-            {mine.map((c) => (
-              <li
-                key={c.id}
-                className={selected === c.id ? "selected" : ""}
-                onClick={() => setSelected(c.id)}
-                onDoubleClick={() => setChosen(chosen.filter((id) => id !== c.id))}
-              >
-                {label(c)}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-      {kind === "Spells" && <p className="sub">Shal'ille (good) and Qor (evil) spells cannot be chosen together.</p>}
-      <p className="points">Spell/skill points left: {points}</p>
-    </div>
+    <>
+      <Text at={kind === "Spells" ? [75, 3, 200, 8] : [87, 3, 180, 8]}>
+        {kind === "Spells" ? "Select the spells that you will be able to cast initially." : "Select the skills that you will initially possess."}
+      </Text>
+      <Text at={[13, 19, 80, 8]}>Available {kind.toLowerCase()}:</Text>
+      <ListBox
+        at={[13, 31, 105, 161]}
+        label={`Available ${kind.toLowerCase()}`}
+        items={items(available, (c) => conflicts(c) || c.cost > points)}
+        selected={sel1}
+        onSelect={(id) => {
+          setSel1(id);
+          setShown(id);
+        }}
+        onActivate={add}
+      />
+      <Button at={[127, 62, 58, 14]} disabled={!cur1 || conflicts(cur1)} onClick={() => add()}>
+        Add {one} &gt;&gt;
+      </Button>
+      <Button at={[127, 78, 58, 14]} disabled={!cur2} onClick={() => remove()}>
+        &lt;&lt; Remove {one}
+      </Button>
+      <Text at={[123, 112, 68, 70]} wrap className="mk-choice-info">
+        {info ? rs(info.descRes) : ""}
+      </Text>
+      <Text at={[125, 184, 22, 8]}>Cost:</Text>
+      <Text at={[149, 184, 20, 8]}>{info?.cost ?? ""}</Text>
+      <Text at={[195, 19, 80, 8]}>{kind} you have:</Text>
+      <ListBox
+        at={[195, 31, 105, 161]}
+        label={`${kind} you have`}
+        items={items(mine, () => false)}
+        selected={sel2}
+        onSelect={(id) => {
+          setSel2(id);
+          setShown(id);
+        }}
+        onActivate={remove}
+      />
+      {kind === "Spells" && <Text at={[57, 199, 210, 8]}>Shal'ille (good) and Qor (evil) spells cannot be chosen together.</Text>}
+      <Text at={[13, 215, 72, 8]}>Spell/skill points left</Text>
+      <GraphBar at={[87, 214, 98, 11]} kind="points" label="Spell/skill points left" min={0} max={SPELL_POINTS} value={points} />
+    </>
   );
 }

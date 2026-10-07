@@ -148,81 +148,6 @@ body,
   color: var(--muted);
 }
 
-/* ---- login / character select ---- */
-.screen {
-  display: grid;
-  place-items: center;
-  height: 100%;
-  background: radial-gradient(ellipse at center, #241b12 0%, var(--bg) 70%);
-}
-
-.card {
-  width: min(360px, calc(100% - 32px));
-  padding: 24px;
-  background: var(--panel);
-  border: 2px solid var(--panel-edge);
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.card.wide {
-  width: min(460px, calc(100% - 32px));
-}
-
-.card h1 {
-  margin: 0;
-  color: var(--gold);
-  font-size: 24px;
-  letter-spacing: 0.04em;
-}
-
-.card h2 {
-  margin: 8px 0 0;
-  font-size: 15px;
-  color: var(--gold);
-}
-
-.card label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.card input,
-.card select,
-.card button {
-  padding: 8px;
-  background: #241d16;
-  color: var(--text);
-  border: 1px solid var(--panel-edge);
-  font: inherit;
-}
-
-.card button {
-  cursor: pointer;
-  color: var(--gold);
-}
-
-.card button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.card .sub,
-.card .motd {
-  margin: 0;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.card a {
-  color: var(--muted);
-}
-
 button.link {
   background: none;
   border: none;
@@ -231,29 +156,6 @@ button.link {
   cursor: pointer;
   font: inherit;
   font-size: 13px;
-}
-
-.characters {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.characters button {
-  width: 100%;
-  text-align: left;
-  font-size: 16px;
-}
-
-.create {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border-top: 1px solid var(--panel-edge);
-  padding-top: 8px;
 }
 
 /* ---- game ---- */
@@ -612,28 +514,39 @@ button.link {
   gap: 1px;
 }
 
-/* statbtn.c: a two-state glyph (left half up, right half down) on the button face */
+/* statbtn.c StatButtonDrawItem: glyph (26 px), middle pieces (2 px each), right piece (4 px),
+   each the up or down half of its bitmap (keyed.ts useKeyedHalves) */
 .stat-tab {
+  position: relative;
   flex: 1;
   height: 20px;
   padding: 0;
   border: none;
-  background-color: transparent;
-  background-repeat: no-repeat, repeat-x;
-  background-position: right 0 top 0, 0 0;
+  background: transparent;
   cursor: pointer;
 }
 
-.stat-tab .glyph {
-  display: block;
-  width: 26px;
+.stat-tab span {
+  position: absolute;
+  top: 0;
   height: 20px;
   background-repeat: no-repeat;
-  background-position: 0 0;
 }
 
-.stat-tab.active .glyph {
-  background-position: -26px 0;
+.stat-tab .glyph {
+  left: 0;
+  width: 26px;
+}
+
+.stat-tab .mid {
+  left: 26px;
+  right: 4px;
+  background-repeat: repeat-x;
+}
+
+.stat-tab .cap {
+  right: 0;
+  width: 4px;
 }
 
 .stat-tab.active {
@@ -747,76 +660,37 @@ button.link {
   background-repeat: repeat;
 }
 
-/* ---- dialogs ---- */
-.dialog {
+/* ---- in-game dialogs (Dialogs.tsx), in the kit's windows ---- */
+.mk-window.game-dialog {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
   z-index: 5;
-  width: min(380px, calc(100% - 32px));
-  max-height: calc(100% - 32px);
-  overflow-y: auto;
-  padding: 12px 16px;
-  background: rgba(27, 22, 18, 0.97);
-  border: 2px solid var(--panel-edge);
-  box-shadow: 0 0 30px rgba(0, 0, 0, 0.7);
-  color: var(--text);
-  font-size: 14px;
-}
-
-.dialog.wide {
-  width: min(760px, calc(100% - 32px));
-}
-
-.dialog h3 {
-  margin: 0 0 8px;
-  color: var(--gold);
-  font-size: 16px;
-}
-
-.dialog h4 {
-  margin: 10px 0 6px;
-  color: var(--muted);
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.dialog button,
-.dialog input[type="number"] {
-  background: #241d16;
-  color: var(--gold);
-  border: 1px solid var(--panel-edge);
-  font: inherit;
-  font-size: 13px;
-  padding: 3px 8px;
-}
-
-.dialog button {
-  cursor: pointer;
-}
-
-.dialog button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.dialog .buttons {
   display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 10px;
+  flex-direction: column;
+  width: min(420px, calc(100% - 16px));
+  max-height: calc(100% - 16px);
+  min-height: 0;
+}
+
+.mk-window.game-dialog.wide {
+  width: min(780px, calc(100% - 16px));
+}
+
+.game-dialog .mk-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.item-frame {
+  max-height: 320px;
 }
 
 .item-picker {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 320px;
-  overflow-y: auto;
-  border: 1px solid var(--panel-edge);
-  background: #000;
+  max-height: 316px;
+  font-size: 15px;
 }
 
 .item-picker li {
@@ -831,8 +705,8 @@ button.link {
   cursor: default;
 }
 
-.item-picker li.chosen {
-  background: #2b2418;
+.item-picker input[type="checkbox"] {
+  accent-color: var(--hl);
 }
 
 .pick-icon {
@@ -846,63 +720,92 @@ button.link {
 }
 
 .pick-cost {
-  color: var(--gold);
+  color: var(--hl);
+}
+
+.item-picker li.selected .pick-cost {
+  color: #6a4a00;
 }
 
 .pick-amount {
-  width: 72px;
+  width: 76px;
+  height: 24px;
+}
+
+.amount-field {
+  width: 140px;
+  height: 26px;
 }
 
 .total {
   margin: 8px 0 0;
   text-align: right;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.dialog-heading {
+  margin: 10px 0 6px;
+  font: 18px var(--font-title);
+  font-weight: normal;
+  color: var(--hl);
+  text-shadow: 1px 1px 0 #000;
+}
+
+.settings-page {
+  padding: 10px;
 }
 
 .settings {
   display: grid;
-  grid-template-columns: 1fr 1.4fr;
-  gap: 16px;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
-.settings .check {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  margin: 4px 0;
-}
-
-.settings .range {
+.mk-group.flow {
   display: flex;
   flex-direction: column;
-  margin: 4px 0 8px;
-  font-size: 13px;
-}
-
-.settings .range input {
-  accent-color: var(--gold);
-}
-
-.settings .preset {
-  display: flex;
   gap: 6px;
-  margin-bottom: 6px;
+  padding: 6px 12px 12px;
 }
 
-.settings .preset .active {
-  outline: 1px solid var(--gold);
-  color: #fff;
+.settings-range {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px 22px;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.settings-keys .preset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.settings-keys .mk-btn {
+  min-height: 22px;
+}
+
+.settings-keys .preset .active {
+  color: var(--hl);
+  border-color: #1c1c1c #a8a8a8 #a8a8a8 #1c1c1c;
 }
 
 .keys {
   width: 100%;
+  margin-bottom: 8px;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .keys td {
   padding: 2px 4px;
-  border-bottom: 1px solid #2a2219;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.5);
   vertical-align: middle;
+  text-shadow: 1px 1px 0 #000;
 }
 
 .keys .key {
@@ -910,14 +813,15 @@ button.link {
   margin: 1px 4px 1px 0;
 }
 
-.keys .key button,
-.keys .add {
-  padding: 1px 6px;
+.keys .mk-btn {
+  min-height: 20px;
+  padding: 0 6px;
+  font-size: 13px;
 }
 
 .keys .key .x,
 .keys .add {
-  color: var(--muted);
+  color: #b8b8b8;
 }
 
 @media (max-width: 760px) {
@@ -991,215 +895,4 @@ button.link {
 .portrait.selecting {
   cursor: crosshair;
   outline: 1px dashed rgb(240, 208, 25);
-}
-
-/* ---- milestone 6: the character creator (module/char) ---- */
-.card.creator {
-  width: min(720px, calc(100% - 32px));
-  max-height: calc(100% - 32px);
-  overflow-y: auto;
-}
-
-.creator-tabs {
-  display: flex;
-  gap: 2px;
-  border-bottom: 1px solid var(--panel-edge);
-}
-
-.creator-tabs button {
-  border-bottom: none;
-  color: var(--muted);
-}
-
-.creator-tabs button.active {
-  color: var(--gold);
-  background: #2b2418;
-}
-
-.creator-page {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 300px;
-}
-
-.creator-page textarea {
-  padding: 8px;
-  background: #241d16;
-  color: var(--text);
-  border: 1px solid var(--panel-edge);
-  font: inherit;
-  resize: vertical;
-}
-
-.creator-page .row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.creator-page .row span {
-  min-width: 90px;
-  text-align: center;
-}
-
-.appearance {
-  flex-direction: row;
-  gap: 24px;
-}
-
-.face-preview {
-  width: 220px;
-  height: 260px;
-  display: grid;
-  place-items: center;
-  background: #241d16;
-  border: 1px solid var(--panel-edge);
-}
-
-.face-preview .face {
-  width: 200px;
-  height: 240px;
-}
-
-.face-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.card .radio {
-  flex-direction: row;
-  align-items: center;
-  gap: 4px;
-}
-
-.card .slider,
-.card .stat-slider {
-  display: flex;
-  gap: 4px;
-}
-
-.card .stat-slider {
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-}
-
-.stat-slider span:first-child {
-  width: 80px;
-  text-align: right;
-}
-
-.stat-slider input {
-  flex: 1;
-  accent-color: rgb(0, 128, 0);
-}
-
-.stat-slider .val {
-  width: 28px;
-}
-
-.creator .points {
-  margin: 0;
-  color: var(--gold);
-}
-
-.creator fieldset {
-  border: 1px solid var(--panel-edge);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.creator legend {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.choice-lists {
-  display: grid;
-  grid-template-columns: 1fr 150px 1fr;
-  gap: 8px;
-}
-
-.choice-lists h4 {
-  margin: 0 0 4px;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.choice-lists ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  height: 240px;
-  overflow-y: auto;
-  background: #000;
-  border: 1px solid var(--panel-edge);
-  font-size: 13px;
-}
-
-.choice-lists li {
-  padding: 1px 6px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.choice-lists li.selected {
-  background: #fff;
-  color: #000;
-}
-
-.choice-lists li.blocked {
-  color: #6b5f4d;
-}
-
-.choice-middle {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-}
-
-.choice-info {
-  margin: 0;
-  color: var(--muted);
-}
-
-.creator-nav {
-  display: flex;
-  gap: 8px;
-}
-
-.creator-nav .spacer {
-  flex: 1;
-}
-
-.creator .confirm {
-  border: 1px solid var(--gold);
-  padding: 8px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.creator .confirm p {
-  margin: 0;
-  flex-basis: 100%;
-}
-
-.new-character {
-  color: var(--muted) !important;
-  font-style: italic;
-}
-
-@media (max-width: 640px) {
-  .appearance {
-    flex-direction: column;
-  }
-  .choice-lists {
-    grid-template-columns: 1fr;
-  }
 }

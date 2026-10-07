@@ -12,7 +12,7 @@ import { isNumberItem, type GameSession } from "@shards/world";
 import type { AssetStore } from "../../assets.ts";
 import { bareIcon, type Drawable, type IconOptions, type IconRenderer } from "../icons.ts";
 import { useAsyncImage, useWorld } from "./hooks.ts";
-import { useKeyedImage } from "./keyed.ts";
+import { useKeyedHalves, useKeyedImage } from "./keyed.ts";
 import { MiniMap } from "./MiniMap.tsx";
 
 /** statmain.c: main stat numbers */
@@ -50,6 +50,32 @@ export function ObjIcon({
   const key = object ? icons.key(object, opts) : "";
   const url = useAsyncImage(key, () => (object ? icons.object(object, opts) : null));
   return <span className={`obj-icon ${className ?? ""}`} title={title}>{url && <img src={url} alt="" draggable={false} />}</span>;
+}
+
+/**
+ * statbtn.c StatButtonDrawItem: the group's glyph on the left, the middle piece repeated up to
+ * the right piece, each from the up or down half of its bitmap, drawn transparently.
+ */
+function StatTab({
+  assets, bitmap, label, active, onClick,
+}: {
+  assets: AssetStore;
+  bitmap: string;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const left = useKeyedHalves(assets.url(`ui/${bitmap}`));
+  const mid = useKeyedHalves(assets.url("ui/statbtn_mid.bmp"));
+  const right = useKeyedHalves(assets.url("ui/statbtn_right.bmp"));
+  const half = (h: [string, string] | null) => (h ? { backgroundImage: `url(${h[active ? 1 : 0]})` } : undefined);
+  return (
+    <button className={active ? "stat-tab active" : "stat-tab"} title={label} aria-label={label} onClick={onClick}>
+      <span className="mid" style={half(mid)} />
+      <span className="glyph" style={half(left)} />
+      <span className="cap" style={half(right)} />
+    </button>
+  );
 }
 
 /** graphctl.c GraphCtlPaint: frame, value bar, limit bar, background, the number. */
@@ -148,15 +174,7 @@ export function Sidebar({
       </div>
       <div className="stat-tabs">
         {TABS.map((t) => (
-          <button
-            key={t.tab}
-            className={tab === t.tab ? "stat-tab active" : "stat-tab"}
-            title={t.label}
-            onClick={() => pick(t.tab, t.group)}
-            style={{ backgroundImage: `${ui("statbtn_right.bmp")}, ${ui("statbtn_mid.bmp")}` }}
-          >
-            <span className="glyph" style={{ backgroundImage: ui(t.bitmap) }} />
-          </button>
+          <StatTab key={t.tab} assets={assets} bitmap={t.bitmap} label={t.label} active={tab === t.tab} onClick={() => pick(t.tab, t.group)} />
         ))}
       </div>
       <div className="stat-area" style={{ backgroundImage: ui("invbkgnd.bmp") }}>

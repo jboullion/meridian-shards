@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { RsbBundle } from "@shards/formats";
 import { AssetStore } from "./assets.ts";
 import { Game } from "./game/Game.tsx";
+import { installUiTheme } from "./game/ui/kit.tsx";
 import { RoomViewer } from "./viewer/RoomViewer.tsx";
 
 const isViewer = () => new URLSearchParams(location.search).has("viewer") || new URLSearchParams(location.search).has("rid");
@@ -15,7 +16,10 @@ export function App() {
     const store = new AssetStore();
     store
       .init()
-      .then(() => store.rsb())
+      .then(() => {
+        installUiTheme(store);
+        return store.rsb();
+      })
       .then((r) => {
         setRsb(r);
         setAssets(store);

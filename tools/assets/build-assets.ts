@@ -10,7 +10,8 @@
 //   3. the installed 104 client's resource folder (%LOCALAPPDATA%\Meridian-104\resource)
 // Plus the palette (blakston.pal, parsed to a 768-byte binary palette.bin), and the
 // interface bitmaps compiled into the client (clientd3d/bitmap and module/merintr/bitmap:
-// backgrounds, stat tab buttons, the map paper) as ui/<name>.bmp.
+// backgrounds, stat tab buttons, the map paper) as ui/<name>.bmp, the login dialog's icon
+// (ui/icon1.ico) and the Heidelberg title font (ui/heidelb1.ttf, font.c FONT_TITLES).
 //
 // Output: dist/assets/<name> and dist/assets/manifest.json:
 //   { generated, rsbHash, files: { name: { size, hash } } }
@@ -45,13 +46,18 @@ type Source = {
   exts?: Set<string>;
 };
 const BMP = new Set([".bmp"]);
+const BMP_ICO = new Set([".bmp", ".ico"]);
+const TTF = new Set([".ttf"]);
 const sources: Source[] = [
   { label: "server rsb", dir: join(RUN, "rsc"), recursive: false, filter: (n) => n === "rsc0000.rsb" },
   { label: "server rooms", dir: join(RUN, "rooms"), recursive: false },
   { label: "installed client", dir: opt.client!, recursive: true },
   { label: "server resource tree", dir: join(SERVER, "resource"), recursive: true },
-  { label: "client UI bitmaps", dir: join(SERVER, "clientd3d", "bitmap"), recursive: false, prefix: "ui/", exts: BMP },
+  { label: "client UI bitmaps", dir: join(SERVER, "clientd3d", "bitmap"), recursive: false, prefix: "ui/", exts: BMP_ICO },
   { label: "interface UI bitmaps", dir: join(SERVER, "module", "merintr", "bitmap"), recursive: false, prefix: "ui/", exts: BMP },
+  // server\setup-client.cmd puts the font in our client's run folder; the installed client has it beside its resource folder
+  { label: "title font", dir: join(SERVER, "run", "localclient"), recursive: false, prefix: "ui/", exts: TTF },
+  { label: "title font (installed client)", dir: dirname(opt.client!), recursive: false, prefix: "ui/", exts: TTF },
 ];
 
 function* walk(dir: string, recursive: boolean): Generator<string> {

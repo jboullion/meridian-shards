@@ -94,6 +94,10 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
   - Tested locally on 2026-10-07: a fresh game loads in about a second; a headless login and the browser client work through Caddy at http://localhost:8080; the first room is about 4.9 MB; the stack uses about 200 MB of RAM.
 - [x] The VM (2026-10-07): Google Cloud, Debian 12, about 1 GB of RAM (e2-micro class), 1 GB swap, Docker from Docker's repository. Live at https://35-206-75-121.sslip.io with a Let's Encrypt certificate. A browser login over WSS, character creation and entering the Inn of Raza took about 4 s and 4.6 MB. The stack uses about 230 MB; the VM has ~300 MB to spare plus swap. (DigitalOcean if it goes live.)
   - The gateway only accepts the site's own Origin (`GATEWAY_ORIGINS`), so headless tools can't connect from outside; run them on the VM or against the local stack.
+- [x] The menus in the game's own look (2026-10-07): a dialog kit (`apps/client/src/game/ui/kit.tsx`) draws windows with the stone edge treatment (`drawint.c`), the noise background (`bkgnd.bmp`), Heidelberg titles (`Heidelb1.ttf` from the asset build, its cmap patched so browsers accept it), the edit box treatment, owner-drawn lists and the BlakGraph bar (`graphctl.c`). Controls are placed in dialog units straight from the `.rc` templates.
+  - The login dialog (`IDD_LOGIN`, no Server field), Select character (`IDD_CHARPICK`: names sorted, every free slot listed, Log off confirm), and the creator as a property sheet (`IDD_CHAR*` pages, OK/Cancel, message boxes for the checks). Created "Shardkit" through it.
+  - The buy, withdraw, offer, deposit and amount dialogs, and the settings as "Preferences" and "Keys" tabs.
+  - Reference shots of the original's creator tabs and Preferences are in `docs/research/reference-images/` (git-ignored).
 - [ ] Test Chrome, Firefox and Safari against the hosted server.
 - [ ] A friends playtest mixing original-client and browser players.
 

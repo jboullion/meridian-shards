@@ -39,6 +39,8 @@ const ATTACK_DELAY = 250;
 const CLOSE_DISTANCE = 5 * FINENESS;
 /** effect.c SHAKE_AMPLITUDE */
 const SHAKE_AMPLITUDE = FINENESS / 4;
+/** A wall within this many squares of a label's anchor doesn't hide it: signs hang on walls */
+const LABEL_OCCLUSION_SLACK = 0.1;
 
 export interface GameSceneStatus {
   roomName: string;
@@ -87,6 +89,8 @@ export class GameScene {
   private readonly resizeObserver: ResizeObserver;
   private labelPool: HTMLDivElement[] = [];
   private readonly raycaster = new THREE.Raycaster();
+  /** For hiding name labels behind walls */
+  private readonly labelRay = new THREE.Raycaster();
   private overlays: ScreenOverlays | null = null;
   /** The selected target (gameuser.c idTarget), or null */
   target: number | null = null;
@@ -508,9 +512,20 @@ export class GameScene {
       h = this.canvas.clientHeight;
     const v = new THREE.Vector3();
     let n = 0;
+    const eye = this.camera.position;
+    const dir = new THREE.Vector3();
     for (const l of labels) {
       v.copy(l.position).project(this.camera);
       if (v.z > 1 || v.z < -1) continue;
+      // D3DRenderNamesDraw3D draws names in the scene with the depth test on, so walls hide
+      // them: skip a label when the room is drawn between the eye and it.
+      if (this.roomView) {
+        dir.subVectors(l.position, eye);
+        const dist = dir.length();
+        this.labelRay.set(eye, dir.divideScalar(dist));
+        this.labelRay.far = dist - LABEL_OCCLUSION_SLACK;
+        if (this.labelRay.far > 0 && this.roomView.occludes(this.labelRay)) continue;
+      }
       const el = this.labelPool[n] ?? this.labelsEl.appendChild(document.createElement("div"));
       this.labelPool[n++] = el;
       el.className = `name-label${l.id === this.hovered ? " hovered" : ""}${l.id === this.target ? " target" : ""}`;

@@ -60,6 +60,8 @@ for (const d of ["memmap", "rsc", "rooms"]) copy(join(RUN, d), join(STAGE, "game
 for (const f of ["kodbase.txt", "blakston.khd", "protocol.khd"]) {
   if (existsSync(join(RUN, f))) copy(join(RUN, f), join(STAGE, "gamedata", f));
 }
+// The message of the day (server/config/motd.txt): blakserv moves it into memmap/ at startup
+copy(join(ROOT, "server", "config", "motd.txt"), join(STAGE, "gamedata", "motd.txt"));
 
 // Linux file names are case-sensitive and Kod names rooms as it likes ("RazaBank.roo"
 // for razabank.roo). Windows can't hold both spellings, so list them in room-aliases.txt

@@ -1,12 +1,14 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import type { CharInfo, CharacterSlot } from "@shards/protocol";
 import { GameSession, type ChatLine, type LookResult, type OfferEvent, type SessionPhase, type TradeList } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
 import { GameAudio } from "./audio.ts";
 import { CharacterCreator } from "./CharacterCreator.tsx";
+import { CharacterSelect } from "./CharacterSelect.tsx";
 import { GameView, MAX_CHAT_LINES } from "./GameView.tsx";
 import { IconRenderer } from "./icons.ts";
+import { ConnectingScreen, LoginScreen } from "./LoginScreen.tsx";
 
 /** A tiny event relay: session events that arrive before (or without) a listener are dropped. */
 class Relay<T> {
@@ -32,14 +34,6 @@ interface Live {
 }
 
 const wsUrl = () => `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
-
-function readRemembered(): string {
-  try {
-    return localStorage.getItem("shards.username") ?? "";
-  } catch {
-    return "";
-  }
-}
 
 export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   const [live, setLive] = useState<Live | null>(null);
@@ -110,9 +104,8 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   };
 
   if (!live || !session || phase === "offline" || phase === "closed")
-    return <LoginScreen onLogin={login} error={error} />;
-  if (phase === "connecting" || phase === "login")
-    return <div className="splash">Connecting…</div>;
+    return <LoginScreen assets={assets} onLogin={login} error={error} onClearError={() => setError(null)} />;
+  if (phase === "connecting" || phase === "login") return <ConnectingScreen />;
   if (phase === "characters" && creating?.info)
     return (
       <CharacterCreator
@@ -125,6 +118,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
           setCreating(null);
           setError(null);
         }}
+        onClearError={() => setError(null)}
       />
     );
   if (phase === "characters")
@@ -135,6 +129,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
         error={error}
         session={session}
         onLogout={logout}
+        onClearError={() => setError(null)}
         onCreate={(slotId) => {
           // charpick.c: picking "<New character>" asks the server for the creator's choices
           setError(null);
@@ -157,82 +152,5 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       onCloseLook={() => setLook(null)}
       onLogout={logout}
     />
-  );
-}
-
-function LoginScreen({ onLogin, error }: { onLogin: (u: string, p: string) => void; error: string | null }) {
-  const [username, setUsername] = useState(readRemembered);
-  const [password, setPassword] = useState("");
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (username && password) onLogin(username.trim(), password);
-  };
-  return (
-    <div className="screen">
-      <form className="card" onSubmit={submit}>
-        <h1>Meridian Shards</h1>
-        <p className="sub">A new account is created the first time you log in with a name.</p>
-        <label>
-          Account
-          <input autoFocus value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
-        </label>
-        <label>
-          Password
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
-        </label>
-        {error && <p className="error">{error}</p>}
-        <button type="submit" disabled={!username || !password}>
-          Enter the shard
-        </button>
-        <p className="sub">
-          <a href="?viewer">Room viewer</a>
-        </p>
-      </form>
-    </div>
-  );
-}
-
-function CharacterSelect({
-  characters, motd, error, session, onLogout, onCreate,
-}: {
-  characters: CharacterSlot[];
-  motd: string;
-  error: string | null;
-  session: GameSession;
-  onLogout: () => void;
-  onCreate: (slotId: number) => void;
-}) {
-  const created = characters.filter((c) => c.flags !== 1);
-  const free = characters.filter((c) => c.flags === 1);
-  return (
-    <div className="screen">
-      <div className="card wide">
-        <h1>Choose your character</h1>
-        {motd && motd !== "<Default>" && <p className="motd">{motd}</p>}
-        <ul className="characters">
-          {created.map((c) => (
-            <li key={c.id}>
-              <button onClick={() => session.useCharacter(c.id)}>{c.name}</button>
-            </li>
-          ))}
-          {free.length > 0 && (
-            <li>
-              <button className="new-character" onClick={() => onCreate(free[0].id)}>
-                &lt;New character&gt;
-              </button>
-            </li>
-          )}
-        </ul>
-        {free.length > 0 && (
-          <p className="sub">
-            {free.length} free slot{free.length === 1 ? "" : "s"}.
-          </p>
-        )}
-        {error && <p className="error">{error}</p>}
-        <button className="link" onClick={onLogout}>
-          Log out
-        </button>
-      </div>
-    </div>
   );
 }

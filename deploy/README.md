@@ -105,6 +105,7 @@ All of these run on the VM, in `~/meridian-shards`:
 | Save the game now | `sudo docker compose -f deploy/docker-compose.yml exec blakserv maint "save game"` |
 | Server console | `sudo docker attach meridian-shards-blakserv-1` (detach with Ctrl+P, Ctrl+Q) |
 | Restart | `sudo docker compose -f deploy/docker-compose.yml restart` |
+| Change the message of the day | Edit `server/config/motd.txt` and redeploy, or on the VM: `sudo docker compose -f deploy/docker-compose.yml cp motd.txt blakserv:/srv/blakserv/motd.txt` then `... exec blakserv maint "reload motd"` (lasts until the container is recreated) |
 | Back up the game | `sudo docker run --rm -v meridian-shards_savegame:/s -v $PWD:/b ubuntu tar czf /b/savegame-$(date +%F).tgz -C /s .` |
 
 blakserv saves every 30 minutes (`[Auto] SavePeriod`). Run "save game" before stopping the VM or redeploying.
