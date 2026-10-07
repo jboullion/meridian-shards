@@ -100,13 +100,20 @@ The first push uploads about 450 MB (mostly the game assets). For code-only upda
 The desktop app (`apps/desktop`, [ADR 0002](../docs/adr/0002-desktop-shell.md)) carries the game files in its installer and asks the server only for files that changed since. Its installers and updates come from GitHub Releases, not the VM. The server needs nothing new except `app://shards` in `GATEWAY_ORIGINS` (above). To release:
 
 1. Deploy the server first (section 5). The release build copies the game files from the VM's `/assets/`.
-2. Bump `version` in `apps/desktop/package.json`, commit, then tag and push:
+2. From a clean, up-to-date `main`, release the next version:
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+npm run release -- 0.1.3
 ```
 
-3. The **Desktop builds** workflow builds Windows, macOS and Linux and uploads them to a draft release named for the tag. Check it on GitHub, then **Publish release**.
+`tools/deploy/release.ts` checks the tree, bumps `apps/desktop/package.json`, commits "Release v0.1.3", tags and pushes with git. Then it follows the **Desktop builds** workflow:
+- the `draft` job creates a draft release with generated notes;
+- the three `build` jobs build Windows, macOS and Linux and upload into the draft;
+- the `publish` job checks every platform's files are there and publishes the release as the latest.
+
+The script prints each job's progress and ends with the release link, or names the failed job and step. A failed build leaves the draft unpublished, so players never get half a release. `npm run release -- --watch 0.1.3` follows a run again; `--no-wait` pushes and leaves.
+
+Don't create releases by hand. A release that already exists for the tag makes the builds skip their uploads, and the script refuses a version that has one.
 
 Installed apps find the new release at their next launch, download the changed blocks in the background, and offer "Restart to update" on the login screen. Unsigned macOS builds can't update themselves. The download page at `https://<dashed-ip>.sslip.io/download/` always lists the latest published release.
 

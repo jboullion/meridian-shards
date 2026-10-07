@@ -36,7 +36,7 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 | `tools/gateway/` | WebSocket-to-TCP bridge in front of blakserv (`ws`). |
 | `tools/headless/` | Headless protocol client for spikes and soak tests. |
 | `tools/maint/` | Sends commands to blakserv's maintenance port (localhost:9998). |
-| `tools/deploy/` | `stage.ts` gathers the Docker build context in `deploy/.stage` (git-ignored: game data and art); `push.ts` ships it to the VM over ssh and restarts the stack. |
+| `tools/deploy/` | `stage.ts` gathers the Docker build context in `deploy/.stage` (git-ignored: game data and art); `push.ts` ships it to the VM over ssh and restarts the stack; `release.ts` releases the desktop app (`npm run release -- <x.y.z>`). |
 | `deploy/` | The hosted stack: `docker-compose.yml`, the blakserv Linux image, the gateway image, the Caddyfile, the download page (`web/site/download/`), and the run book (`deploy/README.md`). |
 | `server/config/blakserv.cfg` | Our server config, the source of truth. Copied into the run folder by `server/setup-run.cmd`. |
 | `server/config/motd.txt` | The message of the day on the character screen (CRLF line endings, for original clients). `server/setup-run.cmd` copies it into the run folder and deploys put it in the image. |
@@ -59,6 +59,7 @@ npm run desktop:start       # the desktop app as it ships (app://shards), unpack
 npm run desktop:build       # an unpacked build in apps/desktop/dist/win-unpacked
 npm run desktop:dist        # installers + latest*.yml for this OS, with dist/assets inside
 npm run desktop:release     # the same, uploaded to a draft GitHub release (CI does this on a v* tag)
+npm run release -- 0.2.0     # bump, commit, tag and push; CI builds all three OSes and publishes v0.2.0
 ```
 
 - Our build of the original Windows client (for parity tests): `server\build.cmd Bclient Bmodules`, then `server\setup-client.cmd`, then run `server\src\run\localclient\meridian.exe /U:<user> /W:<pass> /H:localhost /P:5959`. Never use the installed 104 client's `rsc0000.rsb` or rooms with our server.

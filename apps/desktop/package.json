@@ -5,6 +5,11 @@
   "private": true,
   "description": "Meridian Shards: the desktop client (Electron around the browser client).",
   "author": "Meridian Shards",
+  "homepage": "https://github.com/jboullion/meridian-shards",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jboullion/meridian-shards.git"
+  },
   "license": "GPL-2.0-only",
   "type": "module",
   "main": "out/main.cjs",

@@ -1,9 +1,11 @@
-# Builds the desktop installers on Windows, macOS and Linux and uploads them, with the update
-# feeds, to a draft GitHub release for v<version> (apps/desktop/package.json). Publishing
-# that release (on GitHub) ships it: the download page and installed apps use the latest
-# published release.
+# Builds the desktop installers on Windows, macOS and Linux, uploads them with the update
+# feeds to a draft GitHub release for v<version> (apps/desktop/package.json), and publishes
+# that release once every platform is there. Installed apps and the download page use the
+# latest published release.
 #
-# Run it from the Actions tab, or push a tag: git tag v0.2.0 && git push origin v0.2.0
+# Start it with `npm run release -- <x.y.z>` (tools/deploy/release.ts: bumps the version,
+# tags, pushes and follows this run), or push a v<version> tag yourself. Running it from the
+# Actions tab builds the current version without publishing.
 #
 # The installers carry the game files. Raw art is never in git, so each build copies them
 # from the hosted server's /assets/ (tools/assets/fetch-assets.ts), cached between runs by
@@ -23,7 +25,20 @@ env:
   ASSETS_FROM: https://35-206-75-121.sslip.io
 
 jobs:
+  # One draft for the three builds to upload into (each making its own can race into duplicates)
+  draft:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "Meridian Shards $GITHUB_REF_NAME" --generate-notes
+
   build:
+    needs: draft
+    # From the Actions tab there's no tag and no draft (skipped): build only
+    if: ${{ !failure() && !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
@@ -31,6 +46,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: The tag matches the app's version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          version=$(node -p "require('./apps/desktop/package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match apps/desktop/package.json version $version"
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -48,8 +72,39 @@ jobs:
         run: node tools/assets/fetch-assets.ts --from "$ASSETS_FROM"
         shell: bash
       - name: Build and upload to the draft release
+        if: startsWith(github.ref, 'refs/tags/v')
         run: npm run desktop:release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Unsigned for now (docs/adr/0002-desktop-shell.md); stops macOS looking for a certificate
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Build only (not a tag)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: npm run desktop:dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+  # Publishes the draft once all three platforms built and uploaded. A failed build leaves
+  # the draft unpublished, so players never get half a release.
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every platform's files are in the draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          names=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          echo "$names"
+          for pattern in '\.exe$' '\.exe\.blockmap$' '-mac\.dmg$' '-mac\.zip$' '\.AppImage$' '\.deb$' '^latest\.yml$' '^latest-mac\.yml$' '^latest-linux\.yml$'; do
+            if ! grep -Eq -- "$pattern" <<< "$names"; then
+              echo "::error::The release has no file matching $pattern"
+              exit 1
+            fi
+          done
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
