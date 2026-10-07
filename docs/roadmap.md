@@ -122,7 +122,7 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
   - The client reloads if the server was updated before you log in.
 - [x] Hosting: installers on GitHub Releases (`npm run desktop:release`, or the workflow on a `v*` tag); a download page at `/download/` on the VM.
 - [x] Released (2026-10-07): the repo is public, the VM is deployed, and `npm run release -- <x.y.z>` bumps, tags and pushes. The workflow builds all three platforms into one draft and publishes it. v0.1.3 is the first full release: Windows, macOS (universal) and Linux (AppImage, deb).
-- [ ] Check auto-update end to end: install 0.1.0, publish 0.1.1, and see "Restart to update".
+- [x] Auto-update checked end to end (2026-10-07): an installed 0.1.3 found 0.1.4 on GitHub, downloaded it in the background, offered "Restart to update" and restarted as 0.1.4.
 - [ ] macOS and Linux builds from CI, tried on real machines (pointer lock, sound, WebGL).
 - [ ] Signing before going public: Windows (Azure Trusted Signing) and macOS (an Apple Developer account and notarization).
 

@@ -31,7 +31,7 @@
 }
 
 .mk-footnote {
-  font: 13px var(--font-ui);
+  font: 16px var(--font-ui);
   color: var(--ui-text);
   text-shadow: 1px 1px 0 #000;
 }
@@ -42,6 +42,16 @@
 
 .mk-footnote a {
   color: var(--ui-text);
+}
+
+/* An update waiting to install: the title gold, so it's noticed */
+.mk-footnote .update {
+  color: var(--hl);
+  font-weight: bold;
+}
+
+.mk-footnote .update a {
+  color: var(--hl);
 }
 
 .mk-window {

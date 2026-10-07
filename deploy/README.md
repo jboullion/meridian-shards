@@ -80,10 +80,10 @@ Put this in `.env`, using **your** static IP with dashes (34.123.45.67 becomes `
 
 ```
 SITE_ADDRESS=34-123-45-67.sslip.io
-GATEWAY_ORIGINS=https://34-123-45-67.sslip.io,app://shards
+GATEWAY_ORIGINS=https://34-123-45-67.sslip.io,app://shards,app://meridian-remastered
 ```
 
-`app://shards` is the desktop app's page origin; without it the gateway turns the desktop app away.
+`app://shards` is the desktop app's page origin; without it the gateway turns the desktop app away. `app://meridian-remastered` is the Unreal remaster (`meridian-unreal`, its ADR 0010), which plays on this server too. After changing `.env`, restart the gateway: `docker compose up -d gateway`.
 
 ## 5. Deploy (and redeploy)
 

@@ -67,7 +67,7 @@ export function LoginScreen({
   return (
     <Backdrop>
       <h1 className="mk-shard-title">Meridian Shards</h1>
-      <Window title="Meridian Shards Login" dlu={LAYOUT.size}>
+      <Window title="Login" dlu={LAYOUT.size}>
         <form onSubmit={submit}>
           <img className="mk-login-icon" src={assets.url("ui/icon1.ico")} alt="" style={at([6, 6, 20, 20])} />
           <Text at={LAYOUT.intro} wrap>
@@ -101,7 +101,7 @@ export function LoginScreen({
         {devPagesEnabled && <a href="?viewer">Room viewer</a>}
         {desktop && !update && <span>Version {desktop.version}</span>}
         {desktop && update && (
-          <span>
+          <span className="update">
             Version {update.version} is ready.{" "}
             <a href="#" onClick={(e) => (e.preventDefault(), desktop?.installUpdate())}>
               Restart to update
