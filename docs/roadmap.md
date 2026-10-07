@@ -89,9 +89,13 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 
 ### 7. Host and playtest
 
-- One Linux VPS with blakserv, the gateway, and Caddy for WSS and static files (sizing: meridian-unreal ADR 0004).
-- Test Chrome, Firefox and Safari.
-- A friends playtest mixing original-client and browser players.
+- [x] The hosted stack in Docker (`deploy/`, run book in [deploy/README.md](../deploy/README.md)): blakserv built for Linux, the gateway, and Caddy for HTTPS/WSS, the client and the assets. `tools/deploy/stage.ts` gathers it; `tools/deploy/push.ts` ships it to the VM.
+  - blakserv's Linux build works with two compiler flags (`-D__forceinline=inline`, `-fno-unreachable-traps`) and the `-i` console option (its daemon mode runs two servers). Kod's differently cased room names get symlinks.
+  - Tested locally on 2026-10-07: a fresh game loads in about a second; a headless login and the browser client work through Caddy at http://localhost:8080; the first room is about 4.9 MB; the stack uses about 200 MB of RAM.
+- [x] The VM (2026-10-07): Google Cloud, Debian 12, about 1 GB of RAM (e2-micro class), 1 GB swap, Docker from Docker's repository. Live at https://35-206-75-121.sslip.io with a Let's Encrypt certificate. A browser login over WSS, character creation and entering the Inn of Raza took about 4 s and 4.6 MB. The stack uses about 230 MB; the VM has ~300 MB to spare plus swap. (DigitalOcean if it goes live.)
+  - The gateway only accepts the site's own Origin (`GATEWAY_ORIGINS`), so headless tools can't connect from outside; run them on the VM or against the local stack.
+- [ ] Test Chrome, Firefox and Safari against the hosted server.
+- [ ] A friends playtest mixing original-client and browser players.
 
 ## What the slice must prove
 

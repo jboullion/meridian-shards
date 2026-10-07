@@ -25,6 +25,9 @@ export default defineConfig({
   },
   build: {
     copyPublicDir: false,
+    // /assets/* is the game files (Caddy serves dist/assets there), so the client's own
+    // hashed bundles go elsewhere
+    assetsDir: "assets-client",
     target: "es2023",
   },
 });

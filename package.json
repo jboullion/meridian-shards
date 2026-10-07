@@ -22,7 +22,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/client/tsconfig.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run lint && npm test"
+    "check": "npm run typecheck && npm run lint && npm test",
+    "deploy:stage": "node tools/deploy/stage.ts",
+    "deploy:push": "node tools/deploy/push.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

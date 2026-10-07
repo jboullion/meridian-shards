@@ -31,3 +31,8 @@ Thumbs.db
 # --- Claude Code local state
 .claude/settings.local.json
 .claude/worktrees/
+
+# --- Deployment staging (holds the original game data and art)
+/deploy/.stage/
+/apps/client/dist/
+/.deploy.tgz

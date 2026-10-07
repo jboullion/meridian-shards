@@ -1,0 +1,45 @@
+# Caddy: HTTPS for the site, the client build, the game assets, and the WebSocket
+# gateway at /ws. SITE_ADDRESS is the hostname (e.g. 34-123-45-67.sslip.io); Caddy
+# gets its certificate from Let's Encrypt by itself. For a local test without TLS,
+# set SITE_ADDRESS=http://localhost.
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# The game connection
+	handle /ws {
+		reverse_proxy gateway:8059
+	}
+
+	# The original game files. Files are requested with ?v=<content hash>, so they can be
+	# cached for good; the manifest that holds the hashes must always be fresh.
+	handle /assets/manifest.json {
+		root * /srv
+		header Cache-Control "no-cache"
+		file_server
+	}
+	handle /assets/* {
+		root * /srv
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# The client (a single-page app). Hashed bundles cache forever; index.html never.
+	handle /assets-client/* {
+		root * /srv/client
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+	handle {
+		root * /srv/client
+		@index path / /index.html
+		header @index Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

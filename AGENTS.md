@@ -35,6 +35,8 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 | `tools/gateway/` | WebSocket-to-TCP bridge in front of blakserv (`ws`). |
 | `tools/headless/` | Headless protocol client for spikes and soak tests. |
 | `tools/maint/` | Sends commands to blakserv's maintenance port (localhost:9998). |
+| `tools/deploy/` | `stage.ts` gathers the Docker build context in `deploy/.stage` (git-ignored: game data and art); `push.ts` ships it to the VM over ssh and restarts the stack. |
+| `deploy/` | The hosted stack: `docker-compose.yml`, the blakserv Linux image, the gateway image, the Caddyfile, and the run book (`deploy/README.md`). |
 | `server/config/blakserv.cfg` | Our server config, the source of truth. Copied into the run folder by `server/setup-run.cmd`. |
 | `server/build.cmd`, `server/setup-run.cmd` | Build `blakserv` + Kod, and prepare the run folder. |
 | `server/src/` | **Git-ignored** copy of the Server 104 source plus build output; `server/src/run/server` is the live run folder (savegames!). |
@@ -90,6 +92,7 @@ npm run check               # typecheck + lint + tests
 - **Object ids:** number items (shillings) carry a tag in the id's top 4 bits. Send plain id fields without it (`objId`, as `protocol.c GetObjId` does) and object-list fields with it plus the amount. Look ids up through `WorldState`'s maps, which ignore the tag like the client's `CompareIdObject`.
 - **Testing combat on our server:** `send object <id> SetHealth amount int 1` and `send object <id> Killed` on the maintenance port force a death; the Underworld's "rip in space" brings you back. Never do this on a server with real players.
 - **The first-person hands** are sized like the D3D client's 800 × 600 back buffer: a bitmap pixel is 1.75/800 of the view's width and 2.25/600 of its height (`screenOverlays.ts`).
+- **Hosting:** blakserv runs on Linux from `deploy/blakserv/Dockerfile`; keep `deploy/blakserv/blakserv.cfg` in step with `server/config/blakserv.cfg`. The game data in the image comes from our Windows build, so rebuild with `serveruild.cmd` and restage after Kod changes. Vite's bundles go to `/assets-client/` because `/assets/` is the game files.
 - **Settings** live in `localStorage`. Hot reloading `settings.ts` makes a second copy of its listeners, so reload the page after editing it.
 - **Trying shops and rooms quickly:** `node tools/maint/maint.ts "send object <player id> TeleportTo RID int 303"` moves a logged-in character on our server (303 smithy, 332 vault, 333 bank, 330 Outskirts).
 - **Movement is client-authoritative but checked:** keep `PlayerMover` byte-for-byte faithful to `move.c` (units, step sizes, thresholds). The server only rejects off-map destinations, and other players' original clients see our moves.
