@@ -113,7 +113,8 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     go: k("Space"),
     interact: k("KeyF"),
     lookAt: k("KeyR"),
-    examine: [],
+    // right click examines, as in the original (merintr.c VK_RBUTTON A_LOOKMOUSE)
+    examine: k("Mouse1"),
     offer: [],
     buy: [],
     deposit: [],
@@ -274,9 +275,15 @@ export interface Settings {
 
   /** Minimap zoom (map.c zoom: 0.5 .. 8) */
   mapZoom: number;
+  /** The chat window: the tab shown, and its height in pixels (dragged by its top edge) */
+  chatTab: ChatTab;
+  chatHeight: number;
 }
 
-const SETTINGS_VERSION = 3;
+/** The chat window's tabs: everything, or one channel (packages/world chatChannel.ts) */
+export type ChatTab = "all" | "chat" | "combat" | "server";
+
+const SETTINGS_VERSION = 4;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
@@ -323,6 +330,8 @@ export const DEFAULT_SETTINGS: Settings = {
   hotkeyAliases: DEFAULT_HOTKEY_ALIASES,
   commandAliases: {},
   mapZoom: 1,
+  chatTab: "all",
+  chatHeight: 168,
 };
 
 const STORAGE_KEY = "shards.settings";
@@ -344,6 +353,12 @@ export function migrate(s: SavedSettings): Settings {
     const scale = Math.round(Math.max(1, Math.min(30, (s.mouseSpeed ?? 1) * 15)));
     out.mouseXScale = out.mouseYScale = scale;
     if (s.rightClickLooks && !keys.examine.some((b) => b.code === "Mouse1")) keys.examine = [...keys.examine, { code: "Mouse1" }];
+  }
+  if (version < 4 && preset === "modern") {
+    // Version 4 (the description dialog): the right button examines in the modern preset too,
+    // instead of opening our old actions menu, unless it was bound to something else
+    const used = Object.values(keys).some((list) => list.some((b) => b.code === "Mouse1"));
+    if (!used) keys.examine = [...keys.examine, { code: "Mouse1" }];
   }
   delete (out as SavedSettings).mouseSpeed;
   delete (out as SavedSettings).rightClickLooks;

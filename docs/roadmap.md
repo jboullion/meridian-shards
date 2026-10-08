@@ -143,8 +143,28 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
   - the Map key's full-screen map.
   - Guilds wait for the guild messages.
 - [ ] Emotes and moods, as their own menu (`TODO.md`).
+
+### 10. Looking and picking up (2026-10-07)
+
+- [x] The description dialog (`dialog.c`, IDD_DESC and IDD_DESCPLAYER) on right click, everywhere:
+  - the picture (animated), the name, the text, and inscriptions in pages;
+  - a player's own words and web page, editable for us;
+  - the original's buttons: Get, Drop, Use, Unuse, apply.
+- [x] Picking up as the original does: dragging to the inventory, Get, and Pick Up / `get` with the pick list (`lookdlg.c`).
+- [x] Targeting only what can be attacked (`gameuser.c UserAttack`); no hover tint, no target name over the view.
+- [x] Containers (`BP_SEND_OBJECT_CONTENTS`, `BP_OBJECT_CONTENTS`, `BP_REQ_GET_FROM_CONTAINER`, `BP_REQ_PUT`): Inside, double click or drag to open, take out with amounts, typed `put`. Tested with a storage box on our server.
+- [x] A list when several objects are under the cursor (look, target, activate, get), and the Look key / `look` listing everything in view.
 - [x] The title bar on the desktop is our own: the system frame is gone, with the flower icon, ☰, the room name (no longer over the 3D view), the latency meter, and minimize / maximize / close (close logs off, asking first mid-game).
   - The latency meter is lagbox.c's ping-to-echo round trip: green to 250 ms, yellow to 750 ms, red beyond, with its wording on hover ("fast connection: approximately 73ms latency"). "Show latency meter" in Preferences turns it off.
+
+### 11. Sky and polish (2026-10-08)
+
+- [x] The sun and moon (`BP_ADD/CHANGE/REMOVE_BG_OVERLAY`), placed as the software renderer does (`drawbsp.c`); the D3D client never drew them. Right click looks at them (the sun dazzles you, as Kod says).
+- [x] After a server save: `BP_WAIT` clears the target and `BP_INVALIDATE_DATA` fetches the player, room, players and inventory again (`game.c ResetUserData`). Before this, ids went stale after every save.
+- [x] Tall item pictures (emeralds, potions) fit their inventory boxes; the description picture is padded and contained.
+- [x] Mouselook keeps the cursor in the window (a plain pointer lock); the Preferences window plays its audio choices as you make them.
+- [x] The chat window: tabs (All, Chat, Combat, Server), each keeping its own 300 lines, with a mark for new lines; drag its top edge to resize. Both are remembered.
+- [x] The desktop app's window and taskbar button use the shard icon, grouped with the installer's shortcuts (`AppUserModelId`).
 
 ## What the slice must prove
 

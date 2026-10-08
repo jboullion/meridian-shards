@@ -4,7 +4,7 @@
 import {
   BP, ByteReader, CLIENT_TAG_NUMBER, EFFECT, ENCHANT, objId, objTag, readEffect, readPlayerOverlay, readRadiusShoot, readShoot, type Shot, readAddEnchantment, readChange, readMove, readObject,
   readObjectList, readPlayer, readRemoveEnchantment, readRoomContents, readRoomObject, readSpells, readStat,
-  readStatGroup, readStatGroups, readTurn, readUseList, readSpell, type Animation, type ObjectInfo, type Overlay,
+  readStatGroup, readStatGroups, readTurn, readUseList, readSpell, readBgOverlay, type Animation, type BgOverlay, type ObjectInfo, type Overlay,
   type PlayerInfo, type RoomObject, type Spell, type Statistic,
 } from "@shards/protocol";
 import { animStateFrom, type AnimState } from "./animation.ts";
@@ -89,7 +89,20 @@ export type WorldEvent =
   /** Our first-person overlays (weapon and shield hands) changed. */
   | { type: "playerOverlays" }
   /** A screen effect started or stopped (blind, paralyzed, pain...). */
-  | { type: "effect"; effect: number };
+  | { type: "effect"; effect: number }
+  /** The sun or moon was added, moved or removed (BP_ADD/CHANGE/REMOVE_BG_OVERLAY) */
+  | { type: "bgOverlays" }
+  /**
+   * Object ids are about to change (BP_WAIT before a save) or have changed (BP_INVALIDATE_DATA
+   * after it): the target and anything else holding an id is stale
+   */
+  | { type: "idsStale" };
+
+/** The sun or the moon on the sky (boverlay.c), with its animation. */
+export interface BgOverlayState {
+  info: BgOverlay;
+  look: Look;
+}
 
 /** A projectile in flight (project.c Projectile): a sprite moving from source to dest. */
 export interface Projectile {
@@ -201,6 +214,8 @@ export class WorldState {
   /** First-person overlays, slots 1 and 2 (index 0 and 1). */
   readonly playerOverlays: (PlayerOverlayState | null)[] = [null, null];
   effects: Effects = noEffects();
+  /** The sun and moon (current_room.bg_overlays), by id; the server sends them at logon and every game hour */
+  readonly bgOverlays = new Map<number, BgOverlayState>();
   /** Projectiles flying in the room (current_room.projectiles) */
   readonly projectiles = new Map<number, Projectile>();
   private nextProjectile = -1;
@@ -263,6 +278,32 @@ export class WorldState {
         o.y = Math.round(m.sourceY + m.progress * (m.destY - m.sourceY));
       }
     }
+  }
+
+  /** BP_WAIT: a save is coming and will renumber objects; drop what holds an id (the target). */
+  emitIdsStale(): void {
+    this.emit({ type: "idsStale" });
+  }
+
+  /**
+   * game.c ResetUserData (BP_INVALIDATE_DATA, sent after the server's garbage collection has
+   * renumbered every object): forget the room, the inventory and our overlays; the session asks
+   * for them again. The sun and moon stay: the server only sends them at logon, and their next
+   * hourly update replaces them by picture (the original drops them until then).
+   */
+  resetData(): void {
+    this.objects.clear();
+    this.projectiles.clear();
+    this.inventory.clear();
+    this.inUse.clear();
+    this.enchantments.player.clear();
+    this.enchantments.room.clear();
+    this.playerOverlays[0] = this.playerOverlays[1] = null;
+    this.emit({ type: "idsStale" });
+    this.emit({ type: "inventory" });
+    this.emit({ type: "inUse" });
+    this.emit({ type: "enchantments" });
+    this.emit({ type: "playerOverlays" });
   }
 
   /** Feed one game-mode message (positioned after the type byte). Returns true if handled. */
@@ -378,6 +419,21 @@ export class WorldState {
         this.lighting.shadeIntensity = r.u8();
         this.lighting.sunAngle = r.u16();
         this.emit({ type: "lighting" });
+        return true;
+      case BP.ADD_BG_OVERLAY:
+      case BP.CHANGE_BG_OVERLAY: {
+        // boverlay.c BackgroundOverlayAdd / BackgroundOverlayChange
+        const info = readBgOverlay(r);
+        // After a save renumbers objects, the hourly update comes under a new id: the same
+        // picture replaces the old one rather than showing twice
+        for (const [id, b] of this.bgOverlays) if (id !== info.id && b.info.iconRes === info.iconRes) this.bgOverlays.delete(id);
+        this.bgOverlays.set(info.id, { info, look: lookFrom(info.animation, [], info.translation) });
+        this.emit({ type: "bgOverlays" });
+        return true;
+      }
+      case BP.REMOVE_BG_OVERLAY:
+        this.bgOverlays.delete(r.u32());
+        this.emit({ type: "bgOverlays" });
         return true;
       case BP.BACKGROUND:
         this.background = r.u32();

@@ -32,13 +32,6 @@ const TABS: { tab: Tab; group: number; bitmap: string; label: string }[] = [
   { tab: "quests", group: STAT_GROUP.QUESTS, bitmap: "statbtn_left_quest.bmp", label: "Quests" },
 ];
 
-/** Inventory right click / spell or quest actions, shown by the game view as a menu. */
-export interface ItemMenu {
-  object: ObjectInfo;
-  x: number;
-  y: number;
-}
-
 export function ObjIcon({
   icons, object, opts, className, title,
 }: {
@@ -104,7 +97,7 @@ function StatBar({ stat, main = false, xpAsPercent = false }: { stat: Statistic;
 }
 
 export function Sidebar({
-  session, icons, assets, getRoom, tab, onTab, settings, onItemMenu, onDropItem, target, selecting, onSelectObject, onCast,
+  session, icons, assets, getRoom, tab, onTab, settings, onLookItem, onLook, onDropItem, target, selecting, onSelectObject, onCast,
 }: {
   session: GameSession;
   icons: IconRenderer;
@@ -114,13 +107,16 @@ export function Sidebar({
   onTab: (t: Tab) => void;
   /** Map zoom, Show dynamic map, Show amounts for inventory items, Display XP as percent */
   settings: Settings;
-  onItemMenu: (m: ItemMenu) => void;
+  /** Right click on an inventory item (inventry.c A_LOOKINVENTORY): its description with Drop and Use */
+  onLookItem: (o: ObjectInfo) => void;
+  /** Right click on our face, a spell or a skill: its description, nothing more (SetDescParams DESC_NONE) */
+  onLook: (id: number) => void;
   onDropItem: (o: ObjectInfo) => void;
   /** The selected target, for the self-target ring behind our face */
   target: number | null;
   /** Picking a spell target (GAME_SELECT): clicks on our face or an item pick it */
   selecting: boolean;
-  /** Our face or an item was clicked as a target */
+  /** Our face or an item was picked as a spell target */
   onSelectObject: (id: number) => void;
   onCast: (spell: number, numTargets: number) => void;
 }) {
@@ -144,9 +140,12 @@ export function Sidebar({
         <div
           className={selecting ? "portrait selecting" : "portrait"}
           title={self ? rs(self.info.nameRes) : ""}
-          // userarea.c: a click targets us (or picks us as a spell target); a double click looks
-          onClick={() => self && onSelectObject(self.id)}
-          onDoubleClick={() => self && session.look(self.id)}
+          // userarea.c UserAreaProc: a click picks us as a spell target; a right click looks at us
+          onClick={() => self && selecting && onSelectObject(self.id)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            if (self) onLook(self.id);
+          }}
         >
           {self && target === self.id && selfTargetImg && <img className="self-target" src={selfTargetImg} alt="" draggable={false} />}
           {self && <PortraitIcon icons={icons} object={self.info} />}
@@ -185,13 +184,14 @@ export function Sidebar({
           <StatTab key={t.tab} assets={assets} bitmap={t.bitmap} label={t.label} active={tab === t.tab} onClick={() => pick(t.tab, t.group)} />
         ))}
       </div>
-      <div className="stat-area" style={{ backgroundImage: ui("invbkgnd.bmp") }}>
+      {/* "inventory-panel": where dragging an object from the view picks it up (mermain.c A_ENDDRAG) */}
+      <div className={tab === "inventory" ? "stat-area inventory-panel" : "stat-area"} style={{ backgroundImage: ui("invbkgnd.bmp") }}>
         {tab === "inventory" ? (
           <Inventory
             session={session}
             icons={icons}
             assets={assets}
-            onItemMenu={onItemMenu}
+            onLookItem={onLookItem}
             onDropItem={onDropItem}
             selecting={selecting}
             onSelectObject={onSelectObject}
@@ -204,7 +204,7 @@ export function Sidebar({
             session={session}
             icons={icons}
             group={tab === "spells" ? STAT_GROUP.SPELLS : tab === "skills" ? STAT_GROUP.SKILLS : STAT_GROUP.QUESTS}
-            onItemMenu={onItemMenu}
+            onLook={onLook}
             onCast={onCast}
           />
         )}
@@ -221,14 +221,14 @@ function PortraitIcon({ icons, object }: { icons: IconRenderer; object: ObjectIn
 
 /** inventry.c: a grid of 40x40 boxes; in-use items sit on the yellow sun (inuse.bmp). */
 function Inventory({
-  session, icons, assets, onItemMenu, onDropItem, selecting, onSelectObject, showAmounts,
+  session, icons, assets, onLookItem, onDropItem, selecting, onSelectObject, showAmounts,
 }: {
   /** Show amounts for inventory items (config.inventory_num) */
   showAmounts: boolean;
   session: GameSession;
   icons: IconRenderer;
   assets: AssetStore;
-  onItemMenu: (m: ItemMenu) => void;
+  onLookItem: (o: ObjectInfo) => void;
   onDropItem: (o: ObjectInfo) => void;
   selecting: boolean;
   onSelectObject: (id: number) => void;
@@ -255,10 +255,11 @@ function Inventory({
           // inventry.c: in GAME_SELECT a click picks the item as a spell target
           onClick={() => (selecting ? onSelectObject(o.id) : setSelected(o.id))}
           onDoubleClick={() => !selecting && toggleUse(o)}
+          // inventry.c: VK_RBUTTON is A_LOOKINVENTORY
           onContextMenu={(e: ReactMouseEvent) => {
             e.preventDefault();
             setSelected(o.id);
-            onItemMenu({ object: o, x: e.clientX, y: e.clientY });
+            onLookItem(o);
           }}
           onKeyDown={(e) => {
             if (e.key === "Delete") onDropItem(o);
@@ -296,12 +297,12 @@ function NumericStats({ stats, rs }: { stats: Statistic[]; rs: (id: number) => s
 
 /** statlist.c: icon and "name NN%" (quests: name only; headers green). */
 function StatList({
-  session, icons, group, onItemMenu, onCast,
+  session, icons, group, onLook, onCast,
 }: {
   session: GameSession;
   icons: IconRenderer;
   group: number;
-  onItemMenu: (m: ItemMenu) => void;
+  onLook: (id: number) => void;
   onCast: (spell: number, numTargets: number) => void;
 }) {
   const world = session.world;
@@ -314,7 +315,6 @@ function StatList({
     const l = s.list!;
     if (!l) return null;
     const header = quests && l.value === 0;
-    const object = spellFor(l.id)?.object ?? world.skills.find((k) => k.id === l.id) ?? null;
     return (
       <div
         key={`${s.num}:${i}`}
@@ -322,14 +322,14 @@ function StatList({
         onClick={() => setSelected(i)}
         onDoubleClick={() => {
           if (group === STAT_GROUP.SPELLS && l.id) onCast(l.id, spellFor(l.id)?.numTargets ?? 0);
-          else if (l.id) session.look(l.id);
+          else if (l.id) onLook(l.id);
         }}
+        // statlist.c StatsListRButton: look at it (not quest headers)
         onContextMenu={(e) => {
           e.preventDefault();
-          if (!l.id) return;
+          if (!l.id || header) return;
           setSelected(i);
-          const o = object ?? ({ id: l.id, nameRes: s.nameRes, iconRes: l.icon } as ObjectInfo);
-          onItemMenu({ object: o, x: e.clientX, y: e.clientY });
+          onLook(l.id);
         }}
       >
         {!header && <ObjIcon icons={icons} object={l.icon ? bareIcon(l.icon) : null} className="list-icon" />}

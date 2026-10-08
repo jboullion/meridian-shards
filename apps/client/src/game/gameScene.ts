@@ -13,7 +13,7 @@
 import * as THREE from "three";
 import { FINENESS, leafAt, skyboxForBackground, type Bgf, type Room } from "@shards/formats";
 import {
-  DRAWFX, OF, ObjectsView, RoomView, XlatTable, disposeSkybox, objectBrightness, paletteTexture, type LightSource,
+  DRAWFX, OF, ObjectsView, RoomView, SkyOverlaysView, XlatTable, disposeSkybox, objectBrightness, paletteTexture, type LightSource,
   type NameLabel, type ViewObject,
 } from "@shards/render";
 import { PlayerMover, animStep, type GameSession, type WorldObject } from "@shards/world";
@@ -32,9 +32,12 @@ const MOUSE_TURN = 2.5;
 /** Keyboard look up/down speed, radians per second (A_LOOKUP / A_LOOKDOWN held). */
 const PITCH_RATE = 1.2;
 const MAX_PITCH = 1.2;
-const OF_GETTABLE = 0x10;
-const OF_ACTIVATABLE = 0x800;
+const OF_PLAYER = 0x4;
 const OF_ATTACKABLE = 0x8;
+const OF_GETTABLE = 0x10;
+const OF_CONTAINER = 0x20;
+const OF_NOEXAMINE = 0x40;
+const OF_ACTIVATABLE = 0x800;
 /** gameuser.c: at most one attack every 250 ms; the closest target must be this near */
 const ATTACK_DELAY = 250;
 const CLOSE_DISTANCE = 5 * FINENESS;
@@ -48,16 +51,6 @@ export interface GameSceneStatus {
   objects: number;
   lights: number;
   loading: boolean;
-}
-
-export interface ObjectAction {
-  id: number;
-  name: string;
-  canGet: boolean;
-  canActivate: boolean;
-  /** screen position for a menu */
-  x: number;
-  y: number;
 }
 
 /** The longest the view waits for a new room's sprites and sky before showing it anyway. */
@@ -75,6 +68,8 @@ export class GameScene {
   private palette: THREE.Texture | null = null;
   private xlats: XlatTable | null = null;
   private objects: ObjectsView | null = null;
+  /** The sun and the moon (boverlay.c) */
+  private skyOverlays: SkyOverlaysView | null = null;
   private room: Room | null = null;
   private roomView: RoomView | null = null;
   private roomRes = 0;
@@ -98,6 +93,8 @@ export class GameScene {
   private readonly keys = new Set<string>();
   private mouse: { x: number; y: number } | null = null;
   private hovered: number | null = null;
+  /** graphics.c UserStartDrag: a room object being dragged towards the inventory */
+  private drag: number | null = null;
   private raf = 0;
   private last = performance.now();
   private disposed = false;
@@ -125,8 +122,17 @@ export class GameScene {
   onStatus?: (s: GameSceneStatus) => void;
   /** Enter pressed: focus the chat input */
   onChatKey?: () => void;
-  /** Right click on an object: show an actions menu */
-  onObjectMenu?: (a: ObjectAction) => void;
+  /** Look at a room object (A_LOOKMOUSE, A_LOOK): the description dialog */
+  onLook?: (id: number) => void;
+  /** Pick up (A_PICKUP): the gettable objects to choose from; just one is picked up at once */
+  onPickup?: (ids: number[]) => void;
+  /**
+   * Several objects qualify (lookdlg.c DisplayLookList with LD_SINGLEAUTO): ask which one, under
+   * `title` (IDS_LOOK, IDS_ATTACK, IDS_ACTIVATE, IDS_GET), with `initial` chosen to start with
+   */
+  onChoose?: (title: string, ids: number[], then: (id: number) => void, initial?: number) => void;
+  /** Look inside a container (BP_SEND_OBJECT_CONTENTS; the contents come back as BP_OBJECT_CONTENTS) */
+  onContents?: (id: number) => void;
   /** A key bound to a panel action (inventory, settings, map zoom) */
   onAction?: (a: Action) => void;
   /** Say, Tell, Yell, Broadcast, Emote keys: start a chat line with this command */
@@ -204,6 +210,12 @@ export class GameScene {
         case "objectRemoved":
           if (this.target !== null && e.id === this.target) this.setTarget(null);
           break;
+        case "idsStale":
+          // server.c HandleWait / HandleInvalidateData: SetUserTargetID(INVALID_ID)
+          this.setTarget(null);
+          if (this.selecting) this.select(null);
+          this.drag = null;
+          break;
 
       }
     });
@@ -228,6 +240,8 @@ export class GameScene {
     this.xlats = new XlatTable(pal.rgb, lightPal);
     this.objects = new ObjectsView(this.palette, this.xlats, (id) => this.bgf(id), (id) => this.session.resource(id));
     this.scene.add(this.objects.group);
+    this.skyOverlays = new SkyOverlaysView(pal.rgb);
+    this.scene.add(this.skyOverlays.group);
     this.applyViewSettings();
     this.overlays = new ScreenOverlays(this.labelsEl.parentElement!, pal.rgb, this.xlats, (id) => this.bgf(id));
     await this.syncRoom();
@@ -409,6 +423,14 @@ export class GameScene {
     const labels = this.objects.update(drawn, ctx, this.lights, self.id);
     this.sky?.position.copy(this.camera.position);
     this.camera.updateMatrixWorld();
+    // drawbsp.c doDrawBackground: no sun or moon when blind
+    this.skyOverlays?.update(
+      [...world.bgOverlays.values()].map((b) => ({
+        id: b.info.id, bgf: this.bgf(b.info.iconRes), group: b.look.anim.group, angle: b.info.angle, height: b.info.height,
+      })),
+      this.camera,
+      !world.effects.blind,
+    );
     this.updateHover();
     this.objects.setTarget(this.target);
     this.renderer.render(this.scene, this.camera);
@@ -570,6 +592,8 @@ export class GameScene {
       for (const ov of o.look.overlays) animStep(ov.anim, this.bgf(ov.iconRes)?.groups.length ?? 0, dt);
     }
     for (const p of this.session.world.projectiles.values()) animStep(p.look.anim, this.bgf(p.info.iconRes)?.groups.length ?? 0, dt);
+    // animate.c AnimationTimerProc: the background overlays animate too
+    for (const b of this.session.world.bgOverlays.values()) animStep(b.look.anim, this.bgf(b.info.iconRes)?.groups.length ?? 0, dt);
     // the hands: a weapon swing is an animation on the player overlay
     for (const p of this.session.world.playerOverlays) {
       if (!p) continue;
@@ -597,10 +621,10 @@ export class GameScene {
       this.raycaster.far = 40;
       id = this.objects.pick(this.raycaster);
     }
+    // cursor.c GameWindowSetCursor: a cross over an object, nothing more (the halo is the target's alone)
     if (id !== this.hovered) {
       this.hovered = id;
-      this.objects.setHighlight(id);
-      this.canvas.style.cursor = this.selecting ? "crosshair" : id !== null && !this.locked ? "pointer" : "";
+      if (this.drag === null) this.canvas.style.cursor = this.selecting ? "crosshair" : id !== null && !this.locked ? "pointer" : "";
     }
   }
 
@@ -649,31 +673,90 @@ export class GameScene {
     });
   }
 
-  private actionFor(id: number, x: number, y: number): ObjectAction | null {
+  /** How far a room object is from us, in fine units (room_contents_node distance). */
+  private distanceTo(id: number): number {
     const o = this.session.world.objects.get(id);
-    if (!o) return null;
-    return {
-      id,
-      name: this.session.resource(o.info.nameRes) ?? "",
-      canGet: (o.info.flags & OF_GETTABLE) !== 0,
-      canActivate: (o.info.flags & OF_ACTIVATABLE) !== 0,
-      x,
-      y,
-    };
+    const self = this.session.world.self;
+    return o && self ? Math.hypot(o.x - self.x, o.y - self.y) : Infinity;
   }
 
-  /** F key / menu default: pick up if gettable, else activate. */
-  private interact(id: number): void {
-    const o = this.session.world.objects.get(id);
-    if (!o) return;
-    if (o.info.flags & OF_GETTABLE) this.session.pickUp(id);
-    else if (o.info.flags & OF_ACTIVATABLE) this.session.activate(id);
-    else this.session.look(id);
+  /** gameuser.c UserPickup: the gettable things in view close by; several are offered in a list. */
+  pickUpNearby(): void {
+    const ids = this.visibleObjects(OF_GETTABLE, CLOSE_DISTANCE).map((o) => o.id);
+    if (ids.length) this.onPickup?.(ids);
+  }
+
+  /** gameuser.c UserLook (the Look key, typed "look"): everything in view that can be examined. */
+  lookInView(): void {
+    const ids = this.visibleObjects(0)
+      .filter((o) => !(o.info.flags & OF_NOEXAMINE))
+      .map((o) => o.id);
+    this.choose("Look", ids, (id) => this.onLook?.(id), this.target ?? undefined);
+  }
+
+  /**
+   * client3d.c GetObjects3D at the mouse: the objects drawn under the cursor (the crosshair while
+   * the mouse is captured), not hidden by a wall, that pass `test`, nearest first.
+   */
+  private objectsUnderCursor(test: (o: WorldObject) => boolean = () => true): number[] {
+    if (!this.objects || !this.cursorRay()) return [];
+    const hits = this.objects.pickAll(this.raycaster);
+    const out: WorldObject[] = [];
+    for (const h of hits) {
+      const o = this.session.world.objects.get(h.id);
+      if (!o || !test(o)) continue;
+      if (this.roomView) {
+        this.raycaster.far = h.distance - LABEL_OCCLUSION_SLACK;
+        const hidden = this.raycaster.far > 0 && this.roomView.occludes(this.raycaster);
+        this.raycaster.far = 40;
+        if (hidden) continue;
+      }
+      out.push(o);
+    }
+    return out.sort((a, b) => this.distanceTo(a.id) - this.distanceTo(b.id)).map((o) => o.id);
+  }
+
+  /** The sun or moon under the cursor, where the sky shows (no wall in front of it). */
+  private skyUnderCursor(): number | null {
+    if (!this.skyOverlays || !this.cursorRay()) return null;
+    const id = this.skyOverlays.pick(this.raycaster);
+    if (id === null) return null;
+    if (this.roomView) {
+      this.raycaster.far = 400;
+      const hidden = this.roomView.occludes(this.raycaster);
+      this.raycaster.far = 40;
+      if (hidden) return null;
+    }
+    return id;
+  }
+
+  /** Aim this.raycaster from the eye through the cursor (the crosshair while captured); false if there's no cursor. */
+  private cursorRay(): boolean {
+    let ndc: THREE.Vector2 | null = null;
+    if (this.locked) ndc = new THREE.Vector2(0, 0);
+    else if (this.mouse) {
+      const r = this.canvas.getBoundingClientRect();
+      ndc = new THREE.Vector2(((this.mouse.x - r.left) / r.width) * 2 - 1, -((this.mouse.y - r.top) / r.height) * 2 + 1);
+    }
+    if (!ndc || this.session.world.effects.blind) return false;
+    this.raycaster.setFromCamera(ndc, this.camera);
+    this.raycaster.far = 40;
+    return true;
+  }
+
+  /** lookdlg.c DisplayLookList with LD_SINGLEAUTO: one object goes straight through, several are asked about. */
+  private choose(title: string, ids: number[], then: (id: number) => void, initial?: number): void {
+    if (!ids.length) return;
+    if (ids.length === 1) return then(ids[0]);
+    if (this.locked) document.exitPointerLock();
+    this.onChoose?.(title, ids, then, initial);
   }
 
   // ---- input ----
 
   private readonly onMouseDown = (e: MouseEvent) => {
+    // What the click is on: the cursor where it was pressed
+    if (!this.locked) this.mouse = { x: e.clientX, y: e.clientY };
     if (this.selecting) {
       if (e.button === 0 && this.hovered !== null) this.select(this.hovered);
       return;
@@ -681,43 +764,85 @@ export class GameScene {
     // Mouse buttons are bound like keys (config.ini mousetarget=mouse0, examine=mouse1)
     const actions = actionsFor(this.settings.keys, mouseCode(e.button), { alt: e.altKey, ctrl: e.ctrlKey });
     for (const a of actions) this.trigger(a);
-    // A left click on nothing captures the mouse for mouselook
-    if (e.button === 0 && !this.locked && (this.hovered === null || !actions.includes("selectTarget"))) this.lockPointer();
+    if (e.button !== 0 || this.locked) return;
+    // Select Target took it (a player or a monster under the cursor)
+    if (actions.includes("selectTarget") && this.objectsUnderCursor((o) => (o.info.flags & OF_ATTACKABLE) !== 0).length) return;
+    // graphics.c UserStartDrag: the left button on something gettable (or a container) close by
+    // starts dragging it; letting go over the inventory picks it up or looks inside
+    // (mermain.c A_ENDDRAG). Several there: which one to get
+    const near = this.objectsUnderCursor((o) => (o.info.flags & (OF_GETTABLE | OF_CONTAINER)) !== 0 && this.distanceTo(o.id) <= CLOSE_DISTANCE);
+    if (near.length === 1) {
+      this.drag = near[0];
+      this.canvas.style.cursor = "grabbing";
+      window.addEventListener("mouseup", this.onDragEnd);
+      return;
+    }
+    if (near.length > 1) return this.choose("Get", near, (id) => this.getOrOpen(id));
+    // A left click on nothing (or nothing we can use) captures the mouse for mouselook
+    this.lockPointer();
   };
 
-  /** Select Target: what's under the cursor (gameuser.c SetUserTargetID); Attack On Target attacks it too. */
-  private selectHovered(): void {
-    if (this.hovered === null) return;
-    this.setTarget(this.hovered);
-    const o = this.session.world.objects.get(this.hovered);
-    if (this.settings.attackOnTarget && o && o.info.flags & OF_ATTACKABLE) this.attack();
+  /** mermain.c A_ENDDRAG: a container that can't be picked up is looked inside instead. */
+  private getOrOpen(id: number): void {
+    const o = this.session.world.objects.get(id);
+    if (!o) return;
+    if (o.info.flags & OF_CONTAINER && !(o.info.flags & OF_GETTABLE)) this.onContents?.(id);
+    else this.session.pickUp(id);
   }
 
+  private readonly onDragEnd = (e: MouseEvent) => {
+    window.removeEventListener("mouseup", this.onDragEnd);
+    const id = this.drag;
+    this.drag = null;
+    this.canvas.style.cursor = this.hovered !== null ? "pointer" : "";
+    if (id === null) return;
+    // mermain.c A_ENDDRAG: only a drop on the inventory counts
+    const over = document.elementFromPoint(e.clientX, e.clientY);
+    if (over?.closest(".inventory-panel")) this.getOrOpen(id);
+  };
+
   /**
-   * Raw mouse movement (no OS acceleration) where the platform has it, like the original's
-   * DirectInput mouselook; otherwise a plain lock. Chromium refuses a re-lock for about a
-   * second after Esc, which is harmless here.
+   * Select Target (gameuser.c UserAttack, config.ini mousetarget): only something attackable
+   * under the cursor, a player or a monster; Attack On Target attacks it too.
    */
-  private lockPointer(): void {
-    this.canvas.requestPointerLock({ unadjustedMovement: true }).catch((e: DOMException) => {
-      if (e.name === "NotSupportedError") this.canvas.requestPointerLock().catch(() => {});
+  private selectHovered(): void {
+    const ids = this.objectsUnderCursor((o) => (o.info.flags & OF_ATTACKABLE) !== 0);
+    this.choose("Attack", ids, (id) => {
+      this.setTarget(id);
+      if (this.settings.attackOnTarget) this.attack();
     });
   }
 
-  /** Double click: pick up or activate (merintr EventMouseClick: A_ACTIVATEMOUSE). */
-  private readonly onDoubleClick = () => {
-    if (this.hovered !== null) this.interact(this.hovered);
+  /**
+   * Capture the mouse for mouselook (gameuser.c UserMouselookToggle confines the cursor with
+   * ClipCursor). A plain pointer lock: the raw-input kind ({ unadjustedMovement: true }) let the
+   * cursor wander out of the window on Windows while looking around. Chromium refuses a re-lock
+   * for about a second after Esc, which is harmless here.
+   */
+  private lockPointer(): void {
+    this.canvas.requestPointerLock().catch(() => {});
+  }
+
+  /**
+   * Double click (merintr.c EventMouseClick: A_ACTIVATEMOUSE, gameuser.c UserActivateMouse):
+   * activate what's under the cursor, or look inside a container, if it's close by and not a player.
+   */
+  private readonly onDoubleClick = (e: MouseEvent) => {
+    if (!this.locked) this.mouse = { x: e.clientX, y: e.clientY };
+    const ids = this.objectsUnderCursor(
+      (o) => (o.info.flags & (OF_ACTIVATABLE | OF_CONTAINER)) !== 0 && !(o.info.flags & OF_PLAYER) && this.distanceTo(o.id) <= CLOSE_DISTANCE,
+    );
+    this.choose("Activate", ids, (id) => {
+      const o = this.session.world.objects.get(id);
+      if (o && o.info.flags & OF_CONTAINER) this.onContents?.(id);
+      else this.session.activate(id);
+    });
   };
 
   private readonly onContextMenu = (e: MouseEvent) => {
+    // No browser menu: the right button is bound like a key (Examine), acted on at mousedown
     e.preventDefault();
-    if (this.selecting) return this.select(null);
-    // A right button bound to an action (the original's Examine) did that on mousedown
-    if (actionsFor(this.settings.keys, "Mouse1", { alt: e.altKey, ctrl: e.ctrlKey }).length) return;
-    if (this.locked) document.exitPointerLock();
-    if (this.hovered === null) return;
-    const a = this.actionFor(this.hovered, e.clientX, e.clientY);
-    if (a) this.onObjectMenu?.(a);
+    if (this.selecting) this.select(null);
   };
 
   private readonly onCanvasMouseMove = (e: MouseEvent) => {
@@ -746,6 +871,8 @@ export class GameScene {
     if (t?.closest?.(".dialog")) return;
     // A modal window (the options, a message box) is up: the game takes no keys, like the original's
     if (document.querySelector(".mk-modal")) return;
+    // Copying selected text (the chat window's) is the browser's: Ctrl+C isn't C (Mouselook Toggle)
+    if ((e.ctrlKey || e.metaKey) && (e.code === "KeyC" || e.code === "KeyX") && !window.getSelection()?.isCollapsed) return;
     const actions = actionsFor(this.settings.keys, e.code, { alt: e.altKey, ctrl: e.ctrlKey });
     // Alt alone would focus the browser menu; Alt+arrows would navigate back/forward.
     if (e.key === "Alt" || actions.length || e.code === "Space" || e.code.startsWith("Arrow")) e.preventDefault();
@@ -796,12 +923,12 @@ export class GameScene {
         else this.setTarget(null);
         break;
       case "interact":
-        if (this.hovered !== null) this.interact(this.hovered);
+        // A_PICKUP: UserPickup
+        this.pickUpNearby();
         break;
       case "lookAt":
-        // A_LOOK: the target, else what's under the cursor
-        if (this.target !== null) this.session.look(this.target);
-        else if (this.hovered !== null) this.session.look(this.hovered);
+        // A_LOOK: UserLook, everything in view (the target chosen to start with)
+        this.lookInView();
         break;
       case "lookStraight":
         this.pitch = 0;
@@ -813,17 +940,27 @@ export class GameScene {
         if (this.locked) document.exitPointerLock();
         this.onChatKey?.();
         break;
-      case "examine":
-        // A_LOOK at what's under the cursor (config.ini examine=mouse1)
-        if (this.hovered !== null) this.session.look(this.hovered);
+      case "examine": {
+        // A_LOOKMOUSE (config.ini examine=mouse1): UserLookMouseSquare, what's under the cursor;
+        // with nothing there, the sun or moon (client3d.c GetObjects3D's background overlays)
+        const ids = this.objectsUnderCursor();
+        if (!ids.length) {
+          const sky = this.skyUnderCursor();
+          if (sky !== null) this.onLook?.(sky);
+          break;
+        }
+        if (this.locked) document.exitPointerLock();
+        this.choose("Look", ids, (id) => this.onLook?.(id));
         break;
+      }
       case "selectTarget":
         this.selectHovered();
         break;
       case "mouselookToggle":
-        // intrface.c A_MOUSELOOK: UserMouselookToggle
+        // intrface.c A_MOUSELOOK: UserMouselookToggle. Only with the mouse over the view (the
+        // original's main window): not while it's on the chat, the interface or a dialog
         if (this.locked) document.exitPointerLock();
-        else this.lockPointer();
+        else if (this.mouse) this.lockPointer();
         break;
       case "say":
       case "tell":
@@ -889,6 +1026,7 @@ export class GameScene {
     this.unsubscribe();
     this.offSettings();
     this.resizeObserver.disconnect();
+    window.removeEventListener("mouseup", this.onDragEnd);
     this.canvas.removeEventListener("mousedown", this.onMouseDown);
     this.canvas.removeEventListener("dblclick", this.onDoubleClick);
     this.canvas.removeEventListener("contextmenu", this.onContextMenu);
@@ -900,6 +1038,7 @@ export class GameScene {
     window.removeEventListener("blur", this.onBlur);
     if (this.locked) document.exitPointerLock();
     this.objects?.dispose();
+    this.skyOverlays?.dispose();
     this.overlays?.dispose();
     this.rooms?.dispose();
     if (this.sky) disposeSkybox(this.sky);

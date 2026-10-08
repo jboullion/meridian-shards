@@ -6,3 +6,4 @@ export * from "./xlat.ts";
 export * from "./sprites.ts";
 export * from "./objectLighting.ts";
 export * from "./objectsView.ts";
+export * from "./skyOverlays.ts";

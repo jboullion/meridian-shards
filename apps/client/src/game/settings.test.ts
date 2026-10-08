@@ -17,14 +17,21 @@ describe("settings", () => {
 
   it("migrates version 2 settings: one mouse speed, right click looks", () => {
     const s = migrate({ version: 2, preset: "modern", mouseSpeed: 2, rightClickLooks: true, musicVolume: 40 } as never);
-    expect(s.version).toBe(3);
+    expect(s.version).toBe(4);
     expect(s.mouseXScale).toBe(30);
     expect(s.mouseYScale).toBe(30);
-    expect(s.keys.examine).toContainEqual({ code: "Mouse1" });
+    expect(s.keys.examine).toEqual([{ code: "Mouse1" }]);
     expect(s.musicVolume).toBe(40);
     expect(s.haloColor).toBe("red");
     expect("mouseSpeed" in s).toBe(false);
     expect("rightClickLooks" in s).toBe(false);
+  });
+
+  it("migrates version 3 settings: the right button examines, unless it does something else", () => {
+    const v3 = { version: 3, preset: "modern" as const, keys: { ...PRESETS.modern, examine: [] } };
+    expect(migrate(v3).keys.examine).toEqual([{ code: "Mouse1" }]);
+    const taken = migrate({ ...v3, keys: { ...v3.keys, attack: [{ code: "Mouse1" }] } });
+    expect(taken.keys.examine).toEqual([]);
   });
 
   it("matches modifiers exactly, with plain keys still working under an unbound modifier", () => {
@@ -74,7 +81,7 @@ describe("tell", () => {
 });
 
 describe("ignoring players", () => {
-  const line = (name: string, sayType: number = SAY.NORMAL): ChatLine => ({ kind: "say", spans: [], time: 0, sender: { id: 9, name }, sayType });
+  const line = (name: string, sayType: number = SAY.NORMAL): ChatLine => ({ kind: "say", channel: "chat", spans: [], time: 0, sender: { id: 9, name }, sayType });
   it("hides ignored players, broadcasts or everyone, never our own lines or system text", () => {
     updateSettings({ ...DEFAULT_SETTINGS, ignored: ["pest"] });
     expect(ignoredLine(line("Pest"), "Me")).toBe(true);
@@ -84,7 +91,7 @@ describe("ignoring players", () => {
     updateSettings({ ignoreEveryone: true });
     expect(ignoredLine(line("Friend"), "Me")).toBe(true);
     expect(ignoredLine(line("Me"), "Me")).toBe(false);
-    expect(ignoredLine({ kind: "system", spans: [], time: 0 }, "Me")).toBe(false);
+    expect(ignoredLine({ kind: "system", channel: "server", spans: [], time: 0 }, "Me")).toBe(false);
     updateSettings(DEFAULT_SETTINGS);
   });
 });

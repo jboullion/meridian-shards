@@ -1,23 +1,59 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { SAY, UC, type ObjectInfo } from "@shards/protocol";
-import { isNumberItem, type ChatLine, type GameSession, type LookResult, type OfferEvent, type SessionPhase, type TradeList } from "@shards/world";
+import { isNumberItem, type ChatLine, type ContainerContents, type GameSession, type LookResult, type OfferEvent, type SessionPhase, type TradeList } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
-import type { GameAudio } from "./audio.ts";
-import { GameScene, type GameSceneStatus, type ObjectAction } from "./gameScene.ts";
+import type { AudioPreview, GameAudio } from "./audio.ts";
+import { GameScene, type GameSceneStatus } from "./gameScene.ts";
 import type { IconRenderer } from "./icons.ts";
-import { expandCommandAlias, getSettings, onSettings, updateSettings, type Settings } from "./settings.ts";
+import { expandCommandAlias, getSettings, onSettings, updateSettings, type ChatTab, type Settings } from "./settings.ts";
 import { AmountDialog, GiveDialog, OfferDialog, TradeDialog, reduceOffer } from "./ui/Dialogs.tsx";
+import { DESC, DescriptionDialog, LookListDialog, type DescAction, type LookListChoice } from "./ui/LookDialogs.tsx";
 import { MiniMap } from "./ui/MiniMap.tsx";
 import {
   ActionsDialog, CommandAliasesDialog, ConfigurationDialog, GroupsDialog, GuildDialog, HotkeyAliasesDialog, PreferencesDialog, WhoDialog,
   type ActionWindow,
 } from "./ui/OptionsDialogs.tsx";
-import { Sidebar, type ItemMenu, type Tab } from "./ui/Sidebar.tsx";
+import { Sidebar, type Tab } from "./ui/Sidebar.tsx";
 import { TitleBar } from "./TitleBar.tsx";
 
 const MAX_LINES = 300;
+
+/** The chat window's tabs (ours; the original has one text window). */
+const CHAT_TABS: { tab: ChatTab; label: string }[] = [
+  { tab: "all", label: "All" },
+  { tab: "chat", label: "Chat" },
+  { tab: "combat", label: "Combat" },
+  { tab: "server", label: "Server" },
+];
+/** The chat window's height, dragged by its top edge: at least this, and leaving the view this much */
+const MIN_CHAT_HEIGHT = 60;
+const MIN_VIEW_HEIGHT = 160;
+
+const inTab = (tab: ChatTab, l: ChatLine) => tab === "all" || l.channel === tab;
+
+/**
+ * A new chat line, keeping at most `max` of each channel: a long fight can't push the
+ * conversation out of the Chat tab.
+ */
+export function appendChatLine(lines: readonly ChatLine[], line: ChatLine, max: number = MAX_LINES): ChatLine[] {
+  let n = 0;
+  for (const l of lines) if (l.channel === line.channel) n++;
+  if (n < max) return [...lines, line];
+  const drop = lines.findIndex((l) => l.channel === line.channel);
+  return [...lines.slice(0, drop), ...lines.slice(drop + 1), line];
+}
+
+/** object.c CompareObjectNameAndNumber: number items first, then by name. */
+export function sortByNameAndNumber(items: ObjectInfo[], name: (res: number) => string): ObjectInfo[] {
+  return [...items].sort(
+    (a, b) => Number(isNumberItem(b.id)) - Number(isNumberItem(a.id)) || name(a.nameRes).toLowerCase().localeCompare(name(b.nameRes).toLowerCase()),
+  );
+}
 const OF_PLAYER = 0x4;
-const OF_ATTACKABLE = 0x8;
+const OF_GETTABLE = 0x10;
+const OF_CONTAINER = 0x20;
+const OF_ACTIVATABLE = 0x800;
+const OF_APPLYABLE = 0x1000;
 /** include/proto.h: objects you can offer to (sell to, deposit with) and buy from */
 const OF_OFFERABLE = 0x200;
 const OF_BUYABLE = 0x400;
@@ -112,22 +148,21 @@ type Modal =
   | { type: "preferences" }
   | { type: "configuration" }
   | { type: "actions" }
-  | { type: "action"; window: ActionWindow };
-
-/** Menu for an object in the room or in the inventory. */
-interface Menu {
-  id: number;
-  name: string;
-  x: number;
-  y: number;
-  inventory: boolean;
-  object: ObjectInfo | null;
-  canGet: boolean;
-  canActivate: boolean;
-}
+  | { type: "action"; window: ActionWindow }
+  /** lookdlg.c DisplayLookList: choose among objects (to get, look at, attack, put away...) */
+  | {
+      type: "list";
+      title: string;
+      items: ObjectInfo[];
+      multiple?: boolean;
+      /** LD_AMOUNTS: how many of each number item */
+      amounts?: boolean;
+      initial?: number;
+      onDone: (chosen: LookListChoice[]) => void;
+    };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, look, onCloseLook, onLogout, trades, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, onLogout, trades, offers, serverPrefs, latency,
 }: {
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
@@ -139,8 +174,10 @@ export function GameView({
   icons: IconRenderer;
   phase: SessionPhase;
   chat: ChatLine[];
-  look: LookResult | null;
-  onCloseLook: () => void;
+  /** Subscribe to descriptions from the session (BP_LOOK, UC_LOOK_PLAYER) */
+  looks: (fn: (l: LookResult) => void) => () => void;
+  /** Subscribe to container contents (BP_OBJECT_CONTENTS) */
+  contents: (fn: (c: ContainerContents) => void) => () => void;
   onLogout: () => void;
   /** Subscribe to shop and offer events from the session */
   trades: (fn: (t: TradeList) => void) => () => void;
@@ -152,7 +189,10 @@ export function GameView({
   const logRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<GameScene | null>(null);
   const [status, setStatus] = useState<GameSceneStatus | null>(null);
-  const [menu, setMenu] = useState<Menu | null>(null);
+  /** The description dialog (dialog.c DisplayDescription) and its DESC_* buttons */
+  const [desc, setDesc] = useState<{ look: LookResult; buttons: number } | null>(null);
+  /** dialog.c SetDescParams: the buttons for the next description, set when we ask for it */
+  const descParams = useRef<number>(DESC.NONE);
   const [text, setText] = useState("");
   const [tab, setTab] = useState<Tab>("inventory");
   const [modal, setModal] = useState<Modal | null>(null);
@@ -163,9 +203,20 @@ export function GameView({
   /** The Map key: the map over the whole view (intrface.c A_MAP GraphicsToggleMap) */
   const [fullMap, setFullMap] = useState(false);
   const [fps, setFps] = useState<number | null>(null);
+  /** The chat window's height while its edge is being dragged (saved on letting go) */
+  const [dragHeight, setDragHeight] = useState<number | null>(null);
+  const gameRef = useRef<HTMLDivElement>(null);
+  /** When each chat tab was last looked at, for the new-lines mark on the others */
+  const [seenAt, setSeenAt] = useState<Record<ChatTab, number>>(() => {
+    const now = Date.now();
+    return { all: now, chat: now, combat: now, server: now };
+  });
   /** For the scene's callbacks, which outlive renders */
   const actionRef = useRef<(a: string) => void>(() => {});
   const hotkeyRef = useRef<(n: number) => void>(() => {});
+  const lookRef = useRef<(id: number) => void>(() => {});
+  /** The Preferences window's audio choices, heard before OK */
+  const previewAudio = useCallback((p: AudioPreview | null) => audio.preview(p), [audio]);
 
   useEffect(() => onSettings(setSettings), []);
 
@@ -190,7 +241,16 @@ export function GameView({
     scene.onTarget = setTarget;
     scene.onSelecting = setSelecting;
     scene.onMessage = (t) => session.localMessage(t);
-    scene.onObjectMenu = (a: ObjectAction) => setMenu({ ...a, inventory: false, object: session.world.objects.get(a.id)?.info ?? null });
+    scene.onLook = (id) => lookRef.current(id);
+    const roomObjects = (ids: number[]) => ids.flatMap((id) => session.world.objects.get(id)?.info ?? []);
+    // gameuser.c UserPickup: LD_MULTIPLESEL | LD_SINGLEAUTO
+    scene.onPickup = (ids) =>
+      ids.length === 1
+        ? session.pickUp(ids[0])
+        : setModal({ type: "list", title: "Get", items: roomObjects(ids), multiple: true, onDone: (c) => c.forEach((x) => session.pickUp(x.id)) });
+    scene.onChoose = (title, ids, then, initial) =>
+      setModal({ type: "list", title, items: roomObjects(ids), initial, onDone: (c) => c[0] && then(c[0].id) });
+    scene.onContents = (id) => session.requestContents(id);
     scene.onAction = (a) => actionRef.current(a);
     scene.onChatPrefix = (prefix) => {
       setText(prefix);
@@ -205,6 +265,46 @@ export function GameView({
   }, [session, assets, audio]);
 
   useEffect(() => trades((list) => setModal({ type: "trade", list })), [trades]);
+  // game.c ResetUserData: AbortLookList; the description and pick lists hold stale ids
+  useEffect(
+    () =>
+      session.world.on((e) => {
+        if (e.type !== "idsStale") return;
+        setDesc(null);
+        setModal((m) => (m?.type === "list" ? null : m));
+      }),
+    [session],
+  );
+  // gameuser.c GotObjectContents: "The box is empty.", or choose what to take out and how many
+  useEffect(
+    () =>
+      contents(({ container, items }) => {
+        const box = session.world.objects.get(container);
+        if (!items.length) {
+          if (box) session.localMessage(`The ${session.resource(box.info.nameRes) ?? ""} is empty.`);
+          return;
+        }
+        setModal({
+          type: "list",
+          title: "Get",
+          items: sortByNameAndNumber(items, (id) => session.resource(id) ?? ""),
+          multiple: true,
+          amounts: true,
+          onDone: (c) => c.forEach((x) => session.getFromContainer(x.id, x.amount)),
+        });
+      }),
+    [contents, session],
+  );
+  // dialog.c DisplayDescription: one description at a time, with the buttons asked for
+  useEffect(
+    () =>
+      looks((look) => {
+        const buttons = descParams.current;
+        descParams.current = DESC.NONE;
+        setDesc((cur) => cur ?? { look, buttons });
+      }),
+    [looks],
+  );
   useEffect(() => offers((e) => setOffer((prev) => reduceOffer(prev, e))), [offers]);
 
   // New lines scroll the chat to the bottom, unless "Lock text window in place when
@@ -213,7 +313,7 @@ export function GameView({
   useEffect(() => {
     const el = logRef.current;
     if (el && (!settings.scrollLock || atBottomRef.current)) el.scrollTop = el.scrollHeight;
-  }, [chat, settings.scrollLock]);
+  }, [chat, settings.scrollLock, settings.chatTab]);
 
   /** gameuser.c GetObjects3D(CLOSE_DISTANCE, flag): the nearest object with the flag. */
   const nearest = (flag: number) => {
@@ -228,7 +328,7 @@ export function GameView({
   };
 
   /** Keys and typed commands that open panels and dialogs or talk to traders. */
-  const handleAction = (a: string) => {
+  const handleAction = (a: string): void => {
     const toggle = (type: "preferences" | "configuration" | "actions") => setModal((m) => (m?.type === type ? null : { type }));
     switch (a) {
       case "inventory":
@@ -280,12 +380,19 @@ export function GameView({
   };
 
   /** A typed line or alias (command.c): money and resting, our windows, tell, then speech. */
-  const runCommand = (line: string) => {
+  const runCommand = (line: string): void => {
     const input = expandCommandAlias(getSettings().commandAliases, line);
     const word = /^\/?(\S+)/.exec(input.trim())?.[1].toLowerCase() ?? "";
     if (ACTION_COMMANDS[word] && input.trim().split(/\s+/).length === 1) return setModal({ type: "action", window: ACTION_COMMANDS[word] });
     if (word === "map" && input.trim().split(/\s+/).length === 1) return setFullMap((v) => !v);
     if (word === "quit" && input.trim().split(/\s+/).length === 1) return onLogout();
+    // command.c CommandGet: A_PICKUP
+    if ((word === "get" || word === "pickup") && input.trim().split(/\s+/).length === 1) return sceneRef.current?.pickUpNearby();
+    // command.c CommandLook (A_LOOK) and CommandPut (A_PUT)
+    if (word === "look" && input.trim().split(/\s+/).length === 1) return sceneRef.current?.lookInView();
+    if (word === "put" && input.trim().split(/\s+/).length === 1) return putAway();
+    // command.c CommandBuy, CommandOffer: A_BUY, A_OFFER
+    if ((word === "buy" || word === "offer") && input.trim().split(/s+/).length === 1) return handleAction(word);
     if (NOT_YET_COMMANDS[word]) return session.localMessage(NOT_YET_COMMANDS[word]);
     const tell = parseTell(input, [...session.world.players.values()].map((p) => ({ id: p.id, name: p.name })));
     if (tell) {
@@ -328,41 +435,149 @@ export function GameView({
     inputRef.current?.blur();
   };
 
-  const act = (fn: () => void) => {
-    fn();
-    setMenu(null);
-  };
-
   const drop = (o: ObjectInfo) => {
     if (isNumberItem(o.id) && o.amount > 1) setModal({ type: "amount", object: o });
     else session.drop(o.id, isNumberItem(o.id) ? o.amount : undefined);
   };
 
-  const itemMenu = (m: ItemMenu) =>
-    setMenu({
-      id: m.object.id, name: session.resource(m.object.nameRes) ?? "", x: m.x, y: m.y, inventory: session.world.inventory.has(m.object.id),
-      object: m.object, canGet: false, canActivate: false,
-    });
-
-  /** Our face, an inventory item or a menu: pick it as the spell target, or make it the target. */
-  const selectObject = (id: number) => {
-    const scene = sceneRef.current;
-    if (!scene) return;
-    if (scene.selecting) scene.select(id);
-    else scene.setTarget(id);
+  /** dialog.c SetDescParams, then RequestLook: the description comes back as BP_LOOK. */
+  const lookAt = (id: number, buttons: number) => {
+    descParams.current = buttons;
+    session.look(id);
   };
 
-  const targetName = (() => {
-    if (target === null) return null;
-    const o = session.world.objects.get(target);
-    return o ? (session.resource(o.info.nameRes) ?? null) : null;
-  })();
+  /** gameuser.c SetDescParamsByRoomObject: close by, a room object can be got, used or activated. */
+  const lookRoomObject = (id: number) => {
+    const o = session.world.objects.get(id);
+    const self = session.world.self;
+    let buttons: number = DESC.NONE;
+    if (o && self && Math.hypot(o.x - self.x, o.y - self.y) <= CLOSE_DISTANCE) {
+      const f = o.info.flags;
+      if (f & OF_CONTAINER) buttons |= DESC.INSIDE;
+      if (f & OF_ACTIVATABLE && !(f & OF_PLAYER)) buttons |= DESC.ACTIVATE;
+      if (f & OF_GETTABLE) {
+        buttons |= DESC.GET;
+        if (!(f & OF_ACTIVATABLE)) buttons |= DESC.USE;
+      }
+    }
+    lookAt(id, buttons);
+  };
 
-  const f = menu?.object?.flags ?? 0;
-  const inUse = menu ? session.world.inUse.has(menu.id) : false;
+  /** inventry.c A_LOOKINVENTORY: Drop, and Unuse, Use (apply) or Use. */
+  const lookInventoryItem = (o: ObjectInfo) => {
+    let buttons: number = DESC.DROP;
+    if (session.world.inUse.has(o.id)) buttons |= DESC.UNUSE;
+    else if (o.flags & OF_APPLYABLE) buttons |= DESC.APPLY;
+    else buttons |= DESC.USE;
+    lookAt(o.id, buttons);
+  };
+
+  /**
+   * gameuser.c UserPut: with a container close by, choose inventory items (and how many), then
+   * the container if there's more than one.
+   */
+  const putAway = () => {
+    const boxes = [...session.world.objects.values()].filter(
+      (o) => o.info.flags & OF_CONTAINER && session.world.self && Math.hypot(o.x - session.world.self.x, o.y - session.world.self.y) <= CLOSE_DISTANCE,
+    );
+    if (!boxes.length) return session.localMessage("There's nothing here to put things in.");
+    const putInto = (chosen: LookListChoice[], box: number) => chosen.forEach((c) => session.put(c.id, c.amount, box));
+    setModal({
+      type: "list",
+      title: "Put: Select object",
+      items: [...session.world.inventory.values()].filter((o) => !session.world.inUse.has(o.id)),
+      multiple: true,
+      amounts: true,
+      onDone: (chosen) => {
+        if (boxes.length === 1) return putInto(chosen, boxes[0].id);
+        // The list closes first; open the next one after it
+        setTimeout(() =>
+          setModal({ type: "list", title: "Put: Select container", items: boxes.map((b) => b.info), onDone: (c) => c[0] && putInto(chosen, c[0].id) }),
+        );
+      },
+    });
+  };
+
+  /** Our face or an inventory item while choosing a spell target (GAME_SELECT). */
+  const selectObject = (id: number) => sceneRef.current?.select(id);
+
+  useEffect(() => {
+    lookRef.current = lookRoomObject;
+  });
+
+  /** dialog.c DescDialogProc's buttons, on the object the dialog shows. */
+  const descAction = (a: DescAction, id: number, buttons: number) => {
+    switch (a) {
+      case "get":
+        return session.pickUp(id);
+      case "inside":
+        return session.requestContents(id);
+      case "drop": {
+        // IDC_DROP: all of a number item
+        const o = session.world.inventory.get(id);
+        if (o) session.drop(o.id, isNumberItem(o.id) ? o.amount : undefined);
+        return;
+      }
+      case "use":
+        // IDC_USE: pick it up first when it's on the ground (there's a Get button)
+        if (buttons & DESC.GET) session.pickUp(id);
+        return session.use(id);
+      case "unuse":
+        return session.unuse(id);
+      case "activate":
+        return session.activate(id);
+      case "apply":
+        // gameuser.c StartApply: choose what to use it on
+        return sceneRef.current?.beginSelect((target) => session.apply(id, target));
+    }
+  };
+
+  /** IDOK: a changed description (RequestChangeDescription) or web page (RequestChangeURL(player.id, url)). */
+  const descSave = (id: number, description: string | null, url: string | null) => {
+    if (description !== null) session.changeDescription(id, description);
+    const self = session.world.player?.id;
+    if (url !== null && self !== undefined) session.changeUrl(self, url);
+  };
+
+  const chatTab = settings.chatTab;
+  const shown = chat.filter((l) => inTab(chatTab, l));
+  /** `at`: the click's time, in the chat lines' clock (ms since 1970) */
+  const pickTab = (tab: ChatTab, at: number) => {
+    const now = at;
+    // Leaving All, everything in it has been seen
+    setSeenAt((s) => (chatTab === "all" ? { all: now, chat: now, combat: now, server: now } : { ...s, [chatTab]: now, [tab]: now }));
+    atBottomRef.current = true;
+    updateSettings({ chatTab: tab });
+  };
+  /** Drag the chat window's top edge to make it taller or shorter */
+  const resizeChat = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const game = gameRef.current;
+    if (!game) return;
+    e.preventDefault();
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    const bottom = game.getBoundingClientRect().bottom;
+    const max = game.clientHeight - MIN_VIEW_HEIGHT;
+    const heightAt = (y: number) => Math.round(Math.max(MIN_CHAT_HEIGHT, Math.min(max, bottom - y)));
+    let h = heightAt(e.clientY);
+    const move = (ev: PointerEvent) => {
+      h = heightAt(ev.clientY);
+      setDragHeight(h);
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+      setDragHeight(null);
+      updateSettings({ chatHeight: h });
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  };
 
   return (
-    <div className="game" onClick={() => menu && setMenu(null)}>
+    <div className="game" ref={gameRef} style={{ "--chat-height": `${dragHeight ?? settings.chatHeight}px` } as CSSProperties}>
       <TitleBar
         className="game-title"
         assets={assets}
@@ -394,16 +609,32 @@ export function GameView({
           </div>
         )}
         {settings.showFps && fps !== null && <div className="fps">{fps} fps</div>}
-        {targetName && <div className="target-name">Target: {targetName}</div>}
         {selecting && <div className="select-hint">Choose a target (Esc or right click cancels)</div>}
         {(phase === "entering" || status?.loading) && <div className="loading">Entering…</div>}
-        {look && (
-          <div className="look-panel" onClick={(e) => e.stopPropagation()}>
-            <h3>{look.name}</h3>
-            <p>{look.description}</p>
-            {look.inscription && <p className="inscription">{look.inscription}</p>}
-            <button onClick={onCloseLook}>Close</button>
-          </div>
+        {desc && (
+          <DescriptionDialog
+            key={desc.look.object.id}
+            look={desc.look}
+            buttons={desc.buttons}
+            icons={icons}
+            onAction={(a) => descAction(a, desc.look.object.id, desc.buttons)}
+            onSave={(d, u) => descSave(desc.look.object.id, d, u)}
+            onClose={() => setDesc(null)}
+          />
+        )}
+        {modal?.type === "list" && (
+          <LookListDialog
+            key={modal.title}
+            title={modal.title}
+            multiple={!!modal.multiple}
+            amounts={modal.amounts}
+            initial={modal.initial}
+            icons={icons}
+            items={modal.items.map((o) => ({ object: o, name: (isNumberItem(o.id) ? `${o.amount} ` : "") + (session.resource(o.nameRes) ?? "") }))}
+            onDone={modal.onDone}
+            onLook={(id) => lookAt(id, DESC.NONE)}
+            onClose={() => setModal(null)}
+          />
         )}
         {modal?.type === "trade" && (
           <TradeDialog list={modal.list} session={session} icons={icons} onClose={() => setModal(null)} />
@@ -432,6 +663,7 @@ export function GameView({
               // maindlg.c IDOK -> InterfaceConfigChanged: SendPreferences
               if (flags !== null) session.sendPreferences(flags);
             }}
+            onPreview={previewAudio}
             onClose={() => setModal(null)}
           />
         )}
@@ -452,51 +684,26 @@ export function GameView({
         {modal?.type === "action" && modal.window === "guild" && <GuildDialog onClose={() => setModal(null)} />}
         {offer && <OfferDialog state={offer} session={session} icons={icons} onClose={() => setOffer(null)} />}
       </div>
-      {menu && (
-        <ul className="object-menu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
-          <li className="title">{menu.name}</li>
-          <li><button onClick={() => act(() => session.look(menu.id))}>Look</button></li>
-          {menu.inventory ? (
-            <>
-              <li>
-                <button onClick={() => act(() => (inUse ? session.unuse(menu.id) : session.use(menu.id)))}>{inUse ? "Unuse" : "Use"}</button>
-              </li>
-              <li><button onClick={() => act(() => menu.object && drop(menu.object))}>Drop</button></li>
-            </>
-          ) : (
-            <>
-              {f & OF_ATTACKABLE ? (
-                <li>
-                  <button
-                    onClick={() =>
-                      act(() => {
-                        sceneRef.current?.setTarget(menu.id);
-                        sceneRef.current?.attack();
-                      })
-                    }
-                  >
-                    Attack
-                  </button>
-                </li>
-              ) : null}
-              <li><button onClick={() => act(() => selectObject(menu.id))}>{selecting ? "Choose as target" : "Target"}</button></li>
-              {menu.canGet && <li><button onClick={() => act(() => session.pickUp(menu.id))}>Pick up</button></li>}
-              {menu.canActivate && <li><button onClick={() => act(() => session.activate(menu.id))}>Activate</button></li>}
-              {f & OF_BUYABLE ? (
-                <li><button onClick={() => act(() => session.requestBuy(menu.id))}>Buy</button></li>
-              ) : null}
-              {f & (OF_OFFERABLE | OF_PLAYER) && menu.object ? (
-                <li>
-                  <button onClick={() => act(() => setModal({ type: "give", kind: "offer", target: { id: menu.id, name: menu.name } }))}>
-                    {f & OF_PLAYER ? "Offer…" : "Sell / offer…"}
-                  </button>
-                </li>
-              ) : null}
-            </>
-          )}
-        </ul>
-      )}
       <div className="chat">
+        <div className="chat-resize" onPointerDown={resizeChat} title="Drag to resize the chat window" aria-hidden />
+        <div className="chat-tabs" role="tablist" aria-label="Chat">
+          {CHAT_TABS.map(({ tab, label }) => {
+            // On All every line is on screen, so no tab has unseen ones
+            const unread = chatTab !== "all" && tab !== "all" && tab !== chatTab && chat.some((l) => inTab(tab, l) && l.time > seenAt[tab]);
+            return (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={tab === chatTab}
+                className={`${tab === chatTab ? "active" : ""}${unread ? " unread" : ""}`}
+                onClick={(e) => pickTab(tab, performance.timeOrigin + e.timeStamp)}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
         <div
           ref={logRef}
           className="chat-log"
@@ -505,7 +712,7 @@ export function GameView({
             atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 4;
           }}
         >
-          {chat.map((l, i) => (
+          {shown.map((l, i) => (
             <div key={i} className="chat-line">
               {/* Add chat timestamps (config.chat_time_stamps) */}
               {settings.chatTimestamps && <span className="chat-time">[{new Date(l.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}] </span>}
@@ -554,7 +761,8 @@ export function GameView({
         tab={tab}
         onTab={setTab}
         settings={settings}
-        onItemMenu={itemMenu}
+        onLookItem={lookInventoryItem}
+        onLook={(id) => lookAt(id, DESC.NONE)}
         onDropItem={drop}
         target={target}
         selecting={selecting}
@@ -565,4 +773,3 @@ export function GameView({
   );
 }
 
-export const MAX_CHAT_LINES = MAX_LINES;

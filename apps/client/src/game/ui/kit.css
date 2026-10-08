@@ -339,6 +339,13 @@
   display: block;
 }
 
+/* TBS_NOTICKS: the bar sits in the middle of its control, level with the label beside it */
+.mk-track.no-ticks {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 .mk-track input {
   display: block;
   width: 100%;

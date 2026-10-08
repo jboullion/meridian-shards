@@ -117,6 +117,44 @@ export function buildReqLook(id: number): Uint8Array {
   return new ByteWriter().u8(BP.REQ_LOOK).u32(objId(id)).finish();
 }
 
+/** BP_LOOK flags (include/proto.h DF_*): the description box is shown, and editable. */
+export const DF = { EDITABLE: 0x01, INSCRIBED: 0x02 } as const;
+
+/** BP_CHANGE_DESCRIPTION: a new inscription or player description (dialog.c IDOK RequestChangeDescription). */
+export function buildChangeDescription(id: number, text: string): Uint8Array {
+  return new ByteWriter().u8(BP.CHANGE_DESCRIPTION).u32(objId(id)).string(text).finish();
+}
+
+/**
+ * protocol.c PARAM_OBJECT: the id with its number-item tag, then the amount for number items
+ * (BP_REQ_DROP, BP_REQ_GET_FROM_CONTAINER, BP_REQ_PUT).
+ */
+function writeObject(w: ByteWriter, id: number, amount?: number): ByteWriter {
+  w.u32(id);
+  if (amount !== undefined) w.u32(amount);
+  return w;
+}
+
+/** BP_SEND_OBJECT_CONTENTS: what's inside a container (RequestObjectContents); BP_OBJECT_CONTENTS answers. */
+export function buildReqObjectContents(id: number): Uint8Array {
+  return new ByteWriter().u8(BP.SEND_OBJECT_CONTENTS).u32(objId(id)).finish();
+}
+
+/** BP_REQ_GET_FROM_CONTAINER: take something out of a container (RequestPickupFromContainer). */
+export function buildReqGetFromContainer(id: number, amount?: number): Uint8Array {
+  return writeObject(new ByteWriter().u8(BP.REQ_GET_FROM_CONTAINER), id, amount).finish();
+}
+
+/** BP_REQ_PUT: put an inventory item (and how many) into a container (RequestPut). */
+export function buildReqPut(id: number, amount: number | undefined, container: number): Uint8Array {
+  return writeObject(new ByteWriter().u8(BP.REQ_PUT), id, amount).u32(objId(container)).finish();
+}
+
+/** BP_REQ_APPLY: use one object on another (gameuser.c ApplyCallback RequestApply). */
+export function buildReqApply(item: number, target: number): Uint8Array {
+  return new ByteWriter().u8(BP.REQ_APPLY).u32(objId(item)).u32(objId(target)).finish();
+}
+
 // ---------------------------------------------------------------- game mode: server -> client
 
 export interface Animation {
@@ -224,6 +262,32 @@ export function readObject(r: ByteReader, withLight = true): ObjectInfo {
     id, amount, iconRes, nameRes, flags, drawingType, minimapFlags, nameColor,
     objectType, moveOnType, light, translation, effect, animation, overlays,
   };
+}
+
+/**
+ * A background overlay, the sun or the moon (boverlay.h BackgroundOverlay): drawn on the sky at
+ * `angle` (client angle units, east = 0) and `height` pixels above the horizon.
+ */
+export interface BgOverlay {
+  id: number;
+  iconRes: number;
+  nameRes: number;
+  translation: number;
+  effect: number;
+  animation: Animation;
+  angle: number;
+  /** As the client reads it, a WORD: Kod's negative heights (below the horizon) come out above 32767 */
+  height: number;
+}
+
+/** server.c ExtractNewBackgroundOverlay (BP_ADD_BG_OVERLAY, BP_CHANGE_BG_OVERLAY). */
+export function readBgOverlay(r: ByteReader): BgOverlay {
+  const id = r.u32();
+  const iconRes = r.u32();
+  const nameRes = r.u32();
+  const { translation, effect } = readTranslation(r);
+  const animation = readAnimation(r);
+  return { id, iconRes, nameRes, translation, effect, animation, angle: r.u16(), height: r.u16() };
 }
 
 /** server.c ExtractNewRoomObject. */
@@ -693,7 +757,7 @@ export function readEffect(r: ByteReader): Effect {
 
 /** Some user command types (include/proto.h UC_*). */
 export const UC = {
-  REST: 5, STAND: 6, REQ_PREFERENCES: 7, SEND_PREFERENCES: 9, RECEIVE_PREFERENCES: 34, DEPOSIT: 35, WITHDRAW: 36, BALANCE: 37,
+  LOOK_PLAYER: 2, CHANGE_URL: 3, REST: 5, STAND: 6, REQ_PREFERENCES: 7, SEND_PREFERENCES: 9, RECEIVE_PREFERENCES: 34, DEPOSIT: 35, WITHDRAW: 36, BALANCE: 37,
 } as const;
 
 /**
@@ -703,6 +767,11 @@ export const UC = {
 export const CF = {
   SAFETY_OFF: 0x0001, TEMPSAFE: 0x0002, GROUPING: 0x0004, AUTOLOOT: 0x0008, AUTOCOMBINE: 0x0010, BAGS: 0x0020, SPELLPOWER: 0x0040,
 } as const;
+
+/** UC_CHANGE_URL: a player's web page (dialog.c IDOK RequestChangeURL). */
+export function buildChangeUrl(id: number, url: string): Uint8Array {
+  return new ByteWriter().u8(BP.USERCOMMAND).u8(UC.CHANGE_URL).u32(objId(id)).string(url).finish();
+}
 
 /** BP_USERCOMMAND, the command type, then its int parameters (protocol.c ToServer). */
 export function buildUserCommand(uc: number, ...ints: number[]): Uint8Array {

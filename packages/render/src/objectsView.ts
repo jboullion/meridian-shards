@@ -91,13 +91,12 @@ uniform vec3 uBrightness;
 uniform float uAlpha;
 uniform float uFogEnd;
 uniform float uFog;
-uniform float uHighlight;
 void main() {
   float index = floor(texture(uMap, vUv).r * 255.0 + 0.5);
   if (index == 254.0) discard;
   vec3 rgb = texelFetch(uPalette, ivec2(int(index), 0), 0).rgb;
   float fog = uFog > 0.5 ? clamp((uFogEnd - vDepth) / uFogEnd, 0.0, 1.0) : 1.0;
-  fragColor = vec4(rgb * uBrightness * fog * (1.0 + 0.35 * uHighlight), uAlpha);
+  fragColor = vec4(rgb * uBrightness * fog, uAlpha);
 }
 `;
 
@@ -252,7 +251,6 @@ export class ObjectsView {
             uAlpha: { value: 1 },
             uFogEnd: { value: 100000 },
             uFog: { value: 1 },
-            uHighlight: { value: 0 },
           },
           side: THREE.DoubleSide,
         });
@@ -341,18 +339,27 @@ export class ObjectsView {
    * first. Returns its id or null.
    */
   pick(raycaster: THREE.Raycaster): number | null {
+    return this.pickAll(raycaster)[0]?.id ?? null;
+  }
+
+  /**
+   * Every object drawn under the ray (an opaque pixel of its sprite), nearest first, with the
+   * distance along the ray: client3d.c GetObjects3D at a screen point, for choosing among them.
+   */
+  pickAll(raycaster: THREE.Raycaster): { id: number; distance: number }[] {
     const meshes = [...this.entries.values()].filter((e) => e.mesh.visible && e.composite).map((e) => e.mesh);
+    const out: { id: number; distance: number }[] = [];
     for (const hit of raycaster.intersectObjects(meshes, false)) {
       const id = Number(hit.object.name.split(" ")[1]);
-      if (id < 0) continue; // projectiles can't be clicked
+      if (id < 0 || out.some((o) => o.id === id)) continue; // projectiles can't be clicked
       const e = this.entries.get(id);
       const c = e?.composite;
       if (!c || !hit.uv) continue;
       const px = Math.min(c.width - 1, Math.max(0, Math.floor(hit.uv.x * c.width)));
       const py = Math.min(c.height - 1, Math.max(0, Math.floor(hit.uv.y * c.height)));
-      if (c.pixels[py * c.width + px] !== 254) return id;
+      if (c.pixels[py * c.width + px] !== 254) out.push({ id, distance: hit.distance });
     }
-    return null;
+    return out;
   }
 
   /** The user's selected target (gameuser.c SetUserTargetID); null clears. */
@@ -398,11 +405,6 @@ export class ObjectsView {
     g.setAttribute("position", new THREE.BufferAttribute(new Float32Array([l, t, 0, l, b, 0, r, b, 0, l, t, 0, r, b, 0, r, t, 0]), 3));
     g.setAttribute("uv", new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0]), 2));
     g.computeBoundingSphere();
-  }
-
-  /** Highlight the object under the mouse with a brighter tint; null clears. */
-  setHighlight(id: number | null): void {
-    for (const [eid, e] of this.entries) e.mesh.material.uniforms.uHighlight.value = eid === id ? 1 : 0;
   }
 
   private setComposite(e: Entry): void {

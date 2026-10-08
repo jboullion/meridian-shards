@@ -402,7 +402,7 @@ export function Trackbar({
 }) {
   const n = Math.round((max - min) / step);
   return (
-    <span className="mk-track" style={r ? at(r) : undefined}>
+    <span className={ticks ? "mk-track" : "mk-track no-ticks"} style={r ? at(r) : undefined}>
       <input type="range" min={min} max={max} step={step} value={value} aria-label={label} onChange={(e) => onChange(Number(e.target.value))} />
       {ticks && n > 0 && n <= 64 && (
         <span className="ticks" aria-hidden>

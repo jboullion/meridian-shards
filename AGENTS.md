@@ -90,6 +90,7 @@ npm run release -- 0.2.0     # bump, commit, tag and push; CI builds all three O
 - The Browser pane throttles `requestAnimationFrame` while it's hidden, so FPS readouts there are meaningless. Time `renderer.render` instead.
 - **Sprites:** each object's base bitmap and overlays are composited on the CPU into one palette-index image (with each part's xlat applied), then drawn as a single billboard. That keeps exact palette colours and avoids z-fighting between coplanar overlays.
 - **Handedness:** the D3D client's projection uses a *negative* horizontal FOV (`FovHorizontal`), which mirrors its left-handed view back. Our right-handed scene with X = x, Y = height, Z = y matches what players see, both the world and the sprites (bitmap column 0 on the left). Don't "fix" it.
+- **Looking** goes through `GameView`'s `lookAt(id, buttons)`: it sets the next description's DESC_* buttons (`dialog.c SetDescParams`), then sends `BP_REQ_LOOK`. The answer is `BP_LOOK`, or `UC_LOOK_PLAYER` for a player (the Player Description, with their own words and web page). A ¶ (0xB6) splits an inscription into pages.
 - **Options** come from `apps/client/src/game/settings.ts`, edited in the game's ☰ menu, laid out like the original's windows (`ui/OptionsDialogs.tsx`):
   - **Preferences** is `client.rc IDD_SETTINGS` without Web Browser (O or F10). Options we don't implement yet are kept anyway and shown in italics; list them in `docs/missing-features.md`.
   - The Game Options and "Can attack innocent players" live on the **server**: `UC_REQ_PREFERENCES` on entering, `UC_RECEIVE_PREFERENCES` back, `UC_SEND_PREFERENCES` (the `CF_*` flags) on OK.
@@ -100,8 +101,12 @@ npm run release -- 0.2.0     # bump, commit, tag and push; CI builds all three O
 - **Controls**, the modern preset:
   - Click the view to capture the mouse (or C, Mouselook Toggle); Esc releases it.
   - WASD or arrows to move (left/right arrows turn), Shift to run (or walk, with Always Run), Space to open a door.
-  - Left click targets (Select Target); E attacks; `]` `[` `\` Esc pick the next, previous, yourself or no target; R looks at the target.
-  - F or double click to pick up or activate, right-click for the actions menu (the original preset: right click examines).
+  - Left click targets players and monsters only (Select Target, `gameuser.c UserAttack`); E attacks; `]` `[` `\` Esc pick the next, previous, yourself or no target; R looks at the target. Only the target gets the halo; hovering just changes the cursor.
+  - Right click looks (Examine, in both presets): the description dialog (`ui/LookDialogs.tsx`, `dialog.c`), with the buttons the original gives it (Get/Use close by, Drop/Use/Unuse in the inventory). Right click on the inventory, the spell list or your portrait looks too.
+  - Picking up: drag an item from the view onto the inventory, the dialog's Get, or F (Pick Up) / typing `get`, which takes what's close by (a list when there are several). Double click activates. Typing `buy` or `offer` deals with the nearest shopkeeper.
+  - Several objects under the cursor: a list asks which one (`lookdlg.c DisplayLookList`), for looking, targeting, activating and getting. R (Look) or typed `look` lists everything in view.
+  - Containers (storage boxes in rented rooms): Inside in the description, a double click, or dragging the box to the inventory shows what's in it, to take out with amounts; typed `put` stores inventory items in one close by.
+  - To try containers on our server: `node tools/maint/maint.ts "create object StorageBox"`, then `"send object <room id> NewHold what object <box id> new_row int <r> new_col int <c>"` (the room is the player's `poOwner` in `show object <player id>`), and `"send object <box id> Delete"` afterwards.
   - T, Y, B and ; start a tell, yell, broadcast or emote; Enter chats.
   - PgUp/PgDn/Home to look up, down and straight, End to turn around, +/- to zoom the map, I for the inventory tab.
   - The original preset follows `merintr.c interface_key_table` (Alt+arrows strafe, typing starts a chat line). Restore Defaults goes back to the modern preset.
@@ -124,6 +129,9 @@ npm run release -- 0.2.0     # bump, commit, tag and push; CI builds all three O
   - Timers keep full speed while minimized (`backgroundThrottling: false`); `requestAnimationFrame` still slows down, because Windows stops drawing a minimized window.
   - To drive it from a script, start it with `--remote-debugging-port=9222` and use the Chrome DevTools Protocol.
 - **Settings** live in `localStorage`. Hot reloading `settings.ts` makes a second copy of its listeners, so reload the page after editing it.
+- **Chat tabs** (ours; the original has one text window): `packages/world/src/chatChannel.ts` puts each line in Chat (everything `BP_SAID`), Combat or Server. Server messages have no kind, so Combat is matched on the message's *format string*, before names are filled in; add words there when a fight message lands in Server. `appendChatLine` caps each channel at 300 lines.
+- **Saves renumber objects.** blakserv's garbage collection (every save, or `save game` on the maintenance port) compacts object ids. Clients get `BP_WAIT`, then `BP_INVALIDATE_DATA`, and must ask for everything again (`GameSession` does). Maintenance commands that name an object id are only good until the next save: `show object` it again first.
+- **The sun and moon** are background overlays (`packages/render/src/skyOverlays.ts`), sent at logon and every game hour. Kod's negative heights arrive as WORDs above 32767 and aren't drawn (below the horizon). To see one in daylight, check `window.shards.session.world.bgOverlays`.
 - **The message of the day:** blakserv reads `motd.txt` from the run folder at startup or on `node tools/maint/maint.ts "reload motd"`, and *moves* it into `memmap\`, so the run folder copy disappears; that's normal. Without one it sends `[MessageOfTheDay] Default` ("<Default>"), which the client hides. To change it, edit `server/config/motd.txt`, run `server\setup-run.cmd`, then `reload motd`.
 - **Trying shops and rooms quickly:** `node tools/maint/maint.ts "send object <player id> TeleportTo RID int 303"` moves a logged-in character on our server (303 smithy, 332 vault, 333 bank, 330 Outskirts).
 - **Movement is client-authoritative but checked:** keep `PlayerMover` byte-for-byte faithful to `move.c` (units, step sizes, thresholds). The server only rejects off-map destinations, and other players' original clients see our moves.

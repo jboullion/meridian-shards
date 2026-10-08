@@ -241,11 +241,69 @@ button.link {
 
 /* The original chat window: grey background (color.c COLOR_MAINEDITBGD 120,120,120) */
 .chat {
+  position: relative;
   display: flex;
   flex-direction: column;
-  height: 168px;
+  min-height: 0;
   background: rgb(120, 120, 120);
   border-top: 2px solid var(--panel-edge);
+}
+
+/* The chat window's top edge: drag it to make the window taller or shorter */
+.chat-resize {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -5px;
+  z-index: 3;
+  height: 8px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+/* The chat tabs: All, Chat, Combat, Server */
+.chat-tabs {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  padding: 3px 6px 0;
+  background: rgb(96, 96, 96);
+  border-bottom: 1px solid #444;
+}
+
+.chat-tabs button {
+  position: relative;
+  padding: 2px 12px 3px;
+  border: 1px solid #444;
+  border-bottom: none;
+  background: rgb(150, 150, 150);
+  color: #111;
+  font: 13px Georgia, "Times New Roman", serif;
+  cursor: pointer;
+}
+
+.chat-tabs button:hover {
+  background: rgb(175, 175, 175);
+}
+
+.chat-tabs button.active {
+  margin-bottom: -1px;
+  padding-bottom: 4px;
+  background: rgb(120, 120, 120);
+  color: #fff;
+}
+
+/* New lines in a tab not being shown */
+.chat-tabs button.unread::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(240, 208, 25);
+  box-shadow: 0 0 0 1px #000;
 }
 
 .chat-log {
@@ -269,67 +327,6 @@ button.link {
   background: #e8e4d8;
   color: #000;
   font: 14px Georgia, "Times New Roman", serif;
-}
-
-.look-panel {
-  position: absolute;
-  max-width: min(420px, calc(100% - 32px));
-  padding: 12px 16px;
-  background: rgba(27, 22, 18, 0.95);
-  border: 2px solid var(--panel-edge);
-  color: var(--text);
-  font-size: 14px;
-}
-
-.look-panel {
-  left: 50%;
-  top: 16px;
-  transform: translateX(-50%);
-}
-
-.look-panel h3 {
-  margin: 0 0 6px;
-  color: var(--gold);
-  font-size: 16px;
-}
-
-.look-panel .inscription {
-  font-style: italic;
-  color: var(--muted);
-}
-
-.look-panel button,
-.object-menu button {
-  background: #241d16;
-  color: var(--gold);
-  border: 1px solid var(--panel-edge);
-  font: inherit;
-  font-size: 13px;
-  padding: 3px 8px;
-  cursor: pointer;
-}
-
-.object-menu {
-  position: fixed;
-  z-index: 10;
-  list-style: none;
-  margin: 0;
-  padding: 4px;
-  background: rgba(27, 22, 18, 0.97);
-  border: 2px solid var(--panel-edge);
-  min-width: 140px;
-}
-
-.object-menu .title {
-  color: var(--gold);
-  padding: 2px 6px 4px;
-  font-size: 13px;
-}
-
-.object-menu button {
-  width: 100%;
-  text-align: left;
-  margin-top: 2px;
 }
 
 /* ---- milestone 5: the interface column (module/merintr) ---- */
@@ -359,8 +356,11 @@ button.link {
   color: rgb(231, 231, 231);
 }
 
+/* The cell is the box, not the picture: a tall picture (an emerald, a potion) used to make its
+   cell taller than the box and get cut off. drawbmp.c DrawStretchedObject fits it whole. */
 .obj-icon {
   display: inline-grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
   overflow: hidden;
 }
@@ -368,6 +368,8 @@ button.link {
 .obj-icon img {
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
   object-fit: contain;
   image-rendering: pixelated;
 }
@@ -833,7 +835,6 @@ button.link {
   outline-offset: 1px;
 }
 
-.view .target-name,
 .view .select-hint {
   position: absolute;
   left: 50%;
@@ -841,11 +842,6 @@ button.link {
   font: bold 13px Georgia, "Times New Roman", serif;
   text-shadow: 0 0 3px #000, 1px 1px 0 #000;
   pointer-events: none;
-}
-
-.view .target-name {
-  top: 26px;
-  color: rgb(120, 255, 120);
 }
 
 .view .select-hint {
@@ -902,7 +898,7 @@ button.link {
 
 /* ---- the title bar and its menu (GameView ☰): Preferences, Configuration, Actions ---- */
 .game {
-  grid-template-rows: auto minmax(0, 1fr) 168px;
+  grid-template-rows: auto minmax(0, 1fr) var(--chat-height, 168px);
 }
 
 .game .game-title {
@@ -924,7 +920,7 @@ button.link {
 
 /* The title bar (TitleBar.tsx): on the desktop it's the window's own, so it drags the window */
 .title-bar {
-  --title-gold: rgb(234, 179, 8);
+  --title-text: #000;
   position: relative;
   z-index: 20;
   display: flex;
@@ -934,9 +930,8 @@ button.link {
   padding: 0 0 0 8px;
   background: #cccccc;
   border-bottom: 2px solid #8a8a8a;
-  color: var(--title-gold);
+  color: var(--title-text);
   font: bold 15px Georgia, "Times New Roman", serif;
-  text-shadow: 1px 1px 0 #000;
   user-select: none;
   flex: none;
 }
@@ -982,7 +977,7 @@ button.link {
   border: 1px solid transparent;
   border-radius: 3px;
   background: none;
-  color: var(--title-gold);
+  color: var(--title-text);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -1004,9 +999,9 @@ button.link {
   margin: 2px 0 0;
   padding: 4px;
   list-style: none;
-  background: rgba(27, 22, 18, 0.98);
-  border: 2px solid var(--panel-edge);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+  background: #dcdcdc;
+  border: 1px solid #8a8a8a;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
 }
 
 .title-menu button {
@@ -1015,7 +1010,7 @@ button.link {
   padding: 6px 10px;
   border: 0;
   background: none;
-  color: #e6dcc8;
+  color: #000;
   font: 15px Georgia, "Times New Roman", serif;
   text-align: left;
   cursor: pointer;
@@ -1023,8 +1018,8 @@ button.link {
 
 .title-menu button:hover,
 .title-menu button:focus-visible {
-  background: var(--panel-edge);
-  color: #fff;
+  background: #b4b4b4;
+  color: #000;
   outline: none;
 }
 
@@ -1400,4 +1395,229 @@ button.link {
 
 .bind-editor .bind-side {
   padding-top: calc(var(--dy) * 15 + 4px);
+}
+
+/* ---- looking at things (LookDialogs.tsx): client.rc IDD_DESC / IDD_DESCPLAYER, 338 dialog units across ---- */
+.look-modal {
+  z-index: 40;
+}
+
+.mk-window.desc-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(calc(var(--dx) * 338 + 40px), calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+}
+
+.desc-dialog .mk-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.desc-layout {
+  display: flex;
+  gap: calc(var(--dx) * 6);
+  min-height: 0;
+  flex: 1;
+}
+
+/* IDC_DESCBITMAP: 118 x 108, the object stretched to fit (DrawStretchedObjectGroup) */
+.desc-picture {
+  flex: none;
+  width: calc(var(--dx) * 118);
+  height: calc(var(--dy) * 108);
+  max-width: 35%;
+  box-sizing: border-box;
+  padding: calc(var(--dx) * 4);
+  background: rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+/* The picture fits inside the padding, whatever its proportions */
+.desc-picture .obj-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.desc-picture .obj-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.desc-main {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--dy) * 3);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* IDC_DESCNAME in FONT_TITLES, shrunk to fit (SetFontToFitText) */
+.desc-name {
+  --fit: 1;
+  flex: none;
+  overflow: hidden;
+  white-space: nowrap;
+  font: calc(var(--dy) * 15 * var(--fit)) / 1.25 var(--font-title);
+  color: var(--ui-text);
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* WM_DRAWITEM: a player's name in their colour over a dark copy one pixel down and right */
+.desc-name.player {
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* IDC_DESCFIXED: FONT_EDIT (Times 12) */
+.desc-fixed {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: calc(var(--dy) * 7.4) / 1.3 var(--font-ui);
+  text-shadow: 1px 1px 0 #000;
+}
+
+.desc-box-row {
+  display: flex;
+  gap: calc(var(--dx) * 4);
+  flex: none;
+}
+
+/* IDC_DESCBOX: 66 units tall (71 for players) */
+.desc-box {
+  flex: 1;
+  height: calc(var(--dy) * 66);
+}
+
+.desc-box textarea {
+  font-size: calc(var(--dy) * 7.4);
+}
+
+.desc-pager {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(var(--dy) * 14);
+}
+
+.desc-pager .mk-btn {
+  width: calc(var(--dx) * 9 + 8px);
+  height: calc(var(--dy) * 14);
+  padding: 0;
+}
+
+/* The web page row (IDC_URLLABEL, IDC_URL, IDC_URLBUTTON) */
+.desc-url {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--dx) * 4);
+  flex: none;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.desc-url .mk-edit {
+  flex: 1;
+  height: calc(var(--dy) * 13);
+}
+
+.desc-url .mk-btn {
+  width: calc(var(--dx) * 24);
+  height: calc(var(--dy) * 12 + 2px);
+}
+
+/* The buttons sit where IDD_DESC puts them: OK at 148, Get/Drop at 206, Inside/Use/Unuse at 262 */
+.desc-buttons {
+  position: relative;
+  flex: none;
+  height: calc(var(--dy) * 14);
+  margin-top: calc(var(--dy) * 7);
+}
+
+.desc-buttons .mk-btn {
+  position: absolute;
+  top: 0;
+  left: calc(100% * 148 / 338);
+  width: calc(100% * 44 / 338);
+  min-width: 56px;
+  height: 100%;
+}
+
+.desc-buttons .mk-btn.slot-b {
+  left: calc(100% * 206 / 338);
+}
+
+.desc-buttons .mk-btn.slot-c {
+  left: calc(100% * 262 / 338);
+}
+
+/* lookdlg.c's pick list (IDD_ITEMLISTMULTIPLE: the list on the left, OK, Cancel and All on the right) */
+.mk-window.look-list-dialog {
+  width: min(calc(var(--dx) * 215 + 40px), calc(100vw - 24px));
+}
+
+.look-list-layout {
+  display: flex;
+  gap: calc(var(--dx) * 6);
+}
+
+.look-list-left {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--dy) * 4);
+  flex: 1;
+  min-width: 0;
+}
+
+.look-list-left .mk-edit.list {
+  height: min(calc(var(--dy) * 160), 50vh);
+}
+
+.look-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 4px;
+  cursor: default;
+}
+
+.look-list-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--dy) * 5);
+  padding-top: calc(var(--dy) * 14);
+}
+
+.look-list-buttons .mk-btn {
+  width: calc(var(--dx) * 44);
+  min-width: 64px;
+  height: calc(var(--dy) * 14);
+}
+
+/* A description opened from a pick list (a double click on a row) goes over the list */
+.look-modal.desc-modal {
+  z-index: 41;
+}
+
+.look-list-name {
+  flex: 1;
+  min-width: 0;
+}
+
+/* IDC_QUANLIST: how many of a chosen number item */
+.look-list-amount {
+  flex: none;
+  width: 5.5em;
+  height: 1.5em;
+}
+
+.look-list-amount input {
+  padding: 0 2px;
+  font-size: 0.9em;
 }

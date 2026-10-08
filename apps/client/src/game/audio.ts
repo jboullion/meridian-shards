@@ -18,6 +18,9 @@ import type { AssetStore } from "../assets.ts";
 import { getSettings, onSettings, type Settings } from "./settings.ts";
 
 const MAX_SOUNDS = 24;
+
+/** The Audio Effects settings, as the Preferences window has them before OK */
+export type AudioPreview = Partial<Pick<Settings, "music" | "musicVolume" | "sound" | "soundVolume" | "loopSounds" | "randomSounds">>;
 const ROLLOFF = 0.00016;
 const MAX_DIST = FINENESS * 32;
 
@@ -40,7 +43,10 @@ export class GameAudio {
   /** The room's track, kept while music is off so switching it on restarts it (MusicRestart). */
   private wantedMusic: string | null = null;
   private listener = { x: 0, y: 0, angle: 0 };
+  /** What's playing by: the saved settings with the Preferences window's preview on top */
   private settings: Settings;
+  private saved: Settings;
+  private previewing: AudioPreview = {};
   private readonly assets: AssetStore;
   /** Where an object is, for sounds that come from one (GamePlaySound: obj->motion.x/y) */
   objectPosition: (id: number) => { x: number; y: number } | undefined = () => undefined;
@@ -51,8 +57,11 @@ export class GameAudio {
 
   constructor(assets: AssetStore) {
     this.assets = assets;
-    this.settings = getSettings();
-    this.offSettings = onSettings((s) => this.setSettings(s));
+    this.settings = this.saved = getSettings();
+    this.offSettings = onSettings((s) => {
+      this.saved = s;
+      this.setSettings({ ...s, ...this.previewing });
+    });
     window.addEventListener("pointerdown", this.unlock);
     window.addEventListener("keydown", this.unlock);
   }
@@ -213,7 +222,16 @@ export class GameAudio {
     for (const v of this.voices) if (v.pos) this.place(v);
   }
 
-  setSettings(s: Settings): void {
+  /**
+   * The Preferences window's audio choices, heard while it's open (the original applies them
+   * on OK); null goes back to the saved settings (Cancel, or after OK has saved them).
+   */
+  preview(p: AudioPreview | null): void {
+    this.previewing = p ?? {};
+    this.setSettings({ ...this.saved, ...this.previewing });
+  }
+
+  private setSettings(s: Settings): void {
     const prev = this.settings;
     this.settings = s;
     if (this.music) this.music.gain.gain.value = s.musicVolume / 100;

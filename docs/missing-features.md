@@ -27,6 +27,12 @@ What the original client has that Meridian Shards doesn't yet. Options for these
 | Emotes and moods | Wave, Point, Dance and Happy, Sad, Neutral, Wry get their own menu (see `TODO.md`). Typed, they say they're not in yet instead of being said aloud. |
 | Ignore list by name resource | The original keys ignores by name resource; we use the name, which survives across sessions. Not missing as such, just different. |
 
+## Interaction
+
+| What | What it needs |
+|---|---|
+| Objects under the cursor | The original takes everything whose on-screen rectangle holds the cursor; we take the objects with an opaque pixel there, so a list comes up only when sprites really overlap. A deliberate difference: rectangles would ask too often. |
+
 ## Commands
 
 | Command | What it needs |

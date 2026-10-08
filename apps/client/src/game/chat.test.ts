@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { SAY } from "@shards/protocol";
-import { parseActionCommand, parseChatCommand } from "./GameView.tsx";
+import type { ChatLine } from "@shards/world";
+import { appendChatLine, parseActionCommand, parseChatCommand } from "./GameView.tsx";
 import { PRESETS, actionsFor, isHeld } from "./settings.ts";
 
 describe("chat commands", () => {
@@ -56,5 +57,16 @@ describe("character creator", () => {
     expect(actionsFor(PRESETS.modern, "KeyE", false)).toEqual(["attack"]);
     expect(actionsFor(PRESETS.original, "ControlLeft", false)).toEqual(["attack"]);
     expect(actionsFor(PRESETS.original, "BracketRight", false)).toEqual(["targetNext"]);
+  });
+});
+
+describe("chat tabs keep their own history", () => {
+  const line = (channel: ChatLine["channel"], time: number): ChatLine => ({ kind: "system", channel, spans: [], time });
+  test("a full channel drops its own oldest line, not another channel's", () => {
+    let lines: ChatLine[] = [line("chat", 1), line("combat", 2), line("combat", 3)];
+    lines = appendChatLine(lines, line("combat", 4), 2);
+    expect(lines.map((l) => l.time)).toEqual([1, 3, 4]);
+    lines = appendChatLine(lines, line("chat", 5), 2);
+    expect(lines.map((l) => l.time)).toEqual([1, 3, 4, 5]);
   });
 });

@@ -4,7 +4,7 @@
 import { describe, expect, test } from "vitest";
 import {
   BP, ByteReader, ByteWriter, STATS, STAT_TAG, UC, buildReqBuyItems, buildReqCast, buildReqLook, buildReqOffer,
-  buildSayGroup, buildUserCommand, CF, readBuyList, readPlayWave, readSpells, readStat, readStatGroup,
+  buildSayGroup, buildUserCommand, CF, buildChangeDescription, buildChangeUrl, buildReqApply, buildReqGetFromContainer, buildReqObjectContents, buildReqPut, readBgOverlay, ANIMATE, readBuyList, readPlayWave, readSpells, readStat, readStatGroup,
 } from "../src/index.ts";
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
@@ -89,5 +89,39 @@ describe("say group", () => {
   test("is BP_SAY_GROUP, a u16 count, the plain ids, then the text (protocol.c PARAM_ID_LIST)", () => {
     const tagged = (2 << 28) | 7; // number items carry a tag; players don't, but ids go out plain either way
     expect(hex(buildSayGroup([42, tagged], "hi"))).toBe(hex(new ByteWriter().u8(BP.SAY_GROUP).u16(2).u32(42).u32(7).string("hi").finish()));
+  });
+});
+
+describe("looking (dialog.c IDOK, gameuser.c ApplyCallback)", () => {
+  test("BP_CHANGE_DESCRIPTION is the plain id and the text", () => {
+    expect(hex(buildChangeDescription(NUMBER | 9, "hello"))).toBe(hex(new ByteWriter().u8(BP.CHANGE_DESCRIPTION).u32(9).string("hello").finish()));
+  });
+  test("UC_CHANGE_URL is a user command with the id and the URL (protocol.c user_msg_table)", () => {
+    expect(hex(buildChangeUrl(42, "http://x"))).toBe(hex(new ByteWriter().u8(BP.USERCOMMAND).u8(UC.CHANGE_URL).u32(42).string("http://x").finish()));
+  });
+  test("BP_REQ_APPLY is two plain ids", () => {
+    expect(hex(buildReqApply(NUMBER | 5, 6))).toBe(hex(new ByteWriter().u8(BP.REQ_APPLY).u32(5).u32(6).finish()));
+  });
+});
+
+describe("containers (protocol.c PARAM_OBJECT, PARAM_ID)", () => {
+  test("BP_SEND_OBJECT_CONTENTS is the plain id", () => {
+    expect(hex(buildReqObjectContents(9673))).toBe(hex(new ByteWriter().u8(BP.SEND_OBJECT_CONTENTS).u32(9673).finish()));
+  });
+  test("BP_REQ_GET_FROM_CONTAINER keeps the number tag and adds the amount", () => {
+    expect(hex(buildReqGetFromContainer(NUMBER | 5, 4))).toBe(hex(new ByteWriter().u8(BP.REQ_GET_FROM_CONTAINER).u32(NUMBER | 5).u32(4).finish()));
+    expect(hex(buildReqGetFromContainer(77))).toBe(hex(new ByteWriter().u8(BP.REQ_GET_FROM_CONTAINER).u32(77).finish()));
+  });
+  test("BP_REQ_PUT is the object, then the plain container id", () => {
+    expect(hex(buildReqPut(NUMBER | 5, 10, NUMBER | 9))).toBe(hex(new ByteWriter().u8(BP.REQ_PUT).u32(NUMBER | 5).u32(10).u32(9).finish()));
+  });
+});
+
+describe("background overlays (server.c ExtractNewBackgroundOverlay)", () => {
+  test("id, icon, name, animation, then the angle and height as WORDs", () => {
+    const w = new ByteWriter().u32(5809).u32(100).u32(200).u8(ANIMATE.NONE).u16(1).u16(1690).u16(65508);
+    expect(readBgOverlay(new ByteReader(w.finish()))).toEqual({
+      id: 5809, iconRes: 100, nameRes: 200, translation: 0, effect: 0, animation: { type: ANIMATE.NONE, group: 1 }, angle: 1690, height: 65508,
+    });
   });
 });

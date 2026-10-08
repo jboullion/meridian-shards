@@ -15,6 +15,7 @@ import {
   ACTION_LABELS, ACTION_TABS, PRESETS, bindingLabel, mouseCode, presetSettings,
   type Action, type ActionTab, type HaloColor, type HotkeyAlias, type KeyBinding, type Settings,
 } from "../settings.ts";
+import type { AudioPreview } from "../audio.ts";
 import { Button, Check, GroupBox, ListBox, Select, Tabs, Text, TextField, Trackbar, Window, at, type Rect } from "./kit.tsx";
 
 type Patch = Partial<Settings>;
@@ -66,14 +67,22 @@ const NOT_YET = "Not in Meridian Shards yet; the setting is kept for when it is"
  * `serverFlags` is the server's CF_* preferences (null until UC_RECEIVE_PREFERENCES).
  */
 export function PreferencesDialog({
-  settings, serverFlags, onApply, onClose,
+  settings, serverFlags, onApply, onPreview, onClose,
 }: {
   settings: Settings;
   serverFlags: number | null;
   onApply: (patch: Patch, serverFlags: number | null) => void;
+  /** Hear the Audio Effects choices while the window is open; null when it closes */
+  onPreview?: (audio: AudioPreview | null) => void;
   onClose: () => void;
 }) {
   const [d, setD] = useState<Settings>(settings);
+  // The music and sound change as you choose (the original waits for OK); Cancel undoes it
+  const { music, musicVolume, sound, soundVolume, loopSounds, randomSounds } = d;
+  useEffect(() => {
+    onPreview?.({ music, musicVolume, sound, soundVolume, loopSounds, randomSounds });
+  }, [onPreview, music, musicVolume, sound, soundVolume, loopSounds, randomSounds]);
+  useEffect(() => () => onPreview?.(null), [onPreview]);
   const [flags, setFlags] = useState(serverFlags ?? 0);
   const set = (patch: Patch) => setD((s) => ({ ...s, ...patch }));
   const flag = (f: number, on: boolean) => setFlags((v) => (on ? v | f : v & ~f));
@@ -139,10 +148,11 @@ export function PreferencesDialog({
         {/* maindlg.c: Steady and Atmospheric Sounds only with Sounds on */}
         <Check at={[61, 172, 64, 9]} label="Steady Sounds" disabled={!d.sound} checked={d.loopSounds} onChange={(v) => set({ loopSounds: v })} />
         <Check at={[61, 187, 80, 9]} label="Atmospheric Sounds" disabled={!d.sound} checked={d.randomSounds} onChange={(v) => set({ randomSounds: v })} />
-        <Text at={[161, 173, 50, 10]}>Sound volume</Text>
-        <Trackbar at={[217, 170, 147, 15]} min={0} max={100} value={d.soundVolume} onChange={(v) => set({ soundVolume: v })} label="Sound volume" ticks={false} />
-        <Text at={[161, 189, 53, 10]}>Music volume</Text>
-        <Trackbar at={[217, 186, 147, 15]} min={0} max={100} value={d.musicVolume} onChange={(v) => set({ musicVolume: v })} label="Music volume" ticks={false} />
+        {/* The original has Sound volume on top; ours sit beside their checkboxes (Music, then Sounds) */}
+        <Text at={[161, 173, 50, 10]}>Music volume</Text>
+        <Trackbar at={[217, 170, 147, 15]} min={0} max={100} value={d.musicVolume} onChange={(v) => set({ musicVolume: v })} label="Music volume" ticks={false} />
+        <Text at={[161, 189, 53, 10]}>Sound volume</Text>
+        <Trackbar at={[217, 186, 147, 15]} min={0} max={100} value={d.soundVolume} onChange={(v) => set({ soundVolume: v })} label="Sound volume" ticks={false} />
 
         <GroupBox at={[6, 207, 364, 57]} label="Interface Features" />
         {check("Show toolbar", [15, 218, 62, 9], "toolbar", true)}

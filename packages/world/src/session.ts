@@ -6,16 +6,20 @@ import {
   AP, BP, ByteReader, ByteWriter, Connection, ENCHANT, GENDER, SAY, apName, bpName, buildLogin, buildNewCharInfo,
   buildReqAttack, buildReqBuy, buildReqBuyItems, buildReqCast, buildReqDeposit, buildReqGame, buildReqLook, buildReqMove,
   buildReqOffer, buildReqTurn, buildReqWithdrawal, buildReqWithdrawalItems, buildSay, buildSayGroup, buildSendEnchantments,
-  buildSendSkills, buildSendSpells, buildSendStatGroups, buildSendStats, buildSimple, buildUseCharacter, buildUserCommand,
+  buildSendSkills, buildSendSpells, buildChangeDescription, buildChangeUrl, buildReqApply,
+  buildReqGetFromContainer, buildReqObjectContents, buildReqPut, buildSendStatGroups, buildSendStats, buildSimple, buildUseCharacter, buildUserCommand,
   buildSendCharInfo, UC, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
   type BuyItem, type CharInfo, type CharacterSlot, type NewCharInfo, type ObjectInfo, type ObjectRef, type PlayWave,
 } from "@shards/protocol";
 import { WorldState, fineToKod } from "./state.ts";
 import { formatServerMessage, parseMarkup, type TextSpan } from "./text.ts";
+import { messageChannel, type ChatChannel } from "./chatChannel.ts";
 
 /** A line for the chat window, with the original client's default colour for its kind. */
 export interface ChatLine {
   kind: "system" | "say" | "said-resource";
+  /** The chat tab it belongs in (chatChannel.ts) */
+  channel: ChatChannel;
   spans: TextSpan[];
   time: number;
   /** Who said it (BP_SAID), for ignoring players (msgfiltr.c) */
@@ -24,13 +28,29 @@ export interface ChatLine {
   sayType?: number;
 }
 
-/** BP_LOOK: an object's description (DisplayDescription). */
+/**
+ * An object's description for the description dialog (dialog.c DisplayDescription): BP_LOOK,
+ * or UC_LOOK_PLAYER for a player (merintr.c HandleLookPlayer).
+ */
 export interface LookResult {
   object: ObjectInfo;
   name: string;
+  /** The fixed text (IDC_DESCFIXED): the description, or a player's title and guild */
   description: string;
+  /** The description box (IDC_DESCBOX): an inscription, or a player's own words; null when there's none */
   inscription: string | null;
+  /** DF_* flags: DF_EDITABLE lets us change the box */
   flags: number;
+  /** A player's web page (UC_LOOK_PLAYER), null for objects */
+  url: string | null;
+  /** UC_LOOK_PLAYER: the Player Description dialog (IDD_DESCPLAYER) */
+  player: boolean;
+}
+
+/** BP_OBJECT_CONTENTS: a container and what's in it. */
+export interface ContainerContents {
+  container: number;
+  items: ObjectInfo[];
 }
 
 /** Default colours (clientd3d/color.c): system messages violet, speech white, resource speech black. */
@@ -91,6 +111,8 @@ export interface SessionEvents {
   error?: (message: string) => void;
   chat?: (line: ChatLine) => void;
   look?: (look: LookResult) => void;
+  /** BP_OBJECT_CONTENTS: what's inside a container we asked about (gameuser.c GotObjectContents) */
+  contents?: (container: number, items: ObjectInfo[]) => void;
   trade?: (list: TradeList) => void;
   offer?: (e: OfferEvent) => void;
   sound?: (e: SoundEvent) => void;
@@ -215,6 +237,36 @@ export class GameSession {
     this.send(new ByteWriter().u8(BP.REQ_UNUSE).u32(objId(id)).finish());
   }
 
+  /** BP_SEND_OBJECT_CONTENTS: ask what's inside a container. */
+  requestContents(id: number): void {
+    this.send(buildReqObjectContents(id));
+  }
+
+  /** BP_REQ_GET_FROM_CONTAINER: take an item (all of it, or `amount` of a number item) out of a container. */
+  getFromContainer(id: number, amount?: number): void {
+    this.send(buildReqGetFromContainer(id, amount));
+  }
+
+  /** BP_REQ_PUT: put an inventory item into a container. */
+  put(id: number, amount: number | undefined, container: number): void {
+    this.send(buildReqPut(id, amount, container));
+  }
+
+  /** BP_REQ_APPLY: use an inventory item on another object. */
+  apply(item: number, target: number): void {
+    this.send(buildReqApply(item, target));
+  }
+
+  /** BP_CHANGE_DESCRIPTION: write an inscription or our own description. */
+  changeDescription(id: number, text: string): void {
+    this.send(buildChangeDescription(id, text));
+  }
+
+  /** UC_CHANGE_URL: our web page, shown when others look at us. */
+  changeUrl(id: number, url: string): void {
+    this.send(buildChangeUrl(id, url));
+  }
+
   /** Activate a room object (levers, chests...). */
   activate(id: number): void {
     this.send(new ByteWriter().u8(BP.REQ_ACTIVATE).u32(objId(id)).finish());
@@ -281,7 +333,7 @@ export class GameSession {
 
   /** A line from the client itself in the chat window (system colour, like GameMessage). */
   localMessage(text: string): void {
-    this.chatLine("system", text);
+    this.chatLine("system", text, "server");
   }
 
   /** BP_REQ_ATTACK (gameuser.c UserAttackClosest sends ATTACK_NORMAL at the target). */
@@ -331,8 +383,8 @@ export class GameSession {
     this.userCommand(UC.REQ_PREFERENCES);
   }
 
-  private chatLine(kind: ChatLine["kind"], text: string, extra: Pick<ChatLine, "sender" | "sayType"> = {}): void {
-    this.events.chat?.({ kind, spans: parseMarkup(text, DEFAULT_COLORS[kind]), time: Date.now(), ...extra });
+  private chatLine(kind: ChatLine["kind"], text: string, channel: ChatChannel, extra: Pick<ChatLine, "sender" | "sayType"> = {}): void {
+    this.events.chat?.({ kind, channel, spans: parseMarkup(text, DEFAULT_COLORS[kind]), time: Date.now(), ...extra });
   }
 
   private setPhase(p: SessionPhase): void {
@@ -433,9 +485,11 @@ export class GameSession {
           break;
         case BP.MESSAGE:
         case BP.SYS_MESSAGE: {
-          // server.c HandleStringMessage -> GameMessage (system colour)
-          const text = formatServerMessage(r.u32(), r, (id) => this.resource(id));
-          if (text !== null) this.chatLine("system", text);
+          // server.c HandleStringMessage -> GameMessage (system colour); the tab from the format
+          const format = r.u32();
+          const text = formatServerMessage(format, r, (id) => this.resource(id));
+          const channel = type === BP.SYS_MESSAGE ? "server" : messageChannel(this.resource(format) ?? "");
+          if (text !== null) this.chatLine("system", text, channel);
           break;
         }
         case BP.SAID: {
@@ -445,14 +499,24 @@ export class GameSession {
           const sayType = r.u8();
           const text = formatServerMessage(r.u32(), r, (id) => this.resource(id));
           if (text !== null)
-            this.chatLine(sayType === SAY.RESOURCE ? "said-resource" : "say", text, { sender: { id: senderId, name: senderName }, sayType });
+            this.chatLine(sayType === SAY.RESOURCE ? "said-resource" : "say", text, "chat", { sender: { id: senderId, name: senderName }, sayType });
           break;
         }
         case BP.USERCOMMAND: {
-          // merintr.c HandleUserCommand: only UC_RECEIVE_PREFERENCES matters to us yet
-          if (r.u8() === UC.RECEIVE_PREFERENCES) {
+          // merintr.c HandleUserCommand
+          const uc = r.u8();
+          if (uc === UC.RECEIVE_PREFERENCES) {
             this.preferences = r.i32();
             this.events.preferences?.(this.preferences);
+          } else if (uc === UC.LOOK_PLAYER) {
+            // HandleLookPlayer: the player, flags, their own words, the fixed string, the URL
+            const object = readObject(r);
+            const flags = r.u8();
+            const lookup = (id: number) => this.resource(id);
+            const words = formatServerMessage(r.u32(), r, lookup) ?? "";
+            const fixed = formatServerMessage(r.u32(), r, lookup) ?? "";
+            const url = r.string();
+            this.events.look?.({ object, name: this.resource(object.nameRes) ?? "", description: fixed, inscription: words, flags, url, player: true });
           }
           break;
         }
@@ -460,6 +524,26 @@ export class GameSession {
         case BP.WITHDRAWAL_LIST: {
           const { seller, items } = readBuyList(r);
           this.events.trade?.({ kind: type === BP.BUY_LIST ? "buy" : "withdraw", seller, items });
+          break;
+        }
+        case BP.WAIT:
+          // server.c HandleWait: the system is saving; the target's id won't survive it
+          this.world.emitIdsStale();
+          break;
+        case BP.INVALIDATE_DATA:
+          // server.c HandleInvalidateData -> game.c ResetUserData: every id we hold is stale,
+          // so ask again for the player, the room, who's on and the inventory (and, as the
+          // interface module does, stat groups, spells, skills, enchantments, preferences)
+          this.world.resetData();
+          this.send(buildSimple(BP.SEND_PLAYER));
+          this.send(buildSimple(BP.SEND_ROOM_CONTENTS));
+          this.send(buildSimple(BP.SEND_PLAYERS));
+          this.requestGameData();
+          break;
+        case BP.OBJECT_CONTENTS: {
+          // server.c HandleObjectContents: the container, then its contents
+          const container = r.u32();
+          this.events.contents?.(container, readObjectList(r));
           break;
         }
         case BP.OFFERED:
@@ -500,7 +584,7 @@ export class GameSession {
           const lookup = (id: number) => this.resource(id);
           const description = formatServerMessage(r.u32(), r, lookup) ?? "";
           const inscription = flags & 0x03 && r.remaining >= 4 ? formatServerMessage(r.u32(), r, lookup) : null;
-          this.events.look?.({ object, name: this.resource(object.nameRes) ?? "", description, inscription, flags });
+          this.events.look?.({ object, name: this.resource(object.nameRes) ?? "", description, inscription, flags, url: null, player: false });
           break;
         }
         default:

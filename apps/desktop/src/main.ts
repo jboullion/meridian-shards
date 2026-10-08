@@ -194,7 +194,9 @@ function createWindow(): void {
     // Our own title bar (apps/client/src/game/TitleBar.tsx) instead of the system's: no
     // frame on Windows and Linux; macOS keeps its traffic lights over ours
     ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 10, y: 9 } } : { frame: false }),
-    icon: process.platform === "linux" ? join(app.getAppPath(), "build", "icon.png") : undefined,
+    // The shard in the taskbar too, the same as the installer and shortcuts use (and not
+    // Electron's own when run from npm run desktop); macOS takes the app bundle's
+    icon: process.platform === "darwin" ? undefined : join(app.getAppPath(), "build", "icon.png"),
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -327,6 +329,10 @@ function setupUpdates(): void {
 }
 
 app.on("window-all-closed", () => app.quit());
+
+// Windows groups taskbar buttons by this id: the same as the installer's shortcuts
+// (electron-builder.yml appId), so the running game sits under the pinned shortcut, with its icon
+if (process.platform === "win32") app.setAppUserModelId("net.meridianshards.client");
 
 void app.whenReady().then(() => {
   log(`Meridian Shards ${app.getVersion()} (Electron ${process.versions.electron}), ${DEV_URL ? `dev: ${DEV_URL}` : `server: ${selectedServer()}`}`);

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { CharInfo, CharacterSlot } from "@shards/protocol";
 import { SAY } from "@shards/protocol";
-import { GameSession, type ChatLine, type LookResult, type OfferEvent, type SessionPhase, type TradeList } from "@shards/world";
+import { GameSession, type ChatLine, type ContainerContents, type LookResult, type OfferEvent, type SessionPhase, type TradeList } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
 import { desktop, gameSocketUrl } from "../host.ts";
@@ -9,7 +9,7 @@ import { GameAudio } from "./audio.ts";
 import { CharacterCreator } from "./CharacterCreator.tsx";
 import { AssetDownload } from "./AssetDownload.tsx";
 import { CharacterSelect } from "./CharacterSelect.tsx";
-import { GameView, MAX_CHAT_LINES } from "./GameView.tsx";
+import { GameView, appendChatLine } from "./GameView.tsx";
 import { Framed } from "./TitleBar.tsx";
 import { getSettings } from "./settings.ts";
 import { IconRenderer } from "./icons.ts";
@@ -36,6 +36,8 @@ interface Live {
   icons: IconRenderer;
   trades: Relay<TradeList>;
   offers: Relay<OfferEvent>;
+  looks: Relay<LookResult>;
+  contents: Relay<ContainerContents>;
 }
 
 /**
@@ -71,7 +73,6 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   const [motd, setMotd] = useState("");
   const [error, setError] = useState<string | null>(takeUpdatedNotice);
   const [chat, setChat] = useState<ChatLine[]>([]);
-  const [look, setLook] = useState<LookResult | null>(null);
   /** The creator is open for this empty slot once BP_CHARINFO arrives */
   const [creating, setCreating] = useState<{ slotId: number; info: CharInfo | null } | null>(null);
   /** The game options the server keeps for us (UC_RECEIVE_PREFERENCES) */
@@ -125,6 +126,8 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   const connect = (username: string, password: string, audio: GameAudio) => {
     const trades = new Relay<TradeList>();
     const offers = new Relay<OfferEvent>();
+    const looks = new Relay<LookResult>();
+    const contents = new Relay<ContainerContents>();
     const s = new GameSession(
       { url: gameSocketUrl(), username, password, secretKey: __SECRET_KEY__, lookupResource: (id) => rsb.get(id), pingIntervalMs: 0 },
       {
@@ -141,18 +144,19 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
         chat: (line) => {
           const self = s.world.self;
           if (ignoredLine(line, self ? (s.resource(self.info.nameRes) ?? "") : "")) return;
-          setChat((c) => [...c.slice(-(MAX_CHAT_LINES - 1)), line]);
+          setChat((c) => appendChatLine(c, line));
         },
         preferences: setServerPrefs,
         latency: setLatency,
-        look: setLook,
+        look: looks.emit,
+        contents: (container, items) => contents.emit({ container, items }),
         trade: trades.emit,
         offer: offers.emit,
         sound: (e) => audio.handle(e),
       },
     );
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => s.resource(id)), trades, offers });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => s.resource(id)), trades, offers, looks, contents });
   };
 
   const logout = () => {
@@ -224,8 +228,8 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       offers={live.offers.on}
       phase={phase}
       chat={chat}
-      look={look}
-      onCloseLook={() => setLook(null)}
+      looks={live.looks.on}
+      contents={live.contents.on}
       onLogout={logout}
       serverPrefs={serverPrefs}
       latency={latency}
