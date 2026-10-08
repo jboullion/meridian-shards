@@ -20,6 +20,13 @@ import { messageChannel, type ChatChannel } from "./chatChannel.ts";
 import { readDamageDealt, type DamageDealt } from "./combatHit.ts";
 
 /** A line for the chat window, with the original client's default colour for its kind. */
+/**
+ * How long after choosing a character, and again after entering the game, server messages
+ * count as the logon's and go to the Server tab: the welcome, events, mail, quests and the
+ * help text, which can mention attacking or killing. Attacking or casting ends it at once.
+ */
+export const LOGON_SERVER_TAB_MS = 5000;
+
 export interface ChatLine {
   kind: "system" | "say" | "said-resource";
   /** The chat tab it belongs in (chatChannel.ts) */
@@ -262,6 +269,7 @@ export class GameSession {
   }
 
   useCharacter(id: number): void {
+    this.logonUntil = Date.now() + LOGON_SERVER_TAB_MS;
     this.setPhase("entering");
     this.conn.sendGame(buildUseCharacter(id));
   }
@@ -430,6 +438,7 @@ export class GameSession {
   }
 
   cast(spell: number, targets: ObjectRef[] = []): void {
+    this.logonUntil = 0;
     this.send(buildReqCast(spell, targets));
   }
 
@@ -440,6 +449,7 @@ export class GameSession {
 
   /** BP_REQ_ATTACK (gameuser.c UserAttackClosest sends ATTACK_NORMAL at the target). */
   attack(target: number): void {
+    this.logonUntil = 0;
     this.send(buildReqAttack(target));
   }
 
@@ -555,6 +565,9 @@ export class GameSession {
     return this.world.dynamicResources.get(id) ?? this.opts.lookupResource(id, this.language);
   }
 
+  /** Until then, server messages are the logon's, for the Server tab (LOGON_SERVER_TAB_MS) */
+  private logonUntil = 0;
+
   /**
    * The resource language strings are shown in (config.language, the Language menu; English
    * is 0). The redbook token and our format-string matching (chat tabs, damage numbers)
@@ -669,6 +682,7 @@ export class GameSession {
         // game.c EnterNewRoom: looping sounds belong to the room we left
         this.events.sound?.({ type: "stopLoops" });
         if (this.phase !== "game") {
+          this.logonUntil = Date.now() + LOGON_SERVER_TAB_MS;
           this.setPhase("game");
           this.requestGameData();
         }
@@ -719,7 +733,9 @@ export class GameSession {
           const params = new ByteReader(r.buf.subarray(r.pos));
           const text = formatServerMessage(format, r, (id) => this.resource(id));
           const formatText = this.englishResource(format) ?? "";
-          const channel = type === BP.SYS_MESSAGE ? "server" : messageChannel(formatText);
+          // The logon's messages (welcome, news, quests, the help text) all go to the Server tab,
+          // whatever words they use; after that, the format string decides
+          const channel = type === BP.SYS_MESSAGE || Date.now() < this.logonUntil ? "server" : messageChannel(formatText);
           if (text !== null) this.chatLine("system", text, channel);
           if (type === BP.MESSAGE) {
             const hit = readDamageDealt(formatText, params, (id) => this.resource(id));

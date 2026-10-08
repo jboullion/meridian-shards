@@ -8,6 +8,8 @@
 // recognised by that format string, before the names are filled in: a monster or player called
 // "Slayer" can't move a line into the wrong tab. Descriptions and NPC speech never come this
 // way (they're BP_LOOK and BP_SAID), so the words below only ever meet game messages.
+// The logon's messages skip this and go to Server (GameSession LOGON_SERVER_TAB_MS): the
+// newbie help text says "E key - attack monsters".
 
 export type ChatChannel = "chat" | "combat" | "server";
 

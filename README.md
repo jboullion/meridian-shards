@@ -1,15 +1,27 @@
 # Meridian Shards
 
-A faithful browser port of the classic Meridian 59 client: the original 2.5D look, sprites and textures, rendered with WebGL at modern resolutions, with modern controls. It connects to our own server running the original Server 104 server code. Every server is a "shard" of one original universe.
+A faithful port of the classic Meridian 59 client to the browser, the desktop and (in progress) Android: the original 2.5D look, sprites and textures, rendered with WebGL at modern resolutions, with modern controls beside the original ones. It connects to our own server, which runs the original Server 104 server code unchanged. Every server is a "shard" of one original universe.
 
-**Status:**
-- **Milestone 0 (the de-risk spike) is done.** The server builds and runs locally. A headless client logs in through the WebSocket gateway, creates a character, enters the Inn of Raza and walks out into Raza, and the original Windows client sees it there.
-- **The browser client logs in and enters the world.** You can pick or create a character, then stand in the Inn of Raza or Raza with every object (NPCs, players, signs, trees, torches) drawn, lit and labelled like the original D3D client. Walking uses the original collision code, and you can open doors, cross into neighbouring zones, chat, look at things, and pick up and drop items.
-- **The original's interface works:** the health, mana and vigor bars, your face and enchantments, the minimap, and the inventory, stats, spells, skills and quests tabs. You can buy from shopkeepers, sell to them, use the bank and vault, and hear the original music and sounds. Settings (O or F10) cover sound and key bindings, with a modern (WASD) preset and the original's keys.
-- **Combat and character creation work:** target and fight the forest creatures with your weapon in hand, cast spells at a target, die and walk out of the Underworld, and make new characters with the original's full creator (face, stats, spells and skills).
-- **The room viewer (`/?viewer`) renders every Raza slice room** from the original files.
+## Status
 
-See [docs/roadmap.md](docs/roadmap.md).
+The client does what the original client and its modules do. What's still missing is listed, with the original's source for each, in [docs/missing-features.md](docs/missing-features.md).
+
+- **The world:** every room drawn as the original D3D client draws it, with its lighting, sky, sun and moon, weather, and rooms that change (lifts, doors, the Raza clock). Objects, players and monsters are drawn, lit and animated, with blur, waver and flashing effects. Walking uses the original's movement code, so original clients see our moves.
+- **Playing:**
+  - fighting with a weapon in hand, casting spells (with a Spells menu by school), dying and leaving the Underworld;
+  - looking at things, picking up and dropping, containers, trading with players, shops, the bank and the vault;
+  - chat with tabs (All, Chat, Combat, Server), tells, groups, emotes and moods, and the original's typed commands and aliases;
+  - mail, the news globes, guilds, stat reallocation, chess, and the original's full character creator.
+- **The interface:** the original's column (bars, face, enchantments, minimap with notes, the inventory, stats, spells, skills and quests tabs), toolbar, cursors, stone borders, and its Preferences, Configuration (key bindings) and Actions windows. The controls come in a modern (WASD, mouselook) preset and the original's keys. There's also a profanity filter, a logout timer, a language choice (English, German, Portuguese) and the splash screen.
+- **Ours on top:** damage numbers, chat tabs, a latency meter, and pixel-accurate clicking.
+- **For staff:** an in-game admin console for admin accounts ([docs/admin-console.md](docs/admin-console.md)).
+- **Where to play:**
+  - in a browser on the hosted server, https://35-206-75-121.sslip.io;
+  - with the desktop app for Windows, macOS and Linux, released on [GitHub](https://github.com/jboullion/meridian-shards/releases) (it updates itself);
+  - against a local server, for development.
+- **Android:** the app runs in the emulator against the local server. The phone layout, touch controls and a release build are next ([ADR 0003](docs/adr/0003-android.md)).
+
+The milestones and their progress are in [docs/roadmap.md](docs/roadmap.md).
 
 ## Quick start (Windows, local)
 
@@ -21,19 +33,33 @@ server\build.cmd          # build blakserv, the Kod and rsc0000.rsb from server\
 server\setup-run.cmd      # prepare server\src\run\server and install our config
 npm run assets            # copy the original game files into dist/assets (never committed)
 npm run dev               # blakserv + gateway + Vite; open http://localhost:5173 and log in
-npm run headless -- --user shardbot --pass shardbot --stay 10
 ```
 
-`npm run assets` reads the art and sounds from an installed Server 104 client (`%LOCALAPPDATA%\Meridian-104`).
+- `npm run assets` reads the art and sounds from an installed Server 104 client (`%LOCALAPPDATA%\Meridian-104`). Run it again after pulling changes that add interface files.
+- `server\src` is a git-ignored copy of the Server 104 source. Copy it from `meridian-unreal\Server-104` (for example with `robocopy <that folder> server\src /E /XD run .vs`).
+- The local test accounts are `shardbot`, `shardpal` and the admin `shardadmin` (password = name); [AGENTS.md](AGENTS.md) says how to make them on a fresh server.
 
-`server\src` is a git-ignored copy of the Server 104 source. Copy it from `meridian-unreal\Server-104` (for example with `robocopy <that folder> server\src /E /XD run .vs`).
+Other commands:
+
+```bash
+npm run check             # typecheck, lint and tests
+npm run desktop           # the dev stack plus the desktop app
+npm run desktop:dist      # desktop installers for this OS
+npm run android           # build the Android app and run it on a phone or the emulator
+npm run headless -- --user shardbot --pass shardbot --stay 10   # a scripted client
+```
+
+The room viewer is at http://localhost:5173/?viewer. The desktop app also takes the original client's command line (`/U:name /W:password /Q` to log straight in).
 
 ## Docs
 
-- [AGENTS.md](AGENTS.md): rules, layout and conventions
-- [docs/adr/0001-direction.md](docs/adr/0001-direction.md): decisions and architecture
-- [docs/roadmap.md](docs/roadmap.md): milestones, the slice checklist and progress
+- [AGENTS.md](AGENTS.md): rules, layout, conventions, and how to test things on our server
+- [docs/roadmap.md](docs/roadmap.md): milestones and progress
+- [docs/missing-features.md](docs/missing-features.md): what the original has that we don't yet, and what's different on purpose
+- [docs/admin-console.md](docs/admin-console.md): using the in-game admin console
 - [docs/research/protocol.md](docs/research/protocol.md): the client/server protocol, with source references
+- Decisions: [the direction](docs/adr/0001-direction.md), [the desktop app](docs/adr/0002-desktop-shell.md), [the Android app](docs/adr/0003-android.md)
+- [deploy/README.md](deploy/README.md): running the hosted server
 
 ## Licence
 
