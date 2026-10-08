@@ -50,6 +50,18 @@ export function at(r: Rect): CSSProperties {
 
 /** drawint.c ELEMENT_E*: the edge treatment's corner halves and repeat strips (merintr.rc IDB_E*) */
 const EDGE_PIECES = ["ultop", "ulleft", "urtop", "urright", "llbottom", "llleft", "lrbottom", "lrright", "urepeat", "brepeat", "lrepeat", "rrepeat"];
+/**
+ * merintr drawint.c's treatments around the game's areas, drawn transparently: the view's
+ * corners (IDB_UL*..LR*), the map's (IDB_M*), the inventory's (IDB_I*) and the graph bars'
+ * (IDB_BAR*). Each becomes --ui-t-<file> (styles.css .treat-*).
+ */
+const TREATMENT_PIECES = [
+  "viewtreat_ul_top", "viewtreat_ul_left", "viewtreat_ur_top", "viewtreat_ur_right",
+  "viewtreat_ll_left", "viewtreat_ll_bottom", "viewtreat_lr_right", "viewtreat_lr_bottom",
+  "maptreat_ul", "maptreat_ur", "maptreat_ll", "maptreat_lr", "maptreat_urepeat", "maptreat_brepeat", "maptreat_lrepeat", "maptreat_rrepeat",
+  "iultop", "iulleft", "iurtop", "iurright", "illbottom", "illleft", "ilrbottom", "ilrright", "itop", "ibottom", "ileft", "iright",
+  "barleft", "barright", "bartop", "barbottom",
+];
 /** merintr.rc IDB_B*: the edit box treatment (the top corners reuse the top repeat; the bottom is stripped off) */
 const EDIT_PIECES = ["ulleft", "urright", "llleft", "lrright", "urepeat", "lrepeat", "rrepeat"];
 
@@ -63,10 +75,22 @@ export function installUiTheme(assets: AssetStore): void {
   const url = (name: string) => `url("${assets.url(`ui/${name}`)}")`;
   root.setProperty("--ui-bkgnd", url("bkgnd.bmp"));
   root.setProperty("--ui-invbkgnd", url("invbkgnd.bmp"));
+  // cursor.c: the view's cursors (client.rc IDC_*CURSOR), each with the browser's nearest after it
+  const cursors: [string, string, string][] = [
+    ["target", "target.cur", "crosshair"],
+    ["cross", "crosscur.cur", "pointer"],
+    ["inside", "incur.cur", "pointer"],
+    ["get", "get.cur", "grabbing"],
+  ];
+  for (const [name, file, fallback] of cursors)
+    root.setProperty(`--cursor-${name}`, assets.has(`ui/${file}`) ? `${url(file)}, ${fallback}` : fallback);
   for (const p of EDIT_PIECES) root.setProperty(`--ui-b-${p}`, url(`edittreat_${p}.bmp`));
   // The edge treatment is drawn transparently: its cyan shows what's behind
   for (const p of EDGE_PIECES) {
     void keyOut(assets.url(`ui/edgetreat_${p}.bmp`)).then((u) => root.setProperty(`--ui-e-${p}`, `url("${u}")`));
+  }
+  for (const p of TREATMENT_PIECES) {
+    if (assets.has(`ui/${p}.bmp`)) void keyOut(assets.url(`ui/${p}.bmp`)).then((u) => root.setProperty(`--ui-t-${p}`, `url("${u}")`));
   }
   if (assets.has("ui/heidelb1.ttf")) {
     assets
@@ -219,9 +243,11 @@ export function Button({
 
 /** EDITTEXT: Times (font.c FONT_INPUT) in the edit treatment. */
 export function TextField({
-  at: r, value, onChange, password, autoFocus, maxLength, autoComplete, className, type = "text", min, max,
+  at: r, value, onChange, password, autoFocus, maxLength, autoComplete, className, type = "text", min, max, disabled,
 }: {
   at?: Rect;
+  /** WS_DISABLED */
+  disabled?: boolean;
   value: string | number;
   onChange: (v: string) => void;
   password?: boolean;
@@ -244,6 +270,7 @@ export function TextField({
         autoComplete={autoComplete}
         min={min}
         max={max}
+        disabled={disabled}
         spellCheck={false}
       />
     </span>

@@ -243,6 +243,16 @@ export interface Settings {
   mapAnnotations: boolean;
   showFps: boolean;
   profanityFilter: boolean;
+  /** Profanity Filter Settings (config.ignoreprofane): drop a message with profanity rather than obscure it */
+  profanityIgnore: boolean;
+  /** Logout timer (logoff.c, config.timeoutenabled): log off after this long idle */
+  logoutTimer: boolean;
+  /** config.language: the resource language strings are shown in (languages.ts; 0 English) */
+  language: number;
+  /** config.timeout: minutes idle before logging off */
+  logoutMinutes: number;
+  /** config.extraprofane: Extra search for suspected embedded profanity */
+  profanityExtra: boolean;
   xpAsPercent: boolean;
 
   // ---- Configuration (the Bind Editor's Options and Mouse tab)
@@ -323,6 +333,11 @@ export const DEFAULT_SETTINGS: Settings = {
   mapAnnotations: true,
   showFps: false,
   profanityFilter: true,
+  profanityIgnore: false,
+  logoutTimer: false,
+  language: 0,
+  logoutMinutes: 1440,
+  profanityExtra: false,
   xpAsPercent: false,
   typeToChat: false,
   alwaysRun: false,

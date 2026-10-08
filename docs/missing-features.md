@@ -34,19 +34,13 @@ Phase 3 is done: the news globes, mail, stat reallocation and guilds. What's lef
 
 ## Interface (phase 4)
 
+Phase 4 is done: the toolbar, tooltips, map annotations, the profanity filter, the logout timer, the About box and the splash, the cursors, the stone borders, the resource language, quick start and the desktop command line. What's left:
+
 | What | Original | What it needs |
 |---|---|---|
-| *Show toolbar* | `toolbar.c` | The button bar (with the buttons the modules add). Its actions are spread over our menu and keys. |
-| *Show tooltips* | `tooltip.c` | Tooltips on the interface column's buttons, stat bars and enchantments. |
-| *Map annotations* | `annotate.c`, `map.c:567,813` | Notes on the map, kept per room. |
-| *Filter text profanity*, *Profanity Options and Policy...* | `profane.c`, `IDD_PROFANITY` | The word list and the dialog. |
-| Logout timer | `logoff.c`, `IDD_TIMEOUT` | Logging off after a time idle. |
-| About box and intro | `about.c`, `module/intro` | The credits, and the splash before login (`splash.bgf`, `main.ogg`). |
-| Cursors | `cursor.c` | The original's cursor bitmaps. The wait cursor while the server saves is done (CSS `wait`). |
-| Interface borders | `drawint.c` | The stone treatments around the view and the column (the dialogs have them). |
-| Resource language | `language.c`, `loadrsc.c:368` | Choosing the strings' language (German is in the `.rsb`). |
-| Quick start | `charpick.c:77-82` | Entering straight away with exactly one character. |
-| Desktop command line | `config.c:389-440` | `/H /P /U /W`-style switches, and a single instance. |
+| The window's edge treatment, the stats area's and the user area's | `drawint.c` (IDB_E*, IDB_S*, the personal enchantment treatment) | The view's corners, the map, the inventory and the graph bars have theirs; the stone edge round the whole window, the stats list's thin frame and the frame round the face and bars don't yet. |
+| The drop cursor | `inventry.c`, `merintr.c EventSetCursor` (IDC_DROPCURSOR) | Dragging from the inventory uses the browser's drag and drop, whose cursor a page can't set. |
+| Map annotations on the desktop or phone | `mapfile.c` | Kept in the page's storage per server and room checksum, like the mailbox; the desktop app could keep them in a file. |
 
 ## Mini-games and admin (phase 5)
 
@@ -70,4 +64,7 @@ Phase 3 is done: the news globes, mail, stat reallocation and guilds. What's lef
 | Blur and waver over the hands | The D3D client blurs the whole frame, hands and screen flashes included; ours blurs the 3D view, since the hands are drawn on a 2D canvas over it. |
 | Sector flicker (`BP_SECTOR_LIGHT`, `SF_FLICKER`) | The D3D client keeps the sector's own light while flickering, so it's parsed and has no effect, as there. |
 | The DM module | Staff tools (BGF editor, quest editor, G-Channel); staff use the maintenance port. |
+| The intro's logo and splash | The original fades in `logo.bmp` (Near Death Studios' logo), then shows `splash.bgf`, which in the Server 104 files names that server. We skip the logo and show `xsplash.bgf`, the original Meridian 59 splash, with the same button and music. |
+| One desktop app at a time | The original ran as many clients as you liked. Ours share one profile (storage, the asset cache), so a second start brings the first forward (`requestSingleInstanceLock`). |
+| `/H` and `/P` | The original connects to that host and port; our desktop app takes the listed server with that host (and port), else `https://host:port` (http for localhost), or a whole origin, for this run only. |
 | The character screen's ad panels (`BP_AD_SELECTED`), Print Map, font and colour choices, mipmaps and anti-aliasing | Low value. Settings save themselves, so there's no Save Now. |

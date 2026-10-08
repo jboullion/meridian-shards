@@ -15,6 +15,7 @@ import { useAsyncImage, useWorld } from "./hooks.ts";
 import { useKeyedHalves, useKeyedImage } from "./keyed.ts";
 import type { Settings } from "../settings.ts";
 import { MiniMap } from "./MiniMap.tsx";
+import type { MapAnnotation } from "../annotations.ts";
 
 /** include/proto.h OF_APPLYABLE: used on something else */
 const OF_APPLYABLE = 0x1000;
@@ -59,11 +60,13 @@ export function ObjIcon({
  * the right piece, each from the up or down half of its bitmap, drawn transparently.
  */
 function StatTab({
-  assets, bitmap, label, active, onClick,
+  assets, bitmap, label, tooltip, active, onClick,
 }: {
   assets: AssetStore;
   bitmap: string;
   label: string;
+  /** statbtn.c: the button's name as a tooltip (Show tooltips) */
+  tooltip: boolean;
   active: boolean;
   onClick: () => void;
 }) {
@@ -72,7 +75,7 @@ function StatTab({
   const right = useKeyedHalves(assets.url("ui/statbtn_right.bmp"));
   const half = (h: [string, string] | null) => (h ? { backgroundImage: `url(${h[active ? 1 : 0]})` } : undefined);
   return (
-    <button className={active ? "stat-tab active" : "stat-tab"} title={label} aria-label={label} onClick={onClick}>
+    <button className={active ? "stat-tab active" : "stat-tab"} title={tooltip ? label : undefined} aria-label={label} onClick={onClick}>
       <span className="mid" style={half(mid)} />
       <span className="glyph" style={half(left)} />
       <span className="cap" style={half(right)} />
@@ -106,7 +109,12 @@ function StatBar({ stat, main = false, xpAsPercent = false }: { stat: Statistic;
 
 export function Sidebar({
   session, icons, assets, getRoom, tab, onTab, settings, onLookItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, target, selecting, onSelectObject, onCast,
+  annotations, onAnnotate,
 }: {
+  /** The room's map annotations (annotate.c), drawn with Map annotations on */
+  annotations: readonly MapAnnotation[];
+  /** A right click on the minimap, in room coordinates: add or edit an annotation */
+  onAnnotate: (x: number, y: number) => void;
   session: GameSession;
   icons: IconRenderer;
   assets: AssetStore;
@@ -141,6 +149,8 @@ export function Sidebar({
   const main = (world.stats.get(STAT_GROUP.MAIN) ?? []).filter((s) => s.type === STATS.NUMERIC && s.numeric?.tag === STAT_TAG.INT);
   const self = world.self;
   const rs = (id: number) => session.resource(id) ?? "";
+  /** tooltip.c: names on hover only with Show tooltips (enchant.c TTN_NEEDTEXT, statbtn.c) */
+  const tip = (text: string) => (settings.tooltips ? text : undefined);
 
   const pick = (t: Tab, group: number) => {
     // stats.c: the inventory is always here; other groups are asked for when shown
@@ -153,7 +163,7 @@ export function Sidebar({
       <div className="user-area">
         <div
           className={selecting ? "portrait selecting" : "portrait"}
-          title={self ? rs(self.info.nameRes) : ""}
+          title={self ? tip(rs(self.info.nameRes)) : undefined}
           // userarea.c UserAreaProc: a click picks us as a spell target; a right click looks at us
           onClick={() => self && selecting && onSelectObject(self.id)}
           onContextMenu={(e) => {
@@ -182,7 +192,7 @@ export function Sidebar({
             icons={icons}
             object={e}
             className="enchant"
-            title={rs(e.nameRes)}
+            title={tip(rs(e.nameRes))}
             onContextMenu={(ev) => {
               // enchant.c WM_RBUTTONDOWN: look at the enchantment
               ev.preventDefault();
@@ -191,10 +201,19 @@ export function Sidebar({
           />
         ))}
       </div>
-      <div className="map-frame">
+      <div className="map-frame treat-map">
         {/* Show dynamic map (config.drawmap) off: just the map paper */}
         {settings.dynamicMap ? (
-          <MiniMap world={world} getRoom={getRoom} zoom={settings.mapZoom} paper={assets.url("ui/mapbkgnd.bmp")} />
+          <MiniMap
+            world={world}
+            getRoom={getRoom}
+            zoom={settings.mapZoom}
+            paper={assets.url("ui/mapbkgnd.bmp")}
+            annotations={settings.mapAnnotations ? annotations : undefined}
+            annotationIcon={assets.url("ui/annotate.bmp")}
+            onAnnotate={onAnnotate}
+            tooltips={settings.tooltips}
+          />
         ) : (
           <div className="minimap off" style={{ backgroundImage: `url(${assets.url("ui/mapbkgnd.bmp")})` }} />
         )}
@@ -205,7 +224,7 @@ export function Sidebar({
             icons={icons}
             object={e}
             className="enchant"
-            title={rs(e.nameRes)}
+            title={tip(rs(e.nameRes))}
             onContextMenu={(ev) => {
               // enchant.c WM_RBUTTONDOWN: look at the enchantment
               ev.preventDefault();
@@ -217,10 +236,11 @@ export function Sidebar({
       </div>
       <div className="stat-tabs">
         {TABS.map((t) => (
-          <StatTab key={t.tab} assets={assets} bitmap={t.bitmap} label={t.label} active={tab === t.tab} onClick={() => pick(t.tab, t.group)} />
+          <StatTab key={t.tab} assets={assets} bitmap={t.bitmap} label={t.label} tooltip={settings.tooltips} active={tab === t.tab} onClick={() => pick(t.tab, t.group)} />
         ))}
       </div>
       {/* "inventory-panel": where dragging an object from the view picks it up (mermain.c A_ENDDRAG) */}
+      <div className="stat-frame treat-inv">
       <div className={tab === "inventory" ? "stat-area inventory-panel" : "stat-area"} style={{ backgroundImage: ui("invbkgnd.bmp") }}>
         {tab === "inventory" ? (
           <Inventory
@@ -235,6 +255,7 @@ export function Sidebar({
             selecting={selecting}
             onSelectObject={onSelectObject}
             showAmounts={settings.inventoryNumbers}
+            tooltips={settings.tooltips}
           />
         ) : tab === "stats" ? (
           <NumericStats stats={world.stats.get(STAT_GROUP.STATS) ?? []} rs={rs} />
@@ -248,6 +269,7 @@ export function Sidebar({
           />
         )}
       </div>
+      </div>
     </aside>
   );
 }
@@ -260,8 +282,10 @@ function PortraitIcon({ icons, object }: { icons: IconRenderer; object: ObjectIn
 
 /** inventry.c: a grid of 40x40 boxes; in-use items sit on the yellow sun (inuse.bmp). */
 function Inventory({
-  session, icons, assets, onLookItem, onDropItem, onApplyItem, onPut, onTabOut, selecting, onSelectObject, showAmounts,
+  session, icons, assets, onLookItem, onDropItem, onApplyItem, onPut, onTabOut, selecting, onSelectObject, showAmounts, tooltips,
 }: {
+  /** Our item names on hover, with Show tooltips */
+  tooltips: boolean;
   /** Show amounts for inventory items (config.inventory_num) */
   showAmounts: boolean;
   session: GameSession;
@@ -306,7 +330,7 @@ function Inventory({
           key={o.id}
           className={selected === o.id ? "inv-item selected" : "inv-item"}
           style={selected === o.id ? { backgroundImage: `url(${assets.url("ui/icursor.bmp")})` } : undefined}
-          title={(isNumberItem(o.id) ? `${o.amount} ` : "") + rs(o.nameRes)}
+          title={tooltips ? (isNumberItem(o.id) ? `${o.amount} ` : "") + rs(o.nameRes) : undefined}
           draggable
           onDragStart={(e) => {
             e.dataTransfer.setData("application/x-shards-item", String(o.id));

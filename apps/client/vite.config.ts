@@ -6,6 +6,8 @@ import { defineConfig } from "vite";
 // secret (it ships in the JS); server/config/blakserv.cfg is the one source of truth.
 const cfg = readFileSync(new URL("../../server/config/blakserv.cfg", import.meta.url), "utf8");
 const secretKey = /^SecretKey\s+(\S+)/m.exec(cfg)?.[1] ?? "";
+// The release version (the desktop app's), for the About box
+const appVersion = (JSON.parse(readFileSync(new URL("../desktop/package.json", import.meta.url), "utf8")) as { version: string }).version;
 
 // The original game files (dist/assets, built by `npm run assets`) are served at
 // /assets/* in development. Production serves them separately (Caddy), so they
@@ -15,6 +17,7 @@ export default defineConfig({
   publicDir: "../../dist",
   define: {
     __SECRET_KEY__: JSON.stringify(secretKey),
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
   server: {
     // IPv4 loopback rather than "localhost" (::1 only on this machine): `adb reverse`, which

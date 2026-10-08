@@ -25,8 +25,9 @@ import electronUpdater from "electron-updater";
 import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
-import type { DesktopAssetProgress, DesktopConfig, DesktopUpdate } from "../../client/src/host.ts";
+import type { DesktopAssetProgress, DesktopConfig, DesktopLaunch, DesktopUpdate } from "../../client/src/host.ts";
 import { AssetCache, type DownloadRun } from "./assetCache.ts";
+import { parseCommandLine, serverFromCommandLine } from "./commandLine.ts";
 import { log } from "./log.ts";
 import { saveWindowState, selectServer, selectedServer, servers, windowState } from "./settings.ts";
 
@@ -35,6 +36,20 @@ const DEVTOOLS = !!DEV_URL || process.argv.includes("--devtools");
 const SCHEME = "app";
 const HOST = "shards";
 const APP_URL = `${SCHEME}://${HOST}/`;
+
+// The original's command line (/H /P /U /W /Q): after the executable, and in development
+// after the app's path too
+const commandLine = parseCommandLine(process.argv.slice(app.isPackaged ? 1 : 2));
+/** /H and /P choose the server for this run, without changing the saved choice */
+let launchServer = DEV_URL ? null : serverFromCommandLine(commandLine, servers());
+/** /U, /W and /Q go to the first page only */
+let launch: DesktopLaunch | null =
+  commandLine.username || commandLine.password || commandLine.quickstart
+    ? { username: commandLine.username, password: commandLine.password, quickstart: commandLine.quickstart }
+    : null;
+
+/** The server the page's files and socket come from */
+const currentServer = () => launchServer ?? selectedServer();
 
 // Before `ready`: a standard, secure scheme gets an origin of its own (localStorage,
 // workers, fetch, module scripts) like an https site.
@@ -113,7 +128,7 @@ let assetProgress: DesktopAssetProgress | null = null;
  */
 function downloadAssets(): void {
   if (DEV_URL) return;
-  const origin = selectedServer();
+  const origin = currentServer();
   if (download && download.origin === origin && !download.finished) return;
   if (download) download.cancelled = true;
   const run = { cancelled: false, origin, finished: false };
@@ -129,13 +144,19 @@ function downloadAssets(): void {
 }
 
 function config(): DesktopConfig {
+  const list = servers();
+  // A server named by /H that isn't in the list is in it for this run
+  if (launchServer && !list.some((s) => s.origin === launchServer)) list.push({ name: new URL(launchServer).host, origin: launchServer });
+  const first = launch;
+  launch = null;
   return {
     version: app.getVersion(),
     dev: !!DEV_URL,
     platform: process.platform,
     // In development the page's own origin (Vite) is the only server: its /assets and /ws
-    servers: DEV_URL ? [{ name: "Local (dev)", origin: new URL(DEV_URL).origin }] : servers(),
-    server: DEV_URL ? new URL(DEV_URL).origin : selectedServer(),
+    servers: DEV_URL ? [{ name: "Local (dev)", origin: new URL(DEV_URL).origin }] : list,
+    server: DEV_URL ? new URL(DEV_URL).origin : currentServer(),
+    launch: first,
   };
 }
 
@@ -298,8 +319,9 @@ function setupIpc(): void {
     } else if (action === "close") win.close();
   });
   ipcMain.on("shards:select-server", (_e, origin: unknown) => {
-    if (DEV_URL || typeof origin !== "string" || origin === selectedServer()) return;
+    if (DEV_URL || typeof origin !== "string" || origin === currentServer()) return;
     if (!selectServer(origin)) return;
+    launchServer = null;
     log(`server: ${origin}`);
     // The page's files (manifest, rsc0000.rsb, rooms) come from the server: start over
     win?.webContents.reload();
@@ -330,16 +352,31 @@ function setupUpdates(): void {
 
 app.on("window-all-closed", () => app.quit());
 
+// One game at a time: two would share one profile (its storage and the asset cache). The
+// original allowed several clients; a second start here brings the running one forward.
+const firstInstance = !!DEV_URL || app.requestSingleInstanceLock();
+if (!firstInstance) app.quit();
+app.on("second-instance", () => {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+});
+
 // Windows groups taskbar buttons by this id: the same as the installer's shortcuts
 // (electron-builder.yml appId), so the running game sits under the pinned shortcut, with its icon
 if (process.platform === "win32") app.setAppUserModelId("net.meridianshards.client");
 
 void app.whenReady().then(() => {
-  log(`Meridian Shards ${app.getVersion()} (Electron ${process.versions.electron}), ${DEV_URL ? `dev: ${DEV_URL}` : `server: ${selectedServer()}`}`);
+  if (!firstInstance) return;
+  log(`Meridian Shards ${app.getVersion()} (Electron ${process.versions.electron}), ${DEV_URL ? `dev: ${DEV_URL}` : `server: ${currentServer()}`}`);
+  const { host, port, username, password, quickstart } = commandLine;
+  if (host || port || username || password || quickstart)
+    log(`command line: ${[host && `/H:${host}`, port && `/P:${port}`, username && `/U:${username}`, password && "/W:...", quickstart && "/Q"].filter(Boolean).join(" ")}`);
   protocol.handle(SCHEME, (req) => {
     const url = new URL(req.url);
     if (url.host !== HOST) return new Response("not found", { status: 404 });
-    if (url.pathname.startsWith("/assets/")) return assets.handle(selectedServer(), url.pathname.slice("/assets/".length), url.searchParams.get("v"));
+    if (url.pathname.startsWith("/assets/")) return assets.handle(currentServer(), url.pathname.slice("/assets/".length), url.searchParams.get("v"));
     return serveClient(url.pathname);
   });
   setMenu();

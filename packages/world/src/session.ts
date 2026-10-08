@@ -129,7 +129,7 @@ export interface SessionOptions {
   password: string;
   secretKey: string;
   /** Resolves a resource id to its string (rsc0000.rsb); needed for the redbook token. */
-  lookupResource: (id: number) => string | undefined;
+  lookupResource: (id: number, language?: number) => string | undefined;
   /** Set when pings are driven externally (Web Worker); see Connection.pingIntervalMs. */
   pingIntervalMs?: number;
   /** Factory for the socket; defaults to the global WebSocket. */
@@ -230,6 +230,16 @@ export class GameSession {
     this.send(buildSimple(BP.SEND_ROOM_CONTENTS));
     this.send(buildSimple(BP.SEND_PLAYERS));
     this.requestGameData();
+  }
+
+  /**
+   * language.c MenuLanguageChosen: strings in another language from now on, then
+   * ResetUserData (game.c), asking for everything again so names already shown change too.
+   */
+  setLanguage(language: number): void {
+    if (language === this.language) return;
+    this.language = language;
+    if (this.phase === "game") this.refetchGameData();
   }
 
   /** Send BP_PING (call every 5 s if pings are driven externally). */
@@ -523,6 +533,18 @@ export class GameSession {
 
   /** Resource string: dynamic (player names) first, then the .rsb. */
   resource(id: number): string | undefined {
+    return this.world.dynamicResources.get(id) ?? this.opts.lookupResource(id, this.language);
+  }
+
+  /**
+   * The resource language strings are shown in (config.language, the Language menu; English
+   * is 0). The redbook token and our format-string matching (chat tabs, damage numbers)
+   * stay on English.
+   */
+  language = 0;
+
+  /** A string in English, for matching format strings written in it */
+  private englishResource(id: number): string | undefined {
     return this.world.dynamicResources.get(id) ?? this.opts.lookupResource(id);
   }
 
@@ -541,8 +563,15 @@ export class GameSession {
     this.userCommand(UC.REQ_PREFERENCES);
   }
 
+  /**
+   * Applied to every line before it's shown, colour codes and all (srvrstr.c DisplayMessage
+   * runs the profanity filter there); the client sets it.
+   */
+  textFilter: ((text: string) => string) | null = null;
+
   private chatLine(kind: ChatLine["kind"], text: string, channel: ChatChannel, extra: Pick<ChatLine, "sender" | "sayType"> = {}): void {
-    this.events.chat?.({ kind, channel, spans: parseMarkup(text, DEFAULT_COLORS[kind]), time: Date.now(), ...extra });
+    const shown = this.textFilter ? this.textFilter(text) : text;
+    this.events.chat?.({ kind, channel, spans: parseMarkup(shown, DEFAULT_COLORS[kind]), time: Date.now(), ...extra });
   }
 
   private setPhase(p: SessionPhase): void {
@@ -670,7 +699,7 @@ export class GameSession {
           const format = r.u32();
           const params = new ByteReader(r.buf.subarray(r.pos));
           const text = formatServerMessage(format, r, (id) => this.resource(id));
-          const formatText = this.resource(format) ?? "";
+          const formatText = this.englishResource(format) ?? "";
           const channel = type === BP.SYS_MESSAGE ? "server" : messageChannel(formatText);
           if (text !== null) this.chatLine("system", text, channel);
           if (type === BP.MESSAGE) {

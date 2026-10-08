@@ -435,9 +435,7 @@ button.link {
   flex: 1;
   height: 13px;
   min-width: 0;
-  border: 1px solid #000;
   background: rgb(48, 0, 0);
-  overflow: hidden;
 }
 
 .stat-bar .fill,
@@ -489,8 +487,8 @@ button.link {
   position: relative;
   flex: none;
   height: 200px;
-  border: 2px solid #3a3226;
-  box-shadow: inset 0 0 0 1px #000;
+  /* MAPTREAT_WIDTH, MAPTREAT_HEIGHT: room for the map treatment (.treat-map) */
+  margin: 5px;
 }
 
 .minimap {
@@ -551,12 +549,19 @@ button.link {
   outline: 1px solid rgb(240, 208, 25);
 }
 
+/* drawint.c: the inventory treatment (.treat-inv) in the 3 px around the area */
+.stat-frame {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  margin: 3px;
+}
+
 .stat-area {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding: 2px;
-  border: 1px solid #000;
 }
 
 .inventory-grid {
@@ -917,7 +922,7 @@ button.link {
 
 /* ---- the title bar and its menu (GameView ☰): Preferences, Configuration, Actions ---- */
 .game {
-  grid-template-rows: auto minmax(0, 1fr) var(--chat-height, 168px);
+  grid-template-rows: auto auto minmax(0, 1fr) var(--chat-height, 168px);
 }
 
 .game .game-title {
@@ -925,16 +930,27 @@ button.link {
   grid-row: 1;
 }
 
-.game .view {
+.game .toolbar {
+  grid-column: 1;
   grid-row: 2;
 }
 
-.game .chat {
+.game .view-frame {
+  grid-column: 1;
   grid-row: 3;
+  min-height: 0;
+}
+
+.game .view {
+  height: 100%;
+}
+
+.game .chat {
+  grid-row: 4;
 }
 
 .game .sidebar {
-  grid-row: 2 / span 2;
+  grid-row: 2 / span 3;
 }
 
 /* The title bar (TitleBar.tsx): on the desktop it's the window's own, so it drags the window */
@@ -1173,14 +1189,14 @@ button.link {
 
 @media (max-width: 760px) {
   .game {
-    grid-template-rows: auto minmax(0, 1fr) 140px auto;
+    grid-template-rows: auto auto minmax(0, 1fr) 140px auto;
   }
   .game .game-title {
     grid-column: 1;
   }
   .game .sidebar {
     grid-column: 1;
-    grid-row: 4;
+    grid-row: 5;
   }
 }
 
@@ -1798,4 +1814,188 @@ canvas.server-wait {
   height: 100%;
   object-fit: contain;
   image-rendering: pixelated;
+}
+
+/* The toolbar (toolbar.c): 24 x 20 buttons from TOOLBAR_X along the top of the view, over the
+   window background (graphics.c: the view starts MIN_TOP_TOOLBAR below them) */
+.toolbar {
+  display: flex;
+  padding: 2px 0 6px 10px;
+  background: #000 var(--ui-bkgnd) repeat;
+}
+
+.toolbar-button {
+  width: 24px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent no-repeat center / 100% 100%;
+  image-rendering: pixelated;
+  color: rgb(231, 231, 231);
+  font: 10px Georgia, "Times New Roman", serif;
+  cursor: pointer;
+}
+
+.toolbar-button:focus-visible {
+  outline: 1px dotted rgb(231, 231, 231);
+}
+
+/* The About box (about.c) */
+.about-dialog .about-text {
+  text-align: center;
+  font-size: calc(var(--dy) * 8);
+  line-height: calc(var(--dy) * 10.5);
+}
+
+.about-dialog .about-text p {
+  margin: 0;
+}
+
+.about-dialog .about-scroll {
+  box-shadow: inset 1px 1px 0 #141414, inset -1px -1px 0 #6a6a6a;
+  background: #000;
+}
+
+.about-credits {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  cursor: pointer;
+}
+
+.about-dudes {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.about-dudes img {
+  position: absolute;
+  bottom: 0;
+  transform: translateX(-50%) scale(var(--s, 1));
+  transform-origin: 50% 100%;
+  image-rendering: pixelated;
+}
+
+/* The intro (module/intro): the logo, then the splash with its button, centred on black */
+.intro {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+.intro-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.intro-picture {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 80px);
+  margin: 0 auto;
+  image-rendering: pixelated;
+}
+
+.intro-button {
+  height: 30px;
+  font: 13px "MS Sans Serif", Tahoma, sans-serif;
+}
+
+/* cursor.c GameWindowSetCursor: the original's cursors over the view (kit.tsx installUiTheme) */
+.viewport[data-cursor="target"] {
+  cursor: var(--cursor-target, crosshair);
+}
+
+.viewport[data-cursor="cross"] {
+  cursor: var(--cursor-cross, pointer);
+}
+
+.viewport[data-cursor="inside"] {
+  cursor: var(--cursor-inside, pointer);
+}
+
+.viewport[data-cursor="get"] {
+  cursor: var(--cursor-get, grabbing);
+}
+
+/* ---- drawint.c: the stone treatments, each an overlay of its pieces (kit.tsx --ui-t-*),
+   corners over the repeating strips, drawn transparently in the gap around an area ---- */
+.treat-view,
+.treat-map,
+.treat-inv,
+.stat-bar {
+  position: relative;
+}
+
+.treat-view::after,
+.treat-map::after,
+.treat-inv::after,
+.stat-bar::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  z-index: 1;
+}
+
+/* The view (IDB_UL*..LR*): only the eight corner pieces; its own strips are never placed.
+   The frame's padding is the gap, on the window background. */
+.view-frame.treat-view {
+  padding: 8px;
+  background: #000 var(--ui-bkgnd) repeat;
+}
+
+.treat-view::after {
+  inset: 0;
+  background-image:
+    var(--ui-t-viewtreat_ul_top), var(--ui-t-viewtreat_ul_left), var(--ui-t-viewtreat_ur_top), var(--ui-t-viewtreat_ur_right),
+    var(--ui-t-viewtreat_ll_left), var(--ui-t-viewtreat_ll_bottom), var(--ui-t-viewtreat_lr_right), var(--ui-t-viewtreat_lr_bottom);
+  background-position: left top, left 0 top 8px, right top, right 0 top 8px, left 0 bottom 8px, left bottom, right 0 bottom 8px, right bottom;
+}
+
+/* The map (IDB_M*): 5 px strips, the side pieces taller at the corners */
+.treat-map::after {
+  inset: -5px;
+  background-image:
+    var(--ui-t-maptreat_ul), var(--ui-t-maptreat_ur), var(--ui-t-maptreat_ll), var(--ui-t-maptreat_lr),
+    var(--ui-t-maptreat_urepeat), var(--ui-t-maptreat_brepeat), var(--ui-t-maptreat_lrepeat), var(--ui-t-maptreat_rrepeat);
+  background-position: left top, right top, left bottom, right bottom, left 5px top, left 5px bottom, left top 13px, right top 13px;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat-x, repeat-x, repeat-y, repeat-y;
+}
+
+/* The inventory (IDB_I*): 3 px, each corner a top piece and a side piece */
+.treat-inv::after {
+  inset: -3px;
+  background-image:
+    var(--ui-t-iultop), var(--ui-t-iulleft), var(--ui-t-iurtop), var(--ui-t-iurright),
+    var(--ui-t-illbottom), var(--ui-t-illleft), var(--ui-t-ilrbottom), var(--ui-t-ilrright),
+    var(--ui-t-itop), var(--ui-t-ibottom), var(--ui-t-ileft), var(--ui-t-iright);
+  background-position:
+    left 3px top, left top, right 3px top, right top,
+    left 3px bottom, left bottom, right 3px bottom, right bottom,
+    left 11px top, left 11px bottom, left top 8px, right top 8px;
+  background-repeat:
+    no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat,
+    repeat-x, repeat-x, repeat-y, repeat-y;
+}
+
+/* Graph bars (InterfaceDrawBarBorder): the 5 x 17 ends, 2 px above and below */
+.stat-bar::after {
+  inset: -2px -5px;
+  background-image: var(--ui-t-barleft), var(--ui-t-barright), var(--ui-t-bartop), var(--ui-t-barbottom);
+  background-position: left top, right top, left 5px top, left 5px bottom;
+  background-repeat: no-repeat, no-repeat, repeat-x, repeat-x;
+}
+
+/* The ☰ menu's check marks (TitleBar.tsx checked) */
+.menu-check {
+  display: inline-block;
+  width: 1.2em;
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { CF, SAY, UA, UC, type ObjectInfo } from "@shards/protocol";
 import {
-  isNumberItem, type GuildEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
+  PROFANITY_WARNING, isNumberItem, type GuildEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
   type TradeList,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
@@ -22,10 +22,17 @@ import { AmountDialog, GiveDialog, OfferDialog, PasswordDialog, SuicideDialog, T
 import { DESC, DescriptionDialog, LookListDialog, type DescAction, type LookListChoice } from "./ui/LookDialogs.tsx";
 import { MiniMap } from "./ui/MiniMap.tsx";
 import {
-  ActionsDialog, CommandAliasesDialog, ConfigurationDialog, GroupsDialog, HotkeyAliasesDialog, PreferencesDialog, WhoDialog,
+  ActionsDialog, CommandAliasesDialog, ConfigurationDialog, GroupsDialog, HotkeyAliasesDialog, LogoutTimerDialog, PreferencesDialog, WhoDialog,
   type ActionWindow,
 } from "./ui/OptionsDialogs.tsx";
 import { Sidebar, type Tab } from "./ui/Sidebar.tsx";
+import { Toolbar } from "./ui/Toolbar.tsx";
+import { MessageBox } from "./ui/kit.tsx";
+import { isProfane } from "./profanity.ts";
+import { AnnotateDialog } from "./ui/AnnotateDialog.tsx";
+import { AboutDialog } from "./ui/AboutDialog.tsx";
+import { languageName } from "./languages.ts";
+import { MAX_ANNOTATIONS, annotationAt, loadAnnotations, saveAnnotations, type MapAnnotation } from "./annotations.ts";
 import { useWorld } from "./ui/hooks.ts";
 import { TitleBar } from "./TitleBar.tsx";
 
@@ -107,6 +114,8 @@ type Modal =
   | { type: "password" }
   | { type: "preferences" }
   | { type: "configuration" }
+  | { type: "logoutTimer" }
+  | { type: "about" }
   | { type: "actions" }
   | { type: "action"; window: ActionWindow }
   /** lookdlg.c DisplayLookList: choose among objects (to get, look at, attack, put away...) */
@@ -122,7 +131,7 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, onLogout, trades, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, languages, onLogout, trades, offers, serverPrefs, latency,
 }: {
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
@@ -138,6 +147,8 @@ export function GameView({
   looks: (fn: (l: LookResult) => void) => () => void;
   /** BP_REQ_STAT_CHANGE (module/stats): an elder offers to rearrange our stats */
   statChange: (fn: (e: { stats: number[]; levels: number[] }) => void) => () => void;
+  /** The languages the .rsb has (language.c GetAvailableLanguages) */
+  languages: number[];
   /** The guild messages (merintr guild*.c: UC_GUILDINFO, UC_GUILD_ASK, ...) */
   guild: (fn: (e: GuildEvent) => void) => () => void;
   /** Mail and the news globes (module/mailnews) */
@@ -198,6 +209,16 @@ export function GameView({
   const [guildHalls, setGuildHalls] = useState<Extract<GuildEvent, { type: "halls" }>["halls"] | null>(null);
   /** command.c pinfo.resting: after "rest", until "stand" */
   const restingRef = useRef(false);
+  /** The room's map annotations (annotate.c), by its security checksum, and the one being edited */
+  const [annotations, setAnnotations] = useState<{ security: number; list: MapAnnotation[] } | null>(() => {
+    const p = session.world.player;
+    return p ? { security: p.roomSecurity, list: loadAnnotations(localStorage, gameSocketUrl(), p.roomSecurity) } : null;
+  });
+  const [annotating, setAnnotating] = useState<{ index: number; x: number; y: number; text: string; existed: boolean } | null>(null);
+  /** A message box over the game (MessageBox with MB_OK) */
+  const [alert, setAlert] = useState<string | null>(null);
+  /** The same, for the toolbar's Rest/Stand toggle */
+  const [resting, setRestingShown] = useState(false);
   useWorld(session.world, ["spells"]);
   const spells = session.world.spells;
   const spellSchools = session.world.spellSchools;
@@ -301,6 +322,38 @@ export function GameView({
   useEffect(() => offers((e) => setOffer((prev) => reduceOffer(prev, e))), [offers]);
   useEffect(() => damage((d) => sceneRef.current?.showDamage(d)), [damage]);
   useEffect(() => statChange(setStatChangeAt), [statChange]);
+  // logoff.c: log off after the Logout timer's minutes without a key or a click (UserDidSomething).
+  // onLogout is new on every render, so the timer reads it through a ref.
+  const logoutRef = useRef(onLogout);
+  useEffect(() => {
+    logoutRef.current = onLogout;
+  }, [onLogout]);
+  useEffect(() => {
+    let last = Date.now();
+    const alive = () => (last = Date.now());
+    const opts = { capture: true, passive: true };
+    window.addEventListener("keydown", alive, opts);
+    window.addEventListener("pointerdown", alive, opts);
+    const timer = setInterval(() => {
+      const s = getSettings();
+      if (s.logoutTimer && s.logoutMinutes > 0 && Date.now() - last >= s.logoutMinutes * 60_000) logoutRef.current();
+    }, 10_000);
+    return () => {
+      window.removeEventListener("keydown", alive, opts);
+      window.removeEventListener("pointerdown", alive, opts);
+      clearInterval(timer);
+    };
+  }, []);
+  // map.c MapEnterRoom: the new room's annotations
+  useEffect(
+    () =>
+      session.world.on((e) => {
+        if (e.type !== "player") return;
+        const security = e.player.roomSecurity;
+        setAnnotations((a) => (a?.security === security ? a : { security, list: loadAnnotations(localStorage, gameSocketUrl(), security) }));
+      }),
+    [session],
+  );
   useEffect(
     () =>
       guild((e) => {
@@ -466,9 +519,18 @@ export function GameView({
     setMailbox(next);
   };
 
+  /** say.c FilterSayMessage: speech with profanity is blocked (IDS_PROFANITYWARNING), then tidied */
+  const sayFilter = (text: string): string | null => {
+    if (isProfane(text)) {
+      setAlert(PROFANITY_WARNING);
+      return null;
+    }
+    return filterSayMessage(text);
+  };
+
   /** Speech, filtered as say.c FilterSayMessage does */
   const say = (text: string, kind: number) => {
-    const t = filterSayMessage(text);
+    const t = sayFilter(text);
     if (t) session.say(t, kind);
   };
 
@@ -493,6 +555,7 @@ export function GameView({
     session.userCommand(on ? UC.REST : UC.STAND);
     session.localMessage(on ? "You rest." : "You stop resting.");
     restingRef.current = on;
+    setRestingShown(on);
     if (sceneRef.current) sceneRef.current.resting = on;
   };
 
@@ -536,6 +599,32 @@ export function GameView({
     session.userCommand(UC.REQ_GUILDINFO);
   };
 
+  /** annotate.c MapAnnotationClick: edit the annotation there, or start one in a free slot */
+  const annotateAt = (x: number, y: number) => {
+    if (!annotations) return;
+    const i = annotationAt(annotations.list, x, y);
+    if (i >= 0) return setAnnotating({ index: i, x, y, text: annotations.list[i].text, existed: true });
+    if (annotations.list.length >= MAX_ANNOTATIONS) return session.localMessage(`You may only have ${MAX_ANNOTATIONS} map annotations per room.`);
+    setAnnotating({ index: annotations.list.length, x, y, text: "", existed: false });
+  };
+  /** IDOK or IDC_DELETE: keep the room's annotations (an empty one is gone) */
+  const finishAnnotation = (text: string) => {
+    if (!annotations || !annotating) return;
+    const list = [...annotations.list];
+    if (annotating.existed) list[annotating.index] = { ...list[annotating.index], text };
+    else list.push({ x: annotating.x, y: annotating.y, text });
+    const kept = list.filter((a) => a.text);
+    saveAnnotations(localStorage, gameSocketUrl(), annotations.security, kept);
+    setAnnotations({ security: annotations.security, list: kept });
+    setAnnotating(null);
+  };
+
+  /** language.c MenuLanguageChosen: strings in the new language from now on, the spells' names too */
+  const chooseLanguage = (id: number) => {
+    updateSettings({ language: id });
+    session.setLanguage(id);
+  };
+
   /** command.c Command*: one command, with the words after its name */
   const runParsed = (id: CommandId, args: string): void => {
     const world = session.world;
@@ -568,12 +657,12 @@ export function GameView({
         const r = resolveTell(args, players(), getSettings().groups);
         if (!r) return;
         if ("error" in r) return session.localMessage(r.error);
-        const text = filterSayMessage(r.text);
+        const text = sayFilter(r.text);
         if (text) session.sayTo(r.ids, text);
         return;
       }
       case "appeal": {
-        const text = filterSayMessage(args);
+        const text = sayFilter(args);
         if (text) session.appeal(text);
         return;
       }
@@ -862,13 +951,43 @@ export function GameView({
           // actions.c: each item runs its typed command
           { label: "Actions", items: ACTIONS_MENU.map((a) => (a ? { label: a[1], onSelect: () => runCommand(a[0]) } : { label: "", separator: true })) },
           ...(spellsMenu.length ? [{ label: "Spells", items: spellsMenu }] : []),
+          // language.c: the Language menu, sorted by name, the chosen one checked
+          ...(languages.length > 1
+            ? [
+                {
+                  label: "Language",
+                  items: [...languages]
+                    .sort((a, b) => languageName(a).localeCompare(languageName(b)))
+                    .map((id) => ({ label: languageName(id), checked: settings.language === id, onSelect: () => chooseLanguage(id) })),
+                },
+              ]
+            : []),
           // mailnews.c's toolbar button, until the toolbar
           { label: "Mail…", onSelect: openMail },
           { label: "Change password…", onSelect: () => setModal({ type: "password" }) },
+          { label: "Logout timer…", onSelect: () => setModal({ type: "logoutTimer" }) },
+          { label: "About Meridian Shards…", onSelect: () => setModal({ type: "about" }) },
           { label: "Log off", onSelect: onLogout },
         ]}
         latency={settings.latencyMeter ? latency : undefined}
+        tooltips={settings.tooltips}
       />
+      {settings.toolbar && (
+        <Toolbar
+          assets={assets}
+          tooltips={settings.tooltips}
+          buttons={[
+            // mermain.c default_buttons and mailnews.c mail_buttons: each runs its typed command
+            { bitmap: "help.bmp", name: "Help", onClick: () => runCommand("help") },
+            { bitmap: "drop.bmp", name: "Drop items", onClick: () => runCommand("drop") },
+            { bitmap: "get.bmp", name: "Get items", onClick: () => runCommand("get") },
+            { bitmap: "rest.bmp", name: "Rest/Stand", pressed: resting, onClick: () => runCommand(resting ? "stand" : "rest") },
+            { bitmap: "mailbox.bmp", name: "Read mail", onClick: () => runCommand("mail") },
+          ]}
+        />
+      )}
+      {/* drawint.c: the view's corner treatment in the gap around it */}
+      <div className="view-frame treat-view">
       <div
         className="view"
         onDragOver={(e) => e.dataTransfer.types.includes("application/x-shards-item") && e.preventDefault()}
@@ -887,7 +1006,16 @@ export function GameView({
         <div className="crosshair" />
         {fullMap && (
           <div className="full-map" title="Map (press the Map key again to close)">
-            <MiniMap world={session.world} getRoom={() => sceneRef.current?.currentRoom ?? null} zoom={settings.mapZoom} paper={assets.url("ui/mapbkgnd.bmp")} />
+            <MiniMap
+              world={session.world}
+              getRoom={() => sceneRef.current?.currentRoom ?? null}
+              zoom={settings.mapZoom}
+              paper={assets.url("ui/mapbkgnd.bmp")}
+              annotations={settings.mapAnnotations ? annotations?.list : undefined}
+              annotationIcon={assets.url("ui/annotate.bmp")}
+              onAnnotate={annotateAt}
+              tooltips={settings.tooltips}
+            />
           </div>
         )}
         {settings.showFps && fps !== null && <div className="fps">{fps} fps</div>}
@@ -994,6 +1122,10 @@ export function GameView({
             onClose={() => setModal(null)}
           />
         )}
+        {modal?.type === "about" && <AboutDialog assets={assets} session={session} icons={icons} audio={audio} onClose={() => setModal(null)} />}
+        {modal?.type === "logoutTimer" && (
+          <LogoutTimerDialog settings={settings} iconUrl={assets.url("ui/clock.ico")} onApply={updateSettings} onClose={() => setModal(null)} />
+        )}
         {modal?.type === "configuration" && <ConfigurationDialog settings={settings} onApply={updateSettings} onClose={() => setModal(null)} />}
         {modal?.type === "actions" && (
           <ActionsDialog onOpen={openWindow} onCommand={(c) => runCommand(c)} onClose={() => setModal(null)} />
@@ -1016,6 +1148,7 @@ export function GameView({
         {offer && (
           <OfferDialog key={offer.from?.id ?? 0} state={offer} session={session} icons={icons} onLook={(id) => lookAt(id, DESC.NONE)} onClose={() => setOffer(null)} />
         )}
+      </div>
       </div>
       <div className="chat">
         <div className="chat-resize" onPointerDown={resizeChat} title="Drag to resize the chat window" aria-hidden />
@@ -1118,7 +1251,11 @@ export function GameView({
         selecting={selecting}
         onSelectObject={selectObject}
         onCast={castSpell}
+        annotations={annotations?.list ?? []}
+        onAnnotate={annotateAt}
       />
+      {alert && <MessageBox text={alert} onResult={() => setAlert(null)} />}
+      {annotating && <AnnotateDialog text={annotating.text} onDone={finishAnnotation} onClose={() => setAnnotating(null)} />}
     </div>
   );
 }

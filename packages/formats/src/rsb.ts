@@ -8,8 +8,10 @@ const VERSION = 5;
 export interface RsbBundle {
   /** id -> (lang -> string) */
   entries: Map<number, Map<number, string>>;
-  /** Look up an id, preferring `lang` (default 0, as the original client does). */
+  /** Look up an id in `lang` (default 0, English), else in English, as loadrsc.c LookupRsc does. */
   get(id: number, lang?: number): string | undefined;
+  /** The languages any string is in (language.c GetAvailableLanguages), sorted */
+  languages(): number[];
 }
 
 export function parseRsb(data: Uint8Array): RsbBundle {
@@ -19,6 +21,7 @@ export function parseRsb(data: Uint8Array): RsbBundle {
   if (version !== VERSION) throw new Error(`unsupported .rsb version ${version}`);
   const count = dv.getInt32(8, true);
   const entries = new Map<number, Map<number, string>>();
+  const languages = new Set<number>();
   let pos = 12;
   for (let n = 0; n < count; n++) {
     const id = dv.getInt32(pos, true);
@@ -32,13 +35,15 @@ export function parseRsb(data: Uint8Array): RsbBundle {
     let langs = entries.get(id);
     if (!langs) entries.set(id, (langs = new Map()));
     langs.set(lang, s);
+    languages.add(lang);
   }
   return {
     entries,
     get(id, lang = 0) {
       const langs = entries.get(id);
       if (!langs) return undefined;
-      return langs.get(lang) ?? langs.values().next().value;
+      return langs.get(lang) ?? langs.get(0) ?? langs.values().next().value;
     },
+    languages: () => [...languages].sort((a, b) => a - b),
   };
 }

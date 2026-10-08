@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CharInfo, CharacterSlot } from "@shards/protocol";
 import { SAY } from "@shards/protocol";
 import {
@@ -9,12 +9,14 @@ import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
 import { desktop, gameSocketUrl } from "../host.ts";
 import { GameAudio } from "./audio.ts";
+import { Intro } from "./Intro.tsx";
 import { CharacterCreator } from "./CharacterCreator.tsx";
 import { AssetDownload } from "./AssetDownload.tsx";
 import { CharacterSelect } from "./CharacterSelect.tsx";
 import { GameView, appendChatLine } from "./GameView.tsx";
 import { Framed } from "./TitleBar.tsx";
 import { getSettings } from "./settings.ts";
+import { filterIncoming, loadProfanity } from "./profanity.ts";
 import { IconRenderer } from "./icons.ts";
 import { ConnectingScreen, LoginScreen } from "./LoginScreen.tsx";
 
@@ -87,6 +89,14 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   const [serverPrefs, setServerPrefs] = useState<number | null>(null);
   /** The last ping's round trip (lagbox.c) */
   const [latency, setLatency] = useState<number | null>(null);
+  /** The desktop app's /U, /W and /Q (config.c ConfigOverride), this start only */
+  const [launch] = useState(() => desktop?.launch ?? null);
+  /** /Q (config.quickstart): until the game starts, an error, or logging off */
+  const quickstart = useRef(launch?.quickstart === true);
+  /** The intro's splash (module/intro), at startup (unless /Q) and after logging off */
+  const [intro, setIntro] = useState(() => launch?.quickstart !== true);
+  /** Plays the splash's music (main.ogg) until logging on, as the intro module does until it unloads */
+  const [introAudio, setIntroAudio] = useState<GameAudio | null>(() => new GameAudio(assets));
 
   // The desktop app asks before closing the window mid-game
   useEffect(() => desktop?.setPhase(phase), [phase]);
@@ -107,6 +117,8 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
 
   const login = (username: string, password: string) => {
     setError(null);
+    introAudio?.dispose();
+    setIntroAudio(null);
     try {
       localStorage.setItem("shards.username", username);
     } catch {
@@ -141,17 +153,26 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     const statChange = new Relay<{ stats: number[]; levels: number[] }>();
     const guild = new Relay<GuildEvent>();
     const s = new GameSession(
-      { url: gameSocketUrl(), username, password, secretKey: __SECRET_KEY__, lookupResource: (id) => rsb.get(id), pingIntervalMs: 0 },
+      { url: gameSocketUrl(), username, password, secretKey: __SECRET_KEY__, lookupResource: (id, lang) => rsb.get(id, lang), pingIntervalMs: 0 },
       {
         phase: (p) => {
           setPhase(p);
           if (p === "closed") setLive(null);
+          if (p === "game" || p === "closed") quickstart.current = false;
         },
         characters: (c, m) => {
           setCharacters([...c]);
           if (m) setMotd(m);
+          // charpick.c ChooseCharacter: with /Q and just one character (made already), enter
+          if (quickstart.current && c.length === 1 && c[0].flags !== 1) {
+            quickstart.current = false;
+            s.useCharacter(c[0].id);
+          }
         },
-        error: setError,
+        error: (e) => {
+          quickstart.current = false;
+          setError(e);
+        },
         charInfo: (info) => setCreating((c) => (c ? { ...c, info } : c)),
         chat: (line) => {
           const self = s.world.self;
@@ -179,21 +200,51 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
         damageDealt: damage.emit,
       },
     );
+    // srvrstr.c: the profanity filter on every line shown
+    s.textFilter = filterIncoming;
+    s.setLanguage(getSettings().language);
+    void loadProfanity(assets);
     setPhase("connecting");
     setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => s.resource(id)), trades, offers, looks, contents, damage, mailNews, statChange, guild });
   };
 
   const logout = () => {
+    quickstart.current = false;
     session?.close();
     setLive(null);
     setCreating(null);
     setPhase("offline");
+    // The intro module loads again (intro.c GetModuleInfo)
+    setIntro(true);
+    setIntroAudio((a) => a ?? new GameAudio(assets));
   };
 
+  // login.c GetLogin: with /Q, no login dialog; log on with /U and /W at once
+  const autoLogin = useRef(launch?.quickstart === true && !!launch.username && !!launch.password);
+  useEffect(() => {
+    if (!autoLogin.current || !launch?.username || !launch.password) return;
+    autoLogin.current = false;
+    login(launch.username, launch.password);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, at startup
+  }, []);
+
+  if ((!live || !session || phase === "offline" || phase === "closed") && intro && introAudio)
+    return (
+      <Framed assets={assets}>
+        <Intro assets={assets} audio={introAudio} onDone={() => setIntro(false)} />
+      </Framed>
+    );
   if (!live || !session || phase === "offline" || phase === "closed")
     return (
       <Framed assets={assets}>
-        <LoginScreen assets={assets} onLogin={login} error={error} onClearError={() => setError(null)} />
+        <LoginScreen
+          assets={assets}
+          onLogin={login}
+          error={error}
+          onClearError={() => setError(null)}
+          initialUsername={launch?.username}
+          initialPassword={launch?.password}
+        />
         <AssetDownload />
       </Framed>
     );
@@ -257,6 +308,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       damage={live.damage.on}
       mailNews={live.mailNews.on}
       statChange={live.statChange.on}
+      languages={rsb.languages()}
       guild={live.guild.on}
       onLogout={logout}
       serverPrefs={serverPrefs}

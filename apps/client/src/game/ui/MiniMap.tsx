@@ -1,8 +1,11 @@
 // The minimap (clientd3d/map.c MapDraw with bMiniMap): the room's walls in black on
 // the map paper (mapbkgnd.bmp, scrolling with the player), a dot per object with
 // minimap flags, and the player's arrow, centred on the player and zoomable (+/-).
+// Map annotations (annotate.c) are drawn as annotate.bmp; a right click on the map (the
+// Look action, gameuser.c UserLookMouseSquare) adds or edits one, and hovering shows it.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { annotationAt, annotationRadius, type MapAnnotation } from "../annotations.ts";
 import { FINENESS, type Room } from "@shards/formats";
 import { DRAWFX, OF } from "@shards/render";
 import type { WorldState } from "@shards/world";
@@ -36,19 +39,40 @@ const PLAYER_WIDTH = (31 * 64) / 4; // game.c player.width
 const OBJECT_RADIUS = FINENESS / 4;
 
 export function MiniMap({
-  world, getRoom, zoom, paper,
+  world, getRoom, zoom, paper, annotations, annotationIcon, onAnnotate, tooltips = false,
 }: {
   world: WorldState;
   getRoom: () => Room | null;
   zoom: number;
   /** URL of the map paper bitmap */
   paper: string;
+  /** The room's annotations to draw (Map annotations on), or none */
+  annotations?: readonly MapAnnotation[];
+  /** URL of annotate.bmp */
+  annotationIcon?: string;
+  /** A right click on the map, in room fine coordinates (annotate.c MapAnnotationClick) */
+  onAnnotate?: (x: number, y: number) => void;
+  /** Show an annotation's text on hover (MapAnnotationGetText) */
+  tooltips?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const zoomRef = useRef(zoom);
+  const annotationsRef = useRef(annotations);
+  /** The last frame's mapping (map.c xoffsetMiniMap, yoffsetMiniMap, scaleMiniMap) for MapScreenToRoom */
+  const mapping = useRef<{ xo: number; yo: number; scale: number } | null>(null);
+  const [hoverText, setHoverText] = useState<string | undefined>(undefined);
   useEffect(() => {
     zoomRef.current = zoom;
-  }, [zoom]);
+    annotationsRef.current = annotations;
+  }, [zoom, annotations]);
+  /** MapScreenToRoom with bMiniMap */
+  const toRoom = (e: { clientX: number; clientY: number }): [number, number] | null => {
+    const m = mapping.current;
+    const canvas = canvasRef.current;
+    if (!m || !canvas || m.scale === 0) return null;
+    const r = canvas.getBoundingClientRect();
+    return [Math.trunc((e.clientX - r.left - m.xo) / m.scale), Math.trunc((e.clientY - r.top - m.yo) / m.scale)];
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -57,6 +81,12 @@ export function MiniMap({
     const img = new Image();
     img.onload = () => (pattern = ctx.createPattern(img, "repeat"));
     img.src = paper;
+    let icon: HTMLImageElement | null = null;
+    if (annotationIcon) {
+      const i = new Image();
+      i.onload = () => (icon = i);
+      i.src = annotationIcon;
+    }
     let raf = 0;
     let last = 0;
     const draw = (t: number) => {
@@ -81,6 +111,7 @@ export function MiniMap({
         py = self.y;
       const xo = Math.floor(w / 2 - px * scale),
         yo = Math.floor(h / 2 - py * scale);
+      mapping.current = { xo, yo, scale };
 
       // Paper scrolls with the player
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -101,6 +132,14 @@ export function MiniMap({
         ctx.lineTo(Math.trunc(wall.x1 * scale) + xo + 0.5, Math.trunc(wall.y1 * scale) + yo + 0.5);
       }
       ctx.stroke();
+
+      // Annotations (MapDrawAnnotations): annotate.bmp, at least 14 pixels across
+      const notes = annotationsRef.current;
+      if (notes && icon) {
+        const r = annotationRadius(scale);
+        ctx.imageSmoothingEnabled = false;
+        for (const n of notes) ctx.drawImage(icon, xo + Math.trunc(n.x * scale) - r, yo + Math.trunc(n.y * scale) - r, 2 * r, 2 * r);
+      }
 
       // Objects (MapDrawObjects)
       const radius = Math.max(1, OBJECT_RADIUS * scale);
@@ -163,9 +202,28 @@ export function MiniMap({
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [world, getRoom, paper]);
+  }, [world, getRoom, paper, annotationIcon]);
 
-  return <canvas ref={canvasRef} className="minimap" />;
+  return (
+    <canvas
+      ref={canvasRef}
+      className="minimap"
+      title={tooltips ? hoverText : undefined}
+      onContextMenu={(e) => {
+        if (!onAnnotate) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const p = toRoom(e);
+        if (p) onAnnotate(p[0], p[1]);
+      }}
+      onMouseMove={(e) => {
+        if (!tooltips || !annotations?.length) return;
+        const p = toRoom(e);
+        const i = p ? annotationAt(annotations, p[0], p[1]) : -1;
+        setHoverText(i >= 0 ? annotations[i].text : undefined);
+      }}
+    />
+  );
 }
 
 /** map.c DrawMinimapStar: a five-pointed star for rare items. */

@@ -811,7 +811,7 @@ export class GameScene {
   beginSelect(cb: (id: number) => void): void {
     if (this.locked) document.exitPointerLock();
     this.selectCallback = cb;
-    this.canvas.style.cursor = "crosshair";
+    this.setCursor("target");
     this.onSelecting?.(true);
   }
 
@@ -823,7 +823,7 @@ export class GameScene {
   select(id: number | null): void {
     const cb = this.selectCallback;
     this.selectCallback = null;
-    this.canvas.style.cursor = "";
+    this.setCursor("");
     this.onSelecting?.(false);
     if (cb && id !== null) cb(id);
   }
@@ -865,11 +865,28 @@ export class GameScene {
       this.raycaster.far = 40;
       id = this.objects.pick(this.raycaster);
     }
-    // cursor.c GameWindowSetCursor: a cross over an object, nothing more (the halo is the target's alone)
-    if (id !== this.hovered) {
+    // cursor.c GameWindowSetCursor: a cross over an object (with Shift over a container, the
+    // "inside" one), the target cursor while choosing; nothing more (the halo is the target's alone)
+    if (id !== this.hovered || this.shift !== this.hoverShift) {
       this.hovered = id;
-      if (this.drag === null) this.canvas.style.cursor = this.selecting ? "crosshair" : id !== null && !this.locked ? "pointer" : "";
+      this.hoverShift = this.shift;
+      if (this.drag === null) this.setCursor(this.selecting ? "target" : id !== null && !this.locked ? this.objectCursor(id) : "");
     }
+  }
+
+  /** Shift held at the last mouse move (cursor.c: GetKeyState(VK_SHIFT) for the inside cursor) */
+  private shift = false;
+  private hoverShift = false;
+
+  private objectCursor(id: number): "cross" | "inside" {
+    const o = this.session.world.objects.get(id);
+    return this.shift && o && o.info.flags & OF_CONTAINER ? "inside" : "cross";
+  }
+
+  /** The view's cursor (CSS: .viewport[data-cursor], the original's cursors from the asset build) */
+  private setCursor(kind: "" | "target" | "cross" | "inside" | "get"): void {
+    if (kind) this.canvas.dataset.cursor = kind;
+    else delete this.canvas.dataset.cursor;
   }
 
   private drawLabels(labels: NameLabel[]): void {
@@ -1090,7 +1107,8 @@ export class GameScene {
     const near = this.objectsUnderCursor((o) => (o.info.flags & (OF_GETTABLE | OF_CONTAINER)) !== 0 && this.distanceTo(o.id) <= CLOSE_DISTANCE);
     if (near.length === 1) {
       this.drag = near[0];
-      this.canvas.style.cursor = "grabbing";
+      // graphics.c UserStartDrag: IDC_GETCURSOR while dragging
+      this.setCursor("get");
       window.addEventListener("mouseup", this.onDragEnd);
       return;
     }
@@ -1111,7 +1129,7 @@ export class GameScene {
     window.removeEventListener("mouseup", this.onDragEnd);
     const id = this.drag;
     this.drag = null;
-    this.canvas.style.cursor = this.hovered !== null ? "pointer" : "";
+    this.setCursor(this.hovered !== null ? this.objectCursor(this.hovered) : "");
     if (id === null) return;
     // mermain.c A_ENDDRAG: only a drop on the inventory counts
     const over = document.elementFromPoint(e.clientX, e.clientY);
@@ -1164,6 +1182,7 @@ export class GameScene {
 
   private readonly onCanvasMouseMove = (e: MouseEvent) => {
     this.mouse = { x: e.clientX, y: e.clientY };
+    this.shift = e.shiftKey;
   };
 
   private readonly onMouseLeave = () => {

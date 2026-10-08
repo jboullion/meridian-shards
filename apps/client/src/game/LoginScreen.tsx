@@ -49,15 +49,18 @@ function readRemembered(): string {
 }
 
 export function LoginScreen({
-  assets, onLogin, error, onClearError,
+  assets, onLogin, error, onClearError, initialUsername, initialPassword,
 }: {
   assets: AssetStore;
+  /** The desktop app's /U and /W (the original fills its login dialog from them) */
+  initialUsername?: string;
+  initialPassword?: string;
   onLogin: (u: string, p: string) => void;
   error: string | null;
   onClearError: () => void;
 }) {
-  const [username, setUsername] = useState(readRemembered);
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState(() => initialUsername ?? readRemembered());
+  const [password, setPassword] = useState(initialPassword ?? "");
   const [update, setUpdate] = useState<DesktopUpdate | null>(null);
   useEffect(() => desktop?.onUpdate(setUpdate), []);
   const submit = (e: FormEvent) => {

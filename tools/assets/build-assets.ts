@@ -9,10 +9,12 @@
 //   2. the Server 104 resource tree in server/src/resource (104-only additions)
 //   3. the installed 104 client's resource folder (%LOCALAPPDATA%\Meridian-104\resource)
 // Plus the palette (blakston.pal, parsed to a 768-byte binary palette.bin), and the
-// interface bitmaps compiled into the client (clientd3d/bitmap and module/merintr/bitmap:
-// backgrounds, stat tab buttons, the map paper) as ui/<name>.bmp, the login dialog's icon
-// (ui/icon1.ico), the Heidelberg title font (ui/heidelb1.ttf, font.c FONT_TITLES) and the
-// snow texture (ui/weather_snow.png, d3dparticle.c).
+// bitmaps compiled into the client and its modules (clientd3d/bitmap and
+// module/{merintr,mailnews}/bitmap: backgrounds, stat tab buttons, the toolbar's buttons,
+// the map paper) as ui/<name>.bmp, the profanity filter's terms (ui/profane.dat), the
+// login dialog's icon (ui/icon1.ico), the view's cursors (ui/*.cur), the Heidelberg title
+// font (ui/heidelb1.ttf, font.c FONT_TITLES) and the snow texture (ui/weather_snow.png,
+// d3dparticle.c).
 // And roomlinks.json, which rooms connect to which, from the Kod source (roomLinks.ts), so
 // the client can load the rooms next to yours ahead of time.
 //
@@ -50,7 +52,7 @@ type Source = {
   exts?: Set<string>;
 };
 const BMP = new Set([".bmp"]);
-const BMP_ICO = new Set([".bmp", ".ico"]);
+const BMP_ICO_CUR = new Set([".bmp", ".ico", ".cur"]);
 const TTF = new Set([".ttf"]);
 const PNG = new Set([".png"]);
 const sources: Source[] = [
@@ -58,8 +60,12 @@ const sources: Source[] = [
   { label: "server rooms", dir: join(RUN, "rooms"), recursive: false },
   { label: "installed client", dir: opt.client!, recursive: true },
   { label: "server resource tree", dir: join(SERVER, "resource"), recursive: true },
-  { label: "client UI bitmaps", dir: join(SERVER, "clientd3d", "bitmap"), recursive: false, prefix: "ui/", exts: BMP_ICO },
+  { label: "client UI bitmaps", dir: join(SERVER, "clientd3d", "bitmap"), recursive: false, prefix: "ui/", exts: BMP_ICO_CUR },
   { label: "interface UI bitmaps", dir: join(SERVER, "module", "merintr", "bitmap"), recursive: false, prefix: "ui/", exts: BMP },
+  // mailnews.c mail_buttons: the toolbar's mailbox
+  { label: "mail UI bitmaps", dir: join(SERVER, "module", "mailnews", "bitmap"), recursive: false, prefix: "ui/", exts: BMP },
+  // profane.c LoadProfaneTerms: the profanity filter's terms (mail\profane.dat beside the client)
+  { label: "profanity terms", dir: join(SERVER, "resource", "misc"), recursive: false, prefix: "ui/", exts: new Set([".dat"]), filter: (n) => n === "ui/profane.dat" },
   // d3dparticle.c D3DParticleSystemInit: ./resource/weather_snow.png
   { label: "particle textures", dir: join(SERVER, "resource", "particles"), recursive: false, prefix: "ui/", exts: PNG },
   // server\setup-client.cmd puts the font in our client's run folder; the installed client has it beside its resource folder

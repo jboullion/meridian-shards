@@ -35,8 +35,18 @@ export interface DesktopWindowState {
   fullscreen: boolean;
 }
 
+/** The original client's command line (/U, /W, /Q; config.c ConfigOverride), for this start only */
+export interface DesktopLaunch {
+  username?: string;
+  password?: string;
+  /** /Q: log on at once and, with one character, enter the game (charpick.c ChooseCharacter) */
+  quickstart: boolean;
+}
+
 export interface DesktopConfig {
   version: string;
+  /** Set on the window's first page only (a reload, such as switching servers, doesn't get it) */
+  launch?: DesktopLaunch | null;
   /** Running against the Vite dev server (npm run desktop) */
   dev: boolean;
   platform: string;

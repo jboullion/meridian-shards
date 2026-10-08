@@ -15,6 +15,8 @@ export interface TitleBarMenuItem {
   items?: TitleBarMenuItem[];
   /** A line between groups of items */
   separator?: boolean;
+  /** A check mark (CheckMenuItem), as on the chosen language */
+  checked?: boolean;
 }
 
 /** The ☰ menu's items, submenus opening beside them (on hover or keyboard focus). */
@@ -28,7 +30,8 @@ function MenuList({ items, onDone, className }: { items: TitleBarMenuItem[]; onD
           <li key={`${m.label}${i}`} role="none" className={m.items ? "has-submenu" : undefined}>
             <button
               type="button"
-              role="menuitem"
+              role={m.checked !== undefined ? "menuitemradio" : "menuitem"}
+              aria-checked={m.checked}
               aria-haspopup={m.items ? "menu" : undefined}
               onClick={() => {
                 if (m.items) return;
@@ -36,6 +39,7 @@ function MenuList({ items, onDone, className }: { items: TitleBarMenuItem[]; onD
                 m.onSelect?.();
               }}
             >
+              {m.checked !== undefined && <span className="menu-check">{m.checked ? "✓" : ""}</span>}
               {m.label}
               {m.items && <span className="submenu-arrow">▸</span>}
             </button>
@@ -103,7 +107,7 @@ function WindowButtons() {
 }
 
 export function TitleBar({
-  assets, title, menu, latency, className,
+  assets, title, menu, latency, tooltips = true, className,
 }: {
   /** For the flower icon (ui/icon1.ico); none before the assets load */
   assets?: AssetStore | null;
@@ -111,6 +115,8 @@ export function TitleBar({
   menu?: TitleBarMenuItem[];
   /** The latency meter: a round trip in ms, null while waiting for the first echo, undefined for no meter */
   latency?: number | null;
+  /** Show tooltips: the latency meter's (lagbox.c TTN_NEEDTEXT) */
+  tooltips?: boolean;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -141,20 +147,22 @@ export function TitleBar({
       )}
       <span className="title-text">{title}</span>
       <span className="title-spacer" />
-      {latency !== undefined && <LatencyMeter ms={latency} />}
+      {latency !== undefined && <LatencyMeter ms={latency} tooltip={tooltips} />}
       {ownButtons && <WindowButtons />}
       {open && menu && <MenuList items={menu} onDone={() => setOpen(false)} className="title-menu" />}
     </header>
   );
 }
 
-function LatencyMeter({ ms }: { ms: number | null }) {
+function LatencyMeter({ ms, tooltip }: { ms: number | null; tooltip: boolean }) {
   const text = ms === null ? "Measuring latency…" : latencyText(ms);
   return (
     <span className={`latency ${ms === null ? "waiting" : latencyLevel(ms)}`} aria-label={text} tabIndex={0}>
-      <span className="latency-tip" role="tooltip">
-        {ms === null ? text : `${ms} ms: ${text.split(":")[0]}`}
-      </span>
+      {tooltip && (
+        <span className="latency-tip" role="tooltip">
+          {ms === null ? text : `${ms} ms: ${text.split(":")[0]}`}
+        </span>
+      )}
     </span>
   );
 }

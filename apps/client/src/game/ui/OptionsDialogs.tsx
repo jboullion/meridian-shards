@@ -16,6 +16,8 @@ import {
   type Action, type ActionTab, type HaloColor, type HotkeyAlias, type KeyBinding, type Settings,
 } from "../settings.ts";
 import type { AudioPreview } from "../audio.ts";
+import { MAX_PROFANE_TERM } from "@shards/world";
+import { profanity, saveProfanity } from "../profanity.ts";
 import { Button, Check, GroupBox, ListBox, Select, Tabs, Text, TextField, Trackbar, Window, at, type Rect } from "./kit.tsx";
 
 type Patch = Partial<Settings>;
@@ -84,6 +86,7 @@ export function PreferencesDialog({
   }, [onPreview, music, musicVolume, sound, soundVolume, loopSounds, randomSounds]);
   useEffect(() => () => onPreview?.(null), [onPreview]);
   const [flags, setFlags] = useState(serverFlags ?? 0);
+  const [profanityOpen, setProfanityOpen] = useState(false);
   const set = (patch: Patch) => setD((s) => ({ ...s, ...patch }));
   const flag = (f: number, on: boolean) => setFlags((v) => (on ? v | f : v & ~f));
   const known = serverFlags !== null;
@@ -99,81 +102,189 @@ export function PreferencesDialog({
     onClose();
   };
   return (
-    <DluDialog title="Meridian Shards Preferences" size={[375, 288]} onClose={onClose}>
-      <form onSubmit={ok}>
-        <GroupBox at={[6, 3, 91, 67]} label="Targeting" />
-        <Check
-          at={[16, 14, 73, 17]}
-          className="wrap"
-          label="Can attack innocent players"
-          title={known ? "Kept on the server" : "Waiting for the server"}
-          disabled={!known}
-          checked={(flags & CF.SAFETY_OFF) !== 0}
-          onChange={(v) => flag(CF.SAFETY_OFF, v)}
-        />
-        {halo("Red Highlight", "red", [16, 34, 70, 10])}
-        {halo("Blue Highlight", "blue", [16, 45, 70, 10])}
-        {halo("Green Highlight", "green", [16, 56, 70, 10])}
-
-        <GroupBox at={[108, 3, 262, 67]} label="Special Effects" />
-        {check("Show your pain when you get hurt", [117, 16, 122, 9], "pain")}
-        {check("Draw player names over their heads", [117, 28, 125, 9], "drawPlayerNames")}
-        {check("Draw NPC names over their heads", [117, 40, 122, 9], "drawNpcNames")}
-        {check("Draw sign headings on top of signs", [117, 52, 131, 9], "drawSignNames")}
-        {check("Show amounts for inventory items", [247, 16, 120, 9], "inventoryNumbers")}
-        {check('"Bounce" as you walk', [247, 28, 93, 9], "bounce")}
-        {check("Show targeting light effect", [247, 40, 98, 9], "targetLight")}
-
-        <GroupBox at={[6, 71, 364, 31]} label="Particle effects" />
-        {check("Show weather effects", [18, 84, 91, 9], "weather")}
-        <Text at={[121, 84, 56, 10]}>Particle density %</Text>
-        <Trackbar at={[181, 78, 179, 18]} min={25} max={150} step={5} value={d.particleDensity} onChange={(v) => set({ particleDensity: v })} label="Particle density" />
-
-        <GroupBox at={[6, 103, 364, 55]} label="Game Options" />
-        {SERVER_OPTIONS.map(([label, f, r]) => (
+    <>
+      <DluDialog title="Meridian Shards Preferences" size={[375, 288]} onClose={onClose}>
+        <form onSubmit={ok}>
+          <GroupBox at={[6, 3, 91, 67]} label="Targeting" />
           <Check
-            key={f}
-            at={r}
-            label={label}
+            at={[16, 14, 73, 17]}
+            className="wrap"
+            label="Can attack innocent players"
             title={known ? "Kept on the server" : "Waiting for the server"}
             disabled={!known}
-            checked={(flags & f) !== 0}
-            onChange={(v) => flag(f, v)}
+            checked={(flags & CF.SAFETY_OFF) !== 0}
+            onChange={(v) => flag(CF.SAFETY_OFF, v)}
           />
-        ))}
+          {halo("Red Highlight", "red", [16, 34, 70, 10])}
+          {halo("Blue Highlight", "blue", [16, 45, 70, 10])}
+          {halo("Green Highlight", "green", [16, 56, 70, 10])}
 
-        <GroupBox at={[6, 160, 364, 45]} label="Audio Effects" />
-        {check("Music", [17, 173, 35, 9], "music")}
-        {check("Sounds", [17, 188, 44, 9], "sound")}
-        {/* maindlg.c: Steady and Atmospheric Sounds only with Sounds on */}
-        <Check at={[61, 172, 64, 9]} label="Steady Sounds" disabled={!d.sound} checked={d.loopSounds} onChange={(v) => set({ loopSounds: v })} />
-        <Check at={[61, 187, 80, 9]} label="Atmospheric Sounds" disabled={!d.sound} checked={d.randomSounds} onChange={(v) => set({ randomSounds: v })} />
-        {/* The original has Sound volume on top; ours sit beside their checkboxes (Music, then Sounds) */}
-        <Text at={[161, 173, 50, 10]}>Music volume</Text>
-        <Trackbar at={[217, 170, 147, 15]} min={0} max={100} value={d.musicVolume} onChange={(v) => set({ musicVolume: v })} label="Music volume" ticks={false} />
-        <Text at={[161, 189, 53, 10]}>Sound volume</Text>
-        <Trackbar at={[217, 186, 147, 15]} min={0} max={100} value={d.soundVolume} onChange={(v) => set({ soundVolume: v })} label="Sound volume" ticks={false} />
+          <GroupBox at={[108, 3, 262, 67]} label="Special Effects" />
+          {check("Show your pain when you get hurt", [117, 16, 122, 9], "pain")}
+          {check("Draw player names over their heads", [117, 28, 125, 9], "drawPlayerNames")}
+          {check("Draw NPC names over their heads", [117, 40, 122, 9], "drawNpcNames")}
+          {check("Draw sign headings on top of signs", [117, 52, 131, 9], "drawSignNames")}
+          {check("Show amounts for inventory items", [247, 16, 120, 9], "inventoryNumbers")}
+          {check('"Bounce" as you walk', [247, 28, 93, 9], "bounce")}
+          {check("Show targeting light effect", [247, 40, 98, 9], "targetLight")}
 
-        <GroupBox at={[6, 207, 364, 57]} label="Interface Features" />
-        {check("Show toolbar", [15, 218, 62, 9], "toolbar", true)}
-        {check("Show tooltips", [15, 228, 62, 9], "tooltips", true)}
-        {check("Lock text window in place when scrolling back", [15, 239, 159, 9], "scrollLock")}
-        {check("Add chat timestamps", [15, 250, 77, 9], "chatTimestamps")}
-        {check("Show latency meter", [91, 218, 77, 9], "latencyMeter")}
-        {check("Show dynamic map", [91, 228, 79, 10], "dynamicMap")}
-        {check("Show colored text", [179, 218, 69, 10], "coloredText")}
-        {check("Map annotations", [179, 228, 72, 10], "mapAnnotations", true)}
-        {check("Show FPS", [179, 239, 50, 9], "showFps")}
-        {check("Display XP as percent", [254, 218, 87, 9], "xpAsPercent")}
-        {check("Filter text profanity", [254, 228, 77, 9], "profanityFilter", true)}
-        <Button at={[253, 239, 110, 12]} disabled title={NOT_YET}>
-          Profanity Options and Policy...
+          <GroupBox at={[6, 71, 364, 31]} label="Particle effects" />
+          {check("Show weather effects", [18, 84, 91, 9], "weather")}
+          <Text at={[121, 84, 56, 10]}>Particle density %</Text>
+          <Trackbar at={[181, 78, 179, 18]} min={25} max={150} step={5} value={d.particleDensity} onChange={(v) => set({ particleDensity: v })} label="Particle density" />
+
+          <GroupBox at={[6, 103, 364, 55]} label="Game Options" />
+          {SERVER_OPTIONS.map(([label, f, r]) => (
+            <Check
+              key={f}
+              at={r}
+              label={label}
+              title={known ? "Kept on the server" : "Waiting for the server"}
+              disabled={!known}
+              checked={(flags & f) !== 0}
+              onChange={(v) => flag(f, v)}
+            />
+          ))}
+
+          <GroupBox at={[6, 160, 364, 45]} label="Audio Effects" />
+          {check("Music", [17, 173, 35, 9], "music")}
+          {check("Sounds", [17, 188, 44, 9], "sound")}
+          {/* maindlg.c: Steady and Atmospheric Sounds only with Sounds on */}
+          <Check at={[61, 172, 64, 9]} label="Steady Sounds" disabled={!d.sound} checked={d.loopSounds} onChange={(v) => set({ loopSounds: v })} />
+          <Check at={[61, 187, 80, 9]} label="Atmospheric Sounds" disabled={!d.sound} checked={d.randomSounds} onChange={(v) => set({ randomSounds: v })} />
+          {/* The original has Sound volume on top; ours sit beside their checkboxes (Music, then Sounds) */}
+          <Text at={[161, 173, 50, 10]}>Music volume</Text>
+          <Trackbar at={[217, 170, 147, 15]} min={0} max={100} value={d.musicVolume} onChange={(v) => set({ musicVolume: v })} label="Music volume" ticks={false} />
+          <Text at={[161, 189, 53, 10]}>Sound volume</Text>
+          <Trackbar at={[217, 186, 147, 15]} min={0} max={100} value={d.soundVolume} onChange={(v) => set({ soundVolume: v })} label="Sound volume" ticks={false} />
+
+          <GroupBox at={[6, 207, 364, 57]} label="Interface Features" />
+          {check("Show toolbar", [15, 218, 62, 9], "toolbar")}
+          {check("Show tooltips", [15, 228, 62, 9], "tooltips")}
+          {check("Lock text window in place when scrolling back", [15, 239, 159, 9], "scrollLock")}
+          {check("Add chat timestamps", [15, 250, 77, 9], "chatTimestamps")}
+          {check("Show latency meter", [91, 218, 77, 9], "latencyMeter")}
+          {check("Show dynamic map", [91, 228, 79, 10], "dynamicMap")}
+          {check("Show colored text", [179, 218, 69, 10], "coloredText")}
+          {check("Map annotations", [179, 228, 72, 10], "mapAnnotations")}
+          {check("Show FPS", [179, 239, 50, 9], "showFps")}
+          {check("Display XP as percent", [254, 218, 87, 9], "xpAsPercent")}
+          {check("Filter text profanity", [254, 228, 77, 9], "profanityFilter")}
+          <Button at={[253, 239, 110, 12]} onClick={() => setProfanityOpen(true)}>
+            Profanity Options and Policy...
+          </Button>
+
+          <Button at={[131, 272, 50, 12]} type="submit" isDefault>
+            OK
+          </Button>
+          <Button at={[193, 272, 50, 12]} onClick={onClose}>
+            Cancel
+          </Button>
+        </form>
+      </DluDialog>
+      {profanityOpen && (
+        <ProfanityDialog
+          ignore={d.profanityIgnore}
+          extra={d.profanityExtra}
+          onDone={(ignore, extra) => set({ profanityIgnore: ignore, profanityExtra: extra })}
+          onClose={() => setProfanityOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * maindlg.c ProfanityDialogProc (client.rc IDC_PROFANESETTINGS): ignore or obscure, the
+ * extra search, and adding or removing a term (kept at once, as SaveProfaneTerms does).
+ * The two options go to the Preferences window, applied with its OK.
+ */
+function ProfanityDialog({
+  ignore: initialIgnore, extra: initialExtra, onDone, onClose,
+}: {
+  ignore: boolean;
+  extra: boolean;
+  onDone: (ignore: boolean, extra: boolean) => void;
+  onClose: () => void;
+}) {
+  const [ignore, setIgnore] = useState(initialIgnore);
+  const [extra, setExtra] = useState(initialExtra);
+  const [term, setTerm] = useState("");
+  const edit = (add: boolean) => {
+    if (add) profanity.add(term);
+    else profanity.remove(term);
+    saveProfanity();
+    setTerm("");
+  };
+  return (
+    <DluDialog title="Profanity Filter Settings" size={[321, 201]} onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onDone(ignore, extra);
+          onClose();
+        }}
+      >
+        <GroupBox at={[4, 4, 229, 56]} label="Options" />
+        <Check at={[11, 15, 215, 10]} radio name="profane" label="Ignore any message containing recognized profane terms" checked={ignore} onChange={() => setIgnore(true)} />
+        <Check at={[11, 27, 215, 10]} radio name="profane" label="Obscure all recognized profane terms with symbols ($@#!&)" checked={!ignore} onChange={() => setIgnore(false)} />
+        <Check at={[11, 44, 215, 10]} label="Extra search for suspected embedded profanity" checked={extra} onChange={setExtra} />
+        <Text at={[241, 16, 20, 8]}>Word:</Text>
+        <TextField at={[271, 14, 46, 12]} value={term} onChange={setTerm} maxLength={MAX_PROFANE_TERM} />
+        <Button at={[241, 30, 76, 11]} onClick={() => edit(true)}>
+          Add as Profane Term
         </Button>
-
-        <Button at={[131, 272, 50, 12]} type="submit" isDefault>
+        <Button at={[241, 43, 76, 11]} onClick={() => edit(false)}>
+          Remove Term
+        </Button>
+        <GroupBox at={[4, 66, 313, 108]} label="About Objectionable Language" />
+        <Text at={[10, 77, 300, 25]} wrap>
+          The profanity filter option in Meridian Shards is intended to allow you to make your own choices about objectionable language. You can decide to ignore or
+          filter the incoming text, or to allow incoming text to be shown fully.
+        </Text>
+        <Text at={[10, 104, 300, 26]} wrap>
+          No software filter can stop all profanity without severely limiting other communication. The filter will find thoughtless uses of words and will render them
+          unreadable. It will not stop every form of objectionable material that can be typed.
+        </Text>
+        <Text at={[10, 132, 300, 18]}>Play nice!</Text>
+        <Text at={[10, 152, 300, 18]}>---Zaphod</Text>
+        <Button at={[206, 183, 50, 14]} type="submit" isDefault>
           OK
         </Button>
-        <Button at={[193, 272, 50, 12]} onClick={onClose}>
+        <Button at={[267, 183, 50, 14]} onClick={onClose}>
+          Cancel
+        </Button>
+      </form>
+    </DluDialog>
+  );
+}
+
+/**
+ * logoff.c TimeoutDialogProc (client.rc IDD_TIMEOUT): log off after so many minutes without
+ * a key or a click.
+ */
+export function LogoutTimerDialog({ settings, iconUrl, onApply, onClose }: { settings: Settings; iconUrl: string; onApply: (patch: Patch) => void; onClose: () => void }) {
+  const [enabled, setEnabled] = useState(settings.logoutTimer && settings.logoutMinutes > 0);
+  const [minutes, setMinutes] = useState(String(settings.logoutMinutes));
+  return (
+    <DluDialog title="Logout timer" size={[149, 81]} onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          // IDOK: the typed minutes (at least 0), and on or off
+          onApply({ logoutMinutes: Math.max(Number.parseInt(minutes, 10) || 0, 0), logoutTimer: enabled });
+          onClose();
+        }}
+      >
+        <img src={iconUrl} alt="" style={at([8, 7, 18, 20])} className="mk-login-icon" />
+        <Check at={[47, 13, 74, 10]} label="Enable logout timer" checked={enabled} onChange={setEnabled} />
+        <Text at={[8, 37, 46, 8]}>Disconnect after</Text>
+        <TextField at={[47, 35, 33, 14]} value={minutes} onChange={(v) => setMinutes(v.replace(/\D/g, ""))} maxLength={5} disabled={!enabled} />
+        <Text at={[87, 37, 55, 8]}>minutes idle time</Text>
+        <Button at={[21, 61, 45, 14]} type="submit" isDefault>
+          OK
+        </Button>
+        <Button at={[82, 61, 45, 14]} onClick={onClose}>
           Cancel
         </Button>
       </form>
