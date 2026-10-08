@@ -6,7 +6,7 @@
 // black on white).
 
 import { useState, type ReactNode } from "react";
-import type { ObjectInfo, ObjectRef } from "@shards/protocol";
+import { UC, type ObjectInfo, type ObjectRef } from "@shards/protocol";
 import { isNumberItem, type GameSession, type OfferEvent, type TradeList } from "@shards/world";
 import type { IconRenderer } from "../icons.ts";
 import { Button, TextField, Window } from "./kit.tsx";
@@ -308,6 +308,95 @@ export function AmountDialog({
           </Button>
           <Button onClick={onClose}>Cancel</Button>
         </div>
+      </form>
+    </Dialog>
+  );
+}
+
+/**
+ * merintr.rc IDD_SUICIDE (command.c CommandSuicide): the account's password, checked here,
+ * before UC_SUICIDE starts the character over.
+ */
+export function SuicideDialog({ session, onClose }: { session: GameSession; onClose: () => void }) {
+  const [password, setPassword] = useState("");
+  return (
+    <Dialog title="Meridian Character Suicide" onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          // SuicideVerifyDialogProc: a wrong password just closes the dialog
+          if (session.passwordMatches(password)) session.userCommand(UC.SUICIDE);
+          onClose();
+        }}
+      >
+        <p>
+          Performing a suicide will destroy your character, and will create a new character for you to start over. You are responsible for your own
+          choice to begin the game again.
+        </p>
+        <fieldset className="mk-group">
+          <legend>Verification</legend>
+          <label className="form-row">
+            To verify that you wish to do this, enter your current account password here.
+            <TextField type="password" autoFocus value={password} onChange={setPassword} />
+          </label>
+        </fieldset>
+        <div className="mk-buttons">
+          <Button type="submit" isDefault>
+            Suicide
+          </Button>
+          <Button onClick={onClose}>Cancel</Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+/** maindlg.c MINPASSWORD */
+const MIN_PASSWORD = 6;
+
+/** client.rc IDD_PASSWORD (maindlg.c PasswordDialogProc): the old password and the new one twice. */
+export function PasswordDialog({ session, onClose }: { session: GameSession; onClose: () => void }) {
+  const [old, setOld] = useState("");
+  const [new1, setNew1] = useState("");
+  const [new2, setNew2] = useState("");
+  const [error, setError] = useState("");
+  return (
+    <Dialog title="Change Password" onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (new1 !== new2) return setError("You must type your new password twice identically.");
+          if (new1.length < MIN_PASSWORD) return setError(`Your new password must be at least ${MIN_PASSWORD} characters long.`);
+          session.changePassword(old, new1);
+          onClose();
+        }}
+      >
+        <p>
+          It is important to protect your Meridian password. Changing your password regularly is recommended so that other people cannot ruin your game by
+          using your character.
+        </p>
+        <fieldset className="mk-group">
+          <legend>Your Password</legend>
+          <label className="form-row">
+            Old password: <TextField type="password" autoFocus value={old} onChange={setOld} />
+          </label>
+          <label className="form-row">
+            New password: <TextField type="password" value={new1} onChange={setNew1} />
+          </label>
+          <label className="form-row">
+            Verify new password: <TextField type="password" value={new2} onChange={setNew2} />
+          </label>
+        </fieldset>
+        {error && <p className="form-error">{error}</p>}
+        <div className="mk-buttons">
+          <Button type="submit" isDefault>
+            Change
+          </Button>
+          <Button onClick={onClose}>Cancel</Button>
+        </div>
+        <p className="muted">
+          Be careful not to give other players your account name or password; you are responsible for the actions of whoever uses your account.
+        </p>
       </form>
     </Dialog>
   );

@@ -16,21 +16,11 @@ Phase 1 is done: rooms that change, sloped textures, blur and waver, the xlat ov
 
 ## Commands and interaction (phase 2)
 
+Phase 2 is done: the original's command table, emotes and moods, resting, the Spells menu, inventory reordering and keys, chat history and filtering, ignored tells, the Find box, Tab focus, password changes and suicide. What's left:
+
 | What | Original | What it needs |
 |---|---|---|
-| The command table | `merintr.c:306-429`, `command.c`, `clientd3d/parse.c` | Unique-prefix matching (`b hi` broadcasts), "bad command" for unknown words, and the German aliases. Today unknown words are said aloud. |
-| Missing commands | `command.c` | `use`, `drop`, `cast <spell>`, `time` (`UC_REQ_TIME`), `appeal` (`UC_APPEAL`), `tellguild` (`SAY_GUILD`), `suicide` (`IDD_SUICIDE`, `UC_SUICIDE`), `password` (`BP_CHANGE_PASSWORD`), `newgroup`, `delgroup`, `addgroup`, `tell <group>`, and the `safety`, `tempsafe`, `grouping`, `autoloot`, `autocombine`, `reagentbag`, `spellpower on/off` toggles. `help` opens the original's web help. |
-| Command aliases | `alias.c:406-528` | `alias word = command` typed inline, prefix matching, and `~~` for the arguments. Real commands come first. |
-| Emotes and moods | `actions.c:24-39`, `command.c:370-523` | `BP_ACTION` with one byte: Wave, Point, Dance, Happy, Sad, Neutral, Wry, typed and on the Actions menu. Typed, they say they're not in yet. |
-| Resting and low vigor | `mermain.c:223-304` | Resting blocks moving, attacking and casting; below 10 vigor, running becomes walking. `UC_REST`/`UC_STAND` are sent, but there's no resting state. |
-| The Spells menu | `spells.c:136` | `UC_SPELL_SCHOOLS` (sent at login): a menu per school that casts. |
-| `UC_SEND_QUIT` | `merintr.c:1580` | The server's request to log off (after a suicide or a rescue). |
-| Inventory | `inventry.c` | Reordering by drag (`BP_REQ_INVENTORY_MOVE`), dropping onto a container puts the item in it, double click on an appliable item starts "use on…", and the keys (arrows, Space/R/U use, L look, P put). |
-| Chat line | `textin.c:229-249`, `say.c:98` | A 20-line history, and the outgoing filter (control characters, space and colour-code limits). |
-| Ignored tells | `msgfiltr.c:230-242` | `BP_SAY_BLOCKED` to the server, and the `imp.ogg` ding on incoming tells. |
-| Pick lists | `lookdlg.c:282` | The Find box. |
-| Enchantments | `enchant.c:410` | Right click looks at one. |
-| Tab Forward / Tab Backward | `A_TABFWD`/`A_TABBACK` | Keyboard focus moving between the view, the inventory and the chat line. The keys can be bound but do nothing yet. |
+| `help` | `A_HELP` (`StartHelp`) | The original opens its web help pages; we say they aren't in yet. |
 
 ## Social systems (phase 3)
 
@@ -72,6 +62,9 @@ Phase 1 is done: rooms that change, sloped textures, blur and waver, the xlat ov
 | Ignore list by name resource | The original keys ignores by name resource; we use the name, which survives across sessions. |
 | The client patcher (`download.c`, `AP_DOWNLOAD`) | Our game files come from the asset manifest, and the desktop app updates itself. `AP_DOWNLOAD` now ends the login with the server's reason. |
 | Guest login (`AP_GUEST`) | blakserv never sends it. |
+| Typed lines | The original treats every line as a command ("What?" for anything else; speech needs "say"). That's the Original Command Typing option (on with the original key preset). By default a line is said unless its first word is a command's whole name, and commands that take no words only count typed alone; a "/" in front parses like the original. |
+| `alias word = command` | The original keeps the "=" as part of the command (so the alias fails); we drop it. |
+| Group members on line | The original shows them in red; the chat line marks them with *. |
 | `BP_ROUNDTRIP1` | blakserv never sends it. `BP_SECTOR_ANIMATE` isn't sent either, but it's handled. |
 | Blur and waver over the hands | The D3D client blurs the whole frame, hands and screen flashes included; ours blurs the 3D view, since the hands are drawn on a 2D canvas over it. |
 | Sector flicker (`BP_SECTOR_LIGHT`, `SF_FLICKER`) | The D3D client keeps the sector's own light while flickering, so it's parsed and has no effect, as there. |

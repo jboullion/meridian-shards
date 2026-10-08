@@ -5,7 +5,7 @@
 //   stat groups (stats.c, statbtn.c): Inventory, Stats, Spells, Skills, Quests tabs
 // drawn on the original's background bitmaps from the asset build (ui/*.bmp).
 
-import { useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { Room } from "@shards/formats";
 import { STAT_GROUP, STAT_TAG, STATS, type ObjectInfo, type Statistic } from "@shards/protocol";
 import { isNumberItem, type GameSession } from "@shards/world";
@@ -15,6 +15,9 @@ import { useAsyncImage, useWorld } from "./hooks.ts";
 import { useKeyedHalves, useKeyedImage } from "./keyed.ts";
 import type { Settings } from "../settings.ts";
 import { MiniMap } from "./MiniMap.tsx";
+
+/** include/proto.h OF_APPLYABLE: used on something else */
+const OF_APPLYABLE = 0x1000;
 
 /** statmain.c: main stat numbers */
 const STAT_HP = 1,
@@ -33,17 +36,22 @@ const TABS: { tab: Tab; group: number; bitmap: string; label: string }[] = [
 ];
 
 export function ObjIcon({
-  icons, object, opts, className, title,
+  icons, object, opts, className, title, onContextMenu,
 }: {
   icons: IconRenderer;
   object: Drawable | null;
   opts?: IconOptions;
   className?: string;
   title?: string;
+  onContextMenu?: (e: ReactMouseEvent) => void;
 }) {
   const key = object ? icons.key(object, opts) : "";
   const url = useAsyncImage(key, () => (object ? icons.object(object, opts) : null));
-  return <span className={`obj-icon ${className ?? ""}`} title={title}>{url && <img src={url} alt="" draggable={false} />}</span>;
+  return (
+    <span className={`obj-icon ${className ?? ""}`} title={title} onContextMenu={onContextMenu}>
+      {url && <img src={url} alt="" draggable={false} />}
+    </span>
+  );
 }
 
 /**
@@ -97,7 +105,7 @@ function StatBar({ stat, main = false, xpAsPercent = false }: { stat: Statistic;
 }
 
 export function Sidebar({
-  session, icons, assets, getRoom, tab, onTab, settings, onLookItem, onLook, onDropItem, target, selecting, onSelectObject, onCast,
+  session, icons, assets, getRoom, tab, onTab, settings, onLookItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, target, selecting, onSelectObject, onCast,
 }: {
   session: GameSession;
   icons: IconRenderer;
@@ -112,6 +120,12 @@ export function Sidebar({
   /** Right click on our face, a spell or a skill: its description, nothing more (SetDescParams DESC_NONE) */
   onLook: (id: number) => void;
   onDropItem: (o: ObjectInfo) => void;
+  /** inventry.c StartApply: an item to use on something (OF_APPLYABLE) */
+  onApplyItem: (o: ObjectInfo) => void;
+  /** inventry.c 'P' (A_PUT): put things in a container close by */
+  onPut: () => void;
+  /** inventry.c A_TABFWD / A_TABBACK: Tab on to the chat line, Shift+Tab back to the view */
+  onTabOut: (forward: boolean) => void;
   /** The selected target, for the self-target ring behind our face */
   target: number | null;
   /** Picking a spell target (GAME_SELECT): clicks on our face or an item pick it */
@@ -163,7 +177,18 @@ export function Sidebar({
       </div>
       <div className="enchantments player">
         {[...world.enchantments.player.values()].map((e) => (
-          <ObjIcon key={e.id} icons={icons} object={e} className="enchant" title={rs(e.nameRes)} />
+          <ObjIcon
+            key={e.id}
+            icons={icons}
+            object={e}
+            className="enchant"
+            title={rs(e.nameRes)}
+            onContextMenu={(ev) => {
+              // enchant.c WM_RBUTTONDOWN: look at the enchantment
+              ev.preventDefault();
+              onLook(e.id);
+            }}
+          />
         ))}
       </div>
       <div className="map-frame">
@@ -175,7 +200,18 @@ export function Sidebar({
         )}
         <div className="enchantments room">
           {[...world.enchantments.room.values()].map((e) => (
-            <ObjIcon key={e.id} icons={icons} object={e} className="enchant" title={rs(e.nameRes)} />
+            <ObjIcon
+            key={e.id}
+            icons={icons}
+            object={e}
+            className="enchant"
+            title={rs(e.nameRes)}
+            onContextMenu={(ev) => {
+              // enchant.c WM_RBUTTONDOWN: look at the enchantment
+              ev.preventDefault();
+              onLook(e.id);
+            }}
+          />
           ))}
         </div>
       </div>
@@ -193,6 +229,9 @@ export function Sidebar({
             assets={assets}
             onLookItem={onLookItem}
             onDropItem={onDropItem}
+            onApplyItem={onApplyItem}
+            onPut={onPut}
+            onTabOut={onTabOut}
             selecting={selecting}
             onSelectObject={onSelectObject}
             showAmounts={settings.inventoryNumbers}
@@ -221,7 +260,7 @@ function PortraitIcon({ icons, object }: { icons: IconRenderer; object: ObjectIn
 
 /** inventry.c: a grid of 40x40 boxes; in-use items sit on the yellow sun (inuse.bmp). */
 function Inventory({
-  session, icons, assets, onLookItem, onDropItem, selecting, onSelectObject, showAmounts,
+  session, icons, assets, onLookItem, onDropItem, onApplyItem, onPut, onTabOut, selecting, onSelectObject, showAmounts,
 }: {
   /** Show amounts for inventory items (config.inventory_num) */
   showAmounts: boolean;
@@ -230,6 +269,9 @@ function Inventory({
   assets: AssetStore;
   onLookItem: (o: ObjectInfo) => void;
   onDropItem: (o: ObjectInfo) => void;
+  onApplyItem: (o: ObjectInfo) => void;
+  onPut: () => void;
+  onTabOut: (forward: boolean) => void;
   selecting: boolean;
   onSelectObject: (id: number) => void;
 }) {
@@ -238,9 +280,27 @@ function Inventory({
   const inUseImg = useKeyedImage(assets.url("ui/inuse.bmp"));
   const items = [...world.inventory.values()];
   const rs = (id: number) => session.resource(id) ?? "";
-  const toggleUse = (o: ObjectInfo) => (world.inUse.has(o.id) ? session.unuse(o.id) : session.use(o.id));
+  const gridRef = useRef<HTMLDivElement>(null);
+  // inventry.c A_TOGGLEUSE: an appliable item is used on something; others go in or out of use
+  const toggleUse = (o: ObjectInfo) =>
+    o.flags & OF_APPLYABLE ? onApplyItem(o) : world.inUse.has(o.id) ? session.unuse(o.id) : session.use(o.id);
+  /** inventry.c A_CURSOR*: move the inventory cursor by rows and columns */
+  const moveCursor = (from: number, dRow: number, dCol: number) => {
+    const grid = gridRef.current;
+    const cells = grid ? [...grid.querySelectorAll<HTMLElement>(".inv-item")] : [];
+    if (!cells.length) return;
+    const cols = Math.max(1, cells.filter((c) => c.offsetTop === cells[0].offsetTop).length);
+    const i = Math.max(0, Math.min(items.length - 1, from + dRow * cols + dCol));
+    setSelected(items[i].id);
+    cells[i]?.focus();
+  };
+  /** inventry.c inventory_key_table */
+  const KEY_MOVES: Record<string, [number, number]> = {
+    ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1], PageUp: [-1, 1], Home: [-1, -1], PageDown: [1, 1], End: [1, -1],
+    Numpad8: [-1, 0], Numpad2: [1, 0], Numpad4: [0, -1], Numpad6: [0, 1], Numpad9: [-1, 1], Numpad7: [-1, -1], Numpad3: [1, 1], Numpad1: [1, -1],
+  };
   return (
-    <div className="inventory-grid">
+    <div className="inventory-grid" ref={gridRef}>
       {items.map((o) => (
         <div
           key={o.id}
@@ -255,6 +315,15 @@ function Inventory({
           // inventry.c: in GAME_SELECT a click picks the item as a spell target
           onClick={() => (selecting ? onSelectObject(o.id) : setSelected(o.id))}
           onDoubleClick={() => !selecting && toggleUse(o)}
+          // inventry.c InventoryMoveCurrentItem: dropped on another item, it takes that place
+          onDragOver={(e) => e.dataTransfer.types.includes("application/x-shards-item") && e.preventDefault()}
+          onDrop={(e) => {
+            const id = Number(e.dataTransfer.getData("application/x-shards-item"));
+            if (!world.inventory.get(id)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (world.moveInventoryItem(id, o.id)) session.inventoryMove(id, o.id);
+          }}
           // inventry.c: VK_RBUTTON is A_LOOKINVENTORY
           onContextMenu={(e: ReactMouseEvent) => {
             e.preventDefault();
@@ -262,7 +331,18 @@ function Inventory({
             onLookItem(o);
           }}
           onKeyDown={(e) => {
-            if (e.key === "Delete") onDropItem(o);
+            const index = items.findIndex((x) => x.id === o.id);
+            const move = KEY_MOVES[e.code];
+            if (move) moveCursor(index, move[0], move[1]);
+            else if (e.code === "Space" || e.code === "KeyR" || e.code === "KeyU") toggleUse(o);
+            else if (e.code === "KeyL") onLookItem(o);
+            else if (e.code === "KeyP") onPut();
+            else if (e.key === "Delete") onDropItem(o);
+            else if (e.key === "Tab") onTabOut(!e.shiftKey);
+            else if (e.key === "Escape") (e.currentTarget as HTMLElement).blur(); // A_GOTOMAIN
+            else return;
+            e.preventDefault();
+            e.stopPropagation();
           }}
           tabIndex={0}
         >

@@ -103,7 +103,7 @@ npm run android:sync        # build the client and copy it into apps/android/and
   - The Game Options and "Can attack innocent players" live on the **server**: `UC_REQ_PREFERENCES` on entering, `UC_RECEIVE_PREFERENCES` back, `UC_SEND_PREFERENCES` (the `CF_*` flags) on OK.
   - **Configuration** is the Bind Editor (`m59bind.exe`): the six tabs and Options (Quick Chat, Always Run, Attack On Target, Dynamic Lighting), plus our Interface tab.
   - Bindings take Alt or Ctrl, and mouse buttons as `Mouse0` (left), `Mouse1` (right), `Mouse2` (middle), like `config.ini`. Unbound F1–F12 send the hotkey aliases.
-  - **Actions** has Who (ignoring players), groups (`BP_SAY_GROUP`), hotkey and command aliases, and a guild placeholder. Emotes and moods are a TODO.
+  - **Actions** has Who (ignoring players), groups (`BP_SAY_GROUP`), hotkey and command aliases, a guild placeholder, and the emotes and moods (`BP_ACTION`). The ☰ menu has the same as an Actions submenu, plus Spells by school.
   - Settings saved by older versions are migrated in `migrate()`; bump `SETTINGS_VERSION` when a saved field changes meaning.
 - **Controls**, the modern preset:
   - Click the view to capture the mouse (or C, Mouselook Toggle); Esc releases it.
@@ -142,6 +142,7 @@ npm run android:sync        # build the client and copy it into apps/android/and
   - Timers keep full speed while minimized (`backgroundThrottling: false`); `requestAnimationFrame` still slows down, because Windows stops drawing a minimized window.
   - To drive it from a script, start it with `--remote-debugging-port=9222` and use the Chrome DevTools Protocol.
 - **Settings** live in `localStorage`. Hot reloading `settings.ts` makes a second copy of its listeners, so reload the page after editing it.
+- **Typed commands** (`apps/client/src/game/commands.ts`, run by `GameView`'s `runCommand`/`runParsed`): `COMMAND_TABLE` is merintr's, in order (ties go to the first). `interpretLine` decides between a command, an alias, speech and "What?"; keep it pure and tested (`commands.test.ts`). Hotkey aliases and the ☰ Actions items go through `runCommand` too.
 - **Chat tabs** (ours; the original has one text window): `packages/world/src/chatChannel.ts` puts each line in Chat (everything `BP_SAID`), Combat or Server. Server messages have no kind, so Combat is matched on the message's *format string*, before names are filled in; add words there when a fight message lands in Server. `appendChatLine` caps each channel at 300 lines.
 - **Damage numbers** (ours) come from the attacker's hit message (`battler_attacker_hit` / `_mob` in `battler.kod`), matched by its format string and read from its parameters (`packages/world/src/combatHit.ts`). The message names the target but doesn't give its id, so `GameScene.showDamage` uses the target when the name matches, else the nearest object with that name.
 - **Saves renumber objects.** blakserv's garbage collection (every save, or `save game` on the maintenance port) compacts object ids. Clients get `BP_WAIT`, then `BP_INVALIDATE_DATA`, and must ask for everything again (`GameSession` does). Maintenance commands that name an object id are only good until the next save: `show object` it again first.

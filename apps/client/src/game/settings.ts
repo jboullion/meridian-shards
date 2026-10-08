@@ -170,7 +170,7 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     targetPrevious: k("BracketLeft"),
     targetClear: k("Escape"),
     targetSelf: k("Backslash"),
-    tabForward: [],
+    tabForward: [{ code: "Tab" }],
     tabBackward: [],
     selectTarget: k("Mouse0"),
     map: [],
@@ -256,6 +256,12 @@ export interface Settings {
   dynamicLighting: boolean;
   /** Damage Numbers (ours): the damage we deal floats up over what we hit */
   damageNumbers: boolean;
+  /**
+   * Original Command Typing: every typed line is a command, as in the original (commands.ts):
+   * the start of a name will do, speech needs "say", anything else is "What?". Off, lines
+   * are said unless they start with a command (or "/").
+   */
+  originalCommands: boolean;
   /** Mouselook X / Y scale, 1..30 (config.ini mouselookxscale / mouselookyscale) */
   mouseXScale: number;
   mouseYScale: number;
@@ -323,6 +329,7 @@ export const DEFAULT_SETTINGS: Settings = {
   attackOnTarget: false,
   dynamicLighting: true,
   damageNumbers: true,
+  originalCommands: false,
   mouseXScale: 15,
   mouseYScale: 15,
   invertMouse: false,
@@ -401,8 +408,8 @@ export function onSettings(fn: (s: Settings) => void): () => void {
 }
 
 /** The bindings and the input options that go with a preset (the original also starts chat by typing). */
-export function presetSettings(preset: PresetName): Pick<Settings, "preset" | "keys" | "typeToChat"> {
-  return { preset, keys: PRESETS[preset], typeToChat: preset === "original" };
+export function presetSettings(preset: PresetName): Pick<Settings, "preset" | "keys" | "typeToChat" | "originalCommands"> {
+  return { preset, keys: PRESETS[preset], typeToChat: preset === "original", originalCommands: preset === "original" };
 }
 
 /** Modifier keys held with a key press. */
@@ -450,10 +457,3 @@ export function mouseCode(button: number): string {
   return `Mouse${button === 2 ? 1 : button === 1 ? 2 : button}`;
 }
 
-/** What a command alias turns a typed line into (alias.c AliasExpand: the first word). */
-export function expandCommandAlias(aliases: Record<string, string>, line: string): string {
-  const m = /^(\/?)(\S+)(.*)$/.exec(line.trim());
-  if (!m) return line;
-  const expansion = aliases[m[2].toLowerCase()];
-  return expansion === undefined ? line : expansion + m[3];
-}

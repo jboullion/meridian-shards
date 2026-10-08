@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { SAY } from "@shards/protocol";
 import type { ChatLine } from "@shards/world";
 import { ignoredLine } from "./Game.tsx";
-import { parseTell } from "./GameView.tsx";
-import { ACTIONS, ACTION_TABS, PRESETS, actionsFor, expandCommandAlias, migrate, mouseCode, updateSettings, DEFAULT_SETTINGS } from "./settings.ts";
+import { interpretLine, resolveTell } from "./commands.ts";
+import { ACTIONS, ACTION_TABS, PRESETS, actionsFor, migrate, mouseCode, updateSettings, DEFAULT_SETTINGS } from "./settings.ts";
 
 describe("settings", () => {
   it("binds every action in both presets, each in one Bind Editor tab", () => {
@@ -51,12 +51,12 @@ describe("settings", () => {
     expect(actionsFor(PRESETS.original, "Mouse1", false)).toEqual(["examine"]);
   });
 
-  it("expands a command alias's first word", () => {
-    const aliases = { laugh: "emote laughs", hi: "say hello" };
-    expect(expandCommandAlias(aliases, "laugh")).toBe("emote laughs");
-    expect(expandCommandAlias(aliases, "hi there")).toBe("say hello there");
-    expect(expandCommandAlias(aliases, "Laugh")).toBe("emote laughs");
-    expect(expandCommandAlias(aliases, "hello")).toBe("hello");
+  it("expands a command alias by its whole verb (alias.c ParseVerbAlias)", () => {
+    const aliases = { laugh: "emote laughs", hi: "say hello ~~" };
+    expect(interpretLine("laugh", aliases, false)).toEqual({ kind: "alias", line: "emote laughs" });
+    expect(interpretLine("hi there", aliases, false)).toEqual({ kind: "alias", line: "say hello there" });
+    expect(interpretLine("Laugh", aliases, false)).toEqual({ kind: "alias", line: "emote laughs" });
+    expect(interpretLine("hello", aliases, false)).toEqual({ kind: "say", text: "hello" });
   });
 });
 
@@ -67,16 +67,15 @@ describe("tell", () => {
     { id: 3, name: "Old Tom" },
   ];
   it("finds the player by whole name, quoted name or unique prefix", () => {
-    expect(parseTell("tell Shardbot hello there", players)).toEqual({ id: 1, name: "Shardbot", text: "hello there" });
-    expect(parseTell("tell old tom hi", players)).toEqual({ id: 3, name: "Old Tom", text: "hi" });
-    expect(parseTell('tell "Old Tom" hi', players)).toEqual({ id: 3, name: "Old Tom", text: "hi" });
-    expect(parseTell("t shardk yo", players)).toEqual({ id: 2, name: "Shardkit", text: "yo" });
+    expect(resolveTell("Shardbot hello there", players, {})).toEqual({ ids: [1], text: "hello there" });
+    expect(resolveTell("old tom hi", players, {})).toEqual({ ids: [3], text: "hi" });
+    expect(resolveTell('"Old Tom" hi', players, {})).toEqual({ ids: [3], text: "hi" });
+    expect(resolveTell("shardk yo", players, {})).toEqual({ ids: [2], text: "yo" });
   });
   it("explains what went wrong", () => {
-    expect(parseTell("tell shard hi", players)).toHaveProperty("error");
-    expect(parseTell("tell nobody hi", players)).toHaveProperty("error");
-    expect(parseTell("tell Shardbot", players)).toHaveProperty("error");
-    expect(parseTell("hello", players)).toBeNull();
+    expect(resolveTell("shard hi", players, {})).toHaveProperty("error");
+    expect(resolveTell("nobody hi", players, {})).toHaveProperty("error");
+    expect(resolveTell("Shardbot", players, {})).toBeNull();
   });
 });
 

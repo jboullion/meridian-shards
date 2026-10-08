@@ -1035,6 +1035,35 @@ button.link {
   cursor: pointer;
 }
 
+/* Submenus (the Actions and Spells menus) open to the right of their item */
+.title-menu li {
+  position: relative;
+}
+
+.title-menu .title-submenu {
+  display: none;
+  top: -5px;
+  left: 100%;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.title-menu li.has-submenu:hover > .title-submenu,
+.title-menu li.has-submenu:focus-within > .title-submenu {
+  display: block;
+}
+
+.title-menu .submenu-arrow {
+  float: right;
+  margin-left: 12px;
+}
+
+.title-menu .menu-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: #8a8a8a;
+}
+
 .title-menu button:hover,
 .title-menu button:focus-visible {
   background: #b4b4b4;
@@ -1644,4 +1673,45 @@ button.link {
 /* GAME_WAIT (BP_WAIT until BP_UNWAIT): the server is saving */
 canvas.server-wait {
   cursor: wait !important;
+}
+
+/* Small forms in dialogs (IDD_SUICIDE, IDD_PASSWORD): a label, then its field on the right */
+.game-dialog .form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 6px 0;
+}
+
+.game-dialog .form-row .mk-edit {
+  flex: 0 0 170px;
+}
+
+.game-dialog .form-error {
+  color: #ff8080;
+  text-shadow: 1px 1px 0 #000;
+}
+.game-dialog .mk-group { padding: 4px 10px 8px; }
+
+/* lookdlg.c IDC_ITEMFIND */
+.look-list-find {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.look-list-find .mk-edit {
+  flex: 1;
+}
+
+.look-list-find input {
+  width: 100%;
+}
+
+.look-list li.caret {
+  outline: 1px dotted #fff;
+  outline-offset: -1px;
 }

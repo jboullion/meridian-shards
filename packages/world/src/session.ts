@@ -8,7 +8,7 @@ import {
   buildReqCounteroffer, buildReqOffer, buildReqTurn, buildReqWithdrawal, buildReqWithdrawalItems, buildSay, buildSayGroup, buildSendEnchantments,
   buildSendSkills, buildSendSpells, buildChangeDescription, buildChangeUrl, buildReqApply,
   buildReqGetFromContainer, buildReqObjectContents, buildReqPut, buildSendStatGroups, buildSendStats, buildSimple, buildUseCharacter, buildUserCommand,
-  buildSendCharInfo, UC, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
+  buildSendCharInfo, buildAction, buildAppeal, buildChangePassword, buildReqInventoryMove, buildSayBlocked, UC, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
   type BuyItem, type CharInfo, type CharacterSlot, type NewCharInfo, type ObjectInfo, type ObjectRef, type PlayWave,
 } from "@shards/protocol";
 import { WorldState, fineToKod } from "./state.ts";
@@ -389,6 +389,41 @@ export class GameSession {
     this.send(buildUserCommand(uc, ...ints));
   }
 
+  /** BP_ACTION (command.c, actions.c): a UA_* emote (wave, point, dance) or mood (happy, sad, neutral, wry). */
+  action(ua: number): void {
+    this.send(buildAction(ua));
+  }
+
+  /** UC_APPEAL (command.c CommandAppeal): a message to the game's staff. */
+  appeal(text: string): void {
+    this.send(buildAppeal(text));
+  }
+
+  /** BP_SAY_BLOCKED (msgfiltr.c): we hid a tell from this ignored player. */
+  sayBlocked(id: number): void {
+    this.send(buildSayBlocked(id));
+  }
+
+  /** BP_REQ_INVENTORY_MOVE (inventry.c): put an item where another one is in the inventory. */
+  inventoryMove(id: number, before: number): void {
+    this.send(buildReqInventoryMove(id, before));
+  }
+
+  /** Whether this is the account's password (command.c SuicideVerifyDialogProc checks the typed one). */
+  passwordMatches(password: string): boolean {
+    return password === this.opts.password;
+  }
+
+  /**
+   * BP_CHANGE_PASSWORD (maindlg.c PasswordDialogProc): both passwords as digests. The server
+   * answers BP_PASSWORD_OK or BP_PASSWORD_NOT_OK; like the original, we take the new one as
+   * ours if the old one was right.
+   */
+  changePassword(oldPassword: string, newPassword: string): void {
+    if (oldPassword === this.opts.password) this.opts.password = newPassword;
+    this.send(buildChangePassword(passwordDigest(oldPassword), passwordDigest(newPassword)));
+  }
+
   /** Send any game message (protocol builders). */
   send(body: Uint8Array): void {
     if (this.conn.state === "game") this.conn.sendGame(body);
@@ -580,6 +615,15 @@ export class GameSession {
           if (uc === UC.RECEIVE_PREFERENCES) {
             this.preferences = r.i32();
             this.events.preferences?.(this.preferences);
+          } else if (uc === UC.SPELL_SCHOOLS) {
+            // merintr.c HandleSpellSchools: the schools' names, for the Spells menu
+            const n = r.u8();
+            const schools: number[] = [];
+            for (let i = 0; i < n; i++) schools.push(r.u32());
+            this.world.setSpellSchools(schools);
+          } else if (uc === UC.SEND_QUIT) {
+            // merintr.c HandleSendQuit: the server wants us out (after a suicide, a rescue)
+            this.send(buildSimple(BP.REQ_QUIT));
           } else if (uc === UC.LOOK_PLAYER) {
             // HandleLookPlayer: the player, flags, their own words, the fixed string, the URL
             const object = readObject(r);
@@ -609,6 +653,13 @@ export class GameSession {
           break;
         case BP.INVALIDATE_DATA:
           this.refetchGameData();
+          break;
+        case BP.PASSWORD_OK:
+          // server.c HandlePasswordOk: IDS_PASSWORDCHANGED
+          this.localMessage("Password changed.");
+          break;
+        case BP.PASSWORD_NOT_OK:
+          this.localMessage("You typed your old password incorrectly.  Password NOT changed!");
           break;
         case BP.RESYNC:
           // server.c HandleGameResync -> GameDisplayResync (Connection runs the handshake)

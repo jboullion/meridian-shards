@@ -33,6 +33,9 @@ const MOUSE_TURN = 2.5;
 const PITCH_RATE = 1.2;
 const MAX_PITCH = 1.2;
 const OF_PLAYER = 0x4;
+/** statmain.c STAT_VIGOR (in stat group 1) and MIN_VIGOR */
+const STAT_VIGOR = 3;
+const MIN_VIGOR = 10;
 /** project.h PROJ_FLAG_FOLLOWGROUND */
 const PROJ_FLAG_FOLLOWGROUND = 0x1;
 const OF_ATTACKABLE = 0x8;
@@ -155,6 +158,8 @@ export class GameScene {
   readonly audio: GameAudio;
   private readonly offSettings: () => void;
   fog = true;
+  /** command.c pinfo.resting: no moving, attacking or going through doors (mermain.c InterfaceAction) */
+  resting = false;
   onStatus?: (s: GameSceneStatus) => void;
   /** Enter pressed: focus the chat input */
   onChatKey?: () => void;
@@ -489,12 +494,14 @@ export class GameScene {
     // and move.c: through another object's eyes, only with REMOTE_VIEW_MOVE (and not CONTROL)
     const remote = this.remoteView();
     const rv = remote?.view.flags ?? 0;
-    const still = world.effects.paralyzed || world.waiting || (remote !== null && (rv & REMOTE_VIEW.CONTROL || !(rv & REMOTE_VIEW.MOVE)));
+    const still = world.effects.paralyzed || world.waiting || this.resting || (remote !== null && (rv & REMOTE_VIEW.CONTROL || !(rv & REMOTE_VIEW.MOVE)));
     const forward = still ? 0 : held("forward") - held("backward");
     const strafe = still ? 0 : held("strafeRight") - held("strafeLeft");
     const turn = remote && !(rv & REMOTE_VIEW.TURN) ? 0 : held("turnRight") - held("turnLeft");
     // Always Run (config.ini alwaysrun): the Run/Walk key walks instead
-    const run = (held("run") === 1) !== this.settings.alwaysRun;
+    // mermain.c: too tired to run below MIN_VIGOR (10)
+    const vigor = world.stats.get(1)?.find((st) => st.num === STAT_VIGOR)?.numeric?.value ?? MIN_VIGOR;
+    const run = (held("run") === 1) !== this.settings.alwaysRun && vigor >= MIN_VIGOR;
     const angleBefore = this.mover.angle;
     this.mover.turnKeys(turn, run, dt);
     if (remote && rv & REMOTE_VIEW.CONTROL) {
@@ -770,8 +777,8 @@ export class GameScene {
 
   /** gameuser.c UserAttackClosest: the target if we can see it, else the closest attackable thing. */
   attack(): void {
-    // intrface.c A_ATTACK: not while seeing through another object's eyes
-    if (this.remoteView()) return;
+    // intrface.c A_ATTACK: not while seeing through another object's eyes; mermain.c: nor resting
+    if (this.remoteView() || this.resting || this.session.world.effects.paralyzed) return;
     const now = performance.now();
     if (now - this.lastAttack < ATTACK_DELAY) return;
     this.lastAttack = now;
@@ -993,6 +1000,18 @@ export class GameScene {
   }
 
   /**
+   * inventry.c InventoryLButtonUp: a container close by at a screen point (an item dropped
+   * on it goes in it), or null.
+   */
+  containerAt(clientX: number, clientY: number): number | null {
+    const saved = this.mouse;
+    this.mouse = { x: clientX, y: clientY };
+    const ids = this.objectsUnderCursor((o) => (o.info.flags & OF_CONTAINER) !== 0 && this.distanceTo(o.id) <= CLOSE_DISTANCE);
+    this.mouse = saved;
+    return ids[0] ?? null;
+  }
+
+  /**
    * client3d.c GetObjects3D at the mouse: the objects drawn under the cursor (the crosshair while
    * the mouse is captured), not hidden by a wall, that pass `test`, nearest first.
    */
@@ -1188,7 +1207,8 @@ export class GameScene {
     for (const a of actions) {
       // held keys repeat: zooming, and attacking (rate-limited like the original)
       if (e.repeat && a !== "mapZoomIn" && a !== "mapZoomOut" && a !== "attack") continue;
-      this.trigger(a);
+      // merintr.c interface_key_table: Shift+Tab is Tab Backward
+      this.trigger(a === "tabForward" && e.shiftKey ? "tabBackward" : a);
     }
     // alias.c: F1..F12 send their hotkey aliases (when no action uses the key)
     const fkey = /^F(\d{1,2})$/.exec(e.code);
@@ -1212,6 +1232,7 @@ export class GameScene {
   private trigger(a: Action): void {
     switch (a) {
       case "go":
+        if (this.resting) break; // mermain.c A_GO: not while resting
         this.mover.flush(performance.now()); // A_GO: MoveUpdatePosition first
         this.session.go();
         break;
@@ -1298,8 +1319,13 @@ export class GameScene {
         if (this.locked && a !== "mapZoomIn" && a !== "mapZoomOut" && a !== "inventory" && a !== "map") document.exitPointerLock();
         this.onAction?.(a);
         break;
+      case "tabForward":
+      case "tabBackward":
+        // intrface.c MainTab: from the view to the interface or the chat line
+        if (this.locked) document.exitPointerLock();
+        this.onAction?.(a);
+        break;
       default:
-        // Tab Forward / Back move focus between the original's windows: not yet (docs/missing-features.md)
         break;
     }
   }

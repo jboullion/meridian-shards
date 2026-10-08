@@ -312,6 +312,12 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
               <Check label="Attack On Target" checked={d.attackOnTarget} onChange={(v) => set({ attackOnTarget: v })} />
               <Check label="Dynamic Lighting" checked={d.dynamicLighting} onChange={(v) => set({ dynamicLighting: v })} />
               <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
+              <Check
+                label="Original Command Typing"
+                title="Every typed line is a command, as in the original: speech needs say, and the start of a command's name will do"
+                checked={d.originalCommands}
+                onChange={(v) => set({ originalCommands: v })}
+              />
             </GroupBox>
             <Button onClick={() => set({ ...presetSettings("modern"), keys: PRESETS.modern })}>Restore Defaults</Button>
             <div className="bind-buttons">
@@ -338,7 +344,7 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
 export const ACTION_WINDOWS = ["who", "groups", "hotkeys", "commands", "guild"] as const;
 export type ActionWindow = (typeof ACTION_WINDOWS)[number];
 
-/** merintr.rc IDS_MENU_*, without the emotes (Wave, Point, Dance) and moods (Happy, Sad, Neutral, Wry). */
+/** merintr.rc IDS_MENU_*: the windows */
 const ACTION_MENU: [ActionWindow, string][] = [
   ["who", "Who is logged on"],
   ["groups", "Modify groups"],
@@ -347,7 +353,17 @@ const ACTION_MENU: [ActionWindow, string][] = [
   ["guild", "Guild configuration"],
 ];
 
-export function ActionsDialog({ onOpen, onClose }: { onOpen: (w: ActionWindow) => void; onClose: () => void }) {
+/** actions.c: the emotes and moods, each its typed command (BP_ACTION) */
+const EMOTES: [string, string][] = [["wave", "Wave"], ["point", "Point"], ["dance", "Dance"]];
+const MOODS: [string, string][] = [["happy", "Happy"], ["sad", "Sad"], ["neutral", "Neutral"], ["wry", "Wry"]];
+
+export function ActionsDialog({ onOpen, onCommand, onClose }: { onOpen: (w: ActionWindow) => void; onCommand: (c: string) => void; onClose: () => void }) {
+  const buttons = (list: [string, string][]) =>
+    list.map(([c, label]) => (
+      <Button key={c} onClick={() => onCommand(c)}>
+        {label}
+      </Button>
+    ));
   return (
     <Modal>
       <Window title="Actions" onClose={onClose} className="options-dialog actions-dialog">
@@ -358,7 +374,10 @@ export function ActionsDialog({ onOpen, onClose }: { onOpen: (w: ActionWindow) =
             </Button>
           ))}
         </div>
-        <p className="mk-note">Emotes and moods (wave, point, dance, happy, sad…) are coming in their own menu.</p>
+        <h4 className="dialog-heading">Emotes</h4>
+        <div className="actions-list">{buttons(EMOTES)}</div>
+        <h4 className="dialog-heading">Moods</h4>
+        <div className="actions-list">{buttons(MOODS)}</div>
       </Window>
     </Modal>
   );

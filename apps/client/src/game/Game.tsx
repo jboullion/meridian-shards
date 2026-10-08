@@ -48,7 +48,8 @@ interface Live {
  * choices) isn't shown. Our own lines always are.
  */
 export function ignoredLine(line: ChatLine, ownName: string): boolean {
-  if (!line.sender) return false;
+  // MessageSaid: speech from non-players (SAY_RESOURCE) always shows
+  if (!line.sender || line.sayType === SAY.RESOURCE) return false;
   const name = line.sender.name.toLowerCase();
   if (name === ownName.toLowerCase()) return false;
   const s = getSettings();
@@ -147,8 +148,16 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
         charInfo: (info) => setCreating((c) => (c ? { ...c, info } : c)),
         chat: (line) => {
           const self = s.world.self;
-          if (ignoredLine(line, self ? (s.resource(self.info.nameRes) ?? "") : "")) return;
+          const tell = line.sayType === SAY.GROUP && line.sender && line.sender.id !== s.world.player?.id;
+          if (ignoredLine(line, self ? (s.resource(self.info.nameRes) ?? "") : "")) {
+            // msgfiltr.c MessageSaid: tell the server we didn't hear a tell (SendSayBlocked)
+            const st = getSettings();
+            if (tell && (st.ignoreEveryone || st.ignored.includes(line.sender!.name.toLowerCase()))) s.sayBlocked(line.sender!.id);
+            return;
+          }
           setChat((c) => appendChatLine(c, line));
+          // ...and a ding for tells
+          if (tell) audio.playLocal("imp.ogg");
         },
         preferences: setServerPrefs,
         latency: setLatency,

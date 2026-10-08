@@ -230,6 +230,8 @@ export class WorldState {
   /** Name resources of the stat groups (BP_STAT_GROUPS), index 0 = group 1. */
   statGroupNames: number[] = [];
   spells: Spell[] = [];
+  /** UC_SPELL_SCHOOLS: the schools' name resources, by school number (spells.c submenus) */
+  spellSchools: number[] = [];
   skills: ObjectInfo[] = [];
   /** Enchantments on us (ENCHANT_PLAYER) and on the room (ENCHANT_ROOM), by object id. */
   readonly enchantments = { player: new ObjectMap<ObjectInfo>(), room: new ObjectMap<ObjectInfo>() };
@@ -303,6 +305,28 @@ export class WorldState {
   }
 
   /** BP_WAIT: a save is coming and will renumber objects; drop what holds an id (the target). */
+  /**
+   * inventry.c InventoryMoveCurrentItem (list_move_to_nth): `id` takes `target`'s place in
+   * the inventory's order. The server is told with BP_REQ_INVENTORY_MOVE.
+   */
+  moveInventoryItem(id: number, target: number): boolean {
+    const entries = [...this.inventory.entries()];
+    const from = entries.findIndex(([k]) => k === objId(id));
+    const to = entries.findIndex(([k]) => k === objId(target));
+    if (from < 0 || to < 0 || from === to) return false;
+    const [moved] = entries.splice(from, 1);
+    entries.splice(to, 0, moved);
+    this.inventory.clear();
+    for (const [k, v] of entries) this.inventory.set(k, v);
+    this.emit({ type: "inventory" });
+    return true;
+  }
+
+  setSpellSchools(schools: number[]): void {
+    this.spellSchools = schools;
+    this.emit({ type: "spells" });
+  }
+
   emitIdsStale(): void {
     this.emit({ type: "idsStale" });
   }

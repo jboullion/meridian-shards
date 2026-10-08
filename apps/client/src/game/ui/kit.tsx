@@ -229,7 +229,7 @@ export function TextField({
   maxLength?: number;
   autoComplete?: string;
   className?: string;
-  type?: "text" | "number";
+  type?: "text" | "number" | "password";
   min?: number;
   max?: number;
 }) {

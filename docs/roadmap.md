@@ -142,7 +142,7 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
   - hotkey aliases on F1–F12 and command aliases;
   - the Map key's full-screen map.
   - Guilds wait for the guild messages.
-- [ ] Emotes and moods, as their own menu (`TODO.md`).
+- [x] Emotes and moods, on the Actions menu (milestone 13).
 
 ### 10. Looking and picking up (2026-10-07)
 
@@ -198,7 +198,16 @@ The goal: everything the original client and its modules do. The comparison (the
   - **The remote view** (`BP_SET_VIEW`, `BP_RESET_VIEW`), tested with `SetPlayerView` on the maintenance port; Esc comes back.
   - **Resync in the game** (`BP_RESYNC`, a bad frame): the beacon handshake, then the game data again, with the original's 60 s timeout. Server 104 can't finish the handshake (see [protocol.md](research/protocol.md)), so in practice it ends in a disconnect, as with the original client.
   - Left: a side-by-side check with the original client from the same spots.
-- [ ] **Phase 2: commands and interaction.** merintr's command table with prefix matching, emotes and moods, resting, the Spells menu, inventory reordering and keys, chat history and filtering, ignored tells, the Find box.
+- [x] **Phase 2: commands and interaction** (2026-10-08).
+  - **The command table** (`apps/client/src/game/commands.ts`): merintr's commands with the German names, `parse.c ParseCommand`'s matching (the start of a name will do, "What?" for nothing), and command aliases after them (whole verbs, `~~` for the rest of the line, `alias word command` to define one). By default a line is still said unless it starts with a command; "/" or the Original Command Typing option (the original preset turns it on) parse every line like the original.
+  - New commands: `use`, `drop`, `cast <spell>`, `time` (the server's game date), `appeal`, `tellguild`, `suicide` (`IDD_SUICIDE`, checking the password), `password` (`IDD_PASSWORD`, `BP_CHANGE_PASSWORD`; also on the ☰ menu), `newgroup` / `addgroup` / `delgroup`, `tell` to a group, the `safety`, `tempsafe`, `grouping`, `autoloot`, `autocombine`, `reagentbag` and `spellpower on|off` toggles, `hel` and `suicid`.
+  - **Emotes and moods** (`BP_ACTION`): typed, on the ☰ menu's Actions submenu (laid out as `actions.c`'s menu) and in the Actions window. Moods change the face on the server (tested: happy, sad, neutral).
+  - **Resting** (`mermain.c`): no moving, attacking, casting or doors until `stand`; below 10 vigor you walk.
+  - **The Spells menu** (`UC_SPELL_SCHOOLS`): a submenu per school on the ☰ menu, spells sorted, a click casts.
+  - **Inventory** (`inventry.c`): drag an item onto another to move it there (`BP_REQ_INVENTORY_MOVE`; the server keeps the order), drop one on a container in the view to put it in, double click an appliable item to use it on something, and the keys (arrows and the numeric pad move, Space/R/U use, L looks, P puts, Delete drops, Esc, Tab).
+  - **Chat:** Up and Down go through the last 20 lines; `say.c`'s filter (control characters, runs of spaces and colour codes); a ding (`imp.ogg`) for tells, and `BP_SAY_BLOCKED` when an ignored player's tell is hidden. Speech from non-players always shows, as in the original.
+  - **Smaller:** the pick lists' Find box, right click on an enchantment looks, Tab Forward / Back (Tab in the original preset) between the view, the inventory and the chat line, and `UC_SEND_QUIT`.
+  - Tested on our server with Shardbot and a scripted Shardpal: the commands' replies, password changes (right and wrong old password), the tell ding and the blocked notice, inventory order kept by the server.
 - [ ] **Phase 3: social systems.** News globes, mail with a local mailbox, stat reallocation, guilds.
 - [ ] **Phase 4: interface.** Toolbar, tooltips, map annotations, profanity filter, logout timer, About and intro, cursors, borders, language, quick start, desktop command line.
 - [ ] **Phase 5: mini-games and admin.** Chess, and a basic admin console.

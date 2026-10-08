@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { SAY, UC, type ObjectInfo } from "@shards/protocol";
+import { CF, SAY, UA, UC, type ObjectInfo } from "@shards/protocol";
 import {
   isNumberItem, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
   type TradeList,
@@ -8,8 +8,11 @@ import type { AssetStore } from "../assets.ts";
 import type { AudioPreview, GameAudio } from "./audio.ts";
 import { GameScene, type GameSceneStatus } from "./gameScene.ts";
 import type { IconRenderer } from "./icons.ts";
-import { expandCommandAlias, getSettings, onSettings, updateSettings, type ChatTab, type Settings } from "./settings.ts";
-import { AmountDialog, GiveDialog, OfferDialog, TradeDialog, reduceOffer } from "./ui/Dialogs.tsx";
+import { getSettings, onSettings, updateSettings, type ChatTab, type Settings } from "./settings.ts";
+import {
+  BAD_COMMAND, defineAlias, filterSayMessage, findSpell, groupAdd, groupDelete, groupNew, interpretLine, resolveTell, type CommandId, type GroupResult,
+} from "./commands.ts";
+import { AmountDialog, GiveDialog, OfferDialog, PasswordDialog, SuicideDialog, TradeDialog, reduceOffer } from "./ui/Dialogs.tsx";
 import { DESC, DescriptionDialog, LookListDialog, type DescAction, type LookListChoice } from "./ui/LookDialogs.tsx";
 import { MiniMap } from "./ui/MiniMap.tsx";
 import {
@@ -17,6 +20,7 @@ import {
   type ActionWindow,
 } from "./ui/OptionsDialogs.tsx";
 import { Sidebar, type Tab } from "./ui/Sidebar.tsx";
+import { useWorld } from "./ui/hooks.ts";
 import { TitleBar } from "./TitleBar.tsx";
 
 const MAX_LINES = 300;
@@ -63,91 +67,38 @@ const OF_BUYABLE = 0x400;
 /** gameuser.h CLOSE_DISTANCE: traders must be this close */
 const CLOSE_DISTANCE = 5 * 1024;
 
-/**
- * Typed commands that aren't speech (module/merintr/command.c): money in and out of
- * the bank ("deposit 100", "withdraw 50", "balance"), the vault dialogs ("deposit",
- * "withdraw" with no amount), "rest" and "stand".
- */
-export interface ActionCommand {
-  action: "deposit" | "withdraw" | "balance" | "rest" | "stand";
-  /** 0 when none was given */
-  amount: number;
-}
+/** Windows typed commands open (actions.c "who", "group", "alias", "cmdalias", "guild"). */
+const COMMAND_WINDOWS: Partial<Record<CommandId, ActionWindow>> = { who: "who", group: "groups", alias: "hotkeys", cmdalias: "commands", guild: "guild" };
 
-export function parseActionCommand(input: string): ActionCommand | null {
-  const m = /^\/?(deposit|withdraw|balance|rest|stand)(?:\s+(\d+))?\s*$/i.exec(input.trim());
-  if (!m) return null;
-  return { action: m[1].toLowerCase() as ActionCommand["action"], amount: Number(m[2] ?? 0) };
-}
-
-/**
- * Typed commands (module/merintr/command.c): "say", "emote", "yell", "broadcast",
- * optionally with a leading "/"; ":" starts an emote; anything else is said.
- */
-export function parseChatCommand(input: string): { kind: number; text: string } | null {
-  const t = input.trim();
-  if (!t) return null;
-  if (t.startsWith(":")) return { kind: SAY.EMOTE, text: t.slice(1).trim() };
-  const m = /^\/?(say|emote|em|yell|broadcast|bc)\s+(.*)$/i.exec(t);
-  if (m) {
-    const verb = m[1].toLowerCase();
-    const kind =
-      verb === "emote" || verb === "em" ? SAY.EMOTE : verb === "yell" ? SAY.YELL : verb === "say" ? SAY.NORMAL : SAY.EVERYONE;
-    return { kind, text: m[2] };
-  }
-  return { kind: SAY.NORMAL, text: t };
-}
-
-/**
- * "tell <player> <message>" (command.c CommandTell, GetPlayerName): the player is a logged-on
- * name, quoted or not, matched whole first and then by a unique prefix.
- */
-export function parseTell(input: string, players: readonly { id: number; name: string }[]): { id: number; name: string; text: string } | { error: string } | null {
-  const m = /^\/?(?:tell|t)\s+(.*)$/i.exec(input.trim());
-  if (!m) return null;
-  let rest = m[1];
-  let name: string;
-  if (rest.startsWith('"')) {
-    const end = rest.indexOf('"', 1);
-    if (end < 0) return { error: "Tell whom? Close the quotes around their name." };
-    name = rest.slice(1, end);
-    rest = rest.slice(end + 1);
-  } else {
-    // The longest logged-on name the line starts with (names can have spaces)
-    const lower = rest.toLowerCase();
-    const whole = players
-      .filter((p) => lower.startsWith(p.name.toLowerCase()) && /^(\s|$)/.test(rest.slice(p.name.length)))
-      .sort((a, b) => b.name.length - a.name.length)[0];
-    name = whole ? whole.name : rest.split(/\s+/)[0];
-    rest = rest.slice(name.length);
-  }
-  const text = rest.trim();
-  const exact = players.find((p) => p.name.toLowerCase() === name.toLowerCase());
-  const prefixed = players.filter((p) => p.name.toLowerCase().startsWith(name.toLowerCase()));
-  const target = exact ?? (prefixed.length === 1 ? prefixed[0] : undefined);
-  if (!target) return { error: prefixed.length > 1 ? `More than one player's name starts with "${name}".` : `${name} isn't logged on.` };
-  if (!text) return { error: `Tell ${target.name} what?` };
-  return { id: target.id, name: target.name, text };
-}
-
-/** Commands the original client knows that we don't have yet: we say so instead of saying them aloud. */
-const EMOTES_NOT_YET = "Emotes aren't in Meridian Shards yet.";
-const MOODS_NOT_YET = "Moods aren't in Meridian Shards yet.";
-const NOT_YET_COMMANDS: Record<string, string> = {
-  wave: EMOTES_NOT_YET, point: EMOTES_NOT_YET, dance: EMOTES_NOT_YET,
-  happy: MOODS_NOT_YET, sad: MOODS_NOT_YET, neutral: MOODS_NOT_YET, wry: MOODS_NOT_YET,
-  help: "The help pages aren't in Meridian Shards yet.",
-  mail: "Mail isn't in Meridian Shards yet.",
-  addgroup: "Adding your target to a group isn't in Meridian Shards yet; use Actions → Modify groups.",
+/** command.c: the moods and emotes (BP_ACTION) */
+const USER_ACTIONS: Partial<Record<CommandId, number>> = {
+  wave: UA.WAVE, point: UA.POINT, dance: UA.DANCE, happy: UA.HAPPY, sad: UA.SAD, neutral: UA.NORMAL, wry: UA.WRY,
 };
 
-/** Windows the Actions menu and typed commands open (actions.c "who", "group", "alias", "cmdalias", "guild"). */
-const ACTION_COMMANDS: Record<string, ActionWindow> = { who: "who", group: "groups", groups: "groups", alias: "hotkeys", cmdalias: "commands", guild: "guild" };
+/** command.c: the game options typed commands turn on and off (SendPreferences) */
+const OPTION_COMMANDS: Partial<Record<CommandId, [flag: number, on: boolean]>> = {
+  safetyOn: [CF.SAFETY_OFF, false], safetyOff: [CF.SAFETY_OFF, true], tempsafeOn: [CF.TEMPSAFE, true], tempsafeOff: [CF.TEMPSAFE, false],
+  groupingOn: [CF.GROUPING, true], groupingOff: [CF.GROUPING, false], autolootOn: [CF.AUTOLOOT, true], autolootOff: [CF.AUTOLOOT, false],
+  autocombineOn: [CF.AUTOCOMBINE, true], autocombineOff: [CF.AUTOCOMBINE, false], reagentbagOn: [CF.BAGS, true], reagentbagOff: [CF.BAGS, false],
+  spellpowerOn: [CF.SPELLPOWER, true], spellpowerOff: [CF.SPELLPOWER, false],
+};
+
+/** actions.c `actions`: the Actions menu, null for a separator */
+const ACTIONS_MENU: ([command: string, label: string] | null)[] = [
+  ["who", "Who is logged on"], ["group", "Modify groups"], ["alias", "Hotkey aliases"], ["cmdalias", "Command aliases"], ["guild", "Guild configuration"],
+  null, ["wave", "Wave"], ["point", "Point"], ["dance", "Dance"],
+  null, ["happy", "Happy"], ["sad", "Sad"], ["neutral", "Neutral"], ["wry", "Wry"],
+];
+
+/** textin.c EDITBOX_HISTORY: lines the chat box remembers */
+const CHAT_HISTORY = 20;
 
 type Modal =
   | { type: "trade"; list: TradeList }
   | { type: "give"; kind: "offer" | "deposit"; target: { id: number; name: string } }
   | { type: "amount"; object: ObjectInfo }
+  | { type: "suicide" }
+  | { type: "password" }
   | { type: "preferences" }
   | { type: "configuration" }
   | { type: "actions" }
@@ -216,6 +167,14 @@ export function GameView({
     const now = Date.now();
     return { all: now, chat: now, combat: now, server: now };
   });
+  /** command.c pinfo.resting: after "rest", until "stand" */
+  const restingRef = useRef(false);
+  useWorld(session.world, ["spells"]);
+  const spells = session.world.spells;
+  const spellSchools = session.world.spellSchools;
+  /** textin.c: the lines typed, newest first, and where Up/Down has got to (-1 = the line being typed) */
+  const historyRef = useRef<string[]>([]);
+  const historyPos = useRef(-1);
   /** For the scene's callbacks, which outlive renders */
   const actionRef = useRef<(a: string) => void>(() => {});
   const hotkeyRef = useRef<(n: number) => void>(() => {});
@@ -370,7 +329,14 @@ export function GameView({
       }
       case "deposit":
       case "withdraw":
-        return runCommand(a);
+        runCommand(a);
+        return;
+      // intrface.c MainTab / mermain.c InterfaceTab: the view, the interface, the chat line, round
+      case "tabForward":
+        return focusInterface();
+      case "tabBackward":
+        inputRef.current?.focus();
+        return;
     }
   };
 
@@ -385,47 +351,220 @@ export function GameView({
     }
   };
 
-  /** A typed line or alias (command.c): money and resting, our windows, tell, then speech. */
-  const runCommand = (line: string): void => {
-    const input = expandCommandAlias(getSettings().commandAliases, line);
-    const word = /^\/?(\S+)/.exec(input.trim())?.[1].toLowerCase() ?? "";
-    if (ACTION_COMMANDS[word] && input.trim().split(/\s+/).length === 1) return setModal({ type: "action", window: ACTION_COMMANDS[word] });
-    if (word === "map" && input.trim().split(/\s+/).length === 1) return setFullMap((v) => !v);
-    if (word === "quit" && input.trim().split(/\s+/).length === 1) return onLogout();
-    // command.c CommandGet: A_PICKUP
-    if ((word === "get" || word === "pickup") && input.trim().split(/\s+/).length === 1) return sceneRef.current?.pickUpNearby();
-    // command.c CommandLook (A_LOOK) and CommandPut (A_PUT)
-    if (word === "look" && input.trim().split(/\s+/).length === 1) return sceneRef.current?.lookInView();
-    if (word === "put" && input.trim().split(/\s+/).length === 1) return putAway();
-    // command.c CommandBuy, CommandOffer: A_BUY, A_OFFER
-    if ((word === "buy" || word === "offer") && input.trim().split(/\s+/).length === 1) return handleAction(word);
-    if (NOT_YET_COMMANDS[word]) return session.localMessage(NOT_YET_COMMANDS[word]);
-    const tell = parseTell(input, [...session.world.players.values()].map((p) => ({ id: p.id, name: p.name })));
-    if (tell) {
-      if ("error" in tell) return session.localMessage(tell.error);
-      return session.sayTo([tell.id], tell.text);
+  /** mermain.c InterfaceTab: keyboard focus to the inventory (or the stat list showing) */
+  const focusInterface = () => {
+    setTab("inventory");
+    setTimeout(() => (document.querySelector<HTMLElement>(".inventory-grid .inv-item.selected, .inventory-grid .inv-item") ?? null)?.focus());
+  };
+
+  /** Back to the view: nothing focused, so the game's keys work (SetFocus(hMain)) */
+  const focusView = () => (document.activeElement as HTMLElement | null)?.blur();
+
+  /** Speech, filtered as say.c FilterSayMessage does */
+  const say = (text: string, kind: number) => {
+    const t = filterSayMessage(text);
+    if (t) session.say(t, kind);
+  };
+
+  /** gameuser.c: inventory items to choose from (LD_SINGLEAUTO: just one is taken at once) */
+  const chooseInventory = (title: string, onDone: (c: LookListChoice[]) => void) => {
+    const items = [...session.world.inventory.values()];
+    if (!items.length) return;
+    if (items.length === 1) return onDone([{ id: items[0].id, amount: isNumberItem(items[0].id) ? items[0].amount : undefined }]);
+    setModal({ type: "list", title, items, multiple: true, amounts: true, onDone });
+  };
+
+  /** mermain.c A_CASTSPELL: not while paralyzed or resting */
+  const castSpell = (spell: number, numTargets: number) => {
+    if (session.world.effects.paralyzed) return session.localMessage("You can't lift your hands to cast the spell!");
+    if (restingRef.current) return session.localMessage("You can't cast spells while you're resting.");
+    sceneRef.current?.castSpell(spell, numTargets);
+  };
+
+  /** command.c CommandRest / CommandStand: the server's resting, and ours (no moving or fighting) */
+  const setResting = (on: boolean) => {
+    if (on === restingRef.current) return session.localMessage(on ? "You're already resting." : "You're not resting.");
+    session.userCommand(on ? UC.REST : UC.STAND);
+    session.localMessage(on ? "You rest." : "You stop resting.");
+    restingRef.current = on;
+    if (sceneRef.current) sceneRef.current.resting = on;
+  };
+
+  /** groups.c results: save the groups, tell the player */
+  const applyGroups = (r: GroupResult) => {
+    if (r.groups) updateSettings({ groups: r.groups });
+    r.messages.forEach((m) => session.localMessage(m));
+  };
+
+  /**
+   * A typed line, a hotkey alias or a menu item (merintr.c EventTextCommand): a command
+   * (commands.ts), then a command alias, then (our default) speech. Returns false for a
+   * line that meant nothing (parse.c IDS_BADCOMMAND), which the chat history skips.
+   */
+  const runCommand = (line: string, inAlias = false): boolean => {
+    const s = getSettings();
+    // alias.c: an alias can't name another alias
+    const t = interpretLine(line, inAlias ? {} : s.commandAliases, s.originalCommands);
+    if (!t) return false;
+    switch (t.kind) {
+      case "bad":
+        session.localMessage(inAlias ? "Invalid command stored in alias. (Press F1 or '?' for help.)" : BAD_COMMAND);
+        return false;
+      case "ambiguousAlias":
+        session.localMessage("That command is ambiguous.");
+        return true;
+      case "alias":
+        return runCommand(t.line, true);
+      case "say":
+        say(t.text, SAY.NORMAL);
+        return true;
     }
-    const action = parseActionCommand(input);
-    if (action) {
-      const a = action.action;
-      if (a === "balance") session.userCommand(UC.BALANCE);
-      else if (a === "rest") session.userCommand(UC.REST);
-      else if (a === "stand") session.userCommand(UC.STAND);
-      else if (action.amount > 0) session.userCommand(a === "deposit" ? UC.DEPOSIT : UC.WITHDRAW, action.amount);
-      else if (a === "withdraw") {
-        const banker = nearest(OF_BUYABLE);
-        if (banker) session.requestWithdrawal(banker.id);
-        else session.localMessage("There's no banker here.");
-      } else {
-        const banker = nearest(OF_OFFERABLE);
-        if (banker)
-          setModal({ type: "give", kind: "deposit", target: { id: banker.id, name: session.resource(banker.info.nameRes) ?? "" } });
-        else session.localMessage("There's no banker here.");
+    runParsed(t.id, t.args);
+    return true;
+  };
+
+  /** command.c Command*: one command, with the words after its name */
+  const runParsed = (id: CommandId, args: string): void => {
+    const world = session.world;
+    const players = () => [...world.players.values()].map((p) => ({ id: p.id, name: p.name }));
+    const window = COMMAND_WINDOWS[id];
+    // "alias word command" defines a command alias; alone it opens the window
+    if (window && !((id === "alias" || id === "cmdalias") && args)) return setModal({ type: "action", window });
+    const ua = USER_ACTIONS[id];
+    if (ua !== undefined) return session.action(ua);
+    const option = OPTION_COMMANDS[id];
+    if (option) {
+      const [flag, on] = option;
+      const base = serverPrefs ?? 0;
+      session.sendPreferences(on ? base | flag : base & ~flag);
+      // and read them back, so Preferences shows them
+      return session.userCommand(UC.REQ_PREFERENCES);
+    }
+    switch (id) {
+      case "say":
+        return args ? say(args, SAY.NORMAL) : undefined;
+      case "emote":
+        return args ? say(args, SAY.EMOTE) : undefined;
+      case "yell":
+        return args ? say(args, SAY.YELL) : undefined;
+      case "broadcast":
+        return args ? say(args, SAY.EVERYONE) : undefined;
+      case "tellguild":
+        return args ? say(args, SAY.GUILD) : undefined;
+      case "tell": {
+        const r = resolveTell(args, players(), getSettings().groups);
+        if (!r) return;
+        if ("error" in r) return session.localMessage(r.error);
+        const text = filterSayMessage(r.text);
+        if (text) session.sayTo(r.ids, text);
+        return;
       }
-      return;
+      case "appeal": {
+        const text = filterSayMessage(args);
+        if (text) session.appeal(text);
+        return;
+      }
+      case "alias":
+      case "cmdalias": {
+        const r = defineAlias(getSettings().commandAliases, args);
+        updateSettings({ commandAliases: r.aliases });
+        return session.localMessage(r.message);
+      }
+      case "quit":
+        return onLogout();
+      case "hel":
+        return session.localMessage('Type the entire word "help" to open help.');
+      case "help":
+        return session.localMessage("The help pages aren't in Meridian Shards yet.");
+      case "mail":
+        return session.localMessage("Mail isn't in Meridian Shards yet.");
+      case "suicid":
+        return session.localMessage('Type the entire word "suicide" to restart your character.');
+      case "suicide":
+        return setModal({ type: "suicide" });
+      case "password":
+        return setModal({ type: "password" });
+      case "time":
+        return session.userCommand(UC.REQ_TIME);
+      case "map":
+        return setFullMap((v) => !v);
+      case "get":
+        return sceneRef.current?.pickUpNearby();
+      case "look":
+        return sceneRef.current?.lookInView();
+      case "put":
+        return putAway();
+      case "buy":
+      case "offer":
+        return handleAction(id);
+      case "use": {
+        // gameuser.c UserActivate: something close by to activate, or a container to open
+        const self = world.self;
+        const near = [...world.objects.values()].filter(
+          (o) =>
+            self && o.id !== self.id && o.info.flags & (OF_ACTIVATABLE | OF_CONTAINER) && !(o.info.flags & OF_PLAYER) && Math.hypot(o.x - self.x, o.y - self.y) <= CLOSE_DISTANCE,
+        );
+        const activate = (oid: number) => {
+          const o = world.objects.get(oid);
+          if (o && o.info.flags & OF_CONTAINER) session.requestContents(oid);
+          else session.activate(oid);
+        };
+        if (near.length === 1) return activate(near[0].id);
+        if (near.length) setModal({ type: "list", title: "Activate", items: near.map((o) => o.info), onDone: (c) => c[0] && activate(c[0].id) });
+        return;
+      }
+      case "drop":
+        // gameuser.c UserDrop
+        return chooseInventory("Drop", (chosen) => chosen.forEach((c) => session.drop(c.id, c.amount)));
+      case "cast": {
+        const spells = world.spells.map((sp) => ({ ...sp, name: session.resource(sp.object.nameRes) ?? "" }));
+        if (!args.trim()) {
+          // spells.c UserCastSpell: the spell list
+          if (!spells.length) return;
+          return setModal({
+            type: "list",
+            title: "Cast spell",
+            items: [...spells].sort((a, b) => a.name.localeCompare(b.name)).map((sp) => sp.object),
+            onDone: (c) => {
+              const sp = c[0] && spells.find((x) => x.object.id === c[0].id);
+              if (sp) castSpell(sp.object.id, sp.numTargets);
+            },
+          });
+        }
+        const sp = findSpell(spells, args);
+        if (sp === "none") return session.localMessage("There is no spell with that name.");
+        if (sp === "ambiguous") return session.localMessage("That spell name is ambiguous.");
+        return castSpell(sp.object.id, sp.numTargets);
+      }
+      case "rest":
+        return setResting(true);
+      case "stand":
+        return setResting(false);
+      case "balance":
+        return session.userCommand(UC.BALANCE);
+      case "deposit":
+      case "withdraw": {
+        // command.c CommandDeposit / CommandWithdraw: an amount of money, or the vault
+        const amount = Number.parseInt(args, 10);
+        if (amount > 0) return session.userCommand(id === "deposit" ? UC.DEPOSIT : UC.WITHDRAW, amount);
+        if (id === "withdraw") {
+          const banker = nearest(OF_BUYABLE);
+          if (banker) session.requestWithdrawal(banker.id);
+          else session.localMessage("There's no banker here.");
+          return;
+        }
+        const banker = nearest(OF_OFFERABLE);
+        if (banker) setModal({ type: "give", kind: "deposit", target: { id: banker.id, name: session.resource(banker.info.nameRes) ?? "" } });
+        else session.localMessage("There's no banker here.");
+        return;
+      }
+      case "newgroup":
+        return applyGroups(groupNew(getSettings().groups, args));
+      case "addgroup":
+        return applyGroups(groupAdd(getSettings().groups, args, (n) => players().some((p) => p.name.toLowerCase() === n.toLowerCase())));
+      case "delgroup":
+        return applyGroups(groupDelete(getSettings().groups, args));
     }
-    const cmd = parseChatCommand(input);
-    if (cmd?.text) session.say(cmd.text, cmd.kind);
   };
 
   // The scene calls these through refs, so they see this render's state
@@ -436,7 +575,13 @@ export function GameView({
 
   const send = (e: FormEvent) => {
     e.preventDefault();
-    runCommand(text);
+    if (!text) return;
+    // textin.c TextInputKey: lines that meant something go in the history, once in a row
+    if (runCommand(text)) {
+      const h = historyRef.current;
+      if (h[0] !== text) historyRef.current = [text, ...h].slice(0, CHAT_HISTORY);
+    }
+    historyPos.current = -1;
     setText("");
     inputRef.current?.blur();
   };
@@ -582,6 +727,16 @@ export function GameView({
     handle.addEventListener("pointercancel", up);
   };
 
+  // spells.c MenuAddSpell: a submenu per school (UC_SPELL_SCHOOLS), its spells sorted by name
+  const spellsMenu = spellSchools.flatMap((nameRes, school) => {
+    const items = spells
+      .filter((sp) => sp.school === school)
+      .map((sp) => ({ name: session.resource(sp.object.nameRes) ?? "", sp }))
+      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+      .map(({ name, sp }) => ({ label: name, onSelect: () => castSpell(sp.object.id, sp.numTargets) }));
+    return items.length ? [{ label: session.resource(nameRes) ?? `School ${school + 1}`, items }] : [];
+  });
+
   return (
     <div className="game" ref={gameRef} style={{ "--chat-height": `${dragHeight ?? settings.chatHeight}px` } as CSSProperties}>
       <TitleBar
@@ -591,7 +746,10 @@ export function GameView({
         menu={[
           { label: "Preferences…", onSelect: () => setModal({ type: "preferences" }) },
           { label: "Configuration…", onSelect: () => setModal({ type: "configuration" }) },
-          { label: "Actions…", onSelect: () => setModal({ type: "actions" }) },
+          // actions.c: each item runs its typed command
+          { label: "Actions", items: ACTIONS_MENU.map((a) => (a ? { label: a[1], onSelect: () => runCommand(a[0]) } : { label: "", separator: true })) },
+          ...(spellsMenu.length ? [{ label: "Spells", items: spellsMenu }] : []),
+          { label: "Change password…", onSelect: () => setModal({ type: "password" }) },
           { label: "Log off", onSelect: onLogout },
         ]}
         latency={settings.latencyMeter ? latency : undefined}
@@ -600,10 +758,13 @@ export function GameView({
         className="view"
         onDragOver={(e) => e.dataTransfer.types.includes("application/x-shards-item") && e.preventDefault()}
         onDrop={(e) => {
-          // inventry.c: dragging an item onto the view drops it
+          // inventry.c: dragging an item onto the view drops it, or puts it in a container there
           const id = Number(e.dataTransfer.getData("application/x-shards-item"));
           const o = session.world.inventory.get(id);
-          if (o) drop(o);
+          if (!o) return;
+          const box = sceneRef.current?.containerAt(e.clientX, e.clientY) ?? null;
+          if (box !== null) session.put(o.id, isNumberItem(o.id) ? o.amount : undefined, box);
+          else drop(o);
         }}
       >
         <canvas ref={canvasRef} className="viewport" />
@@ -660,6 +821,8 @@ export function GameView({
             onClose={() => setModal(null)}
           />
         )}
+        {modal?.type === "suicide" && <SuicideDialog session={session} onClose={() => setModal(null)} />}
+        {modal?.type === "password" && <PasswordDialog session={session} onClose={() => setModal(null)} />}
         {modal?.type === "preferences" && (
           <PreferencesDialog
             settings={settings}
@@ -674,7 +837,9 @@ export function GameView({
           />
         )}
         {modal?.type === "configuration" && <ConfigurationDialog settings={settings} onApply={updateSettings} onClose={() => setModal(null)} />}
-        {modal?.type === "actions" && <ActionsDialog onOpen={(w) => setModal({ type: "action", window: w })} onClose={() => setModal(null)} />}
+        {modal?.type === "actions" && (
+          <ActionsDialog onOpen={(w) => setModal({ type: "action", window: w })} onCommand={(c) => runCommand(c)} onClose={() => setModal(null)} />
+        )}
         {modal?.type === "action" && modal.window === "who" && (
           <WhoDialog session={session} settings={settings} onApply={updateSettings} onClose={() => setModal(null)} />
         )}
@@ -753,7 +918,21 @@ export function GameView({
             onKeyDown={(e) => {
               if (e.key === "Escape") {
                 setText("");
+                historyPos.current = -1;
                 inputRef.current?.blur();
+              } else if (e.key === "Tab") {
+                // textin.c: Tab to the view, Shift+Tab to the interface
+                e.preventDefault();
+                if (e.shiftKey) focusInterface();
+                else focusView();
+              } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                // textin.c: the chat box is a combo box of the last 20 lines
+                const h = historyRef.current;
+                const next = Math.max(-1, Math.min(h.length - 1, historyPos.current + (e.key === "ArrowUp" ? 1 : -1)));
+                if (next === historyPos.current) return;
+                e.preventDefault();
+                historyPos.current = next;
+                setText(next < 0 ? "" : h[next]);
               }
             }}
             placeholder="Enter to chat — say, emote, yell, broadcast"
@@ -772,10 +951,13 @@ export function GameView({
         onLookItem={lookInventoryItem}
         onLook={(id) => lookAt(id, DESC.NONE)}
         onDropItem={drop}
+        onApplyItem={(o) => sceneRef.current?.beginSelect((target) => session.apply(o.id, target))}
+        onPut={putAway}
+        onTabOut={(forward) => (forward ? inputRef.current?.focus() : focusView())}
         target={target}
         selecting={selecting}
         onSelectObject={selectObject}
-        onCast={(spell, n) => sceneRef.current?.castSpell(spell, n)}
+        onCast={castSpell}
       />
     </div>
   );

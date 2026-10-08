@@ -10,7 +10,41 @@ import { desktop, isAndroid, type DesktopWindowState } from "../host.ts";
 
 export interface TitleBarMenuItem {
   label: string;
-  onSelect: () => void;
+  onSelect?: () => void;
+  /** A submenu (the original's Actions and Spells menus) */
+  items?: TitleBarMenuItem[];
+  /** A line between groups of items */
+  separator?: boolean;
+}
+
+/** The ☰ menu's items, submenus opening beside them (on hover or keyboard focus). */
+function MenuList({ items, onDone, className }: { items: TitleBarMenuItem[]; onDone: () => void; className: string }) {
+  return (
+    <ul className={className} role="menu">
+      {items.map((m, i) =>
+        m.separator ? (
+          <li key={`sep${i}`} role="separator" className="menu-separator" />
+        ) : (
+          <li key={`${m.label}${i}`} role="none" className={m.items ? "has-submenu" : undefined}>
+            <button
+              type="button"
+              role="menuitem"
+              aria-haspopup={m.items ? "menu" : undefined}
+              onClick={() => {
+                if (m.items) return;
+                onDone();
+                m.onSelect?.();
+              }}
+            >
+              {m.label}
+              {m.items && <span className="submenu-arrow">▸</span>}
+            </button>
+            {m.items && <MenuList items={m.items} onDone={onDone} className="title-menu title-submenu" />}
+          </li>
+        ),
+      )}
+    </ul>
+  );
 }
 
 /** lagbox.c s_adwLatencyMetric (round trip, ms) and IDS_LATENCY0..8. */
@@ -109,24 +143,7 @@ export function TitleBar({
       <span className="title-spacer" />
       {latency !== undefined && <LatencyMeter ms={latency} />}
       {ownButtons && <WindowButtons />}
-      {open && menu && (
-        <ul className="title-menu" role="menu">
-          {menu.map((m) => (
-            <li key={m.label} role="none">
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  m.onSelect();
-                }}
-              >
-                {m.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {open && menu && <MenuList items={menu} onDone={() => setOpen(false)} className="title-menu" />}
     </header>
   );
 }

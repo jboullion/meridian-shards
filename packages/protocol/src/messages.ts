@@ -757,8 +757,38 @@ export function readEffect(r: ByteReader): Effect {
 
 /** Some user command types (include/proto.h UC_*). */
 export const UC = {
-  LOOK_PLAYER: 2, CHANGE_URL: 3, REST: 5, STAND: 6, REQ_PREFERENCES: 7, SEND_PREFERENCES: 9, RECEIVE_PREFERENCES: 34, DEPOSIT: 35, WITHDRAW: 36, BALANCE: 37,
+  SEND_QUIT: 1, LOOK_PLAYER: 2, CHANGE_URL: 3, SPELL_SCHOOLS: 4, REST: 5, STAND: 6, REQ_PREFERENCES: 7, SUICIDE: 8, SEND_PREFERENCES: 9,
+  REQ_GUILDINFO: 10, GUILDINFO: 11, INVITE: 12, EXILE: 13, RENOUNCE: 14, ABDICATE: 15, VOTE: 16, SET_RANK: 17, GUILD_ASK: 18,
+  GUILD_CREATE: 19, DISBAND: 20, REQ_GUILD_LIST: 21, GUILD_LIST: 22, MAKE_ALLIANCE: 23, END_ALLIANCE: 24, MAKE_ENEMY: 25,
+  END_ENEMY: 26, GUILD_HALLS: 27, ABANDON_GUILD_HALL: 28, GUILD_RENT: 29, GUILD_SET_PASSWORD: 30, GUILD_SHIELD: 31,
+  GUILD_SHIELDS: 32, CLAIM_SHIELD: 33, RECEIVE_PREFERENCES: 34, DEPOSIT: 35, WITHDRAW: 36, BALANCE: 37, APPEAL: 40,
+  REQ_RESCUE: 41, MINIGAME_START: 45, MINIGAME_STATE: 46, MINIGAME_MOVE: 47, MINIGAME_PLAYER: 48, MINIGAME_RESET_PLAYERS: 49,
+  REQ_TIME: 60,
 } as const;
+
+/** UC_APPEAL: a message to the game's staff (merintr.h RequestAppeal). */
+export function buildAppeal(text: string): Uint8Array {
+  return new ByteWriter().u8(BP.USERCOMMAND).u8(UC.APPEAL).string(text).finish();
+}
+
+/** command.c user actions for BP_ACTION (UA_*): moods change your face, the rest animate you. */
+export const UA = { NORMAL: 1, HAPPY: 2, SAD: 3, WRY: 4, WAVE: 8, POINT: 9, DANCE: 10 } as const;
+
+/** BP_ACTION (protocol.h RequestAction): one UA_* byte. */
+export const buildAction = (action: number): Uint8Array => Uint8Array.of(BP.ACTION, action);
+
+/** BP_SAY_BLOCKED (msgfiltr.c): we hid a tell from this ignored player. */
+export const buildSayBlocked = (id: number): Uint8Array => new ByteWriter().u8(BP.SAY_BLOCKED).u32(objId(id)).finish();
+
+/** BP_CHANGE_PASSWORD (maindlg.c PasswordDialogProc): the old and the new password's digests (passwordDigest). */
+export function buildChangePassword(oldDigest: Uint8Array, newDigest: Uint8Array): Uint8Array {
+  return new ByteWriter().u8(BP.CHANGE_PASSWORD).string(oldDigest).string(newDigest).finish();
+}
+
+/** BP_REQ_INVENTORY_MOVE (inventry.c): move the first item to where the second is. */
+export function buildReqInventoryMove(id: number, before: number): Uint8Array {
+  return new ByteWriter().u8(BP.REQ_INVENTORY_MOVE).u32(objId(id)).u32(objId(before)).finish();
+}
 
 /**
  * The game options the server keeps for each player (include/proto.h CF_*): sent with

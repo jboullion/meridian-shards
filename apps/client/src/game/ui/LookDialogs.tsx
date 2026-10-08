@@ -212,7 +212,18 @@ export function LookListDialog({
   const [chosen, setChosen] = useState<number[]>(multiple || !first ? [] : [first.object.id]);
   const [counts, setCounts] = useState<Map<number, number>>(new Map());
   const listRef = useRef<HTMLUListElement>(null);
+  /** IDC_ITEMFIND: the item the Find box went to (the caret, in a multiple-choice list) */
+  const [caret, setCaret] = useState<number | null>(null);
   useEffect(() => listRef.current?.focus(), []);
+  // lookdlg.c IDC_ITEMFIND EN_UPDATE: ListBox_FindString, the first name starting with the text
+  const find = (text: string) => {
+    if (!text) return;
+    const hit = items.find((i) => i.name.toLowerCase().startsWith(text.toLowerCase()));
+    if (!hit) return;
+    setCaret(hit.object.id);
+    if (!multiple) setChosen([hit.object.id]);
+    listRef.current?.querySelector(`[data-id="${hit.object.id}"]`)?.scrollIntoView({ block: "nearest" });
+  };
   const toggle = (id: number) =>
     setChosen((c) => (multiple ? (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]) : [id]));
   const counted = (i: LookListItem) => amounts && isNumberItem(i.object.id);
@@ -251,7 +262,8 @@ export function LookListDialog({
                       key={i.object.id}
                       role="option"
                       aria-selected={on}
-                      className={on ? "selected" : ""}
+                      data-id={i.object.id}
+                      className={`${on ? "selected" : ""}${caret === i.object.id ? " caret" : ""}`}
                       onMouseDown={() => toggle(i.object.id)}
                       onDoubleClick={() => onLook(i.object.id)}
                     >
@@ -275,6 +287,12 @@ export function LookListDialog({
                 })}
               </ul>
             </span>
+            <label className="look-list-find">
+              Find:
+              <span className="mk-edit">
+                <input type="text" maxLength={64} onChange={(e) => find(e.target.value)} onKeyDown={(e) => e.key === "Enter" && chosen.length && ok()} aria-label="Find" />
+              </span>
+            </label>
           </div>
           <div className="look-list-buttons">
             <Button isDefault onClick={ok} disabled={!chosen.length}>

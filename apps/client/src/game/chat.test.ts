@@ -1,27 +1,27 @@
 import { describe, expect, test } from "vitest";
-import { SAY } from "@shards/protocol";
 import type { ObjectInfo } from "@shards/protocol";
 import type { ChatLine } from "@shards/world";
 import { reduceOffer } from "./ui/Dialogs.tsx";
-import { appendChatLine, parseActionCommand, parseChatCommand } from "./GameView.tsx";
+import { appendChatLine } from "./GameView.tsx";
+import { interpretLine } from "./commands.ts";
 import { PRESETS, actionsFor, isHeld } from "./settings.ts";
 
 describe("chat commands", () => {
   test("plain text says; verbs and : pick the kind", () => {
-    expect(parseChatCommand("hello")).toEqual({ kind: SAY.NORMAL, text: "hello" });
-    expect(parseChatCommand("yell help!")).toEqual({ kind: SAY.YELL, text: "help!" });
-    expect(parseChatCommand("/emote waves")).toEqual({ kind: SAY.EMOTE, text: "waves" });
-    expect(parseChatCommand(":bows")).toEqual({ kind: SAY.EMOTE, text: "bows" });
-    expect(parseChatCommand("broadcast hi all")).toEqual({ kind: SAY.EVERYONE, text: "hi all" });
-    expect(parseChatCommand("   ")).toBeNull();
+    expect(interpretLine("hello", {}, false)).toEqual({ kind: "say", text: "hello" });
+    expect(interpretLine("yell help!", {}, false)).toEqual({ kind: "command", id: "yell", args: "help!" });
+    expect(interpretLine("/emote waves", {}, false)).toEqual({ kind: "command", id: "emote", args: "waves" });
+    expect(interpretLine(":bows", {}, false)).toEqual({ kind: "command", id: "emote", args: "bows" });
+    expect(interpretLine("broadcast hi all", {}, false)).toEqual({ kind: "command", id: "broadcast", args: "hi all" });
+    expect(interpretLine("   ", {}, false)).toBeNull();
   });
 
-  test("bank commands: with an amount it's money, without it opens the vault", () => {
-    expect(parseActionCommand("deposit 100")).toEqual({ action: "deposit", amount: 100 });
-    expect(parseActionCommand("/withdraw")).toEqual({ action: "withdraw", amount: 0 });
-    expect(parseActionCommand("balance")).toEqual({ action: "balance", amount: 0 });
-    expect(parseActionCommand("deposit my sword please")).toBeNull();
-    expect(parseActionCommand("say rest")).toBeNull();
+  test("bank commands take an amount, or open the vault without one", () => {
+    expect(interpretLine("deposit 100", {}, false)).toEqual({ kind: "command", id: "deposit", args: "100" });
+    expect(interpretLine("/withdraw", {}, false)).toEqual({ kind: "command", id: "withdraw", args: "" });
+    expect(interpretLine("balance", {}, false)).toEqual({ kind: "command", id: "balance", args: "" });
+    expect(interpretLine("balance my books", {}, false)).toEqual({ kind: "say", text: "balance my books" });
+    expect(interpretLine("say rest", {}, false)).toEqual({ kind: "command", id: "say", args: "rest" });
   });
 });
 
