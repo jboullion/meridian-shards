@@ -49,7 +49,6 @@ services:
       - "${HTTPS_PORT:-443}:443/udp"
     volumes:
       - ./web/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./.stage/client:/srv/client:ro
       - ./.stage/assets:/srv/assets:ro
       - ./web/site:/srv/site:ro
       - caddy-data:/data

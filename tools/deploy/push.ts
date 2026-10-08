@@ -59,8 +59,9 @@ const remote = [
   "rm ~/meridian-shards-deploy.tgz",
   "test -f deploy/.env || { echo 'deploy/.env is missing on the server: copy deploy/.env.example and set SITE_ADDRESS'; exit 1; }",
   "sudo docker compose -f deploy/docker-compose.yml up -d --build",
-  // Caddy bind-mounts .stage/client, which was just deleted and unpacked again; a running
-  // container keeps serving the old (now empty) directory until it restarts
+  // Caddy bind-mounts .stage/assets, which was just deleted and unpacked again; a running
+  // container keeps serving the old (now empty) directory until it restarts. (.stage/client
+  // is removed above too: older deploys hosted the browser client there.)
   "sudo docker compose -f deploy/docker-compose.yml restart web",
   "sudo docker compose -f deploy/docker-compose.yml ps",
 ]

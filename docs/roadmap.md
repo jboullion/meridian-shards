@@ -248,6 +248,11 @@ The goal: everything the original client and its modules do. The comparison (the
   - `login.c` comes from `login.c-example` with our key. The example is stale: `LoginOk` needs a second `int sessionid` parameter to match `login.h`.
   - `dm.dll` (the DM tools module) fails to link (`ShowBGFEditorDlg`); players don't need it.
   - `server\setup-client.cmd` adds the art and music from the installed 104 client but keeps our `rsc0000.rsb` and rooms, which must match the server.
+- **Possible feature: the gateway adds the login key.** Today every client ships `[Login] SecretKey` (it's in our JavaScript and in the Unreal client's `servers.json`), so the key keeps nothing out. The gateway could write the key into each `AP_LOGIN` on its way to blakserv instead:
+  - Login frames are only CRC-checked, not encrypted, so the gateway rewrites the key string and recomputes the CRC. blakserv doesn't change.
+  - Clients would send no key, and the real key would live only in the VM's `.env`. The key would become a secret again, so the raw port (5959) would only take original Windows clients we've built.
+  - The gate for WebSocket clients would then be the gateway (its origin list and per-address limit), which a non-browser client can get past by sending any `Origin`.
+  - Not built: the game has run with a public key for 30 years. Worth doing if we only ever run our own servers and want them tighter. It's also how a Server 104 operator could take our clients without publishing their key.
 
 ## Progress log
 
@@ -267,3 +272,5 @@ The goal: everything the original client and its modules do. The comparison (the
   - Milestone 8 began: the desktop app (Electron) runs the same client, with the game files in its installer and only server changes downloaded. There's a Windows installer, an update feed, a download page and CI for macOS and Linux.
   - Milestone 6 is done: targeting with the original halo, attacking, the weapon hand, screen effects, projectiles, casting at targets, death and the Underworld, and the full character creator.
   - Death and respawn need nothing special from the client: the server moves you to the Underworld and you walk out through its rip in space.
+- **2026-10-08:**
+  - The hosted browser client is taken down: it was only for early testing. The VM keeps blakserv, the gateway, the game files and the download page, and its front page now goes to the download page. Players use the desktop app (and later the Android app); the browser stays for development.

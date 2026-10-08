@@ -13,9 +13,10 @@ The name comes from the lore: every server or world is a "shard" of one original
 
 1. **Name: "Meridian Shards".** Never "104" in any name or branding. Repo and folder: `meridian-browser`.
 2. **Licence: GPLv2.** We port `clientd3d` logic directly (protocol, `move.c`, `xlat.c`, `srvrstr.c`, `bspload.c`); no clean room. `Server-104/roomedit/roogen/roofile.py` may be reused.
-   - **Never copy Shards code into the UE remaster**, which stays non-GPL.
+   - ~~**Never copy Shards code into the UE remaster**, which stays non-GPL.~~ Changed 2026-10-08: the remaster is GPLv2 too, with an Unreal Engine linking exception, so our own code may go there. Code we ported from the Meridian 59 source still may not, because that exception can only cover code we own (AGENTS.md, "Hard rules").
    - Before going public, check that nothing in git is original art or rooms.
 3. **Our server only.** Browser players connect to our server running Server 104 code. We never connect to the live 104 server.
+   - Changed 2026-10-08: the hosted browser client was only for early testing and has been taken down. Players use the desktop app (and later the Android app), which runs this same client; the browser is for development.
 4. **Server: unmodified `blakserv`, config changes only.** The config is [server/config/blakserv.cfg](../../server/config/blakserv.cfg):
    - our own `SecretKey` (it ships in the JS, so it isn't security);
    - patching and downloads off (the default when the patch hosts are empty);

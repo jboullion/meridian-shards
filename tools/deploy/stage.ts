@@ -5,15 +5,13 @@
 //   deploy/.stage/gamedata/       compiled Kod (memmap), resources (rsc), rooms and kodbase.txt
 //                                 from our Windows build, so the server's rsc0000.rsb matches the
 //                                 client's assets exactly
-//   deploy/.stage/client/         the production client build (apps/client/dist)
 //   deploy/.stage/assets/         the asset build (dist/assets)
 //   deploy/.stage/gateway/        the gateway script and its one dependency (ws)
 //
-//   node tools/deploy/stage.ts [--skip-client] [--skip-assets]
+//   node tools/deploy/stage.ts [--skip-assets]
 //
 // Run `npm run assets` (and server\build.cmd) first. Then `docker compose -f deploy/docker-compose.yml build`.
 
-import { execSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,7 +23,7 @@ const STAGE = join(ROOT, "deploy", ".stage");
 const SRC = join(ROOT, "server", "src");
 const RUN = join(SRC, "run", "server");
 const { values: opt } = parseArgs({
-  options: { "skip-client": { type: "boolean", default: false }, "skip-assets": { type: "boolean", default: false } },
+  options: { "skip-assets": { type: "boolean", default: false } },
 });
 
 function need(path: string, hint: string): void {
@@ -47,6 +45,8 @@ need(join(ROOT, "dist", "assets", "manifest.json"), "build the assets first: npm
 rmSync(join(STAGE, "blakserv-src"), { recursive: true, force: true });
 rmSync(join(STAGE, "gamedata"), { recursive: true, force: true });
 rmSync(join(STAGE, "gateway"), { recursive: true, force: true });
+// older stages held the browser client, which is no longer hosted
+rmSync(join(STAGE, "client"), { recursive: true, force: true });
 
 // Sources for the Linux build (no Windows build output)
 const noObjects = (p: string) => !/[\\/](debug|release)([\\/]|$)/i.test(p) && !/\.(obj|pdb|exe|ilk|lib)$/i.test(p);
@@ -88,13 +88,6 @@ copy(join(ROOT, "deploy", "blakserv", "maint.sh"), join(STAGE, "maint.sh"));
 // Gateway: the script plus ws (pure JS, no dependencies of its own)
 copy(join(ROOT, "tools", "gateway", "gateway.ts"), join(STAGE, "gateway", "gateway.ts"));
 copy(join(ROOT, "node_modules", "ws"), join(STAGE, "gateway", "node_modules", "ws"));
-
-if (!opt["skip-client"]) {
-  console.log("building the client (vite build)...");
-  execSync("npm run build", { cwd: ROOT, stdio: "inherit" });
-  rmSync(join(STAGE, "client"), { recursive: true, force: true });
-  copy(join(ROOT, "apps", "client", "dist"), join(STAGE, "client"));
-}
 
 if (!opt["skip-assets"]) {
   // Mirror dist/assets (417 MB); skipped files that haven't changed keep it quick

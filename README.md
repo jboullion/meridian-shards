@@ -1,6 +1,6 @@
 # Meridian Shards
 
-A faithful port of the classic Meridian 59 client to the browser, the desktop and (in progress) Android: the original 2.5D look, sprites and textures, rendered with WebGL at modern resolutions, with modern controls beside the original ones. It connects to our own server, which runs the original Server 104 server code unchanged. Every server is a "shard" of one original universe.
+A faithful port of the classic Meridian 59 client to the desktop (Windows, macOS and Linux) and, in progress, Android: the original 2.5D look, sprites and textures, rendered with WebGL at modern resolutions, with modern controls beside the original ones. It connects to our own server, which runs the original Server 104 server code unchanged. Every server is a "shard" of one original universe.
 
 ## Status
 
@@ -15,11 +15,9 @@ The client does what the original client and its modules do. What's still missin
 - **The interface:** the original's column (bars, face, enchantments, minimap with notes, the inventory, stats, spells, skills and quests tabs), toolbar, cursors, stone borders, and its Preferences, Configuration (key bindings) and Actions windows. The controls come in a modern (WASD, mouselook) preset and the original's keys. There's also a profanity filter, a logout timer, a language choice (English, German, Portuguese) and the splash screen.
 - **Ours on top:** damage numbers, chat tabs, a latency meter, and pixel-accurate clicking.
 - **For staff:** an in-game admin console for admin accounts ([docs/admin-console.md](docs/admin-console.md)).
-- **Where to play:**
-  - in a browser on the hosted server, https://35-206-75-121.sslip.io;
-  - with the desktop app for Windows, macOS and Linux, released on [GitHub](https://github.com/jboullion/meridian-shards/releases) (it updates itself);
-  - against a local server, for development.
-- **Android:** the app runs in the emulator against the local server. The phone layout, touch controls and a release build are next ([ADR 0003](docs/adr/0003-android.md)).
+- **Where to play:** with the desktop app for Windows, macOS and Linux, released on [GitHub](https://github.com/jboullion/meridian-shards/releases) (it updates itself), on our hosted server. The client is built with web technology, so it also runs in a browser against a local server, for development; the hosted server doesn't offer browser play.
+- **Mac and Linux players:** the original client has only ever been a Windows program, so playing on a Mac or on Linux has meant running it under Wine or a virtual machine. Meridian Shards runs natively there, with the macOS (universal) and Linux (AppImage, deb) builds of the desktop app. Those builds come out of CI with every release, but they haven't been tried on real Mac and Linux machines yet, so reports are welcome.
+- **Android (in progress):** an Android app is on the way. It already runs in the emulator against the local server; the phone layout, touch controls and a release build are next ([ADR 0003](docs/adr/0003-android.md)).
 
 The milestones and their progress are in [docs/roadmap.md](docs/roadmap.md).
 

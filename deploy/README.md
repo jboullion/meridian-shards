@@ -6,9 +6,9 @@ The hosted stack is three containers on one small Linux VM:
 |---|---|
 | `blakserv` | The unmodified Server 104 server, built for Linux (32-bit), with the compiled Kod, resources and rooms from our build. Game state lives on the `savegame` volume. |
 | `gateway` | The WebSocket-to-TCP gateway (`tools/gateway/gateway.ts`). |
-| `web` | Caddy: HTTPS (Let's Encrypt), the client, the game assets at `/assets/`, the gateway at `/ws`, and the desktop app's download page (`/download/`; the installers are on GitHub Releases). |
+| `web` | Caddy: HTTPS (Let's Encrypt), the game assets at `/assets/`, the gateway at `/ws`, and the desktop app's download page (`/download/`; the installers are on GitHub Releases). Every other path, `/` included, redirects to the download page: the browser client isn't hosted (since 2026-10-08), so players use the desktop or Android app. |
 
-Port 5959 is also open for original Windows clients built with our `SecretKey`. Browser players only need 443.
+Port 5959 is also open for original Windows clients built with our `SecretKey`. Our apps only need 443.
 
 It needs about 200 MB of RAM (blakserv about 150 MB). An e2-small is comfortable; the free-tier e2-micro (1 GB) also fits.
 
@@ -80,7 +80,7 @@ Put this in `.env`, using **your** static IP with dashes (34.123.45.67 becomes `
 
 ```
 SITE_ADDRESS=34-123-45-67.sslip.io
-GATEWAY_ORIGINS=https://34-123-45-67.sslip.io,app://shards,app://meridian-remastered
+GATEWAY_ORIGINS=app://shards,https://localhost,app://meridian-remastered
 ```
 
 `app://shards` is the desktop app's page origin; without it the gateway turns the desktop app away. `app://meridian-remastered` is the Unreal remaster (`meridian-unreal`, its ADR 0010), which plays on this server too. After changing `.env`, restart the gateway: `docker compose up -d gateway`.
@@ -93,7 +93,7 @@ From the repo root on your PC:
 node tools/deploy/push.ts --host shards@<EXTERNAL_IP> --key $HOME/.ssh/meridian_shards
 ```
 
-The first push uploads about 450 MB (mostly the game assets). For code-only updates add `--skip-assets`. The first start takes a minute: Docker builds blakserv, and Caddy fetches the certificate. Then open `https://<dashed-ip>.sslip.io`.
+The first push uploads about 450 MB (mostly the game assets). For code-only updates add `--skip-assets`. The first start takes a minute: Docker builds blakserv, and Caddy fetches the certificate. Then open `https://<dashed-ip>.sslip.io`, which should show the download page.
 
 ## 6. The desktop app
 
