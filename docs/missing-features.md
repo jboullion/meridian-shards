@@ -44,10 +44,12 @@ Phase 4 is done: the toolbar, tooltips, map annotations, the profanity filter, t
 
 ## Mini-games and admin (phase 5)
 
+Phase 5 is done: chess and the basic admin console. What's left:
+
 | What | Original | What it needs |
 |---|---|---|
-| Chess | `module/chess` | `UC_MINIGAME_*`, the board and promotion dialogs, opened and closed by `BP_LOAD_MODULE`/`BP_UNLOAD_MODULE` (now passed on as the session's `module` event). |
-| Admin console | `module/admin` | For admin characters: a text console sending `BP_REQ_ADMIN` and showing `BP_ADMIN`. |
+| The admin console's object box | `admindlg.c` (IDC_OBJECTLIST, `adminprs.c`), IDD_ADMINMOVE, IDD_ADMINVALUE | A shown object's properties in a list, each editable (`set object`), its owner, Move... and Send...; left out of the basic console. Typed commands do the same. |
+| The admin console's Refresh | `admindlg.c` IDC_REFRESH | Our user list follows who's on as it changes, so there's no button. |
 
 ## Deliberately different or left out
 

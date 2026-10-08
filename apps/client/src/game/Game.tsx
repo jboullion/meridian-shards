@@ -3,7 +3,7 @@ import type { CharInfo, CharacterSlot } from "@shards/protocol";
 import { SAY } from "@shards/protocol";
 import {
   GameSession, type ChatLine, type ContainerContents, type DamageDealt, type LookResult, type OfferEvent, type SessionPhase, type TradeList,
-  type MailNewsEvent, type GuildEvent,
+  type MailNewsEvent, type GuildEvent, type MinigameEvent,
 } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
@@ -47,6 +47,10 @@ interface Live {
   mailNews: Relay<MailNewsEvent>;
   statChange: Relay<{ stats: number[]; levels: number[] }>;
   guild: Relay<GuildEvent>;
+  minigame: Relay<MinigameEvent>;
+  /** BP_LOAD_MODULE / BP_UNLOAD_MODULE: the mini-games and the admin console */
+  modules: Relay<{ name: string; loaded: boolean }>;
+  admin: Relay<string>;
 }
 
 /**
@@ -152,6 +156,9 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     const mailNews = new Relay<MailNewsEvent>();
     const statChange = new Relay<{ stats: number[]; levels: number[] }>();
     const guild = new Relay<GuildEvent>();
+    const minigame = new Relay<MinigameEvent>();
+    const modules = new Relay<{ name: string; loaded: boolean }>();
+    const admin = new Relay<string>();
     const s = new GameSession(
       { url: gameSocketUrl(), username, password, secretKey: __SECRET_KEY__, lookupResource: (id, lang) => rsb.get(id, lang), pingIntervalMs: 0 },
       {
@@ -193,6 +200,9 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
         mailNews: mailNews.emit,
         statChange: (stats, levels) => statChange.emit({ stats, levels }),
         guild: guild.emit,
+        minigame: minigame.emit,
+        module: (name, loaded) => modules.emit({ name, loaded }),
+        admin: admin.emit,
         contents: (container, items) => contents.emit({ container, items }),
         trade: trades.emit,
         offer: offers.emit,
@@ -205,7 +215,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     s.setLanguage(getSettings().language);
     void loadProfanity(assets);
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => s.resource(id)), trades, offers, looks, contents, damage, mailNews, statChange, guild });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => s.resource(id)), trades, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
   };
 
   const logout = () => {
@@ -310,6 +320,9 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       statChange={live.statChange.on}
       languages={rsb.languages()}
       guild={live.guild.on}
+      minigame={live.minigame.on}
+      modules={live.modules.on}
+      admin={live.admin.on}
       onLogout={logout}
       serverPrefs={serverPrefs}
       latency={latency}

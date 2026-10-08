@@ -199,3 +199,13 @@ describe("guilds (merintr.c guild messages)", () => {
     expect(hex(m.buildGuildCreate("S", ["m1", "m2", "m3", "m4", "m5"], ["f1", "f2", "f3", "f4", "f5"], false))).toBe(hex(create.u8(0).finish()));
   });
 });
+
+describe("mini-games and the admin console (module/chess, module/admin)", () => {
+  test("builders", async () => {
+    const m = await import("../src/index.ts");
+    const state = String.fromCharCode(2, 0x87, 0x3d);
+    expect(hex(m.buildMinigameState(9765, state))).toBe(hex(new ByteWriter().u8(BP.USERCOMMAND).u8(UC.MINIGAME_STATE).u32(9765).u16(3).u8(2).u8(0x87).u8(0x3d).finish()));
+    expect(hex(m.buildMinigameResetPlayers(9765))).toBe(hex(new ByteWriter().u8(BP.USERCOMMAND).u8(UC.MINIGAME_RESET_PLAYERS).u32(9765).finish()));
+    expect(hex(m.buildReqAdmin("show status"))).toBe(hex(new ByteWriter().u8(BP.REQ_ADMIN).string("show status").finish()));
+  });
+});

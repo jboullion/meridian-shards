@@ -176,7 +176,7 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 - [ ] Phase 3: touch controls and the phone layout.
 - [ ] Phase 4: lifecycle, the update notice, CI and the signed APK.
 
-### 13. Feature parity (planned 2026-10-08)
+### 13. Feature parity (2026-10-08: phases 0-5 done; what is left is in missing-features.md)
 
 The goal: everything the original client and its modules do. The comparison (the original's message tables against ours, the Kod that sends them, and our UI) is written up as the checklist in [missing-features.md](missing-features.md). Our own additions stay beside the original's features. World fidelity comes first.
 
@@ -227,7 +227,10 @@ The goal: everything the original client and its modules do. The comparison (the
   - **Language** (`language.c`): a ☰ Language menu with the languages the `.rsb` has (English, German, Portuguese on our server); strings fall back to English, and the redbook token and our chat-tab and damage matching stay on English.
   - **The desktop command line** (`config.c ConfigOverride`): `/H` `/P` `/U` `/W` `/Q` (or `-H` and so on); `/Q` logs on at once and, with one character, goes straight in (`charpick.c`). A second start brings the running app forward.
   - Tested on our server: each of the above in the browser, the timer logging off after a minute, and the desktop app with `-U -W -q` going straight into the Inn as Shardpal (one character) and stopping at the character list for Shardbot (three).
-- [ ] **Phase 5: mini-games and admin.** Chess, and a basic admin console.
+- [x] **Phase 5: mini-games and admin** (2026-10-08).
+  - **Chess** (`module/chess`): using a chess board loads the module (`BP_LOAD_MODULE` "chess.dll") and opens the window: the board, the players with whose turn it is, check, checkmate, stalemate and resignations, Resign, Restart game, Reset players and Close window, and the pawn promotion dialog. The rules are `cmove.c`'s, in `packages/world/src/chess.ts`; the server only keeps the state string (`UC_MINIGAME_STATE` in, `UC_MINIGAME_MOVE`, `START` and `PLAYER` out). The window is modeless, as the original's.
+  - **The admin console** (`module/admin`, for admin characters, who get "admin.dll" on logon): Shift+4 opens it; the command line with its history, the server's answers (`BP_REQ_ADMIN`, `BP_ADMIN`), Go to room, Reset data, and the users logged on with Show, Go to and Rescue. With the console showing, looking at something shows the object there. The object box and its dialogs are left out.
+  - Tested on our server: a game between Shardbot in the browser and a scripted Shardpal (moves both ways, red's castling flag, resigning, restarting), and Shardadmin's console (`show status`, `show object` from a right click, hiding and reopening).
 
 ## What the slice must prove
 

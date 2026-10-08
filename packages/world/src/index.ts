@@ -7,3 +7,4 @@ export * from "./chatChannel.ts";
 export * from "./combatHit.ts";
 export * from "./roomAnim.ts";
 export * from "./profanity.ts";
+export * from "./chess.ts";

@@ -1095,3 +1095,12 @@ export const buildGuildRent = (hall: number, password: string): Uint8Array => us
 
 /** UC_GUILD_SET_PASSWORD (guildmtr.c) */
 export const buildGuildPassword = (password: string): Uint8Array => userCommand(UC.GUILD_SET_PASSWORD).string(password).finish();
+
+/** UC_MINIGAME_STATE (chess.c RequestGameMove): the game object and its new state string */
+export const buildMinigameState = (game: number, state: string): Uint8Array => userCommand(UC.MINIGAME_STATE).u32(objId(game)).string(state).finish();
+
+/** UC_MINIGAME_RESET_PLAYERS (chess.c RequestGameResetPlayers): a player starts the game over with new players */
+export const buildMinigameResetPlayers = (game: number): Uint8Array => userCommand(UC.MINIGAME_RESET_PLAYERS).u32(objId(game)).finish();
+
+/** BP_REQ_ADMIN (module/admin admin.c): an administrator's command, run on the server like the maintenance port's */
+export const buildReqAdmin = (command: string): Uint8Array => new ByteWriter().u8(BP.REQ_ADMIN).string(command).finish();

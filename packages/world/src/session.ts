@@ -12,6 +12,7 @@ import {
   buildReqLookupNames, buildSendMail, buildChangedStats, readStatChange, readGuildInfo, readGuildList, readGuildShield, readGuildShields,
   readGuildHalls, type GuildInfo, readArticles, readLookNewsgroup, readLookupNames, readMailHeader, type NewsArticle, buildAction, buildAppeal, buildChangePassword, buildReqInventoryMove, buildSayBlocked, UC, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
   type BuyItem, type CharInfo, type CharacterSlot, type NewCharInfo, type ObjectInfo, type ObjectRef, type PlayWave,
+  buildReqAdmin,
 } from "@shards/protocol";
 import { WorldState, fineToKod } from "./state.ts";
 import { formatServerMessage, parseMarkup, type TextSpan } from "./text.ts";
@@ -107,6 +108,15 @@ export type GuildEvent =
   /** UC_GUILD_HALLS: halls to rent */
   | { type: "halls"; halls: ReturnType<typeof readGuildHalls> };
 
+/** A mini-game's messages (module/chess chess.c, minigame.kod) */
+export type MinigameEvent =
+  /** UC_MINIGAME_START: the game object, and our player number (1 white, 2 red, more an observer) */
+  | { type: "start"; game: number; player: number }
+  /** UC_MINIGAME_MOVE: the game's state string ("" before the first move) */
+  | { type: "state"; game: number; state: string }
+  /** UC_MINIGAME_PLAYER: who plays as player `player` */
+  | { type: "player"; player: number; name: string };
+
 /** Sound and music from the server (server.c HandlePlayWave / HandleStopWave / HandlePlayMusic). */
 export type SoundEvent =
   | { type: "play"; wave: PlayWave; file: string }
@@ -148,6 +158,10 @@ export interface SessionEvents {
   statChange?: (stats: number[], levels: number[]) => void;
   /** Guilds (merintr.c guild*.c) */
   guild?: (e: GuildEvent) => void;
+  /** Mini-game messages (chess) */
+  minigame?: (e: MinigameEvent) => void;
+  /** BP_ADMIN (module/admin): the server's answer to an admin command, newlines and all */
+  admin?: (text: string) => void;
   /** Mail and news (module/mailnews) */
   mailNews?: (e: MailNewsEvent) => void;
   /** BP_OBJECT_CONTENTS: what's inside a container we asked about (gameuser.c GotObjectContents) */
@@ -432,6 +446,11 @@ export class GameSession {
   /** BP_USERCOMMAND (UC_DEPOSIT amount, UC_WITHDRAW amount, UC_BALANCE, UC_REST ...). */
   userCommand(uc: number, ...ints: number[]): void {
     this.send(buildUserCommand(uc, ...ints));
+  }
+
+  /** BP_REQ_ADMIN: an admin command (the server answers with BP_ADMIN; only admin accounts may) */
+  adminCommand(command: string): void {
+    this.send(buildReqAdmin(command));
   }
 
   /** BP_ACTION (command.c, actions.c): a UA_* emote (wave, point, dance) or mood (happy, sad, neutral, wry). */
@@ -743,6 +762,15 @@ export class GameSession {
             this.events.guild?.({ type: "shields", patterns: readGuildShields(r) });
           } else if (uc === UC.GUILD_HALLS) {
             this.events.guild?.({ type: "halls", halls: readGuildHalls(r) });
+          } else if (uc === UC.MINIGAME_START) {
+            // chess.c HandleGameStart: game ID, player number BYTE
+            this.events.minigame?.({ type: "start", game: r.u32(), player: r.u8() });
+          } else if (uc === UC.MINIGAME_MOVE) {
+            // HandleGameState: game ID, state string
+            this.events.minigame?.({ type: "state", game: r.u32(), state: r.string() });
+          } else if (uc === UC.MINIGAME_PLAYER) {
+            // HandleGamePlayer: player number BYTE, name string
+            this.events.minigame?.({ type: "player", player: r.u8(), name: r.string() });
           } else if (uc === UC.SEND_QUIT) {
             // merintr.c HandleSendQuit: the server wants us out (after a suicide, a rescue)
             this.send(buildSimple(BP.REQ_QUIT));
@@ -833,6 +861,10 @@ export class GameSession {
           this.events.statChange?.(stats, levels);
           break;
         }
+        case BP.ADMIN:
+          // admin.c HandleAdmin: a string
+          this.events.admin?.(r.string());
+          break;
         case BP.LOOK_NEWSGROUP: {
           // mailnews.c HandleLookNewsgroup: a news globe, instead of BP_LOOK
           const { newsgroup, permission, object } = readLookNewsgroup(r);

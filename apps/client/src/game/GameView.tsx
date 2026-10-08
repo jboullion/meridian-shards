@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { CF, SAY, UA, UC, type ObjectInfo } from "@shards/protocol";
+import { CF, SAY, UA, UC, objId, type ObjectInfo } from "@shards/protocol";
 import {
-  PROFANITY_WARNING, isNumberItem, type GuildEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
+  PROFANITY_WARNING, isNumberItem, OBSERVER, WHITE, BLACK, decodeBoard, type GuildEvent, type MinigameEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
   type TradeList,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
@@ -31,6 +31,8 @@ import { MessageBox } from "./ui/kit.tsx";
 import { isProfane } from "./profanity.ts";
 import { AnnotateDialog } from "./ui/AnnotateDialog.tsx";
 import { AboutDialog } from "./ui/AboutDialog.tsx";
+import { ChessWindow, type ChessState } from "./ui/ChessWindow.tsx";
+import { AdminConsole, appendAdminText } from "./ui/AdminConsole.tsx";
 import { languageName } from "./languages.ts";
 import { MAX_ANNOTATIONS, annotationAt, loadAnnotations, saveAnnotations, type MapAnnotation } from "./annotations.ts";
 import { useWorld } from "./ui/hooks.ts";
@@ -131,7 +133,7 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, languages, onLogout, trades, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, offers, serverPrefs, latency,
 }: {
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
@@ -149,6 +151,12 @@ export function GameView({
   statChange: (fn: (e: { stats: number[]; levels: number[] }) => void) => () => void;
   /** The languages the .rsb has (language.c GetAvailableLanguages) */
   languages: number[];
+  /** Mini-game messages (chess) */
+  minigame: (fn: (e: MinigameEvent) => void) => () => void;
+  /** The server loading and unloading client modules (chess.dll, admin.dll) */
+  modules: (fn: (e: { name: string; loaded: boolean }) => void) => () => void;
+  /** BP_ADMIN: the server's answers to admin commands */
+  admin: (fn: (text: string) => void) => () => void;
   /** The guild messages (merintr guild*.c: UC_GUILDINFO, UC_GUILD_ASK, ...) */
   guild: (fn: (e: GuildEvent) => void) => () => void;
   /** Mail and the news globes (module/mailnews) */
@@ -217,6 +225,13 @@ export function GameView({
   const [annotating, setAnnotating] = useState<{ index: number; x: number; y: number; text: string; existed: boolean } | null>(null);
   /** A message box over the game (MessageBox with MB_OK) */
   const [alert, setAlert] = useState<string | null>(null);
+  /**
+   * The admin module (module/admin): loaded for admin characters; its window opened with
+   * Shift+4, hidden rather than closed; its text and command history
+   */
+  const [adminConsole, setAdminConsole] = useState<{ open: boolean; text: string; command: string; history: string[] } | null>(null);
+  /** The chess module's window (module/chess), while the server has it loaded */
+  const [chess, setChess] = useState<ChessState | null>(null);
   /** The same, for the toolbar's Rest/Stand toggle */
   const [resting, setRestingShown] = useState(false);
   useWorld(session.world, ["spells"]);
@@ -285,6 +300,8 @@ export function GameView({
       session.world.on((e) => {
         if (e.type !== "idsStale") return;
         setDesc(null);
+        // chess.c EventResetData: the game's id is stale, so the module goes
+        setChess(null);
         setModal((m) => (m?.type === "list" ? null : m));
       }),
     [session],
@@ -322,6 +339,66 @@ export function GameView({
   useEffect(() => offers((e) => setOffer((prev) => reduceOffer(prev, e))), [offers]);
   useEffect(() => damage((d) => sceneRef.current?.showDamage(d)), [damage]);
   useEffect(() => statChange(setStatChangeAt), [statChange]);
+  // modules.c: BP_LOAD_MODULE "chess.dll" opens the chess window; BP_UNLOAD_MODULE closes it
+  useEffect(
+    () =>
+      modules(({ name, loaded }) => {
+        if (/^admin/i.test(name)) return setAdminConsole((a) => (loaded ? (a ?? { open: false, text: "", command: "", history: [] }) : null));
+        if (!/^chess/i.test(name)) return;
+        setChess((c) => (loaded ? (c ?? { game: 0, color: OBSERVER, board: null, names: ["", ""] }) : null));
+      }),
+    [modules],
+  );
+  useEffect(() => admin((text) => setAdminConsole((a) => (a ? { ...a, text: appendAdminText(a.text, text) } : a))), [admin]);
+  // admin.c admin_key_table: Shift+4 opens the console (in the game, not while typing)
+  const adminLoaded = adminConsole !== null;
+  useEffect(() => {
+    if (!adminLoaded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "$" || (e.target as HTMLElement | null)?.closest?.("input, textarea, select")) return;
+      e.preventDefault();
+      setAdminConsole((a) => (a ? { ...a, open: true } : a));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [adminLoaded]);
+  /** BK_SENDCMD: to the server, and to the top of the history unless it's there already */
+  const adminCommand = (command: string) => {
+    session.adminCommand(command);
+    setAdminConsole((a) =>
+      a ? { ...a, command, history: a.history[0]?.toLowerCase() === command.toLowerCase() ? a.history : [command, ...a.history] } : a,
+    );
+  };
+  useEffect(
+    () =>
+      minigame((e) => {
+        setChess((c) => {
+          if (!c) return c;
+          switch (e.type) {
+            case "start": {
+              // HandleGameStart: once; player 1 is white, 2 red, the rest watch. Our own name goes up
+              if (c.game) return c;
+              const color = e.player === 1 ? WHITE : e.player === 2 ? BLACK : OBSERVER;
+              const self = session.world.self;
+              const names: [string, string] = [...c.names];
+              if (color !== OBSERVER && self) names[color] = session.resource(self.info.nameRes) ?? "";
+              return { ...c, game: e.game, color, names };
+            }
+            case "state":
+              // HandleGameState: only our game's
+              return e.game === c.game ? { ...c, board: decodeBoard(e.state) } : c;
+            case "player": {
+              if (!c.game || (e.player !== 1 && e.player !== 2)) return c;
+              const names: [string, string] = [...c.names];
+              names[e.player - 1] = e.name;
+              return { ...c, names };
+            }
+          }
+          return c;
+        });
+      }),
+    [minigame, session],
+  );
   // logoff.c: log off after the Logout timer's minutes without a key or a click (UserDidSomething).
   // onLogout is new on every render, so the timer reads it through a ref.
   const logoutRef = useRef(onLogout);
@@ -801,6 +878,8 @@ export function GameView({
 
   /** gameuser.c SetDescParamsByRoomObject: close by, a room object can be got, used or activated. */
   const lookRoomObject = (id: number) => {
+    // admin.c A_LOOKMOUSE: with the admin console showing, show the object there instead
+    if (adminConsole?.open) return adminCommand(`show object ${objId(id)}`);
     const o = session.world.objects.get(id);
     const self = session.world.self;
     let buttons: number = DESC.NONE;
@@ -818,6 +897,8 @@ export function GameView({
 
   /** inventry.c A_LOOKINVENTORY: Drop, and Unuse, Use (apply) or Use. */
   const lookInventoryItem = (o: ObjectInfo) => {
+    // admin.c A_LOOKINVENTORY, likewise
+    if (adminConsole?.open) return adminCommand(`show object ${objId(o.id)}`);
     let buttons: number = DESC.DROP;
     if (session.world.inUse.has(o.id)) buttons |= DESC.UNUSE;
     else if (o.flags & OF_APPLYABLE) buttons |= DESC.APPLY;
@@ -1141,6 +1222,27 @@ export function GameView({
         )}
         {modal?.type === "action" && modal.window === "commands" && (
           <CommandAliasesDialog settings={settings} onApply={updateSettings} onOpen={openWindow} onClose={() => setModal(null)} />
+        )}
+        {adminConsole?.open && (
+          <AdminConsole
+            session={session}
+            text={adminConsole.text}
+            command={adminConsole.command}
+            onCommandChange={(command) => setAdminConsole((a) => (a ? { ...a, command } : a))}
+            history={adminConsole.history}
+            onCommand={adminCommand}
+            onHide={() => setAdminConsole((a) => (a ? { ...a, open: false } : a))}
+            onQuit={() => setAdminConsole((a) => (a ? { ...a, open: false, text: "" } : a))}
+          />
+        )}
+        {chess && (
+          <ChessWindow
+            session={session}
+            assets={assets}
+            state={chess}
+            onBoard={(board) => setChess((c) => (c ? { ...c, board } : c))}
+            onClose={() => setChess(null)}
+          />
         )}
         {guildState && <GuildWindow session={session} state={guildState} icons={icons} onClose={() => setGuildState(null)} />}
         {guildAsk && <GuildCreateDialog session={session} cost={guildAsk.cost} secretCost={guildAsk.secretCost} onClose={() => setGuildAsk(null)} />}
