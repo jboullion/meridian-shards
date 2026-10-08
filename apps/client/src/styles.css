@@ -2090,3 +2090,273 @@ canvas.server-wait {
   font: calc(var(--dy) * 7) Consolas, "Courier New", monospace;
   white-space: pre-wrap;
 }
+
+/* ---- the phone layout (Touch Controls; ours, ADR 0003) ----
+   The view takes the whole screen under the title bar. The interface column is a drawer from
+   the right and the chat covers everything while it's out; health, mana and vigor and the
+   controls sit on the view (ui/TouchControls.tsx). */
+.game.touch-ui {
+  position: relative;
+  /* The drawer waits off the right edge: it mustn't widen the page (the browser would zoom out to fit it) */
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.game.touch-ui .game-title {
+  grid-column: 1;
+}
+
+.game.touch-ui .view-frame {
+  grid-column: 1;
+  grid-row: 2;
+  padding: 0;
+  background: #000;
+}
+
+.game.touch-ui .view-frame.treat-view::after {
+  display: none;
+}
+
+/* A finger on the view is ours (looking around, gameScene.ts), not the browser's to pan or zoom with */
+.game .viewport {
+  touch-action: none;
+}
+
+/* Put away, the chat stays in place (so the chat line can take focus, which brings it out) but unseen */
+.game.touch-ui .chat {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.game.touch-ui.chat-open .chat {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.game.touch-ui .chat-resize {
+  display: none;
+}
+
+.game.touch-ui .chat-tabs button {
+  padding: 6px 14px 7px;
+  font-size: 15px;
+}
+
+.game.touch-ui .chat-tabs .chat-close {
+  order: 1;
+  margin-left: auto;
+  padding: 4px 16px;
+  font: bold 18px Arial, sans-serif;
+}
+
+.game.touch-ui .chat-input input {
+  font-size: 16px;
+  padding: 8px;
+}
+
+.game.touch-ui .sidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  width: 264px;
+  max-height: none;
+  padding-right: max(8px, env(safe-area-inset-right));
+  transform: translateX(100%);
+  transition: transform 0.18s ease-out;
+}
+
+.game.touch-ui.drawer-open .sidebar {
+  transform: none;
+  box-shadow: -6px 0 16px rgba(0, 0, 0, 0.6);
+}
+
+/* The drawer is the tabs and their list only: the bars are on the view and the map is the Map
+   button's. The list takes the rest of the height and scrolls with a finger. */
+.game.touch-ui .sidebar .user-area,
+.game.touch-ui .sidebar .enchantments.player,
+.game.touch-ui .sidebar .map-frame {
+  display: none;
+}
+
+.game.touch-ui .sidebar .stat-area {
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 24;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.game.touch-ui .full-map {
+  inset: 52px 8px 8px;
+}
+
+.touch-controls {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.touch-hud {
+  position: absolute;
+  top: 8px;
+  left: max(8px, env(safe-area-inset-left));
+  width: min(220px, 34%);
+}
+
+.hud-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* Enchantments on the view: ours under the bars, the room's under the top right buttons */
+.hud-enchantments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.hud-enchantments.room {
+  position: absolute;
+  top: 52px;
+  right: max(8px, env(safe-area-inset-right));
+  max-width: 40%;
+  margin: 0;
+  flex-direction: row-reverse;
+}
+
+.hud-enchantments .enchant {
+  width: 30px;
+  height: 30px;
+  padding: 2px;
+  background: rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+
+.touch-ticker {
+  margin-top: 6px;
+  width: max(100%, 46vw);
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.45);
+  font: 13px Georgia, "Times New Roman", serif;
+  line-height: 1.25;
+  color: #ddd;
+  text-shadow: 0 0 2px #000, 1px 1px 0 #000;
+}
+
+.touch-ticker-line {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.touch-top-buttons {
+  position: absolute;
+  top: 8px;
+  right: max(8px, env(safe-area-inset-right));
+  display: flex;
+  gap: 8px;
+}
+
+.touch-button {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  border: 2px solid rgba(214, 180, 90, 0.8);
+  border-radius: 50%;
+  background: rgba(20, 20, 20, 0.55);
+  color: #f2e2b4;
+  font: bold 13px Georgia, "Times New Roman", serif;
+  text-shadow: 1px 1px 0 #000;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.touch-button:active {
+  background: rgba(214, 180, 90, 0.55);
+}
+
+.touch-button.small {
+  width: auto;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+}
+
+.touch-button.big {
+  width: 80px;
+  height: 80px;
+  font-size: 15px;
+}
+
+.touch-button.unread::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgb(255, 200, 40);
+  box-shadow: 0 0 0 1px #000;
+}
+
+.touch-stick {
+  position: absolute;
+  left: max(24px, calc(env(safe-area-inset-left) + 12px));
+  bottom: 22px;
+  display: grid;
+  place-items: center;
+  width: 128px;
+  height: 128px;
+  border: 2px solid rgba(214, 180, 90, 0.45);
+  border-radius: 50%;
+  background: rgba(20, 20, 20, 0.3);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.touch-knob {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: rgba(214, 180, 90, 0.6);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+/* Attack under the thumb, the rest in an arc around it */
+.touch-actions {
+  position: absolute;
+  right: max(16px, calc(env(safe-area-inset-right) + 8px));
+  bottom: 16px;
+  width: 230px;
+  height: 160px;
+}
+
+.touch-actions .touch-button {
+  position: absolute;
+}
+
+.touch-actions .attack { right: 0; bottom: 0; }
+.touch-actions .go { right: 11px; bottom: 92px; }
+.touch-actions .interact { right: 92px; bottom: 0; }
+.touch-actions .lookAt { right: 82px; bottom: 70px; }
+.touch-actions .targetNext { right: 164px; bottom: 6px; }

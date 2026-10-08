@@ -17,8 +17,9 @@ public class ShardsPlugin extends Plugin {
     @SuppressLint({ "JavascriptInterface", "AddJavascriptInterface" })
     @Override
     public void load() {
-        ShardsHost host = new ShardsHost(getContext());
         WebView webView = getBridge().getWebView();
+        AssetCache assets = AssetCache.get(getContext());
+        ShardsHost host = new ShardsHost(getContext(), assets, webView);
         WebSettings settings = webView.getSettings();
         // The desktop app's autoplayPolicy "no-user-gesture-required"
         settings.setMediaPlaybackRequiresUserGesture(false);
@@ -26,6 +27,6 @@ public class ShardsPlugin extends Plugin {
         if (BuildConfig.DEBUG) settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         // Only our own page ever loads (Capacitor keeps navigation to the app's origin)
         webView.addJavascriptInterface(host, "shardsAndroid");
-        getBridge().setWebViewClient(new ShardsWebViewClient(getBridge(), host));
+        getBridge().setWebViewClient(new ShardsWebViewClient(getBridge(), host, assets));
     }
 }

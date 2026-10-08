@@ -123,6 +123,13 @@ function useEscape(fn: (() => void) | undefined) {
   }, [enabled]);
 }
 
+/** Closes the topmost window as Escape would (Android's back button); false if none is open. */
+export function closeTopWindow(): boolean {
+  if (!escapeStack.length) return false;
+  escapeStack[escapeStack.length - 1].current();
+  return true;
+}
+
 // (no window in tests)
 globalThis.window?.addEventListener("keydown", (e) => {
   // The game's own Escape handling (clearing the target) may have seen it first; close anyway

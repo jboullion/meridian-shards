@@ -423,6 +423,18 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
               <Check label="Attack On Target" checked={d.attackOnTarget} onChange={(v) => set({ attackOnTarget: v })} />
               <Check label="Dynamic Lighting" checked={d.dynamicLighting} onChange={(v) => set({ dynamicLighting: v })} />
               <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
+              <label className="bind-select">
+                <span>Touch Controls</span>
+                <Select
+                  value={d.touchControls}
+                  options={[
+                    { key: "auto", label: "Auto" },
+                    { key: "on", label: "On" },
+                    { key: "off", label: "Off" },
+                  ]}
+                  onChange={(v) => set({ touchControls: v })}
+                />
+              </label>
               <Check
                 label="Original Command Typing"
                 title="Every typed line is a command, as in the original: speech needs say, and the start of a command's name will do"

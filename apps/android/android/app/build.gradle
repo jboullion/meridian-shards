@@ -1,8 +1,36 @@
 apply plugin: 'com.android.application'
 
-// The version is apps/android/package.json's; versionCode = major * 10000 + minor * 100 + patch (ADR 0003)
-def shardsVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
+// The release version is the desktop app's (apps/desktop/package.json, which `npm run release`
+// bumps; the client's About box uses it too); versionCode = major * 10000 + minor * 100 + patch (ADR 0003)
+def shardsVersion = new groovy.json.JsonSlurper().parse(file('../../../desktop/package.json')).version
 def shardsParts = shardsVersion.tokenize('.').collect { it.toInteger() }
+
+// Release signing (ADR 0003): one key for good, since every update must carry the same signature.
+// CI passes it in SHARDS_KEYSTORE (the .jks path) and SHARDS_KEYSTORE_PASSWORD, SHARDS_KEY_ALIAS and
+// SHARDS_KEY_PASSWORD; on a developer's machine it's ~/.meridian-shards/android-release.properties
+// (storeFile, relative to it, storePassword, keyAlias, keyPassword). Neither is ever in git.
+// Without either, release builds come out unsigned (and can't be installed).
+def releaseKey = null
+if (System.getenv('SHARDS_KEYSTORE')) {
+    releaseKey = [
+        storeFile: file(System.getenv('SHARDS_KEYSTORE')),
+        storePassword: System.getenv('SHARDS_KEYSTORE_PASSWORD'),
+        keyAlias: System.getenv('SHARDS_KEY_ALIAS'),
+        keyPassword: System.getenv('SHARDS_KEY_PASSWORD'),
+    ]
+} else {
+    def keyProps = new File(System.getProperty('user.home'), '.meridian-shards/android-release.properties')
+    if (keyProps.exists()) {
+        def p = new Properties()
+        keyProps.withInputStream { p.load(it) }
+        releaseKey = [
+            storeFile: new File(keyProps.parentFile, p.getProperty('storeFile')),
+            storePassword: p.getProperty('storePassword'),
+            keyAlias: p.getProperty('keyAlias'),
+            keyPassword: p.getProperty('keyPassword'),
+        ]
+    }
+}
 
 android {
     namespace = "net.meridianshards.client"
@@ -23,11 +51,37 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (releaseKey) {
+            release {
+                storeFile releaseKey.storeFile
+                storePassword releaseKey.storePassword
+                keyAlias releaseKey.keyAlias
+                keyPassword releaseKey.keyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            if (releaseKey) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+    }
+}
+
+// The game files: release builds carry the asset build (dist/assets, about 430 MB) as assets/assets/,
+// so a fresh install downloads nothing; AssetCache reads them when the server's hash matches.
+// Debug builds stay small and fetch files as needed; `-PshardsBundleAssets` puts them in a debug
+// build too. Without a server build, get dist/assets from the server: tools/assets/fetch-assets.ts.
+def assetBuild = file('../../../../dist')
+android.sourceSets.release.assets.srcDirs += assetBuild
+if (project.hasProperty('shardsBundleAssets')) android.sourceSets.debug.assets.srcDirs += assetBuild
+tasks.matching { it.name in ['mergeReleaseAssets', 'mergeDebugAssets'] }.configureEach { t ->
+    t.doFirst {
+        boolean wanted = t.name == 'mergeReleaseAssets' || project.hasProperty('shardsBundleAssets')
+        if (wanted && !new File(assetBuild, 'assets/manifest.json').exists())
+            throw new GradleException("No dist/assets: run `npm run assets` (or tools/assets/fetch-assets.ts) first")
     }
 }
 

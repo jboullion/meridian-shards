@@ -5,7 +5,7 @@
 //   npm run release -- 0.2.0 --no-wait  push and leave (watch it in the Actions tab)
 //   npm run release -- --watch 0.2.0    only follow an already pushed v0.2.0
 //
-// The workflow does the rest on GitHub: builds Windows, macOS and Linux with the hosted
+// The workflow does the rest on GitHub: builds Windows, macOS, Linux and Android with the hosted
 // server's game files, uploads them to a draft release, and publishes it once every
 // platform is there. So deploy the server first (tools/deploy/push.ts): the installers
 // carry its files.
@@ -26,8 +26,8 @@ const API = `https://api.github.com/repos/${REPO}`;
 const PKG = join(ROOT, "apps", "desktop", "package.json");
 const LOCK = join(ROOT, "package-lock.json");
 const POLL_MS = 30_000;
-/** What a complete release holds (apps/desktop/electron-builder.yml artifactName) */
-const EXPECTED = [/\.exe$/, /\.exe\.blockmap$/, /-mac\.dmg$/, /-mac\.zip$/, /\.AppImage$/, /\.deb$/, /^latest\.yml$/, /^latest-mac\.yml$/, /^latest-linux\.yml$/];
+/** What a complete release holds (apps/desktop/electron-builder.yml artifactName, and the Android APK) */
+const EXPECTED = [/\.exe$/, /\.exe\.blockmap$/, /-mac\.dmg$/, /-mac\.zip$/, /\.AppImage$/, /\.deb$/, /^latest\.yml$/, /^latest-mac\.yml$/, /^latest-linux\.yml$/, /\.apk$/];
 
 const { values: opt, positionals } = parseArgs({
   allowPositionals: true,

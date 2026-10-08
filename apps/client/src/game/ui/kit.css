@@ -30,6 +30,14 @@
   letter-spacing: 0.02em;
 }
 
+/* A phone on its side has room for the dialog, not the heading too: the dialog is sized to the
+   window (useDluScale), which doesn't count the heading */
+@media (max-height: 520px) {
+  .mk-backdrop > .mk-shard-title {
+    display: none;
+  }
+}
+
 .mk-footnote {
   font: 16px var(--font-ui);
   color: var(--ui-text);

@@ -149,9 +149,51 @@ Android's System WebView is Chromium, the engine we test in. Most of the client 
    - In the emulator (API 37, WebView 145) the app logs in to the local stack and draws the Underworld: room, sprites, hands, stats, minimap, inventory, chat. The debug APK is 4.3 MB.
    - `npm run android` builds, installs and launches (`tools/android/run.ts`).
    - Gradle runs on a separate JDK 21: Android Studio 2026.2 bundles JDK 25, which the template's Gradle 8.14 can't run on.
-2. **The game files.** The native asset interceptor, the bundled files and the download progress.
-3. **Touch controls and the phone layout.**
-4. **Lifecycle, the update notice, CI and the signed APK on GitHub releases.**
+2. **The game files.** *Done 2026-10-08.*
+   - `AssetCache.java` ports `assetCache.ts`: the APK's copy when the hash matches, then `filesDir/asset-cache`, then the server, with every download checked against its hash.
+   - Release builds carry `dist/assets` as the APK's `assets/assets/` (Gradle adds `dist/` as an asset folder, no copy). Debug builds don't, unless built with `npm run android -- --bundle`. The bundled debug APK is 383 MB.
+   - The full download (`downloadAll`) runs only on an unmetered network, never for the local dev stack. On mobile data, files load and are cached as the game needs them.
+   - The cache and the download are per process, because Android may create the activity more than once (it did, on update). A new page joins a running download.
+   - After a complete pass the prune also drops cached copies of files the APK has, and `.tmp` files over 10 minutes old (left by a killed process).
+   - Measured in the emulator:
+     - from the VM, the last 258 MB came down in 55 s, with all 4,788 hashes checked;
+     - with the bundled build, the Inn's 194 requests all came from the APK and nothing was downloaded.
+3. **Touch controls and the phone layout.** *Done 2026-10-08 in the emulator; a real phone next.*
+   - Touch Controls (Auto/On/Off) in the Bind Editor's Options. On Auto it's on for a coarse pointer, so it also applies to phone browsers.
+   - The view fills the screen under the title bar:
+     - health, mana and vigor at the top left, with the last chat lines under them;
+     - Map, Chat and Items at the top right;
+     - the joystick at the bottom left;
+     - Attack, Open, Get, Look and Next around the right thumb.
+   - Touch on the view (`gameScene.ts`):
+     - drag to turn and look up or down;
+     - tap to target, or to pick up something close by;
+     - double tap to activate;
+     - long press to examine.
+   - The interface column is a drawer from the right, closed by tapping the view. It holds only the five tabs and their list, which takes the full height and scrolls. The portrait, the bars, the enchantments and the map are hidden from it, because they're elsewhere:
+     - the bars are on the view;
+     - our enchantments are icons under the bars, and the room's are under the top-right buttons; a tap or a long press shows an enchantment's description;
+     - the map is the Map button's. The chat covers the screen while it's out, and stays in place but unseen while it's away, so anything that focuses the chat line (Enter, T, the hotkeys) brings it out.
+   - Android's back button closes the top window, then the chat, drawer or map, then asks "Log off and quit?".
+   - Found along the way:
+     - the canvas needs `touch-action: none`, or the browser takes a drag over after a few moves;
+     - the drawer parked off screen made the browser zoom the page out, so the layout clips and the viewport has `user-scalable=no`.
+   - A minute in the background kept the connection.
+   - Not yet:
+     - a hotbar for the F1–F12 hotkey aliases and favourite spells (spells cast from the drawer's Spells tab for now);
+     - the toolbar (Help, Drop, Get, Rest, Mail), which the phone layout hides; Mail is in ☰, and Rest is typed;
+     - a Render Scale option, if a real phone needs one.
+4. **The update notice, CI and the signed APK on GitHub releases.** *Built 2026-10-08; the first release is next.*
+   - The release key is RSA 4096 (PKCS12, alias `meridian-shards`, 100 years), made with the JDK's `keytool`. It lives in `~/.meridian-shards` with its password file, and in the repository's secrets for CI. `app/build.gradle` signs release builds from `SHARDS_KEYSTORE*` (CI) or that properties file.
+   - The `android` job in `.github/workflows/desktop.yml` runs beside the desktop builds:
+     - JDK 21, the same cached game files from the VM, `npm run android:sync`, `gradlew assembleRelease`;
+     - uploads `Meridian-Shards-<version>.apk` to the draft;
+     - `publish` and `npm run release` require the APK.
+   - The version is the desktop's; versionCode = major × 10000 + minor × 100 + patch.
+   - The update notice: release builds ask GitHub for the latest release. If it's newer and has an APK, the login screen says "Version x is out. Download it", which opens the APK in the browser.
+   - The download page has an Android card, picked first on Android, whose browsers also say Linux.
+   - A local release build (`npm run android -- --release`): 379 MB, versionCode 200. On first launch all 4,785 files came from the APK and nothing from the VM.
+   - The login dialog didn't fit 411 px with the big heading above it, so screens under 520 px tall drop the heading.
 5. **Later: the Play Store.**
 
 To install, asking first as AGENTS.md says:
@@ -160,7 +202,11 @@ To install, asking first as AGENTS.md says:
 
 ## Open questions
 
-- **Does `bridge.setWebViewClient` work as expected in the current Capacitor?** Phase 1 shows whether the interception holds up. If it doesn't, the fallback is the same cache in the page through Cache Storage. That needs `Access-Control-Allow-Origin` on Caddy's `/assets/`, a 418 MB first download from the VM, and `navigator.storage.persist()`.
+- ~~Does `bridge.setWebViewClient` work as expected in the current Capacitor?~~ Yes (phases 1 and 2).
+- **On a real phone:**
+  - how the joystick, the button sizes and the drag speed feel;
+  - frame time and memory, which decide whether to add a Render Scale (the emulator's GPU says nothing);
+  - whether the login dialog should stay whole above the soft keyboard (now it shrinks and its top goes off screen while typing).
 - **Does pointer lock work in the Android WebView** for players with a mouse (tablets, Chromebooks)?
 - **Memory and frame time on a mid-range phone.** Phase 0 showed it runs well, but nothing was measured. Room-cache size, texture memory and the Render Scale default follow from those numbers.
 - **Should the sound files be optional?** They're 165 MB of the 418 MB. An APK without them, downloading on first use, would be about 270 MB.

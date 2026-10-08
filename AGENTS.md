@@ -33,7 +33,7 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 | `packages/world/` | `GameSession` (login, characters, game actions, chat and look events), `WorldState` (player, room objects with interpolated motion, inventory, online players, lighting), `PlayerMover` (the `move.c` port), rooms that change (`roomAnim.ts`, the `roomanim.c` port), the server-text formatter (`text.ts`) and bitmap-group animation. No DOM or Three.js. |
 | `apps/client/` | The browser client (Vite + React): login, character select and the game view (`/`); the room viewer is at `/?viewer` or `/?rid=301`. In `src/game/`: `gameScene.ts` (3D view and input), `audio.ts` (sound, after `audio.c`), `icons.ts` (item pictures), `settings.ts` (every option and key binding, the two key presets), and `ui/` (the interface column, minimap and dialogs, `OptionsDialogs.tsx` for the ☰ menu's Preferences, Configuration and Actions windows, and `kit.tsx`, the dialog kit every menu is drawn with: stone frames, lists, buttons, stat bars, laid out in dialog units from the original `.rc` templates). |
 | `apps/desktop/` | The desktop app (Electron) around the browser client. `src/main.ts` serves the page as `app://shards/`: the client build, and the game files from the chosen server through a disk cache (`assetCache.ts`). Also the preload (`window.shardsDesktop`), the server list and window state (`settings.ts`), and `electron-builder.yml` (installers, the update feed). `apps/client/src/host.ts` is the client's side of it. |
-| `apps/android/` | The Android app (Capacitor) around the browser client ([ADR 0003](docs/adr/0003-android.md)). `capacitor.config.ts`, and the native project in `android/`, where `app/src/main/java/net/meridianshards/client/` holds our code: `ShardsPlugin` (sets the page up before it loads), `ShardsHost` (`window.shardsAndroid`: the server list and choice) and `ShardsWebViewClient` (answers `/assets/*` from the selected server). `apps/client/src/host.ts` turns `shardsAndroid` into the same bridge the desktop has. |
+| `apps/android/` | The Android app (Capacitor) around the browser client ([ADR 0003](docs/adr/0003-android.md)). `capacitor.config.ts`, and the native project in `android/`, where `app/src/main/java/net/meridianshards/client/` holds our code: `ShardsPlugin` (sets the page up before it loads), `ShardsHost` (`window.shardsAndroid`: the server list and choice, the game file download) and `ShardsWebViewClient` (answers `/assets/*` through `AssetCache`, the port of the desktop's `assetCache.ts`). `apps/client/src/host.ts` turns `shardsAndroid` into the same bridge the desktop has. |
 | `tools/android/` | `run.ts`: builds the Android app and runs it on a phone or the emulator (`npm run android`). |
 | `tools/assets/` | `build-assets.ts`: copies the original files into `dist/assets` (git-ignored) with a manifest, plus the client's interface bitmaps as `ui/*.bmp` and `roomlinks.json` (which rooms connect, from the Kod exits). `fetch-assets.ts`: copies a server's game files into `dist/assets`, for packaging without a server build. |
 | `tools/dev/` | `dev.ts`: the one-command dev stack. |
@@ -66,6 +66,8 @@ npm run desktop:release     # the same, uploaded to a draft GitHub release (CI d
 npm run release -- 0.2.0     # bump, commit, tag and push; CI builds all three OSes and publishes v0.2.0
 npm run android             # build the client and the debug APK, install it on the phone or emulator, adb reverse 5173, launch
 npm run android -- --no-build --device emulator-5554   # reinstall and relaunch only, on one of several devices
+npm run android -- --bundle   # with the game files in the APK (dist/assets, ~380 MB), as release builds have them
+npm run android -- --release  # the signed release APK as players get it (uninstalls a debug build first: another key)
 npm run android:sync        # build the client and copy it into apps/android/android (then build in Android Studio)
 ```
 
@@ -161,7 +163,22 @@ npm run android:sync        # build the client and copy it into apps/android/and
 - **Movement is client-authoritative but checked:** keep `PlayerMover` byte-for-byte faithful to `move.c` (units, step sizes, thresholds). The server only rejects off-map destinations, and other players' original clients see our moves.
 - **Uniform arrays** in Three.js `ShaderMaterial`s must be flat typed arrays (or `Vector` objects), not nested JS arrays.
 - **The Android app** (`apps/android`, [ADR 0003](docs/adr/0003-android.md)):
-  - The page is `https://localhost/`, served from the APK by Capacitor. `/assets/*` never reaches Capacitor's server: `ShardsWebViewClient` fetches it from the selected server, so the client asks for files exactly as in the browser. For now nothing is cached on the device (ADR 0003 phase 2).
+  - The page is `https://localhost/`, served from the APK by Capacitor. `/assets/*` never reaches Capacitor's server: `ShardsWebViewClient` fetches it from the selected server, so the client asks for files exactly as in the browser.
+  - `AssetCache` follows the desktop's rules:
+    - the APK's copy when the server's hash matches (release builds bundle `dist/assets` as `assets/assets/`);
+    - then `filesDir/asset-cache/<name>.<hash>`;
+    - then the server, checked against the hash.
+  - The full download runs only on an unmetered network and never for the local dev stack. The cache and the download are per process: Android can create the activity twice.
+  - The phone layout is `touch-ui` on `.game` (Touch Controls in the Bind Editor; Auto means a coarse pointer, so phone browsers too). `ui/TouchControls.tsx` has the HUD bars, the joystick and the buttons.
+  - Touch on the view is `gameScene.ts`'s pointer handlers: drag looks, tap targets or gets, double tap activates, long press examines. They `preventDefault` the pointerdown, so no emulated mouse events follow, and the canvas has `touch-action: none` (without it the browser cancels a drag).
+  - The chat is put away with opacity, not `display: none`, so focusing the chat line (any chat key) can bring it out.
+  - Android's back button goes through `host.ts onBackButton`: `GameView` closes the top window (`kit.tsx closeTopWindow`), then the panels, then asks before logging off. With no handler, the app closes.
+  - The viewport is `user-scalable=no`, and `.game.touch-ui` clips its content. The off-screen drawer once made the browser zoom the page out.
+  - **Releases:**
+    - The APK is in every release, built by the `android` job in `.github/workflows/desktop.yml` and signed with the release key: `~/.meridian-shards/android-release.*` locally, the `ANDROID_KEYSTORE_*` secrets in CI. It's never in git. Losing it means players must uninstall to update. `deploy/README.md` section 7.
+    - The version is the desktop's (`apps/desktop/package.json`).
+    - Release builds look for a newer release's APK on GitHub and offer it on the login screen (`host.ts newerApk`). Debug builds don't.
+  - Release builds aren't debuggable: no DevTools through `adb forward`. Use a debug build, or `adb logcat -s ShardsAssets`.
   - `ShardsPlugin` is registered before `super.onCreate` and does its work in `load()`, which runs before the page loads. A JavaScript interface added later only appears after a reload.
   - Debug builds allow cleartext to localhost (`src/debug`) and mixed content (the dev stack's `ws://` from the `https://localhost` page). Release builds allow neither.
   - Vite listens on `127.0.0.1` because `adb reverse` connects to IPv4. With Vite on `::1` only, the app's proxy gets "unexpected end of stream".

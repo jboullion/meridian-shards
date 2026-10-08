@@ -267,6 +267,11 @@ export interface Settings {
   /** Damage Numbers (ours): the damage we deal floats up over what we hit */
   damageNumbers: boolean;
   /**
+   * Touch Controls (ours, ADR 0003): the phone layout, with a joystick and buttons on the view.
+   * Auto: on a touch screen (a coarse pointer), as the Android app and phone browsers have
+   */
+  touchControls: TouchControls;
+  /**
    * Original Command Typing: every typed line is a command, as in the original (commands.ts):
    * the start of a name will do, speech needs "say", anything else is "What?". Off, lines
    * are said unless they start with a command (or "/").
@@ -300,6 +305,14 @@ export interface Settings {
 
 /** The chat window's tabs: everything, or one channel (packages/world chatChannel.ts) */
 export type ChatTab = "all" | "chat" | "combat" | "server";
+
+export type TouchControls = "auto" | "on" | "off";
+
+/** Whether the touch layout is on: Touch Controls, or on Auto a touch screen without a mouse. */
+export function touchUi(s: Settings): boolean {
+  if (s.touchControls !== "auto") return s.touchControls === "on";
+  return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+}
 
 const SETTINGS_VERSION = 4;
 
@@ -344,6 +357,7 @@ export const DEFAULT_SETTINGS: Settings = {
   attackOnTarget: false,
   dynamicLighting: true,
   damageNumbers: true,
+  touchControls: "auto",
   originalCommands: false,
   mouseXScale: 15,
   mouseYScale: 15,

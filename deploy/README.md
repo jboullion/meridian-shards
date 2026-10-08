@@ -109,6 +109,7 @@ npm run release -- 0.1.3
 `tools/deploy/release.ts` checks the tree, bumps `apps/desktop/package.json`, commits "Release v0.1.3", tags and pushes with git. Then it follows the **Desktop builds** workflow:
 - the `draft` job creates a draft release with generated notes;
 - the three `build` jobs build Windows, macOS and Linux and upload into the draft;
+- the `android` job builds the signed APK (`Meridian-Shards-<version>.apk`) and uploads it too;
 - the `publish` job checks every platform's files are there and publishes the release as the latest.
 
 The script prints each job's progress and ends with the release link, or names the failed job and step. A failed build leaves the draft unpublished, so players never get half a release. `npm run release -- --watch 0.1.3` follows a run again; `--no-wait` pushes and leaves.
@@ -118,6 +119,19 @@ Don't create releases by hand. A release that already exists for the tag makes t
 Installed apps find the new release at their next launch, download the changed blocks in the background, and offer "Restart to update" on the login screen. Unsigned macOS builds can't update themselves. The download page at `https://<dashed-ip>.sslip.io/download/` always lists the latest published release.
 
 To build only Windows locally: `npm run desktop:dist` makes the installer in `apps/desktop/dist/`. `npm run desktop:release` uploads it to the draft release too, with a token in `GH_TOKEN`.
+
+## 7. The Android app
+
+The Android app (`apps/android`, [ADR 0003](../docs/adr/0003-android.md)) ships in the same release as the desktop installers: one APK with the game files inside, about 380 MB. Players download it from the release or the download page and install it themselves. When a newer release has an APK, the app says so on its login screen and links to it.
+
+**The release key.** Android installs an update only if it carries the same signature as the installed app, so every APK is signed with one key, kept for good:
+- `~/.meridian-shards/android-release.jks` and `android-release.properties` (its password) on the machine that made it. Back both up. If they're lost, players must uninstall to get a newer version.
+- In the repository's secrets (Settings → Secrets and variables → Actions):
+  - `ANDROID_KEYSTORE_BASE64`: the `.jks` in base64 (`android-release.jks.base64.txt` beside it);
+  - `ANDROID_KEYSTORE_PASSWORD`: `storePassword` from the properties file.
+- Without the secrets, the `android` job fails, and so does the release.
+
+To build a signed APK locally and run it on a phone or the emulator: `npm run android -- --release`. It uninstalls a debug build first, because that's signed with another key.
 
 ## Running it
 

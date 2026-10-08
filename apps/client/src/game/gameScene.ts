@@ -32,6 +32,36 @@ const MOUSE_TURN = 2.5;
 /** Keyboard look up/down speed, radians per second (A_LOOKUP / A_LOOKDOWN held). */
 const PITCH_RATE = 1.2;
 const MAX_PITCH = 1.2;
+/** Touch (ours): a finger moving further than this is a drag (looking), not a tap; px */
+const TAP_SLOP = 10;
+/** A finger held still this long examines (the right click); ms */
+const LONG_PRESS_MS = 500;
+/** A second tap this soon and this close is a double tap (activate); ms, px */
+const DOUBLE_TAP_MS = 350;
+const DOUBLE_TAP_SLOP = 40;
+/** Dragging on the view turns this much less than the mouse does per pixel: fingers cover more pixels */
+const TOUCH_LOOK = 0.8;
+
+/** The on-screen joystick's move, like the keys (-1, 0 or 1) */
+export interface TouchMove {
+  forward: number;
+  strafe: number;
+  /** Pushed far: run (Always Run runs anyway) */
+  run: boolean;
+}
+
+/** A finger on the view */
+interface TouchState {
+  x0: number;
+  y0: number;
+  x: number;
+  y: number;
+  /** Moved past TAP_SLOP: it's looking around */
+  moved: boolean;
+  /** The long press fired */
+  held: boolean;
+  timer: number;
+}
 const OF_PLAYER = 0x4;
 /** statmain.c STAT_VIGOR (in stat group 1) and MIN_VIGOR */
 const STAT_VIGOR = 3;
@@ -130,6 +160,11 @@ export class GameScene {
   private pitch = 0;
   private readonly keys = new Set<string>();
   private mouse: { x: number; y: number } | null = null;
+  private touchMove: TouchMove = { forward: 0, strafe: 0, run: false };
+  private readonly touches = new Map<number, TouchState>();
+  private lastTap: { x: number; y: number; at: number } | null = null;
+  /** When a finger last touched the view: the browser's emulated dblclick is ignored after it */
+  private lastTouchAt = -Infinity;
   private hovered: number | null = null;
   /** graphics.c UserStartDrag: a room object being dragged towards the inventory */
   private drag: number | null = null;
@@ -278,6 +313,11 @@ export class GameScene {
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("keyup", this.onKeyUp);
     window.addEventListener("blur", this.onBlur);
+    // Touch on the view (the phone layout): drag to look, tap, double tap, long press
+    canvas.addEventListener("pointerdown", this.onPointerDown);
+    canvas.addEventListener("pointermove", this.onPointerMove);
+    canvas.addEventListener("pointerup", this.onPointerUp);
+    canvas.addEventListener("pointercancel", this.onPointerCancel);
     void this.init();
     if (import.meta.env.DEV) (window as unknown as { shards: unknown }).shards = { gameScene: this, session, audio: this.audio, THREE };
   }
@@ -495,13 +535,18 @@ export class GameScene {
     const remote = this.remoteView();
     const rv = remote?.view.flags ?? 0;
     const still = world.effects.paralyzed || world.waiting || this.resting || (remote !== null && (rv & REMOTE_VIEW.CONTROL || !(rv & REMOTE_VIEW.MOVE)));
-    const forward = still ? 0 : held("forward") - held("backward");
-    const strafe = still ? 0 : held("strafeRight") - held("strafeLeft");
+    // The keys and the on-screen joystick add up, as two keys for the same move would
+    const tm = this.touchMove;
+    const clamp1 = (v: number) => Math.max(-1, Math.min(1, v));
+    const forward = still ? 0 : clamp1(held("forward") - held("backward") + tm.forward);
+    const strafe = still ? 0 : clamp1(held("strafeRight") - held("strafeLeft") + tm.strafe);
     const turn = remote && !(rv & REMOTE_VIEW.TURN) ? 0 : held("turnRight") - held("turnLeft");
     // Always Run (config.ini alwaysrun): the Run/Walk key walks instead
     // mermain.c: too tired to run below MIN_VIGOR (10)
     const vigor = world.stats.get(1)?.find((st) => st.num === STAT_VIGOR)?.numeric?.value ?? MIN_VIGOR;
-    const run = (held("run") === 1) !== this.settings.alwaysRun && vigor >= MIN_VIGOR;
+    const joystick = tm.forward !== 0 || tm.strafe !== 0;
+    const wantsRun = joystick ? tm.run || this.settings.alwaysRun : (held("run") === 1) !== this.settings.alwaysRun;
+    const run = wantsRun && vigor >= MIN_VIGOR;
     const angleBefore = this.mover.angle;
     this.mover.turnKeys(turn, run, dt);
     if (remote && rv & REMOTE_VIEW.CONTROL) {
@@ -1163,7 +1208,13 @@ export class GameScene {
    * activate what's under the cursor, or look inside a container, if it's close by and not a player.
    */
   private readonly onDoubleClick = (e: MouseEvent) => {
+    // A double tap is the touch handlers' (the browser still sends a dblclick for it)
+    if (performance.now() - this.lastTouchAt < 1000) return;
     if (!this.locked) this.mouse = { x: e.clientX, y: e.clientY };
+    this.activateUnderCursor();
+  };
+
+  private activateUnderCursor(): void {
     const ids = this.objectsUnderCursor(
       (o) => (o.info.flags & (OF_ACTIVATABLE | OF_CONTAINER)) !== 0 && !(o.info.flags & OF_PLAYER) && this.distanceTo(o.id) <= CLOSE_DISTANCE,
     );
@@ -1172,7 +1223,7 @@ export class GameScene {
       if (o && o.info.flags & OF_CONTAINER) this.onContents?.(id);
       else this.session.activate(id);
     });
-  };
+  }
 
   private readonly onContextMenu = (e: MouseEvent) => {
     // No browser menu: the right button is bound like a key (Examine), acted on at mousedown
@@ -1190,25 +1241,110 @@ export class GameScene {
   };
 
   private readonly onMouseMove = (e: MouseEvent) => {
-    if (!this.locked) return;
+    if (this.locked) this.look(e.movementX, e.movementY);
+  };
+
+  /** Mouselook, or a finger dragged across the view: turn and look up or down by pixels moved. */
+  private look(dx: number, dy: number): void {
     // config.ini mouselookxscale / mouselookyscale, 1..30; 15 is our usual speed
     const sx = this.settings.mouseXScale / 15,
       sy = this.settings.mouseYScale / 15;
     const remote = this.remoteView();
     const rv = remote?.view.flags ?? 0;
-    if (!remote) this.mover.turnBy(e.movementX * MOUSE_TURN * sx);
+    if (!remote) this.mover.turnBy(dx * MOUSE_TURN * sx);
     else if (rv & REMOTE_VIEW.TURN) {
       // move.c: turning through another's eyes turns them only with REMOTE_VIEW_CONTROL
       const before = this.mover.angle;
-      this.mover.turnBy(e.movementX * MOUSE_TURN * sx);
+      this.mover.turnBy(dx * MOUSE_TURN * sx);
       if (rv & REMOTE_VIEW.CONTROL) {
         remote.obj.angle = (remote.obj.angle + this.mover.angle - before + 4096) & 4095;
         this.mover.setAngle(before);
       }
     }
-    const dy = e.movementY * 0.0025 * sy * (this.settings.invertMouse ? -1 : 1);
-    this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch - dy));
+    const pitch = dy * 0.0025 * sy * (this.settings.invertMouse ? -1 : 1);
+    this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch - pitch));
+  }
+
+  // ---- touch (ours, ADR 0003): the phone layout's view ----
+
+  /** The on-screen joystick (TouchControls.tsx): digital like the keys (move.c), and run when pushed far. */
+  setTouchMove(m: TouchMove): void {
+    this.touchMove = m;
+  }
+
+  /** An on-screen button: the action its key would do. */
+  press(a: Action): void {
+    this.trigger(a);
+  }
+
+  private readonly onPointerDown = (e: PointerEvent) => {
+    if (e.pointerType !== "touch") return;
+    // No emulated mousedown/mouseup for this finger: the touch handlers below do it all
+    e.preventDefault();
+    this.lastTouchAt = performance.now();
+    this.canvas.setPointerCapture(e.pointerId);
+    const t: TouchState = { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, moved: false, held: false, timer: 0 };
+    // A long press examines what's under the finger (the right click's Examine)
+    t.timer = window.setTimeout(() => {
+      if (t.moved) return;
+      t.held = true;
+      this.mouse = { x: t.x0, y: t.y0 };
+      this.trigger("examine");
+    }, LONG_PRESS_MS);
+    this.touches.set(e.pointerId, t);
   };
+
+  private readonly onPointerMove = (e: PointerEvent) => {
+    const t = this.touches.get(e.pointerId);
+    if (!t) return;
+    if (!t.moved && Math.hypot(e.clientX - t.x0, e.clientY - t.y0) > TAP_SLOP) {
+      t.moved = true;
+      clearTimeout(t.timer);
+    }
+    if (t.moved && !t.held) this.look((e.clientX - t.x) * TOUCH_LOOK, (e.clientY - t.y) * TOUCH_LOOK);
+    t.x = e.clientX;
+    t.y = e.clientY;
+  };
+
+  private readonly onPointerUp = (e: PointerEvent) => {
+    const t = this.touches.get(e.pointerId);
+    if (!t) return;
+    this.touches.delete(e.pointerId);
+    clearTimeout(t.timer);
+    this.lastTouchAt = performance.now();
+    if (!t.moved && !t.held) this.tap(t.x0, t.y0);
+  };
+
+  private readonly onPointerCancel = (e: PointerEvent) => {
+    const t = this.touches.get(e.pointerId);
+    if (t) clearTimeout(t.timer);
+    this.touches.delete(e.pointerId);
+  };
+
+  /**
+   * A tap on the view: picking a spell target; a second tap close by soon after activates (the
+   * double click); else Select Target on a player or monster, or picks up (or opens) what's
+   * close by, where a click would start dragging it to the inventory.
+   */
+  private tap(x: number, y: number): void {
+    this.mouse = { x, y };
+    const now = performance.now();
+    const last = this.lastTap;
+    this.lastTap = { x, y, at: now };
+    if (this.selecting) {
+      this.updateHover();
+      if (this.hovered !== null) this.select(this.hovered);
+      return;
+    }
+    if (last && now - last.at < DOUBLE_TAP_MS && Math.hypot(x - last.x, y - last.y) < DOUBLE_TAP_SLOP) {
+      this.lastTap = null;
+      this.activateUnderCursor();
+      return;
+    }
+    if (this.objectsUnderCursor((o) => (o.info.flags & OF_ATTACKABLE) !== 0).length) return this.selectHovered();
+    const near = this.objectsUnderCursor((o) => (o.info.flags & (OF_GETTABLE | OF_CONTAINER)) !== 0 && this.distanceTo(o.id) <= CLOSE_DISTANCE);
+    if (near.length) this.choose("Get", near, (id) => this.getOrOpen(id));
+  }
 
   private readonly onKeyDown = (e: KeyboardEvent) => {
     this.altDown = e.altKey;
@@ -1392,6 +1528,11 @@ export class GameScene {
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("blur", this.onBlur);
+    this.canvas.removeEventListener("pointerdown", this.onPointerDown);
+    this.canvas.removeEventListener("pointermove", this.onPointerMove);
+    this.canvas.removeEventListener("pointerup", this.onPointerUp);
+    this.canvas.removeEventListener("pointercancel", this.onPointerCancel);
+    for (const t of this.touches.values()) clearTimeout(t.timer);
     if (this.locked) document.exitPointerLock();
     this.objects?.dispose();
     this.skyOverlays?.dispose();

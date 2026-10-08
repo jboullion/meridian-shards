@@ -6,13 +6,13 @@ import {
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import type { AudioPreview, GameAudio } from "./audio.ts";
-import { GameScene, type GameSceneStatus } from "./gameScene.ts";
+import { GameScene, type GameSceneStatus, type TouchMove } from "./gameScene.ts";
 import type { IconRenderer } from "./icons.ts";
-import { getSettings, onSettings, updateSettings, type ChatTab, type Settings } from "./settings.ts";
+import { getSettings, onSettings, touchUi, updateSettings, type Action, type ChatTab, type Settings } from "./settings.ts";
 import {
   BAD_COMMAND, defineAlias, filterSayMessage, findSpell, groupAdd, groupDelete, groupNew, interpretLine, resolveTell, type CommandId, type GroupResult,
 } from "./commands.ts";
-import { gameSocketUrl } from "../host.ts";
+import { exitApp, gameSocketUrl, onBackButton } from "../host.ts";
 import { loadMailbox, newMailMessage, nextMailNumber, replyRecipients, replySubject, saveMailbox, type MailMessage } from "./mailbox.ts";
 import { StatChangeDialog } from "./ui/StatChangeDialog.tsx";
 import { GuildCreateDialog, GuildHallsDialog, GuildWindow, legalShield, type GuildState } from "./ui/GuildDialogs.tsx";
@@ -27,7 +27,8 @@ import {
 } from "./ui/OptionsDialogs.tsx";
 import { Sidebar, type Tab } from "./ui/Sidebar.tsx";
 import { Toolbar } from "./ui/Toolbar.tsx";
-import { MessageBox } from "./ui/kit.tsx";
+import { TouchControls } from "./ui/TouchControls.tsx";
+import { MessageBox, closeTopWindow } from "./ui/kit.tsx";
 import { isProfane } from "./profanity.ts";
 import { AnnotateDialog } from "./ui/AnnotateDialog.tsx";
 import { AboutDialog } from "./ui/AboutDialog.tsx";
@@ -189,6 +190,14 @@ export function GameView({
   const [selecting, setSelecting] = useState(false);
   /** The Map key: the map over the whole view (intrface.c A_MAP GraphicsToggleMap) */
   const [fullMap, setFullMap] = useState(false);
+  /** The phone layout (Touch Controls): the chat and the interface slide out over the view */
+  const touch = touchUi(settings);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  /** When the phone layout's chat was last open, for the mark on its button */
+  const [chatSeenAt, setChatSeenAt] = useState(() => Date.now());
+  const touchMove = useCallback((m: TouchMove) => sceneRef.current?.setTouchMove(m), []);
+  const touchPress = useCallback((a: Action) => sceneRef.current?.press(a), []);
   const [fps, setFps] = useState<number | null>(null);
   /** The chat window's height while its edge is being dragged (saved on letting go) */
   const [dragHeight, setDragHeight] = useState<number | null>(null);
@@ -225,6 +234,26 @@ export function GameView({
   const [annotating, setAnnotating] = useState<{ index: number; x: number; y: number; text: string; existed: boolean } | null>(null);
   /** A message box over the game (MessageBox with MB_OK) */
   const [alert, setAlert] = useState<string | null>(null);
+  /** Android's back button with nothing left to close: log off and quit? */
+  const [quitAsk, setQuitAsk] = useState(false);
+  // Android's back button (host.ts): a window first, then the phone layout's panels, then ask
+  // before logging off, as closing the desktop app's window does mid-game
+  useEffect(
+    () =>
+      onBackButton(() => {
+        if (closeTopWindow()) return true;
+        if (chatOpen || drawerOpen || fullMap) {
+          (document.activeElement as HTMLElement | null)?.blur();
+          setChatOpen(false);
+          setDrawerOpen(false);
+          setFullMap(false);
+          return true;
+        }
+        setQuitAsk(true);
+        return true;
+      }),
+    [chatOpen, drawerOpen, fullMap],
+  );
   /**
    * The admin module (module/admin): loaded for admin characters; its window opened with
    * Shift+4, hidden rather than closed; its text and command history
@@ -1021,7 +1050,10 @@ export function GameView({
   });
 
   return (
-    <div className="game" ref={gameRef} style={{ "--chat-height": `${dragHeight ?? settings.chatHeight}px` } as CSSProperties}>
+    <div
+      className={`game${touch ? " touch-ui" : ""}${touch && chatOpen ? " chat-open" : ""}${touch && drawerOpen ? " drawer-open" : ""}`}
+      ref={gameRef}
+      style={{ "--chat-height": `${dragHeight ?? settings.chatHeight}px` } as CSSProperties}>
       <TitleBar
         className="game-title"
         assets={assets}
@@ -1053,7 +1085,7 @@ export function GameView({
         latency={settings.latencyMeter ? latency : undefined}
         tooltips={settings.tooltips}
       />
-      {settings.toolbar && (
+      {settings.toolbar && !touch && (
         <Toolbar
           assets={assets}
           tooltips={settings.tooltips}
@@ -1100,6 +1132,22 @@ export function GameView({
           </div>
         )}
         {settings.showFps && fps !== null && <div className="fps">{fps} fps</div>}
+        {touch && (
+          <TouchControls
+            session={session}
+            icons={icons}
+            settings={settings}
+            chat={chat}
+            chatUnread={!chatOpen && chat.some((l) => l.time > chatSeenAt)}
+            onMove={touchMove}
+            onPress={touchPress}
+            onChat={() => setChatOpen(true)}
+            onDrawer={() => setDrawerOpen((v) => !v)}
+            onMap={() => setFullMap((v) => !v)}
+            // enchant.c WM_RBUTTONDOWN: look at the enchantment, as the interface's do
+            onLook={(id) => lookAt(id, DESC.NONE)}
+          />
+        )}
         {selecting && <div className="select-hint">Choose a target (Esc or right click cancels)</div>}
         {(phase === "entering" || status?.loading) && <div className="loading">Entering…</div>}
         {desc && (
@@ -1255,6 +1303,20 @@ export function GameView({
       <div className="chat">
         <div className="chat-resize" onPointerDown={resizeChat} title="Drag to resize the chat window" aria-hidden />
         <div className="chat-tabs" role="tablist" aria-label="Chat">
+          {touch && (
+            <button
+              type="button"
+              className="chat-close"
+              aria-label="Close the chat"
+              onClick={() => {
+                inputRef.current?.blur();
+                setChatOpen(false);
+                setChatSeenAt(Date.now());
+              }}
+            >
+              ✕
+            </button>
+          )}
           {CHAT_TABS.map(({ tab, label }) => {
             // On All every line is on screen, so no tab has unseen ones
             const unread = chatTab !== "all" && tab !== "all" && tab !== chatTab && chat.some((l) => inTab(tab, l) && l.time > seenAt[tab]);
@@ -1330,6 +1392,8 @@ export function GameView({
                 setText(next < 0 ? "" : h[next]);
               }
             }}
+            // The phone layout keeps the chat put away; typing (Enter, T, the hotkeys) brings it out
+            onFocus={() => touch && setChatOpen(true)}
             placeholder="Enter to chat — say, emote, yell, broadcast"
             maxLength={500}
           />
@@ -1356,7 +1420,20 @@ export function GameView({
         annotations={annotations?.list ?? []}
         onAnnotate={annotateAt}
       />
+      {touch && drawerOpen && <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} />}
       {alert && <MessageBox text={alert} onResult={() => setAlert(null)} />}
+      {quitAsk && (
+        <MessageBox
+          kind="yesno"
+          text="Log off and quit Meridian Shards?"
+          onResult={(yes) => {
+            setQuitAsk(false);
+            if (!yes) return;
+            onLogout();
+            exitApp();
+          }}
+        />
+      )}
       {annotating && <AnnotateDialog text={annotating.text} onDone={finishAnnotation} onClose={() => setAnnotating(null)} />}
     </div>
   );

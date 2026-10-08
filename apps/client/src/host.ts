@@ -78,12 +78,65 @@ interface AndroidHost {
   /** Remembers the choice; false if it isn't one of the servers */
   selectServer(origin: string): boolean;
   setPhase(phase: string): void;
+  /** Starts the game file download (AssetCache.downloadAll), once per server per page load */
+  downloadAssets(): void;
+  /** Its latest progress (DesktopAssetProgress) as JSON, "" before any; later ones come to window.shardsAndroidAssets */
+  assetProgress(): string;
 }
 
-/** The Android app's side of DesktopBridge: no window to control, and no updates or downloads yet (ADR 0003 phases 2 and 4). */
+/** The releases the apps come from (apps/desktop/electron-builder.yml publish); the APK is one of each release's files */
+const LATEST_RELEASE = "https://api.github.com/repos/jboullion/meridian-shards/releases/latest";
+
+/** Whether version a (x.y.z) is newer than b. */
+export function newerVersion(a: string, b: string): boolean {
+  const pa = a.split(".").map(Number),
+    pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
+  return false;
+}
+
+/** The latest release's APK if it's newer than `current`; null otherwise, or when GitHub can't be asked. */
+async function newerApk(current: string): Promise<{ version: string; url: string } | null> {
+  try {
+    const res = await fetch(LATEST_RELEASE, { cache: "no-store" });
+    if (!res.ok) return null;
+    const release = (await res.json()) as { tag_name?: string; assets?: { name: string; browser_download_url: string }[] };
+    const version = release.tag_name?.replace(/^v/, "") ?? "";
+    const apk = release.assets?.find((f) => f.name.endsWith(".apk"));
+    return apk && newerVersion(version, current) ? { version, url: apk.browser_download_url } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The Android app's side of DesktopBridge: no window to control. A sideloaded app can't update
+ * itself, so an update is a newer release's APK, opened in the phone's browser to install.
+ */
 function androidBridge(a: AndroidHost): DesktopBridge {
   const config = JSON.parse(a.config()) as DesktopConfig;
-  const none = () => () => {};
+  let update: { version: string; url: string } | null = null;
+  const updateListeners = new Set<(u: DesktopUpdate) => void>();
+  // Not for development builds: their version is whatever the desktop's is
+  if (!config.dev)
+    void newerApk(config.version).then((found) => {
+      if (!found) return;
+      update = found;
+      for (const fn of updateListeners) fn({ version: found.version });
+    });
+  const latest = a.assetProgress();
+  let assets: DesktopAssetProgress | null = latest ? (JSON.parse(latest) as DesktopAssetProgress) : null;
+  const assetListeners = new Set<(p: DesktopAssetProgress) => void>();
+  (globalThis as { shardsAndroidAssets?: (p: DesktopAssetProgress) => void }).shardsAndroidAssets = (p) => {
+    assets = p;
+    for (const fn of assetListeners) fn(p);
+  };
+  try {
+    a.downloadAssets();
+  } catch (e) {
+    // A Java exception surfaces here; the game still loads its files as it needs them
+    console.error("game file download didn't start:", e);
+  }
   return {
     ...config,
     selectServer: (origin) => {
@@ -92,9 +145,24 @@ function androidBridge(a: AndroidHost): DesktopBridge {
     },
     setPhase: (phase) => a.setPhase(phase),
     toggleFullscreen: () => {},
-    onUpdate: none,
-    onAssets: none,
-    installUpdate: () => {},
+    onUpdate: (fn) => {
+      updateListeners.add(fn);
+      if (update) fn({ version: update.version });
+      return () => {
+        updateListeners.delete(fn);
+      };
+    },
+    onAssets: (fn) => {
+      assetListeners.add(fn);
+      if (assets) fn(assets);
+      return () => {
+        assetListeners.delete(fn);
+      };
+    },
+    // Capacitor hands a link off its own origin to the system (the browser downloads the APK)
+    installUpdate: () => {
+      if (update) location.assign(update.url);
+    },
     windowControl: () => {},
     onWindowState: (fn) => {
       fn({ maximized: false, fullscreen: true });
@@ -102,6 +170,39 @@ function androidBridge(a: AndroidHost): DesktopBridge {
     },
   };
 }
+
+/** Capacitor's App plugin, as its native bridge puts it on the page (no npm import needed) */
+interface CapacitorApp {
+  addListener(event: "backButton", fn: () => void): unknown;
+  exitApp(): void;
+}
+
+const capacitorApp = (globalThis as { Capacitor?: { Plugins?: { App?: CapacitorApp } } }).Capacitor?.Plugins?.App;
+
+/** Back button handlers, newest last; each says whether it took the press */
+const backHandlers: (() => boolean)[] = [];
+
+/**
+ * Android's back button: the newest handler that takes it (closing a window, putting the chat
+ * away, asking before logging off); when none does, the app closes. Returns the unsubscribe.
+ */
+export function onBackButton(fn: () => boolean): () => void {
+  backHandlers.push(fn);
+  return () => {
+    const i = backHandlers.lastIndexOf(fn);
+    if (i >= 0) backHandlers.splice(i, 1);
+  };
+}
+
+/** Closes the Android app (after logging off); nothing elsewhere. */
+export function exitApp(): void {
+  capacitorApp?.exitApp();
+}
+
+capacitorApp?.addListener("backButton", () => {
+  for (let i = backHandlers.length - 1; i >= 0; i--) if (backHandlers[i]()) return;
+  capacitorApp.exitApp();
+});
 
 const androidHost = (globalThis as { shardsAndroid?: AndroidHost }).shardsAndroid;
 

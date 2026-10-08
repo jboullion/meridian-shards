@@ -120,7 +120,7 @@
     <main>
       <img class="icon" src="icon.png" alt="" />
       <h1>Meridian Shards</h1>
-      <p class="lead">The desktop client: the whole game in one download. It keeps itself up to date.</p>
+      <p class="lead">The whole game in one download, for your computer or your Android phone.</p>
       <div class="downloads">
         <section class="os" data-os="win">
           <div><h2>Windows</h2><small>Windows 10 or later, 64-bit</small></div>
@@ -134,12 +134,21 @@
           <div><h2>Linux</h2><small>64-bit AppImage or Debian package</small></div>
           <div class="links"><span class="none">Checking…</span></div>
         </section>
+        <section class="os" data-os="android">
+          <div><h2>Android</h2><small>Android 7 or later, played in landscape</small></div>
+          <div class="links"><span class="none">Checking…</span></div>
+        </section>
       </div>
       <div class="notes">
         <p>
           The builds aren't signed yet. On Windows, choose <em>More info → Run anyway</em> if SmartScreen
           stops the installer. On macOS, right-click the app and choose <em>Open</em> the first time.
           On Linux, make the AppImage executable (<code>chmod +x</code>) and run it.
+        </p>
+        <p>
+          On Android, open the downloaded file and allow your browser to install apps when asked. If
+          Play Protect warns about an unknown developer, choose <em>Install anyway</em>. The app tells
+          you when there's a newer version: download it here and install it over the old one.
         </p>
         <p>
           Meridian Shards is free software under the GNU General Public License, version 2:
@@ -149,12 +158,13 @@
       </div>
     </main>
     <script>
-      // The latest published release's installers (apps/desktop/electron-builder.yml artifactName)
+      // The latest published release's installers (apps/desktop/electron-builder.yml artifactName) and APK
       const RELEASE = "https://api.github.com/repos/jboullion/meridian-shards/releases/latest";
       const PICK = {
         win: [[/\.exe$/, "Download"]],
         mac: [[/-mac\.dmg$/, "Download"]],
         linux: [[/\.AppImage$/, "AppImage"], [/\.deb$/, ".deb"]],
+        android: [[/\.apk$/, "Download"]],
       };
 
       function show(os, links) {
@@ -191,7 +201,8 @@
       }
 
       const ua = navigator.userAgent;
-      const mine = /Windows/.test(ua) ? "win" : /Mac OS X|Macintosh/.test(ua) ? "mac" : /Linux|X11/.test(ua) ? "linux" : null;
+      // Android first: its browsers say Linux too
+      const mine = /Android/.test(ua) ? "android" : /Windows/.test(ua) ? "win" : /Mac OS X|Macintosh/.test(ua) ? "mac" : /Linux|X11/.test(ua) ? "linux" : null;
       if (mine) {
         const el = document.querySelector(`[data-os="${mine}"]`);
         el.classList.add("mine");

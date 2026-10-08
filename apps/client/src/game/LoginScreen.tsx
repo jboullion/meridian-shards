@@ -6,7 +6,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import type { AssetStore } from "../assets.ts";
-import { desktop, devPagesEnabled, type DesktopBridge, type DesktopUpdate } from "../host.ts";
+import { desktop, devPagesEnabled, isAndroid, type DesktopBridge, type DesktopUpdate } from "../host.ts";
 import { Backdrop, Button, GroupBox, MessageBox, Select, Text, TextField, Window, at, type Rect } from "./ui/kit.tsx";
 
 /** Control rectangles: client.rc IDD_LOGIN (251 x 175) for the desktop, the same less the Server row for the browser. */
@@ -105,9 +105,10 @@ export function LoginScreen({
         {desktop && !update && <span>Version {desktop.version}</span>}
         {desktop && update && (
           <span className="update">
-            Version {update.version} is ready.{" "}
+            {/* Android: a newer release's APK to download and install (host.ts androidBridge) */}
+            Version {update.version} is {isAndroid ? "out" : "ready"}.{" "}
             <a href="#" onClick={(e) => (e.preventDefault(), desktop?.installUpdate())}>
-              Restart to update
+              {isAndroid ? "Download it" : "Restart to update"}
             </a>
           </span>
         )}

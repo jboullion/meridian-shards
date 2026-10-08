@@ -172,9 +172,9 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 - [x] The investigation: Capacitor around the same client, a native port of the asset cache, a touch layout for phones in landscape, and a signed APK on GitHub releases before the Play Store ([ADR 0003](adr/0003-android.md)).
 - [x] Phase 0: the hosted web build on an Android phone runs well; the space is cramped. The phone layout: health, mana and vigor on the view, with the interface column and a full-screen chat sliding out. Frame time and memory aren't measured yet.
 - [x] Phase 1: the shell (`apps/android`, Capacitor 8.5) and the host seam. The app logs in to the local stack in the emulator and draws the game; `npm run android` builds, installs and launches it.
-- [ ] Phase 2: the game files (bundled, cached, downloaded).
-- [ ] Phase 3: touch controls and the phone layout.
-- [ ] Phase 4: lifecycle, the update notice, CI and the signed APK.
+- [x] Phase 2: the game files: bundled in release builds, cached and checked against their hashes, downloaded in full on Wi-Fi (`AssetCache.java`).
+- [x] Phase 3: Touch Controls and the phone layout, plus the back button and the soft keyboard (emulator; a real phone next).
+- [ ] Phase 4: the update notice, CI and the signed APK.
 
 ### 13. Feature parity (2026-10-08: phases 0-5 done; what is left is in missing-features.md)
 

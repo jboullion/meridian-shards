@@ -37,7 +37,7 @@ const TABS: { tab: Tab; group: number; bitmap: string; label: string }[] = [
 ];
 
 export function ObjIcon({
-  icons, object, opts, className, title, onContextMenu,
+  icons, object, opts, className, title, onContextMenu, onClick,
 }: {
   icons: IconRenderer;
   object: Drawable | null;
@@ -45,11 +45,12 @@ export function ObjIcon({
   className?: string;
   title?: string;
   onContextMenu?: (e: ReactMouseEvent) => void;
+  onClick?: (e: ReactMouseEvent) => void;
 }) {
   const key = object ? icons.key(object, opts) : "";
   const url = useAsyncImage(key, () => (object ? icons.object(object, opts) : null));
   return (
-    <span className={`obj-icon ${className ?? ""}`} title={title} onContextMenu={onContextMenu}>
+    <span className={`obj-icon ${className ?? ""}`} title={title} onContextMenu={onContextMenu} onClick={onClick}>
       {url && <img src={url} alt="" draggable={false} />}
     </span>
   );
@@ -103,6 +104,60 @@ function StatBar({ stat, main = false, xpAsPercent = false }: { stat: Statistic;
       <span className={xp ? "num xp" : value > 70 ? "num inside" : "num"} style={xp || value > 70 ? undefined : { left: `calc(${value}% + 2px)` }}>
         {text}
       </span>
+    </div>
+  );
+}
+
+/** Health, mana and vigor over the view, for the phone layout (ours; TouchControls.tsx): the interface's bars without XP. */
+export function HudBars({ session, icons }: { session: GameSession; icons: IconRenderer }) {
+  const world = session.world;
+  useWorld(world, ["stats"]);
+  const bars = (world.stats.get(STAT_GROUP.MAIN) ?? [])
+    .filter((s) => s.type === STATS.NUMERIC && s.numeric?.tag === STAT_TAG.INT && s.num !== STAT_XP)
+    .sort((a, b) => a.num - b.num);
+  return (
+    <div className="hud-bars">
+      {bars.map((s) => (
+        <div className="main-stat" key={s.num}>
+          <ObjIcon icons={icons} object={bareIcon(s.nameRes)} className="stat-icon" />
+          <StatBar stat={s} main />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The enchantments on us or on the room, for the phone layout's view (ours; TouchControls.tsx):
+ * the interface's enchant.c icons, bigger. A tap, or a long press (the right click), looks at one.
+ */
+export function HudEnchantments({
+  session, icons, kind, onLook,
+}: {
+  session: GameSession;
+  icons: IconRenderer;
+  kind: "player" | "room";
+  onLook: (id: number) => void;
+}) {
+  const world = session.world;
+  useWorld(world, ["enchantments"]);
+  const list = [...world.enchantments[kind].values()];
+  if (!list.length) return null;
+  return (
+    <div className={`hud-enchantments ${kind}`}>
+      {list.map((e) => (
+        <ObjIcon
+          key={e.id}
+          icons={icons}
+          object={e}
+          className="enchant"
+          onClick={() => onLook(e.id)}
+          onContextMenu={(ev) => {
+            ev.preventDefault();
+            onLook(e.id);
+          }}
+        />
+      ))}
     </div>
   );
 }

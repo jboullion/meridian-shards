@@ -5,7 +5,12 @@
 //   3. adb: install it, `adb reverse tcp:5173 tcp:5173` (the app's "Local (dev)" server is the
 //      dev stack's Vite on this machine), and launch it
 //
-//   npm run android [-- --device <serial>] [--no-build]
+//   npm run android [-- --device <serial>] [--no-build] [--bundle] [--release]
+//
+// --bundle puts the game files (dist/assets, about 430 MB) in the debug APK, as release builds have them.
+// --release builds the signed release APK as players get it (app/build.gradle: the key in
+// ~/.meridian-shards), with the game files and only the hosted server. Android won't put it over a
+// debug build (another key), so the app is uninstalled first, and its cached files with it.
 //
 // The SDK comes from ANDROID_HOME, ANDROID_SDK_ROOT or apps/android/android/local.properties.
 // `cap run android` would do steps 2 and 3, but it runs `./gradlew`, which cmd.exe can't.
@@ -24,6 +29,8 @@ const { values: opt } = parseArgs({
   options: {
     device: { type: "string" },
     "no-build": { type: "boolean", default: false },
+    bundle: { type: "boolean", default: false },
+    release: { type: "boolean", default: false },
   },
 });
 
@@ -69,7 +76,9 @@ if (!opt["no-build"]) {
   step("building the client and copying it into the Android project", win ? "npm.cmd" : "npm", ["run", "android:sync"], ROOT, win);
   // By full path: cmd.exe may not look in the current folder (NoDefaultCurrentDirectoryInExePath)
   const gradlew = join(PROJECT, win ? "gradlew.bat" : "gradlew");
-  step("building the debug APK", gradlew, ["assembleDebug", "--console=plain", "-q"], PROJECT, win, { ...process.env, JAVA_HOME: javaHome() });
+  const task = opt.release ? "assembleRelease" : "assembleDebug";
+  const bundle = opt.bundle && !opt.release ? ["-PshardsBundleAssets"] : [];
+  step(`building the ${opt.release ? "release" : "debug"} APK`, gradlew, [task, "--console=plain", "-q", ...bundle], PROJECT, win, { ...process.env, JAVA_HOME: javaHome() });
 }
 
 const devices = execFileSync(adb, ["devices"], { encoding: "utf8" })
@@ -88,7 +97,12 @@ if (!device || !devices.includes(device)) {
   process.exit(2);
 }
 const onDevice = (label: string, ...args: string[]) => step(label, adb, ["-s", device, ...args]);
-onDevice(`installing on ${device}`, "install", "-r", join(PROJECT, "app", "build", "outputs", "apk", "debug", "app-debug.apk"));
+const apk = opt.release
+  ? join(PROJECT, "app", "build", "outputs", "apk", "release", "app-release.apk")
+  : join(PROJECT, "app", "build", "outputs", "apk", "debug", "app-debug.apk");
+// A build signed with another key won't install over the one there: start clean (not an error if it isn't installed)
+if (opt.release) spawnSync(adb, ["-s", device, "uninstall", APP_ID], { stdio: "ignore" });
+onDevice(`installing on ${device}`, "install", "-r", apk);
 onDevice("forwarding the device's localhost:5173 to the dev stack", "reverse", "tcp:5173", "tcp:5173");
 onDevice("launching", "shell", "am", "start", "-n", `${APP_ID}/.MainActivity`);
 console.log("[android] running. Console and DevTools: chrome://inspect in Chrome on this machine.");

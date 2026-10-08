@@ -1,6 +1,6 @@
-# Builds the desktop installers on Windows, macOS and Linux, uploads them with the update
-# feeds to a draft GitHub release for v<version> (apps/desktop/package.json), and publishes
-# that release once every platform is there. Installed apps and the download page use the
+# Builds the desktop installers on Windows, macOS and Linux and the Android APK, uploads them
+# with the update feeds to a draft GitHub release for v<version> (apps/desktop/package.json), and
+# publishes that release once every platform is there. Installed apps and the download page use the
 # latest published release.
 #
 # Start it with `npm run release -- <x.y.z>` (tools/deploy/release.ts: bumps the version,
@@ -110,10 +110,86 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-  # Publishes the draft once all three platforms built and uploaded. A failed build leaves
-  # the draft unpublished, so players never get half a release.
+  # The Android APK (apps/android, docs/adr/0003-android.md) into the same draft: the client in
+  # Capacitor with the same game files, signed with the release key. Every update must carry the
+  # same signature, so the key lives in the repository's secrets:
+  #   ANDROID_KEYSTORE_BASE64    the .jks, base64 (~/.meridian-shards/android-release.jks)
+  #   ANDROID_KEYSTORE_PASSWORD  its password (storePassword in android-release.properties)
+  android:
+    needs: draft
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag matches the app's version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          version=$(node -p "require('./apps/desktop/package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match apps/desktop/package.json version $version"
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      # Gradle 8.14 (the Capacitor template's) runs on JDK 21
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - name: The server's manifest (the cache key for its files)
+        run: curl -fsSL "$ASSETS_FROM/assets/manifest.json" -o server-manifest.json
+        shell: bash
+      - uses: actions/cache@v4
+        with:
+          path: dist/assets
+          key: game-files-${{ hashFiles('server-manifest.json') }}
+          restore-keys: game-files-
+      - name: Game files from the server
+        run: node tools/assets/fetch-assets.ts --from "$ASSETS_FROM"
+        shell: bash
+      - name: The release key
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error title=No Android release key::Add the ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD secrets (docs/adr/0003-android.md)"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/android-release.jks"
+          echo "SHARDS_KEYSTORE=$RUNNER_TEMP/android-release.jks" >> "$GITHUB_ENV"
+      # Without the key (a run from the Actions tab) the APK comes out unsigned: a build check only
+      - name: Build the APK
+        shell: bash
+        env:
+          SHARDS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SHARDS_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SHARDS_KEY_ALIAS: meridian-shards
+        run: |
+          set -o pipefail
+          if ! (npm run android:sync && cd apps/android/android && sh ./gradlew assembleRelease --console=plain) 2>&1 | tee build.log; then
+            echo "::error title=Build failed::$(tail -n 40 build.log | tr -d '\r' | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')"
+            exit 1
+          fi
+      - name: Upload to the draft release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          apk="Meridian-Shards-${GITHUB_REF_NAME#v}.apk"
+          cp apps/android/android/app/build/outputs/apk/release/app-release.apk "$apk"
+          gh release upload "$GITHUB_REF_NAME" "$apk" --repo "$GITHUB_REPOSITORY" --clobber
+
+  # Publishes the draft once all three platforms and the APK built and uploaded. A failed build
+  # leaves the draft unpublished, so players never get half a release.
   publish:
-    needs: build
+    needs: [build, android]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -124,7 +200,7 @@ jobs:
         run: |
           names=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
           echo "$names"
-          for pattern in '\.exe$' '\.exe\.blockmap$' '-mac\.dmg$' '-mac\.zip$' '\.AppImage$' '\.deb$' '^latest\.yml$' '^latest-mac\.yml$' '^latest-linux\.yml$'; do
+          for pattern in '\.exe$' '\.exe\.blockmap$' '-mac\.dmg$' '-mac\.zip$' '\.AppImage$' '\.deb$' '^latest\.yml$' '^latest-mac\.yml$' '^latest-linux\.yml$' '\.apk$'; do
             if ! grep -Eq -- "$pattern" <<< "$names"; then
               echo "::error::The release has no file matching $pattern"
               exit 1
