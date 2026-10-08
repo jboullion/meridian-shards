@@ -163,3 +163,17 @@ describe("combat state (milestone 6)", () => {
     expect(world.playerOverlays[1]?.look.anim.group).toBe(4);
   });
 });
+
+describe("remote view (game.c SetPlayerRemoteView)", () => {
+  const feed = (world: WorldState, type: number, w: ByteWriter) => world.handle(type, new ByteReader(w.finish()));
+  test("BP_SET_VIEW sees through another object; our own id or BP_RESET_VIEW means our eyes", () => {
+    const world = new WorldState();
+    feed(world, BP.SET_VIEW, new ByteWriter().u32(77).i32(0x2 | 0x400).i32(0).u8(40));
+    expect(world.remoteView).toEqual({ id: 77, flags: 0x402, height: 0, light: 40 });
+    feed(world, BP.RESET_VIEW, new ByteWriter());
+    expect(world.remoteView).toBeNull();
+    feed(world, BP.SET_VIEW, new ByteWriter().u32(77).i32(0).i32(0).u8(0));
+    world.endRemoteView();
+    expect(world.remoteView).toBeNull();
+  });
+});

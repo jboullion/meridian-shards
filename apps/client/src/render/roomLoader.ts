@@ -8,6 +8,8 @@ import type { AssetStore } from "../assets.ts";
 export interface LoadedRoom {
   room: Room;
   view: RoomView;
+  /** Its grid textures by id (a changed copy of the room starts from these) */
+  bgfs: Map<number, Bgf>;
   textures: number;
   missingTextures: number[];
   triangles: number;
@@ -28,10 +30,10 @@ export async function loadRoomView(assets: AssetStore, roo: string, palette: THR
       else missing.push(id);
     }),
   );
-  const view = new RoomView(room, textures, palette);
+  const view = new RoomView(room, new Map(textures), palette);
   let triangles = 0;
   for (const b of view.geometry.batches.values()) triangles += b.positions.length / 9;
-  return { room, view, textures: textures.size, missingTextures: missing.sort((a, b) => a - b), triangles };
+  return { room, view, bgfs: textures, textures: textures.size, missingTextures: missing.sort((a, b) => a - b), triangles };
 }
 
 /** A sky box from a .bsf file name. */

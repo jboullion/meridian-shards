@@ -29,7 +29,7 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 - [x] The D3D client's lighting: `GetLightPaletteIndex` brightness, sun shading on walls and sloped planes, and the per-sector black fog. Room ambient comes from the Kod formula (base light + outside factor × time of day).
 - [x] Animated textures (cycling groups) and scrolling walls and floors, the sky box, and the original 50° × 32° view (Hor+ for widescreen) at the original eye height.
 - [x] The room viewer (`apps/client`, `?rid=301`) shows every slice room, with no missing textures.
-- [ ] Sloped-texture rotation (the slope's texture angle). Sloped planes currently use the flat mapping.
+- [x] Sloped-texture rotation (the slope's texture angle), done in milestone 13.
 - [x] Dynamic lights (the light maps around torches and lamps), done in milestone 3.
 - [ ] A side-by-side check against original-client screenshots from the same spot. The user's inn screenshot matches in layout, texture orientation and proportions; the remaining brightness difference is the torch light maps.
 
@@ -85,7 +85,7 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 - [x] Casting at targets (`spells.c SpellCast`): no-target spells cast at once; others go to the target, or you pick one (an object in the view, your face, or an inventory item; Esc or right click cancels).
 - [x] Tested on our server: killed baby spiders in the Outskirts with the mace (hits, misses, damage messages, XP, unbound energy, auto-loot); died (death sound, the Underworld with its music and lava), walked into the rip in space and came back in the Inn of Raza.
 - [x] The character creator (`module/char`): Name, Appearance (the face from the server's parts, gender, hair, eyes, nose, mouth, hair and skin colour), Statistics (1–50, 70 points, the four suggestions), Spells and Skills (45 shared points, Shal'ille and Qor exclusive). Created "Shardmage" with it.
-- Not yet: weather (rain, snow, sand), blur and waver, `EFFECT_XLATOVERRIDE`, and the "attack on click" option. The mummies in the crypt aren't fought yet, only the forest creatures.
+- Not yet at the time: weather, blur and waver, `EFFECT_XLATOVERRIDE` (all done in milestone 13), and the "attack on click" option. The crypt's mummies were fought in milestone 13.
 
 ### 7. Host and playtest
 
@@ -188,7 +188,16 @@ The goal: everything the original client and its modules do. The comparison (the
   - `AP_TIMEOUT` and `AP_DOWNLOAD` end the login with a reason instead of hanging.
   - `EFFECT_FIREWORKS` is kept.
   - Fixed `buy`/`offer` with words after them being taken as the command.
-- [ ] **Phase 1: world fidelity.** Rooms that change (lifts, wall animation, texture changes, sector flags), sloped-texture rotation, blur, waver and xlat override, weather and fireworks, flashing and bouncing objects, remote view, resync in the game, the crypt.
+- [x] **Phase 1: world fidelity** (2026-10-08).
+  - **Rooms that change** (`roomanim.c`): `packages/world/src/roomAnim.ts` keeps a copy of the room per visit (`LiveRoom`), started over on every `BP_PLAYER`. It applies lifts (`BP_SECTOR_MOVE`, animated at their speed, with the walls' heights following), wall bitmaps and their end actions (`BP_WALL_ANIMATE`), `BP_SECTOR_ANIMATE`, texture changes and sector flags. Collision uses the same copy. The scene draws the cache's view until the first change, then its own, rebuilt only when something changed (2.7 ms a frame while the crypt door lifts).
+  - Tested on our server: the Raza clock shows the hour, the crypt door lifts from the maintenance port and you can walk through it, and a mummy behind it was fought and killed.
+  - **Sloped textures** follow the slope's texture angle (`bspload.c LoadSlopeInfo` with the client's fixed-point maths, `d3drender.c` floor and ceiling extraction): the thatched roofs in Raza.
+  - **Blur and waver** as the D3D client draws both (the last eight frames at a quarter opacity, swelling and shrinking), and **`EFFECT_XLATOVERRIDE`** (the phase spell's white).
+  - **Weather** (`d3dparticle.c`): rain, snow (`ui/weather_snow.png` from the asset build), sand and fireworks, at the original's 70 steps a second, only outdoors. Show Weather and Particle Density work.
+  - **Objects:** `OF_FLASHING` (how detect invisible shows invisible things), `OF_BOUNCING`, projectiles flying from source height to target height or along the ground.
+  - **The remote view** (`BP_SET_VIEW`, `BP_RESET_VIEW`), tested with `SetPlayerView` on the maintenance port; Esc comes back.
+  - **Resync in the game** (`BP_RESYNC`, a bad frame): the beacon handshake, then the game data again, with the original's 60 s timeout. Server 104 can't finish the handshake (see [protocol.md](research/protocol.md)), so in practice it ends in a disconnect, as with the original client.
+  - Left: a side-by-side check with the original client from the same spots.
 - [ ] **Phase 2: commands and interaction.** merintr's command table with prefix matching, emotes and moods, resting, the Spells menu, inventory reordering and keys, chat history and filtering, ignored tells, the Find box.
 - [ ] **Phase 3: social systems.** News globes, mail with a local mailbox, stat reallocation, guilds.
 - [ ] **Phase 4: interface.** Toolbar, tooltips, map annotations, profanity filter, logout timer, About and intro, cursors, borders, language, quick start, desktop command line.

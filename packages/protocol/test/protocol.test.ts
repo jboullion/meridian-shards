@@ -3,6 +3,7 @@ import { test } from "vitest";
 import {
   BP, ByteReader, Connection, FrameDecoder, RandomStreams, ServerToken, buildReqMove, crc32, encodeFrame, md5,
   passwordDigest, readMove,
+  BEACON, CLIENT_ACK, SERVER_HELLO,
 } from "../src/index.ts";
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
@@ -110,5 +111,47 @@ test("connection: login messages are framed with crc 0 and epoch 0; game ones ca
   assert.equal(conn.state, "game");
   conn.sendGame(Uint8Array.of(BP.PING));
   assert.equal(sent[1][6], 9);
+  conn.close();
+});
+
+test("connection: BP_RESYNC in the game runs the beacon handshake and comes back to the game (com.c Resynchronize)", () => {
+  const sent: Uint8Array[] = [];
+  const states: string[] = [];
+  const conn = new Connection((b) => sent.push(b), { state: (s) => states.push(s) }, { pingIntervalMs: 0 });
+  conn.start();
+  const seeds = new Uint8Array(21);
+  seeds[0] = 22;
+  conn.receive(encodeFrame(seeds, 0, 9));
+  conn.receive(encodeFrame(Uint8Array.of(25), 0, 9));
+  assert.equal(conn.state, "game");
+  // blakserv/game.c GameSendResync: ten BP_RESYNCs in a row
+  const resyncs = [...Array(10)].map(() => encodeFrame(Uint8Array.of(BP.RESYNC), 0, 9));
+  conn.receive(new Uint8Array(resyncs.flatMap((f) => [...f])));
+  assert.equal(conn.state, "startup");
+  assert.deepEqual([...sent.at(-1)!], [...BEACON]);
+  // game messages wait (unsent, unencoded) until the handshake is done
+  const before = sent.length;
+  conn.sendGame(Uint8Array.of(BP.PING));
+  assert.equal(sent.length, before);
+  conn.receive(SERVER_HELLO);
+  assert.deepEqual([...sent.at(-1)!], [...CLIENT_ACK]);
+  assert.equal(conn.state, "game");
+  assert.deepEqual(states.slice(-2), ["startup", "game"]);
+  conn.close();
+});
+
+test("connection: a bad frame in the game tells the server (BP_RESYNC) and resynchronizes", () => {
+  const sent: Uint8Array[] = [];
+  const conn = new Connection((b) => sent.push(b), {}, { pingIntervalMs: 0 });
+  conn.start();
+  const seeds = new Uint8Array(21);
+  seeds[0] = 22;
+  conn.receive(encodeFrame(seeds, 0, 9));
+  conn.receive(encodeFrame(Uint8Array.of(25), 0, 9));
+  // lengths that don't agree (com.c ProcessMsgHeader)
+  conn.receive(Uint8Array.of(5, 0, 0, 0, 6, 0, 9, 1, 2, 3, 4, 5));
+  assert.equal(conn.state, "startup");
+  assert.equal(sent.at(-2)![7], BP.RESYNC);
+  assert.deepEqual([...sent.at(-1)!], [...BEACON]);
   conn.close();
 });

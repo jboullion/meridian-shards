@@ -11,7 +11,8 @@
 // Plus the palette (blakston.pal, parsed to a 768-byte binary palette.bin), and the
 // interface bitmaps compiled into the client (clientd3d/bitmap and module/merintr/bitmap:
 // backgrounds, stat tab buttons, the map paper) as ui/<name>.bmp, the login dialog's icon
-// (ui/icon1.ico) and the Heidelberg title font (ui/heidelb1.ttf, font.c FONT_TITLES).
+// (ui/icon1.ico), the Heidelberg title font (ui/heidelb1.ttf, font.c FONT_TITLES) and the
+// snow texture (ui/weather_snow.png, d3dparticle.c).
 // And roomlinks.json, which rooms connect to which, from the Kod source (roomLinks.ts), so
 // the client can load the rooms next to yours ahead of time.
 //
@@ -51,6 +52,7 @@ type Source = {
 const BMP = new Set([".bmp"]);
 const BMP_ICO = new Set([".bmp", ".ico"]);
 const TTF = new Set([".ttf"]);
+const PNG = new Set([".png"]);
 const sources: Source[] = [
   { label: "server rsb", dir: join(RUN, "rsc"), recursive: false, filter: (n) => n === "rsc0000.rsb" },
   { label: "server rooms", dir: join(RUN, "rooms"), recursive: false },
@@ -58,6 +60,8 @@ const sources: Source[] = [
   { label: "server resource tree", dir: join(SERVER, "resource"), recursive: true },
   { label: "client UI bitmaps", dir: join(SERVER, "clientd3d", "bitmap"), recursive: false, prefix: "ui/", exts: BMP_ICO },
   { label: "interface UI bitmaps", dir: join(SERVER, "module", "merintr", "bitmap"), recursive: false, prefix: "ui/", exts: BMP },
+  // d3dparticle.c D3DParticleSystemInit: ./resource/weather_snow.png
+  { label: "particle textures", dir: join(SERVER, "resource", "particles"), recursive: false, prefix: "ui/", exts: PNG },
   // server\setup-client.cmd puts the font in our client's run folder; the installed client has it beside its resource folder
   { label: "title font", dir: join(SERVER, "run", "localclient"), recursive: false, prefix: "ui/", exts: TTF },
   { label: "title font (installed client)", dir: dirname(opt.client!), recursive: false, prefix: "ui/", exts: TTF },

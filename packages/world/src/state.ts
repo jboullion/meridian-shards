@@ -4,7 +4,7 @@
 import {
   BP, ByteReader, CLIENT_TAG_NUMBER, EFFECT, ENCHANT, objId, objTag, readEffect, readPlayerOverlay, readRadiusShoot, readShoot, type Shot, readAddEnchantment, readChange, readMove, readObject,
   readObjectList, readPlayer, readRemoveEnchantment, readRoomContents, readRoomObject, readSpells, readStat,
-  readStatGroup, readStatGroups, readTurn, readUseList, readSpell, readBgOverlay, type Animation, type BgOverlay, type ObjectInfo, type Overlay,
+  readStatGroup, readStatGroups, readTurn, readRoomChange, type RoomChange, readUseList, readSpell, readBgOverlay, type Animation, type BgOverlay, type ObjectInfo, type Overlay,
   type PlayerInfo, type RoomObject, type Spell, type Statistic,
 } from "@shards/protocol";
 import { animStateFrom, type AnimState } from "./animation.ts";
@@ -52,6 +52,20 @@ export interface WorldObject {
   version: number;
 }
 
+/** proto.h REMOTE_VIEW_* */
+export const REMOTE_VIEW = {
+  MOVE: 0x1, TURN: 0x2, TILT: 0x4, CAST: 0x8, LOOK: 0x10,
+  TOP: 0x100, BOTTOM: 0x200, MID: 0x400, SPECIFIED: 0x800,
+  CONTROL: 0x10000, ESC_CANCELS: 0x20000, VALID_HEIGHT: 0x40000, VALID_LIGHT: 0x80000,
+} as const;
+
+export interface RemoteView {
+  id: number;
+  flags: number;
+  height: number;
+  light: number;
+}
+
 export interface Lighting {
   ambient: number;
   playerLight: number;
@@ -97,6 +111,10 @@ export type WorldEvent =
    * after it): the target and anything else holding an id is stale
    */
   | { type: "idsStale" }
+  /** BP_SECTOR_MOVE, BP_WALL_ANIMATE and the rest: the room changed (roomAnim.ts) */
+  | { type: "roomChange"; change: RoomChange }
+  /** BP_SET_VIEW / BP_RESET_VIEW: seeing through another object's eyes (game.c SetPlayerRemoteView) */
+  | { type: "remoteView" }
   /** BP_WAIT / BP_UNWAIT: the server is saving (game.c GameWait / GameUnwait) */
   | { type: "wait"; waiting: boolean };
 
@@ -290,6 +308,25 @@ export class WorldState {
   }
 
   /**
+   * BP_SET_VIEW: the view is another object's (the DM's Globe of Seeing), with REMOTE_VIEW_*
+   * flags saying what we may do and where the eyes are; null for our own eyes.
+   */
+  remoteView: RemoteView | null = null;
+
+  /** cursor.c UserMoveEsc: back to our own eyes (the client decides this alone) */
+  endRemoteView(): void {
+    if (!this.remoteView) return;
+    this.remoteView = null;
+    this.emit({ type: "remoteView" });
+  }
+
+  /**
+   * The changes to the current room since the last BP_PLAYER, in order (roomAnim.ts
+   * LiveRoom replays them onto its copy of the room once the room has loaded).
+   */
+  roomChanges: RoomChange[] = [];
+
+  /**
    * Set while the server saves (BP_WAIT until BP_UNWAIT): the original enters GAME_WAIT,
    * where it shows the wait cursor and neither moves nor animates (statgame.c, animate.c:95).
    */
@@ -332,6 +369,9 @@ export class WorldState {
         this.lighting.playerLight = this.player.playerLight;
         this.background = this.player.backgroundRes;
         if (prev !== this.player.roomId) this.enchantments.room.clear();
+        // game.c HandlePlayer reloads the room every time; the server then sends every
+        // change again (user.kod ToCliPlayer)
+        this.roomChanges = [];
         this.emit({ type: "player", player: this.player, roomChanged: prev !== this.player.roomId });
         return true;
       }
@@ -450,6 +490,32 @@ export class WorldState {
       case BP.REMOVE_BG_OVERLAY:
         this.bgOverlays.delete(r.u32());
         this.emit({ type: "bgOverlays" });
+        return true;
+      case BP.SECTOR_MOVE:
+      case BP.WALL_ANIMATE:
+      case BP.SECTOR_ANIMATE:
+      case BP.SECTOR_CHANGE:
+      case BP.CHANGE_TEXTURE:
+      case BP.SECTOR_LIGHT: {
+        const change = readRoomChange(type, r)!;
+        this.roomChanges.push(change);
+        this.emit({ type: "roomChange", change });
+        return true;
+      }
+      case BP.SET_VIEW: {
+        // server.c HandleSetView: object, flags, height, light
+        const id = r.u32();
+        const flags = r.i32();
+        const height = r.i32();
+        const light = r.u8();
+        // game.c SetPlayerRemoteView: our own id (or none) means our own eyes
+        this.remoteView = id && id !== this.player?.id ? { id, flags, height, light } : null;
+        this.emit({ type: "remoteView" });
+        return true;
+      }
+      case BP.RESET_VIEW:
+        this.remoteView = null;
+        this.emit({ type: "remoteView" });
         return true;
       case BP.BACKGROUND:
         this.background = r.u32();

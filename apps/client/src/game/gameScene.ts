@@ -11,15 +11,15 @@
 //   PgUp/PgDn/Home: look up, down, straight; End: turn around;  Enter: chat
 
 import * as THREE from "three";
-import { FINENESS, leafAt, skyboxForBackground, type Bgf, type Room } from "@shards/formats";
+import { FINENESS, ceilingHeightAt, floorHeightAt, gridTextureName, leafAt, skyboxForBackground, type Bgf, type Room } from "@shards/formats";
 import {
-  DRAWFX, OF, ObjectsView, RoomView, SkyOverlaysView, XlatTable, disposeSkybox, objectBrightness, paletteTexture, type LightSource,
+  DRAWFX, OF, ObjectsView, PARTICLE_STEPS_PER_SECOND, RoomView, SkyOverlaysView, TrailBlur, WeatherParticles, XlatTable, type ParticleRoom, disposeSkybox, objectBrightness, paletteTexture, type LightSource,
   type NameLabel, type ViewObject,
 } from "@shards/render";
-import { PlayerMover, animStep, type DamageDealt, type GameSession, type WorldObject } from "@shards/world";
+import { LiveRoom, PlayerMover, REMOTE_VIEW, animStep, type DamageDealt, type RemoteView, type GameSession, type WorldObject } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import { RoomCache } from "../render/roomCache.ts";
-import { loadSkybox } from "../render/roomLoader.ts";
+import { loadSkybox, type LoadedRoom } from "../render/roomLoader.ts";
 import { ORIGINAL_FOV } from "../viewer/roomScene.ts";
 import type { GameAudio } from "./audio.ts";
 import { ScreenOverlays } from "./screenOverlays.ts";
@@ -33,6 +33,8 @@ const MOUSE_TURN = 2.5;
 const PITCH_RATE = 1.2;
 const MAX_PITCH = 1.2;
 const OF_PLAYER = 0x4;
+/** project.h PROJ_FLAG_FOLLOWGROUND */
+const PROJ_FLAG_FOLLOWGROUND = 0x1;
 const OF_ATTACKABLE = 0x8;
 const OF_GETTABLE = 0x10;
 const OF_CONTAINER = 0x20;
@@ -88,6 +90,24 @@ export class GameScene {
   private room: Room | null = null;
   private roomView: RoomView | null = null;
   private roomRes = 0;
+  /** The current room as the cache loaded it (shared; never changed) */
+  private loaded: LoadedRoom | null = null;
+  /** The current room with the server's changes (roomanim.c); `room` is its room */
+  private live: LiveRoom | null = null;
+  /** How many of the world's room changes `live` has applied */
+  private liveApplied = 0;
+  /** The live room's version `roomView` shows */
+  private liveDrawn = 0;
+  /** Our own view of the changed room (the cache's view stays as the file has it) */
+  private ownView: RoomView | null = null;
+  /** Rain, snow, sand and fireworks (d3dparticle.c) */
+  private weather: WeatherParticles | null = null;
+  /** Particle steps owed (they run at the original's 70 frames a second) */
+  private particleTime = 0;
+  /** Blurred and wavering vision (EFFECT_BLUR, EFFECT_WAVER), made when first needed */
+  private blur: TrailBlur | null = null;
+  /** Grid textures a change asked for that are loading */
+  private textureLoads = new Set<number>();
   /** This room and the ones next to it, loaded ahead */
   private rooms: RoomCache | null = null;
   /**
@@ -209,6 +229,9 @@ export class GameScene {
         case "background":
           void this.syncSky();
           break;
+        case "roomChange":
+          this.applyRoomChanges();
+          break;
         case "roomContents":
           this.contentsResolve?.();
           this.contentsResolve = null;
@@ -266,6 +289,9 @@ export class GameScene {
     this.scene.add(this.skyOverlays.group);
     this.applyViewSettings();
     this.overlays = new ScreenOverlays(this.labelsEl.parentElement!, pal.rgb, this.xlats, (id) => this.bgf(id));
+    this.weather = new WeatherParticles(await this.snowTexture());
+    this.weather.onFireworkSound = (x, y) => this.audio.playAt("firework.ogg", x, y);
+    this.scene.add(this.weather.group);
     await this.syncRoom();
     const loop = (t: number) => {
       this.frame(Math.min(250, t - this.last), t);
@@ -313,7 +339,12 @@ export class GameScene {
 
   private async syncRoom(): Promise<void> {
     const p = this.session.world.player;
-    if (!p || !this.rooms || p.roomRes === this.roomRes) return void this.syncSky();
+    if (!p || !this.rooms || p.roomRes === this.roomRes) {
+      // game.c HandlePlayer loads the room again even when it's the same one; the server
+      // then sends its changes again (user.kod ToCliPlayer)
+      if (!this.entering) this.resetLiveRoom();
+      return void this.syncSky();
+    }
     this.roomRes = p.roomRes;
     const name = this.session.resource(p.roomRes);
     if (!name) return;
@@ -331,11 +362,8 @@ export class GameScene {
     }
     if (this.disposed || this.roomRes !== p.roomRes) return;
     // The cache owns room views: neighbours stay loaded for when you walk back
-    if (this.roomView) this.scene.remove(this.roomView.group);
-    this.room = loaded.room;
-    this.roomView = loaded.view;
-    this.scene.add(loaded.view.group);
-    this.mover.room = loaded.room;
+    this.loaded = loaded;
+    this.resetLiveRoom();
     const self = this.session.world.self;
     if (self) {
       this.mover.place(self.x, self.y, performance.now());
@@ -345,7 +373,85 @@ export class GameScene {
     await Promise.race([Promise.all([this.objectsReady(), this.syncSky()]), new Promise((r) => setTimeout(r, ENTER_TIMEOUT_MS))]);
     if (this.disposed || this.roomRes !== p.roomRes) return;
     this.entering = false;
+    this.applyRoomChanges();
     this.status(false);
+  }
+
+  /**
+   * Starts the current room over as the file has it (the cache's view), then applies the
+   * changes the server has sent since BP_PLAYER.
+   */
+  private resetLiveRoom(): void {
+    const loaded = this.loaded;
+    if (!loaded) return;
+    if (this.roomView) this.scene.remove(this.roomView.group);
+    this.ownView?.dispose();
+    this.ownView = null;
+    this.live = new LiveRoom(loaded.room);
+    // bspload.c: loading a room starts the particle emitters over
+    this.weather?.reset();
+    this.live.numGroups = (id) => this.roomBgf(id)?.groups.length ?? 0;
+    this.liveApplied = 0;
+    this.liveDrawn = 0;
+    this.room = this.live.room;
+    this.roomView = loaded.view;
+    this.scene.add(loaded.view.group);
+    this.mover.room = this.live.room;
+    this.applyRoomChanges();
+  }
+
+  /** Applies the room changes the live room hasn't seen yet (BP_SECTOR_MOVE and the rest). */
+  private applyRoomChanges(): void {
+    const live = this.live;
+    if (!live || this.entering) return;
+    const changes = this.session.world.roomChanges;
+    if (this.liveApplied > changes.length) this.liveApplied = 0; // a BP_PLAYER started a new list
+    for (; this.liveApplied < changes.length; this.liveApplied++) live.apply(changes[this.liveApplied]);
+    this.loadRoomTextures();
+  }
+
+  private roomBgf(id: number): Bgf | undefined {
+    return this.loaded?.bgfs.get(id) ?? this.ownViewTextures.get(id);
+  }
+
+  /** Grid textures that changes brought in (BP_CHANGE_TEXTURE), beyond the room's own */
+  private ownViewTextures = new Map<number, Bgf>();
+
+  /** BP_CHANGE_TEXTURE can name textures the room file doesn't use: load them, then redraw */
+  private loadRoomTextures(): void {
+    const live = this.live;
+    if (!live) return;
+    for (const id of live.textureIds()) {
+      if (this.roomBgf(id) || this.textureLoads.has(id)) continue;
+      this.textureLoads.add(id);
+      this.assets.bgf(gridTextureName(id)).then(
+        (b) => {
+          this.textureLoads.delete(id);
+          if (!b?.bitmaps.length || this.disposed) return;
+          this.ownViewTextures.set(id, b);
+          this.ownView?.addTexture(id, b);
+          if (this.live) this.live.version++;
+        },
+        () => this.textureLoads.delete(id),
+      );
+    }
+  }
+
+  /** Draws the live room's changes: our own view of it, built again when it changed. */
+  private drawRoomChanges(dt: number): void {
+    const live = this.live;
+    if (!live || !this.loaded || !this.palette) return;
+    live.tick(dt);
+    if (live.version === this.liveDrawn) return;
+    this.liveDrawn = live.version;
+    if (!this.ownView) {
+      const textures = new Map(this.loaded.bgfs);
+      for (const [id, b] of this.ownViewTextures) textures.set(id, b);
+      this.ownView = new RoomView(live.room, textures, this.palette);
+      if (this.roomView) this.scene.remove(this.roomView.group);
+      this.roomView = this.ownView;
+      this.scene.add(this.ownView.group);
+    } else this.ownView.rebuild(live.room);
   }
 
   private async syncSky(): Promise<void> {
@@ -375,16 +481,27 @@ export class GameScene {
       this.renderer.render(this.scene, this.camera);
       return;
     }
+    // The room's lifts and wall changes first: collision uses the heights they leave
+    this.drawRoomChanges(dt);
     // --- movement (move.c) ---
     const held = (a: Action) => (isHeld(this.settings.keys, a, this.keys, this.mods()) ? 1 : 0);
     // EFFECT_PARALYZE, and GAME_WAIT while the server saves: no motion
-    const still = world.effects.paralyzed || world.waiting;
+    // and move.c: through another object's eyes, only with REMOTE_VIEW_MOVE (and not CONTROL)
+    const remote = this.remoteView();
+    const rv = remote?.view.flags ?? 0;
+    const still = world.effects.paralyzed || world.waiting || (remote !== null && (rv & REMOTE_VIEW.CONTROL || !(rv & REMOTE_VIEW.MOVE)));
     const forward = still ? 0 : held("forward") - held("backward");
     const strafe = still ? 0 : held("strafeRight") - held("strafeLeft");
-    const turn = held("turnRight") - held("turnLeft");
+    const turn = remote && !(rv & REMOTE_VIEW.TURN) ? 0 : held("turnRight") - held("turnLeft");
     // Always Run (config.ini alwaysrun): the Run/Walk key walks instead
     const run = (held("run") === 1) !== this.settings.alwaysRun;
+    const angleBefore = this.mover.angle;
     this.mover.turnKeys(turn, run, dt);
+    if (remote && rv & REMOTE_VIEW.CONTROL) {
+      // move.c UserTurnPlayer, REMOTE_VIEW_CONTROL: the turn turns the object we see through
+      remote.obj.angle = (remote.obj.angle + this.mover.angle - angleBefore + 4096) & 4095;
+      this.mover.setAngle(angleBefore);
+    }
     const pitchDir = held("lookUp") - held("lookDown");
     if (pitchDir) this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch + (pitchDir * PITCH_RATE * dt) / 1000));
     this.mover.roomFlags = world.player?.roomFlags ?? 0;
@@ -396,8 +513,9 @@ export class GameScene {
     world.tick(dt);
     this.audio.setListener(this.mover.x, this.mover.y, this.mover.angle);
 
-    // --- camera: our eyes ---
-    const a = (this.mover.angle * 2 * Math.PI) / 4096;
+    // --- camera: our eyes, or the object's we see through (draw.c DrawRoom) ---
+    const eye = remote ? this.remoteEye(remote) : { x: this.mover.x, y: this.mover.y, z: this.mover.z + EYE_HEIGHT + (this.settings.bounce ? this.mover.bounce : 0), angle: this.mover.angle };
+    const a = (eye.angle * 2 * Math.PI) / 4096;
     const yaw = Math.atan2(-Math.cos(a), -Math.sin(a)); // client (cos a, sin a) -> scene (X, Z)
     // effect.c EffectShake: jiggle the view by up to a quarter square
     let jx = 0,
@@ -408,11 +526,7 @@ export class GameScene {
       const jiggle = () => Math.floor(Math.random() * amp) - amp / 2;
       [jx, jy, jz] = [jiggle(), jiggle(), jiggle()];
     }
-    this.camera.position.set(
-      (this.mover.x + jx) / FINENESS,
-      (this.mover.z + EYE_HEIGHT + (this.settings.bounce ? this.mover.bounce : 0) + jz) / FINENESS,
-      (this.mover.y + jy) / FINENESS,
-    );
+    this.camera.position.set((eye.x + jx) / FINENESS, (eye.z + jz) / FINENESS, (eye.y + jy) / FINENESS);
     this.camera.rotation.set(this.pitch, yaw, 0, "YXZ");
 
     this.animate(world.objects.values(), dt);
@@ -422,10 +536,11 @@ export class GameScene {
       roomFlags: world.player?.roomFlags ?? 0,
       overrideDepths: this.mover.overrideDepths,
       ambient: lighting.ambient,
-      viewerLight: lighting.playerLight,
-      viewer: { x: this.mover.x, y: this.mover.y },
+      viewerLight: remote && rv & REMOTE_VIEW.VALID_LIGHT ? remote.view.light : lighting.playerLight,
+      viewer: { x: eye.x, y: eye.y },
       yaw,
       fog: this.fog,
+      dt,
     };
     const drawn = [...world.objects.values(), ...this.projectileViews()];
     // Dynamic Lighting off: no light maps from torches and lamps, nor the targeting light
@@ -455,11 +570,73 @@ export class GameScene {
     );
     this.updateHover();
     this.objects.setTarget(this.target);
+    this.updateWeather(dt, room);
     this.renderer.render(this.scene, this.camera);
+    if (world.effects.blur > 0 || world.effects.waver > 0) (this.blur ??= new TrailBlur()).apply(this.renderer);
     this.drawLabels(labels);
     this.drawDamage();
     this.drawOverlays(room, lighting);
     this.countFrame(now);
+  }
+
+  /** d3drender.c PARTICLES: weather follows the viewer; nothing is drawn while blind */
+  private updateWeather(dt: number, room: Room): void {
+    const weather = this.weather;
+    if (!weather) return;
+    const fx = this.session.world.effects;
+    weather.group.visible = !fx.blind;
+    if (fx.blind) return;
+    this.particleTime += dt;
+    const steps = Math.min(10, Math.floor((this.particleTime * PARTICLE_STEPS_PER_SECOND) / 1000));
+    this.particleTime = steps === 10 ? 0 : this.particleTime - (steps * 1000) / PARTICLE_STEPS_PER_SECOND;
+    weather.setDensity(this.settings.particleDensity);
+    weather.setFov(this.camera.fov);
+    const at: ParticleRoom = {
+      floor: (x, y) => {
+        const leaf = leafAt(room, x, y);
+        return leaf?.sector ? floorHeightAt(room.sectors[leaf.sector - 1], x, y) : -1;
+      },
+      ceiling: (x, y) => {
+        const leaf = leafAt(room, x, y);
+        return leaf?.sector ? ceilingHeightAt(room.sectors[leaf.sector - 1], x, y) : -1;
+      },
+      roofed: (x, y) => {
+        const leaf = leafAt(room, x, y);
+        return !!leaf?.sector && room.sectors[leaf.sector - 1].ceilingType !== 0;
+      },
+    };
+    const weatherOn = this.settings.weather;
+    weather.update(
+      { x: this.mover.x, y: this.mover.y, z: this.mover.z + EYE_HEIGHT },
+      { sand: fx.sand, rain: fx.raining && weatherOn, snow: fx.snowing && weatherOn, fireworks: fx.fireworks },
+      steps,
+      at,
+    );
+  }
+
+  /** ui/weather_snow.png from the asset build (d3dparticle.c), or null to draw snow as lines */
+  private async snowTexture(): Promise<THREE.Texture | null> {
+    if (!this.assets.has("ui/weather_snow.png")) return null;
+    try {
+      const bytes = await this.assets.fetchBytes("ui/weather_snow.png");
+      const image = await createImageBitmap(new Blob([bytes as BlobPart], { type: "image/png" }));
+      const canvas = new OffscreenCanvas(image.width, image.height);
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(image, 0, 0);
+      // The flakes are drawn white (SNOW_R/G/B 255), so keep only the alpha: the black of the
+      // transparent texels would otherwise darken them as they shrink with distance (mipmaps)
+      const rgba = ctx.getImageData(0, 0, image.width, image.height).data;
+      for (let i = 0; i < rgba.length; i += 4) rgba[i] = rgba[i + 1] = rgba[i + 2] = 255;
+      const tex = new THREE.DataTexture(new Uint8Array(rgba.buffer), image.width, image.height, THREE.RGBAFormat);
+      tex.colorSpace = THREE.NoColorSpace;
+      tex.generateMipmaps = true;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.needsUpdate = true;
+      return tex;
+    } catch {
+      return null;
+    }
   }
 
   /** Show FPS (config.showFPS): frames over the last half second. */
@@ -502,10 +679,45 @@ export class GameScene {
     this.overlays.draw(world.playerOverlays, effects, light, alpha);
   }
 
+  /** BP_SET_VIEW's object, when it's in the room (game.c SetPlayerRemoteView falls back to our eyes) */
+  private remoteView(): { obj: WorldObject; view: RemoteView } | null {
+    const view = this.session.world.remoteView;
+    const obj = view ? this.session.world.objects.get(view.id) : undefined;
+    return view && obj ? { obj, view } : null;
+  }
+
+  /** Where the remote eyes are: the object's place and angle, at the height the flags ask for */
+  private remoteEye({ obj, view }: { obj: WorldObject; view: RemoteView }): { x: number; y: number; z: number; angle: number } {
+    const ext = this.objects?.extentOf(obj.id) ?? null;
+    const base = ext?.z ?? 0;
+    const height = ext?.height ?? 0;
+    const room = this.room;
+    const leaf = room ? leafAt(room, obj.x, obj.y) : null;
+    const floor = room && leaf?.sector ? floorHeightAt(room.sectors[leaf.sector - 1], obj.x, obj.y) : 0;
+    const f = view.flags;
+    const z =
+      f & REMOTE_VIEW.VALID_HEIGHT ? floor + view.height
+      : f & REMOTE_VIEW.TOP ? base + height
+      : f & REMOTE_VIEW.BOTTOM ? base
+      : f & REMOTE_VIEW.MID ? base + height / 2
+      : EYE_HEIGHT; // player.viewHeight = player.height
+    return { x: obj.x, y: obj.y, z, angle: obj.angle };
+  }
+
   /** Projectiles as sprites for ObjectsView: fully lit, no name. */
   private projectileViews(): ViewObject[] {
+    const room = this.room;
+    // client3d.c GetPointFloor: the floor's height there, or -1 off the map
+    const floor = (x: number, y: number) => {
+      const leaf = room ? leafAt(room, x, y) : null;
+      return room && leaf?.sector ? floorHeightAt(room.sectors[leaf.sector - 1], x, y) : -1;
+    };
     return [...this.session.world.projectiles.values()].map((p) => ({
       id: p.id, x: Math.round(p.x), y: Math.round(p.y), angle: p.angle, version: 0, fullBright: true,
+      // project.c: from the source's height to the target's, or along the ground (PROJ_FLAG_FOLLOWGROUND)
+      z: p.flags & PROJ_FLAG_FOLLOWGROUND
+        ? floor(p.x, p.y)
+        : floor(p.sourceX, p.sourceY) + Math.min(1, p.progress) * (floor(p.destX, p.destY) - floor(p.sourceX, p.sourceY)),
       info: { iconRes: p.info.iconRes, nameRes: 0, flags: 0, drawingType: 0, nameColor: 0, light: p.info.light },
       look: p.look,
     }));
@@ -558,6 +770,8 @@ export class GameScene {
 
   /** gameuser.c UserAttackClosest: the target if we can see it, else the closest attackable thing. */
   attack(): void {
+    // intrface.c A_ATTACK: not while seeing through another object's eyes
+    if (this.remoteView()) return;
     const now = performance.now();
     if (now - this.lastAttack < ATTACK_DELAY) return;
     this.lastAttack = now;
@@ -942,7 +1156,18 @@ export class GameScene {
     // config.ini mouselookxscale / mouselookyscale, 1..30; 15 is our usual speed
     const sx = this.settings.mouseXScale / 15,
       sy = this.settings.mouseYScale / 15;
-    this.mover.turnBy(e.movementX * MOUSE_TURN * sx);
+    const remote = this.remoteView();
+    const rv = remote?.view.flags ?? 0;
+    if (!remote) this.mover.turnBy(e.movementX * MOUSE_TURN * sx);
+    else if (rv & REMOTE_VIEW.TURN) {
+      // move.c: turning through another's eyes turns them only with REMOTE_VIEW_CONTROL
+      const before = this.mover.angle;
+      this.mover.turnBy(e.movementX * MOUSE_TURN * sx);
+      if (rv & REMOTE_VIEW.CONTROL) {
+        remote.obj.angle = (remote.obj.angle + this.mover.angle - before + 4096) & 4095;
+        this.mover.setAngle(before);
+      }
+    }
     const dy = e.movementY * 0.0025 * sy * (this.settings.invertMouse ? -1 : 1);
     this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch - dy));
   };
@@ -1004,6 +1229,8 @@ export class GameScene {
         break;
       case "targetClear":
         if (this.selecting) this.select(null);
+        // intrface.c A_TARGETCLEAR: through another's eyes, Esc brings us back (UserMoveEsc)
+        else if (this.remoteView()) this.session.world.endRemoteView();
         else this.setTarget(null);
         break;
       case "interact":
@@ -1125,6 +1352,9 @@ export class GameScene {
     this.skyOverlays?.dispose();
     this.overlays?.dispose();
     this.rooms?.dispose();
+    this.ownView?.dispose();
+    this.blur?.dispose();
+    this.weather?.dispose();
     if (this.sky) disposeSkybox(this.sky);
     this.renderer.dispose();
     this.labelsEl.replaceChildren();

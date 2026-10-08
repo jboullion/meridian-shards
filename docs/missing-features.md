@@ -8,17 +8,11 @@ Our own additions (the modern key preset, chat tabs, damage numbers, pixel-accur
 
 ## World (phase 1)
 
+Phase 1 is done: rooms that change, sloped textures, blur and waver, the xlat override, weather and fireworks, flashing and bouncing objects, projectiles' heights, the remote view and resync. What's left:
+
 | What | Original | What it needs |
 |---|---|---|
-| Rooms that change while you're in them | `roomanim.c`, `server.c:1586-1620` | `BP_SECTOR_MOVE` (floors and ceilings that lift: the Raza crypt's door and columns, guild halls' secret doors, temples, arenas), `BP_WALL_ANIMATE` (the Raza clock; walls that become passable), `BP_CHANGE_TEXTURE` (snow on the ground, rented rooms' carpets), `BP_SECTOR_CHANGE` (water freezing). Rooms are built once, and collision reads fixed heights. `BP_SECTOR_LIGHT` only needs parsing: the D3D client ignores flicker (`roomanim.c:622-638`). |
-| Sloped-texture rotation | `d3drender.c` | The slope's texture angle (`roomGeometry.ts` `TODO(slopes)`). Sloped planes use the flat mapping. |
-| Blur, waver and `EFFECT_XLATOVERRIDE` | `effect.c:62,148,158`, `d3drender.c:7699` | Post-effects. `WorldState` keeps the state already; nothing draws it. Waver comes from duskrat poison and vertigo, blur from drink. |
-| Weather and fireworks | `d3dparticle.c`, `d3drender.c:1182-1210` | Rain, snow, sand and fireworks, with *Show weather effects* and *Particle density %* (`BP_EFFECT` flags already kept). |
-| Flashing and bouncing objects | `d3dlighting.c:1199`, `moveobj.c:233-249` | `OF_FLASHING` (how detect-invisible shows invisible things) and `OF_BOUNCING` (fairies, wasps, seekers). |
-| Projectiles following the ground | `project.c:141` | `PROJ_FLAG_FOLLOWGROUND`. |
-| Remote view | `game.c:193`, `server.c:2077-2102` | `BP_SET_VIEW` / `BP_RESET_VIEW`, used only by the DM's Globe of Seeing. |
-| Resync in the game | `com.c:380-400`, `statgame.c:139` | On `BP_RESYNC` (a framing or security error), the beacon handshake instead of closing. |
-| Fighting in the crypt | | The mummies haven't been fought yet. |
+| A side-by-side check against the original client | | Screenshots from the same spots in both (our build of the original is in `server/src/run/localclient`). |
 
 ## Commands and interaction (phase 2)
 
@@ -78,6 +72,8 @@ Our own additions (the modern key preset, chat tabs, damage numbers, pixel-accur
 | Ignore list by name resource | The original keys ignores by name resource; we use the name, which survives across sessions. |
 | The client patcher (`download.c`, `AP_DOWNLOAD`) | Our game files come from the asset manifest, and the desktop app updates itself. `AP_DOWNLOAD` now ends the login with the server's reason. |
 | Guest login (`AP_GUEST`) | blakserv never sends it. |
-| `BP_ROUNDTRIP1`, `BP_SECTOR_ANIMATE` | blakserv and the Kod never send them. |
+| `BP_ROUNDTRIP1` | blakserv never sends it. `BP_SECTOR_ANIMATE` isn't sent either, but it's handled. |
+| Blur and waver over the hands | The D3D client blurs the whole frame, hands and screen flashes included; ours blurs the 3D view, since the hands are drawn on a 2D canvas over it. |
+| Sector flicker (`BP_SECTOR_LIGHT`, `SF_FLICKER`) | The D3D client keeps the sector's own light while flickering, so it's parsed and has no effect, as there. |
 | The DM module | Staff tools (BGF editor, quest editor, G-Channel); staff use the maintenance port. |
 | The character screen's ad panels (`BP_AD_SELECTED`), Print Map, font and colour choices, mipmaps and anti-aliasing | Low value. Settings save themselves, so there's no Save Now. |

@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "vitest";
 import {
-  BP, ByteReader, ByteWriter, STATS, STAT_TAG, UC, buildReqBuyItems, buildReqCast, buildReqCounteroffer, buildReqLook, buildReqOffer,
+  BP, ByteReader, ByteWriter, STATS, STAT_TAG, UC, buildReqBuyItems, buildReqCast, buildReqCounteroffer, buildReqLook, readRoomChange, buildReqOffer,
   buildSayGroup, buildUserCommand, CF, buildChangeDescription, buildChangeUrl, buildReqApply, buildReqGetFromContainer, buildReqObjectContents, buildReqPut, readBgOverlay, ANIMATE, readBuyList, readPlayWave, readSpells, readStat, readStatGroup,
 } from "../src/index.ts";
 
@@ -128,5 +128,21 @@ describe("background overlays (server.c ExtractNewBackgroundOverlay)", () => {
     expect(readBgOverlay(new ByteReader(w.finish()))).toEqual({
       id: 5809, iconRes: 100, nameRes: 200, translation: 0, effect: 0, animation: { type: ANIMATE.NONE, group: 1 }, angle: 1690, height: 65508,
     });
+  });
+});
+
+describe("room changes (server.c HandleSectorMove and the rest)", () => {
+  test("byte layouts", () => {
+    const rc = (type: number, w: ByteWriter) => readRoomChange(type, new ByteReader(w.finish()));
+    // type, sector WORD, height WORD, speed BYTE
+    expect(rc(BP.SECTOR_MOVE, new ByteWriter().u8(5).u16(3).u16(172).u8(16))).toEqual({ type: "sectorMove", animation: 5, sector: 3, height: 172, speed: 16 });
+    // wall WORD, ExtractAnimation, action BYTE
+    expect(rc(BP.WALL_ANIMATE, new ByteWriter().u16(1).u8(ANIMATE.NONE).u16(7).u8(0))).toEqual({
+      type: "wallAnimate", wall: 1, animation: { type: ANIMATE.NONE, group: 7 }, action: 0,
+    });
+    expect(rc(BP.SECTOR_CHANGE, new ByteWriter().u16(9).u8(0).u8(4))).toEqual({ type: "sectorChange", sector: 9, depth: 0, scroll: 4 });
+    expect(rc(BP.CHANGE_TEXTURE, new ByteWriter().u16(15).u16(61016).u8(8))).toEqual({ type: "changeTexture", id: 15, texture: 61016, flags: 8 });
+    expect(rc(BP.SECTOR_LIGHT, new ByteWriter().u16(2).u8(1))).toEqual({ type: "sectorLight", sector: 2, light: 1 });
+    expect(rc(BP.SAID, new ByteWriter())).toBeNull();
   });
 });

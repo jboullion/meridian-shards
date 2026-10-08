@@ -223,6 +223,9 @@ export const ANIMATE = {
   NONE: 1,
   CYCLE: 2,
   ONCE: 3,
+  /** BP_SECTOR_MOVE: change a floor's or a ceiling's height */
+  FLOOR_LIFT: 4,
+  CEILING_LIFT: 5,
   TRANSLATION: 9,
   EFFECT: 10,
 } as const;

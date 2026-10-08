@@ -6,10 +6,13 @@ import * as THREE from "three";
 import { FINENESS, SF, ceilingHeightAt, floorHeightAt, leafAt, type Bgf, type Room } from "@shards/formats";
 import { compositeSprite, frameFor, type Composite, type SpritePart } from "./sprites.ts";
 import type { XlatTable } from "./xlat.ts";
-import { dlightScale, fogEnd, lightColor, objectBrightness, type LightSource } from "./objectLighting.ts";
+import { dlightScale, fixedSin, flashStep, fogEnd, lightColor, objectBrightness, type LightSource } from "./objectLighting.ts";
 
 /** Object flags (include/proto.h OF_*) and draw effects (DRAWFX_*). */
-export const OF = { DISPLAY_NAME: 0x1, SIGN: 0x2, PLAYER: 0x4, HANGING: 0x100, NPC: 0x2000 } as const;
+export const OF = { DISPLAY_NAME: 0x1, SIGN: 0x2, PLAYER: 0x4, HANGING: 0x100, NPC: 0x2000, BOUNCING: 0x10000, FLASHING: 0x40000 } as const;
+/** moveobj.c OBJECT_BOUNCE_HEIGHT, TIME_FULL_OBJECT_BOUNCE */
+const OBJECT_BOUNCE_HEIGHT = FINENESS >> 4;
+const TIME_FULL_OBJECT_BOUNCE = 2000;
 export const DRAWFX = {
   PLAIN: 0, TRANSLUCENT25: 1, TRANSLUCENT50: 2, TRANSLUCENT75: 3, BLACK: 4, INVISIBLE: 5,
   DITHERINVIS: 7, DITHERTRANS: 8, DOUBLETRANS: 9, SECONDTRANS: 10, DITHERGREY: 11,
@@ -38,6 +41,8 @@ export interface ViewObject {
   };
   /** Drawn at full brightness, unaffected by light or fog (projectiles: d3drender.c COLOR_MAX) */
   fullBright?: boolean;
+  /** A height of its own instead of the floor's (projectiles fly from source to target: project.c) */
+  z?: number;
   /** The look to draw now (normal, or the motion look while moving). */
   look: {
     anim: { group: number };
@@ -58,6 +63,8 @@ export interface ObjectViewContext {
   /** camera yaw (scene) for billboard facing */
   yaw: number;
   fog: boolean;
+  /** ms since the last update (flashing and bouncing objects) */
+  dt?: number;
 }
 
 export interface NameLabel {
@@ -132,6 +139,11 @@ interface Entry {
   x: number;
   y: number;
   z: number;
+  /** OF_FLASHING clock and light adjustment (animate.c obj.bounceTime, obj.lightAdjust) */
+  flashTime: number;
+  lightAdjust: number;
+  /** OF_BOUNCING clock (moveobj.c obj.bounceTime) */
+  bounceTime: number;
 }
 
 export class ObjectsView {
@@ -257,7 +269,7 @@ export class ObjectsView {
         const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
         mesh.name = `object ${o.id}`;
         this.group.add(mesh);
-        e = { mesh, halo: null, key: "", composite: null, texture: null, x, y, z: 0 };
+        e = { mesh, halo: null, key: "", composite: null, texture: null, x, y, z: 0, flashTime: 0, lightAdjust: 0, bounceTime: 0 };
         this.entries.set(o.id, e);
       }
       if (e.key !== key) {
@@ -282,7 +294,18 @@ export class ObjectsView {
       e.mesh.visible = true;
       e.x = x;
       e.y = y;
-      e.z = this.ground(o, x, y, ctx, e.composite.heightFine);
+      e.z = o.z ?? this.ground(o, x, y, ctx, e.composite.heightFine);
+      const dtMs = ctx.dt ?? 0;
+      if (o.info.flags & OF.BOUNCING && !(o.info.flags & OF.PLAYER)) {
+        // moveobj.c AnimateObjects: bob up and down above the floor (fairies, wasps, seekers)
+        e.bounceTime += Math.min(dtMs, 40);
+        if (e.bounceTime > TIME_FULL_OBJECT_BOUNCE) e.bounceTime -= TIME_FULL_OBJECT_BOUNCE;
+        const angle = Math.trunc((4096 * e.bounceTime) / TIME_FULL_OBJECT_BOUNCE);
+        const leaf = leafAt(ctx.room, x, y);
+        if (leaf?.sector) e.z = floorHeightAt(ctx.room.sectors[leaf.sector - 1], x, y) + OBJECT_BOUNCE_HEIGHT + fixedSin(OBJECT_BOUNCE_HEIGHT, angle);
+      }
+      if (o.info.flags & OF.FLASHING) [e.flashTime, e.lightAdjust] = flashStep(e.flashTime, dtMs);
+      else e.lightAdjust = 0;
       e.mesh.position.set(x / FINENESS, e.z / FINENESS, y / FINENESS);
       e.mesh.rotation.set(0, ctx.yaw, 0);
 
@@ -295,7 +318,7 @@ export class ObjectsView {
         ? [1, 1, 1]
         : dt === DRAWFX.BLACK
           ? [0, 0, 0]
-          : objectBrightness({ x, y, z: e.z }, sectorLight, ctx.viewerLight, ctx.ambient, lights);
+          : objectBrightness({ x, y, z: e.z }, sectorLight, ctx.viewerLight, ctx.ambient, lights, e.lightAdjust);
       (u.uBrightness.value as THREE.Vector3).set(r, g, b);
       u.uFogEnd.value = fogEnd(sectorLight, ctx.viewerLight, ctx.ambient);
       u.uFog.value = ctx.fog && !o.fullBright ? 1 : 0;
@@ -339,6 +362,13 @@ export class ObjectsView {
     const e = this.entries.get(id);
     if (!e?.composite || !e.mesh.visible) return null;
     return new THREE.Vector3(e.x / FINENESS, (e.z + Math.max(e.composite.baseTop, e.composite.top)) / FINENESS, e.y / FINENESS);
+  }
+
+  /** An object's ground height and sprite height in fine units (game.c SetPlayerRemoteView), or null. */
+  extentOf(id: number): { z: number; height: number } | null {
+    const e = this.entries.get(id);
+    if (!e?.composite) return null;
+    return { z: e.z, height: Math.max(e.composite.baseTop, e.composite.top) };
   }
 
   /**

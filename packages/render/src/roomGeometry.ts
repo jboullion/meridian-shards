@@ -43,6 +43,12 @@ export interface Batch {
   key: string;
   textureId: number;
   animation: TextureAnimation | null;
+  /**
+   * The bitmap group to show, when the server picked one (BP_WALL_ANIMATE,
+   * BP_SECTOR_ANIMATE: roomanim.c shows group % the texture's group count); null for
+   * the first bitmap, or the batch's own animation.
+   */
+  group: number | null;
   /** x, y, z per vertex (client fine units) */
   positions: number[];
   /** s, t per vertex */
@@ -70,10 +76,10 @@ const PETER_FUDGE = 16;
 export function buildRoomGeometry(room: Room, textureInfo: (id: number) => TextureInfo | null): RoomGeometry {
   const batches = new Map<string, Batch>();
   const skySectors = new Set<number>();
-  const batch = (id: number, animation: TextureAnimation | null = null): Batch => {
-    const key = animation ? `${id}|${Object.values(animation).join(":")}` : String(id);
+  const batch = (id: number, animation: TextureAnimation | null = null, group: number | null = null): Batch => {
+    const key = group !== null ? `${id}|g${group}` : animation ? `${id}|${Object.values(animation).join(":")}` : String(id);
     let b = batches.get(key);
-    if (!b) batches.set(key, (b = { key, textureId: id, animation, positions: [], uvs: [], lights: [], shade: [], transparent: false }));
+    if (!b) batches.set(key, (b = { key, textureId: id, animation: group !== null ? null : animation, group, positions: [], uvs: [], lights: [], shade: [], transparent: false }));
     return b;
   };
 
@@ -145,7 +151,7 @@ function addWall(
   type: WallType,
   side: 1 | -1,
   textureInfo: (id: number) => TextureInfo | null,
-  batch: (id: number, animation?: TextureAnimation | null) => Batch,
+  batch: (id: number, animation?: TextureAnimation | null, group?: number | null) => Batch,
 ): void {
   const sdNum = side > 0 ? w.posSidedef : w.negSidedef;
   if (!sdNum) return;
@@ -273,7 +279,7 @@ function addWall(
   // Surface normal of this side: the separator, negated for the negative side.
   const nx = (w.separator.a / FINENESS) * side;
   const ny = (w.separator.b / FINENESS) * side;
-  const b = batch(texId, wallAnimation(sd));
+  const b = batch(texId, wallAnimation(sd), sd.group ?? null);
   if (noVTile || sd.flags & WF.TRANSPARENT) b.transparent = true;
   const vert = (i: number): Vert => ({ x: X[i], y: Y[i], z: Z[i], s: S[i], t: T[i] });
   pushTri(b, vert(0), vert(1), vert(2), [nx, ny, 0], light, nx, ny, 1);
@@ -286,7 +292,7 @@ function addFlat(
   s: Sector,
   ceiling: boolean,
   textureInfo: (id: number) => TextureInfo | null,
-  batch: (id: number, animation?: TextureAnimation | null) => Batch,
+  batch: (id: number, animation?: TextureAnimation | null, group?: number | null) => Batch,
 ): void {
   const texId = ceiling ? s.ceilingType : s.floorType;
   if (!texId || !textureInfo(texId)) return;
@@ -316,17 +322,63 @@ function addFlat(
     ny = slope.b / len;
     shaded = 1;
   }
-  const b = batch(texId, sectorAnimation(s, ceiling));
-  const v = points.map((p) => ({
-    x: p.x,
-    y: p.y,
-    z: z(p.x, p.y),
-    // TODO(slopes): the client rotates sloped textures by the slope's texture angle.
-    s: (Math.abs(p.x - left) - s.tx) * inv,
-    t: (Math.abs(p.y - top) - s.ty) * inv,
-  }));
+  const b = batch(texId, sectorAnimation(s, ceiling), s.group ?? null);
+  const v = points.map((p) => {
+    const pz = z(p.x, p.y);
+    if (slope) {
+      const [ss, tt] = slopeST(slope, p.x, p.y, pz, s, ceiling);
+      return { x: p.x, y: p.y, z: pz, s: ss * inv, t: tt * inv };
+    }
+    return { x: p.x, y: p.y, z: pz, s: (Math.abs(p.x - left) - s.tx) * inv, t: (Math.abs(p.y - top) - s.ty) * inv };
+  });
   const facing: [number, number, number] = ceiling ? [0, 0, -1] : [0, 0, 1];
   for (let i = 1; i < v.length - 1; i++) pushTri(b, v[0], v[i], v[i + 1], facing, s.light, nx, ny, shaded);
+}
+
+/**
+ * d3drender.c D3DRenderFloorExtract / D3DRenderCeilingExtract for a sloped plane: the
+ * texture runs along the slope's own axes (p0 -> p1 and p0 -> p2, turned by its texture
+ * angle). s is the distance from the line p0-p2, t from the line p0-p1, signed by which
+ * side the point is on, plus half the sector's texture offset.
+ */
+function slopeST(
+  slope: NonNullable<Sector["slopedFloor"]>,
+  x: number,
+  y: number,
+  z: number,
+  s: Sector,
+  ceiling: boolean,
+): [number, number] {
+  const { p0, p1, p2 } = slope;
+  // Distance from the point to the line p0 + U (q - p0)
+  const lineDistance = (q: { x: number; y: number; z: number }) => {
+    let temp = (q.x - p0.x) ** 2 + (q.z - p0.z) ** 2 + (q.y - p0.y) ** 2;
+    if (temp === 0) temp = 1;
+    const u = ((x - p0.x) * (q.x - p0.x) + (z - p0.z) * (q.z - p0.z) + (y - p0.y) * (q.y - p0.y)) / temp;
+    return Math.hypot(x - (p0.x + u * (q.x - p0.x)), z - (p0.z + u * (q.z - p0.z)), y - (p0.y + u * (q.y - p0.y)));
+  };
+  let tt = lineDistance(p1);
+  let ss = lineDistance(p2);
+  if (!ceiling) {
+    tt += s.ty / 2;
+    ss += s.tx / 2;
+  }
+  // Which side of each axis the point is on (in the x/y plane)
+  const unit = (dx: number, dy: number) => {
+    const d = Math.hypot(dx, dy) || 1;
+    return [dx / d, dy / d];
+  };
+  const [ux, uy] = unit(p1.x - p0.x, p1.y - p0.y);
+  const [vx, vy] = unit(p2.x - p0.x, p2.y - p0.y);
+  const [px, py] = unit(x - p0.x, y - p0.y);
+  const du = px * ux + py * uy;
+  if (ceiling ? du < 0 : du <= 0) ss = -ss;
+  if (px * vx + py * vy > 0) tt = -tt;
+  if (ceiling) {
+    tt -= s.ty / 2;
+    ss -= s.tx / 2;
+  }
+  return [ss, tt];
 }
 
 interface Vert {

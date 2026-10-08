@@ -212,7 +212,7 @@ function readTranslation(r: ByteReader): { translation: number; effect: number }
 }
 
 /** Bitmap groups arrive 1-based from the server (BitmapGroupSToC). Kept as sent. */
-function readAnimation(r: ByteReader): Animation {
+export function readAnimation(r: ByteReader): Animation {
   const type = r.u8();
   switch (type) {
     case ANIMATE.NONE:
@@ -778,6 +778,55 @@ export function buildUserCommand(uc: number, ...ints: number[]): Uint8Array {
   const w = new ByteWriter().u8(BP.USERCOMMAND).u8(uc);
   for (const v of ints) w.i32(v);
   return w.finish();
+}
+
+// ---------------------------------------------------------------- room changes (server.c, roomanim.c)
+
+/** Room animation actions when a wall's animation ends (include/proto.h RA_*). */
+export const RA = { NONE: 0, PASSABLE_END: 1, IMPASSABLE_END: 2, INVISIBLE_END: 3 } as const;
+/** BP_CHANGE_TEXTURE: which textures to change (include/proto.h CTF_*). */
+export const CTF = { ABOVEWALL: 0x01, NORMALWALL: 0x02, BELOWWALL: 0x04, FLOOR: 0x08, CEILING: 0x10, RESET: 0x20 } as const;
+/** BP_SECTOR_LIGHT (include/proto.h SL_*). */
+export const SL = { FLICKER_ON: 1, FLICKER_OFF: 2 } as const;
+/** BP_SECTOR_CHANGE: leave this value as it is (roomanim.h CHANGE_OVERRIDE). */
+export const CHANGE_OVERRIDE = 4;
+
+/**
+ * A change the server makes to the room you're in. Walls and sectors are named by their
+ * server id (the .roo's `serverId`); every wall or sector with that id changes.
+ */
+export type RoomChange =
+  /** BP_SECTOR_MOVE (HandleSectorMove): a floor or ceiling to `height` (Kod units), at `speed` (Kod units/s; 0 = at once) */
+  | { type: "sectorMove"; animation: number; sector: number; height: number; speed: number }
+  /** BP_WALL_ANIMATE (HandleWallAnimate): show a wall's bitmap groups; `action` (RA_*) when it ends */
+  | { type: "wallAnimate"; wall: number; animation: Animation; action: number }
+  /** BP_SECTOR_ANIMATE (HandleSectorAnimate): likewise for floors and ceilings */
+  | { type: "sectorAnimate"; sector: number; animation: Animation; action: number }
+  /** BP_SECTOR_CHANGE (HandleSectorChange): depth and scroll speed, or CHANGE_OVERRIDE to keep */
+  | { type: "sectorChange"; sector: number; depth: number; scroll: number }
+  /** BP_CHANGE_TEXTURE (HandleChangeTexture): new grid texture on the parts named by `flags` (CTF_*) */
+  | { type: "changeTexture"; id: number; texture: number; flags: number }
+  /** BP_SECTOR_LIGHT (HandleSectorLight): flicker on or off (SL_*) */
+  | { type: "sectorLight"; sector: number; light: number };
+
+/** Reads one of the room-change messages, or null if `type` isn't one. */
+export function readRoomChange(type: number, r: ByteReader): RoomChange | null {
+  switch (type) {
+    case BP.SECTOR_MOVE:
+      return { type: "sectorMove", animation: r.u8(), sector: r.u16(), height: r.u16(), speed: r.u8() };
+    case BP.WALL_ANIMATE:
+      return { type: "wallAnimate", wall: r.u16(), animation: readAnimation(r), action: r.u8() };
+    case BP.SECTOR_ANIMATE:
+      return { type: "sectorAnimate", sector: r.u16(), animation: readAnimation(r), action: r.u8() };
+    case BP.SECTOR_CHANGE:
+      return { type: "sectorChange", sector: r.u16(), depth: r.u8(), scroll: r.u8() };
+    case BP.CHANGE_TEXTURE:
+      return { type: "changeTexture", id: r.u16(), texture: r.u16(), flags: r.u8() };
+    case BP.SECTOR_LIGHT:
+      return { type: "sectorLight", sector: r.u16(), light: r.u8() };
+    default:
+      return null;
+  }
 }
 
 // ---------------------------------------------------------------- sound (server.c HandlePlayWave etc.)

@@ -104,9 +104,15 @@ export class ScreenOverlays {
       ctx.globalAlpha = 1;
     });
 
-    // Flash, whiteout, then pain on top (D3DRenderOverlaysDraw order)
+    // Flash, the xlat override, whiteout, then pain on top (D3DPostOverlayEffects order)
     if (fx.flashXlat) {
       const [r, g, b, a] = flashColor(fx.flashXlat);
+      ctx.fillStyle = `rgba(${r},${g},${b},${a / 255})`;
+      ctx.fillRect(0, 0, w, h);
+    }
+    // EFFECT_XLATOVERRIDE (the phase spell's fading white): the same colours, until the server clears it
+    if (fx.xlatOverride > 0) {
+      const [r, g, b, a] = flashColor(fx.xlatOverride);
       ctx.fillStyle = `rgba(${r},${g},${b},${a / 255})`;
       ctx.fillRect(0, 0, w, h);
     }

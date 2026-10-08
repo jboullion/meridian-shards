@@ -125,9 +125,9 @@ export function PreferencesDialog({
         {check("Show targeting light effect", [247, 40, 98, 9], "targetLight")}
 
         <GroupBox at={[6, 71, 364, 31]} label="Particle effects" />
-        {check("Show weather effects", [18, 84, 91, 9], "weather", true)}
+        {check("Show weather effects", [18, 84, 91, 9], "weather")}
         <Text at={[121, 84, 56, 10]}>Particle density %</Text>
-        <Trackbar at={[181, 78, 179, 18]} min={25} max={150} step={5} value={d.particleDensity} onChange={(v) => set({ particleDensity: v })} label="Particle density (not in yet)" />
+        <Trackbar at={[181, 78, 179, 18]} min={25} max={150} step={5} value={d.particleDensity} onChange={(v) => set({ particleDensity: v })} label="Particle density" />
 
         <GroupBox at={[6, 103, 364, 55]} label="Game Options" />
         {SERVER_OPTIONS.map(([label, f, r]) => (

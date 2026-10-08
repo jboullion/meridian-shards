@@ -42,21 +42,71 @@ export interface RoomLighting {
 
 export class RoomView {
   readonly group = new THREE.Group();
-  readonly geometry: RoomGeometry;
-  private readonly meshes: THREE.Mesh[] = [];
-  private readonly materials: THREE.ShaderMaterial[] = [];
-  private readonly animated: { batch: Batch; material: THREE.ShaderMaterial; frames: THREE.DataTexture[]; bgf: Bgf }[] = [];
+  geometry!: RoomGeometry;
+  private readonly textures: Map<number, Bgf>;
+  private readonly palette: THREE.Texture;
+  /** Index textures by grid texture and bitmap ("id:bitmap"), kept across rebuilds */
+  private readonly indexTextures = new Map<string, THREE.DataTexture>();
+  private meshes: THREE.Mesh[] = [];
+  private materials: THREE.ShaderMaterial[] = [];
+  private animated: { batch: Batch; material: THREE.ShaderMaterial; frames: THREE.DataTexture[]; bgf: Bgf }[] = [];
+  private lighting: RoomLighting | null = null;
+  private lights: LightSource[] = [];
+  private time = 0;
 
   constructor(room: Room, textures: Map<number, Bgf>, palette: THREE.Texture) {
+    this.textures = textures;
+    this.palette = palette;
+    this.build(room);
+  }
+
+  /** Grid textures this view can draw; add new ones before a rebuild uses them. */
+  addTexture(id: number, bgf: Bgf): void {
+    this.textures.set(id, bgf);
+  }
+
+  hasTexture(id: number): boolean {
+    return this.textures.has(id);
+  }
+
+  /**
+   * Builds the room again after it changed (roomanim.c: lifts, wall bitmaps, textures,
+   * scrolling). Textures and the lighting carry over.
+   */
+  rebuild(room: Room): void {
+    for (const m of this.meshes) {
+      this.group.remove(m);
+      m.geometry.dispose();
+    }
+    // Keep each batch's material (its texture and shader program) for the same batch
+    const old = new Map(this.meshes.map((m) => [m.name, m.material as THREE.ShaderMaterial]));
+    this.meshes = [];
+    this.materials = [];
+    this.animated = [];
+    this.build(room, old);
+    for (const m of old.values()) m.dispose();
+    if (this.lighting) this.setLighting(this.lighting);
+    this.setLights(this.lights);
+    this.update(this.time);
+  }
+
+  private indexTexture(id: number, bgf: Bgf, bitmap: number): THREE.DataTexture {
+    const key = `${id}:${bitmap}`;
+    let t = this.indexTextures.get(key);
+    if (!t) this.indexTextures.set(key, (t = indexTexture(bgf, bitmap)));
+    return t;
+  }
+
+  private build(room: Room, reuse?: Map<string, THREE.ShaderMaterial>): void {
     const info = (id: number): TextureInfo | null => {
-      const b = textures.get(id);
+      const b = this.textures.get(id);
       if (!b) return null;
       const bmp = b.bitmaps[0];
       return { width: bmp.width, height: bmp.height, shrink: b.shrink };
     };
     this.geometry = buildRoomGeometry(room, info);
     for (const batch of this.geometry.batches.values()) {
-      const bgf = textures.get(batch.textureId)!;
+      const bgf = this.textures.get(batch.textureId)!;
       const n = batch.positions.length / 3;
       const pos = new Float32Array(n * 3);
       const uv = new Float32Array(n * 2);
@@ -81,25 +131,33 @@ export class RoomView {
       g.setAttribute("aLight", new THREE.BufferAttribute(light, 1));
       g.setAttribute("aShade", new THREE.BufferAttribute(shade, 3));
       g.computeBoundingSphere();
-      const uniforms = lightingUniforms();
-      // Cycling textures show the first bitmap of each group in turn (roomanim.c).
+      // Cycling textures show the first bitmap of each group in turn (roomanim.c); a group
+      // the server picked shows that group's first bitmap (group % number of groups).
+      const groupBitmap = (gi: number) => (bgf.groups.length ? (bgf.groups[gi % bgf.groups.length][0] ?? 0) : 0);
       const frames =
-        batch.animation?.kind === "cycle" && bgf.groups.length > 1
-          ? bgf.groups.map((g) => indexTexture(bgf, g[0] ?? 0))
-          : [indexTexture(bgf)];
-      uniforms.uMap.value = frames[0];
-      uniforms.uPalette.value = palette;
-      const mat = new THREE.ShaderMaterial({
-        glslVersion: THREE.GLSL3,
-        uniforms,
-        vertexShader: roomVertexShader,
-        fragmentShader: roomFragmentShader,
-        side: THREE.FrontSide,
-      });
+        batch.group !== null
+          ? [this.indexTexture(batch.textureId, bgf, groupBitmap(batch.group))]
+          : batch.animation?.kind === "cycle" && bgf.groups.length > 1
+            ? bgf.groups.map((_, gi) => this.indexTexture(batch.textureId, bgf, groupBitmap(gi)))
+            : [this.indexTexture(batch.textureId, bgf, 0)];
+      let mat = reuse?.get(batch.key);
+      if (mat) reuse!.delete(batch.key);
+      else {
+        const uniforms = lightingUniforms();
+        uniforms.uMap.value = frames[0];
+        uniforms.uPalette.value = this.palette;
+        mat = new THREE.ShaderMaterial({
+          glslVersion: THREE.GLSL3,
+          uniforms,
+          vertexShader: roomVertexShader,
+          fragmentShader: roomFragmentShader,
+          side: THREE.FrontSide,
+        });
+      }
       this.materials.push(mat);
       if (batch.animation) this.animated.push({ batch, material: mat, frames, bgf });
       const mesh = new THREE.Mesh(g, mat);
-      mesh.name = `grd${batch.textureId}`;
+      mesh.name = batch.key;
       this.group.add(mesh);
       this.meshes.push(mesh);
     }
@@ -125,6 +183,7 @@ export class RoomView {
 
   /** Advance texture animations to `timeMs` (any monotonic clock). */
   update(timeMs: number): void {
+    this.time = timeMs;
     for (const { batch, material, frames, bgf } of this.animated) {
       const a = batch.animation!;
       const steps = Math.floor(timeMs / a.periodMs);
@@ -150,6 +209,7 @@ export class RoomView {
 
   /** Light sources for the light maps (see objectLighting.ts). At most 32 are used. */
   setLights(lights: LightSource[]): void {
+    this.lights = lights;
     const n = Math.min(32, lights.length);
     for (const m of this.materials) {
       const pos = m.uniforms.uLightPos.value as Float32Array;
@@ -164,6 +224,7 @@ export class RoomView {
   }
 
   setLighting(l: RoomLighting): void {
+    this.lighting = l;
     const a = (l.sunAngle * 2 * Math.PI) / 4096;
     for (const m of this.materials) {
       m.uniforms.uViewerLight.value = l.viewerLight;
@@ -175,14 +236,10 @@ export class RoomView {
   }
 
   dispose(): void {
-    this.group.traverse((o) => {
-      if (o instanceof THREE.Mesh) {
-        o.geometry.dispose();
-        (o.material as THREE.ShaderMaterial).uniforms.uMap.value?.dispose?.();
-        (o.material as THREE.Material).dispose();
-      }
-    });
-    for (const a of this.animated) for (const f of a.frames) f.dispose();
+    for (const m of this.meshes) m.geometry.dispose();
+    for (const m of this.materials) m.dispose();
+    for (const t of this.indexTextures.values()) t.dispose();
+    this.indexTextures.clear();
   }
 }
 

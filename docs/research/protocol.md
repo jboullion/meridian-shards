@@ -229,6 +229,20 @@ A room object then adds:
   - `i32 n` spells and `i32 n` skills, each `i32 id, u32 name rsc, u32 description rsc, i32 cost, u8 school`.
   - `BP_NEW_CHARINFO` sends the face parts in the order head, hair, eyes, nose, mouth, then the hair and skin translations, the six stats, and the chosen spell and skill ids (Kod numbers, not objects).
 
+## Rooms that change, trading and resync (milestone 13)
+
+- **Room changes** (`server.c HandleSectorMove` and the rest, `roomanim.c`). Walls and sectors are named by their server id; every one with that id changes.
+  - `BP_SECTOR_MOVE`: type BYTE (`ANIMATE_FLOOR_LIFT` 4 or `ANIMATE_CEILING_LIFT` 5), sector WORD, height WORD (Kod units, × 16 for client units), speed BYTE (Kod units per second; 0 = at once).
+  - `BP_WALL_ANIMATE`: wall WORD, an animation (as in objects), action BYTE (`RA_PASSABLE_END`, `RA_IMPASSABLE_END`, `RA_INVISIBLE_END`).
+  - `BP_CHANGE_TEXTURE`: id WORD, texture WORD, flags BYTE (`CTF_*`: above, normal, below, floor, ceiling).
+  - `BP_SECTOR_CHANGE`: sector WORD, depth BYTE, scroll BYTE (`CHANGE_OVERRIDE` 4 keeps the old value).
+  - `BP_SECTOR_LIGHT`: sector WORD, type BYTE (flicker on or off). The D3D client keeps the sector's own light, so it changes nothing.
+  - The original reloads the room on every `BP_PLAYER`, and the server follows every `BP_PLAYER` with the room's changes again at speed 0 (`user.kod ToCliPlayer`). So a client can start from the file's room on each `BP_PLAYER` and apply what follows.
+  - The Raza crypt's door is sector 3, a ceiling that lifts (84 shut, 172 open); the Raza clock is wall 1, its hour as the bitmap group.
+- **Trading with another player** (`offer.c`, `user.kod`). The offerer sends `BP_REQ_OFFER`; the receiver gets `BP_OFFER` and must answer with `BP_REQ_COUNTEROFFER` (an object list, possibly empty), which the server echoes to them as `BP_COUNTEROFFERED` and sends the offerer as `BP_COUNTEROFFER`. Only then may the offerer send `BP_ACCEPT_OFFER`; an earlier accept is logged as an "ALERT" and the offer cancelled. Both sides get `BP_OFFER_CANCELED` when the trade completes, which closes their dialogs.
+- **The remote view** (`BP_SET_VIEW`: object ID, flags DWORD, height DWORD, light BYTE; `BP_RESET_VIEW`): see through another object's eyes. Only the DM's Globe of Seeing uses it (`player.kod SetPlayerView`).
+- **Resync.** After a bad frame the server sends ten `BP_RESYNC`s and waits for the beacon (`blakserv/game.c GameSendResync`, `GameSyncInputChar`); the client sends `BP_RESYNC` first if it found the bad frame itself, then the beacon every 2 s (`com.c Resynchronize`, `statstrt.c`). **In Server 104 the handshake can't complete**: `GameSyncInputChar` and `resync.c ResyncInputChar` compare a signed `char` with the beacon's byte 255, and blakserv isn't built with `/J`. Clients wait out the 60 s `BEACON_TIMEOUT` ("Couldn't connect to server!") or the server hangs up first.
+
 ## Sources
 
 - The reference source: `meridian-unreal/Server-104` (`blakserv`, `clientd3d`, `module`, `kod`, `include/proto.h`), and M59's own `doc/protocol.txt`, which is older than the code. Trust the code.

@@ -158,6 +158,14 @@ export class GameSession {
       {
         message: (type, r, state) => (state === "login" ? this.onLogin(type, r) : this.onGame(type, r)),
         error: (e) => this.fail(`protocol error: ${e.message}`),
+        state: (st) => {
+          // statstrt.c: back in the game after resynchronizing, ask for everything again
+          if (st === "startup") this.resyncing = this.phase === "game";
+          else if (st === "game" && this.resyncing) {
+            this.resyncing = false;
+            this.refetchGameData();
+          }
+        },
         latency: (ms) => this.events.latency?.(ms),
       },
       { pingIntervalMs: opts.pingIntervalMs },
@@ -171,6 +179,22 @@ export class GameSession {
       this.conn.close();
     };
     this.ws.onerror = () => this.events.debug?.("socket error");
+  }
+
+  /** Resynchronizing after a transmission error (the beacon handshake) */
+  private resyncing = false;
+
+  /**
+   * game.c ResetUserData (BP_INVALIDATE_DATA, and after a resync): every id we hold is
+   * stale, so ask again for the player, the room, who's on and the inventory (and, as the
+   * interface module does, stat groups, spells, skills, enchantments, preferences).
+   */
+  private refetchGameData(): void {
+    this.world.resetData();
+    this.send(buildSimple(BP.SEND_PLAYER));
+    this.send(buildSimple(BP.SEND_ROOM_CONTENTS));
+    this.send(buildSimple(BP.SEND_PLAYERS));
+    this.requestGameData();
   }
 
   /** Send BP_PING (call every 5 s if pings are driven externally). */
@@ -584,14 +608,11 @@ export class GameSession {
           this.world.setWaiting(false);
           break;
         case BP.INVALIDATE_DATA:
-          // server.c HandleInvalidateData -> game.c ResetUserData: every id we hold is stale,
-          // so ask again for the player, the room, who's on and the inventory (and, as the
-          // interface module does, stat groups, spells, skills, enchantments, preferences)
-          this.world.resetData();
-          this.send(buildSimple(BP.SEND_PLAYER));
-          this.send(buildSimple(BP.SEND_ROOM_CONTENTS));
-          this.send(buildSimple(BP.SEND_PLAYERS));
-          this.requestGameData();
+          this.refetchGameData();
+          break;
+        case BP.RESYNC:
+          // server.c HandleGameResync -> GameDisplayResync (Connection runs the handshake)
+          this.localMessage("Transmission error; trying to reestablish connection.");
           break;
         case BP.OBJECT_CONTENTS: {
           // server.c HandleObjectContents: the container, then its contents

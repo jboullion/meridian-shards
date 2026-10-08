@@ -126,6 +126,11 @@ export class GameAudio {
     void this.playSound(file, 0, null);
   }
 
+  /** A sound the client plays itself at a spot (audio.c SoundPlayFile with x, y: fireworks). */
+  playAt(file: string, x: number, y: number): void {
+    void this.playSound(file, 0, { x, y });
+  }
+
   private async playMusic(file: string): Promise<void> {
     const name = file.toLowerCase();
     this.wantedMusic = name;

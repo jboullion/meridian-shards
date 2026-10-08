@@ -51,6 +51,9 @@ export interface Slope {
   d: number;
   /** Texture origin (x, y from file; z from the plane). */
   p0: { x: number; y: number; z: number };
+  /** The ends of the texture's u and v axes from p0, one square long (bspload.c LoadSlopeInfo). */
+  p1: { x: number; y: number; z: number };
+  p2: { x: number; y: number; z: number };
   /** Texture angle (client angle units, 4096 per circle). */
   angle: number;
 }
@@ -70,6 +73,11 @@ export interface Sector {
   animateSpeed: number;
   slopedFloor: Slope | null;
   slopedCeiling: Slope | null;
+  /**
+   * Set while the server animates this sector's bitmaps (BP_SECTOR_ANIMATE): the 0-based
+   * group its floor and ceiling show, in place of the file's own animation (roomanim.c).
+   */
+  group?: number;
 }
 
 export interface Sidedef {
@@ -79,6 +87,8 @@ export interface Sidedef {
   belowType: number;
   flags: number;
   animateSpeed: number;
+  /** Likewise for BP_WALL_ANIMATE: the 0-based group the wall's textures show. */
+  group?: number;
 }
 
 export interface Wall {
@@ -353,7 +363,64 @@ function readSlope(r: Reader): Slope {
     y = r.i32();
   const angle = r.i32();
   r.pos += 18; // 3 x 6 unused bytes
-  return { a, b, c, d, p0: { x, y, z: (-a * x - b * y - d) / c }, angle };
+  const p0 = { x, y, z: f32((-a * x - b * y - d) / c) };
+  const [v1, v2] = slopeTextureAxes(a, b, c, angle);
+  const add = (v: Vec3) => ({ x: f32(p0.x + v.x), y: f32(p0.y + v.y), z: f32(p0.z + v.z) });
+  return { a, b, c, d, p0, p1: add(v1), p2: add(v2), angle };
+}
+
+// ----- bspload.c LoadSlopeInfo's texture axes, with the client's fixed-point helpers
+// (fixed.c: 8 fractional bits). They take `long`s, so the float vectors are truncated
+// on the way in, as C converts them.
+
+interface Vec3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+const f32 = Math.fround;
+/** C's float/double -> long conversion */
+const toLong = (v: number): number => Math.trunc(v) | 0;
+/** fixed.c fpMul: (m1 * m2 + 0.5) >> 8, from the 64-bit product */
+const fpMul = (m1: number, m2: number): number => Number((BigInt(toLong(m1)) * BigInt(toLong(m2)) + 128n) >> 8n) | 0;
+/** fixed.c fpSquare */
+const fpSquare = (x: number): number => fpMul(x, x);
+/** fixed.c mulDiv: value * mulBy / divBy, truncated (idiv) */
+const mulDiv = (value: number, mulBy: number, divBy: number): number =>
+  Number((BigInt(toLong(value)) * BigInt(toLong(mulBy))) / BigInt(toLong(divBy))) | 0;
+/** fixed.h Dbl2FP: fistp rounds to nearest, ties to even */
+function dbl2fp(v: number): number {
+  const x = v * 256 + 0.5;
+  const r = Math.round(x);
+  return (Math.abs(x % 1) === 0.5 && r % 2 !== 0 ? r - 1 : r) | 0;
+}
+/** fixed.c fpSqrt -> fpSqrtSlowest */
+const fpSqrt = (x: number): number => dbl2fp(Math.sqrt(x / 256));
+/** bspload.c V3Cross (the results land in float vectors) */
+const v3Cross = (a: Vec3, b: Vec3): Vec3 => ({
+  x: fpMul(a.y, b.z) - fpMul(a.z, b.y),
+  y: fpMul(a.z, b.x) - fpMul(a.x, b.z),
+  z: fpMul(a.x, b.y) - fpMul(a.y, b.x),
+});
+/** bspload.c V3Scale */
+function v3Scale(v: Vec3, newLen: number): Vec3 {
+  const len = fpSqrt(fpSquare(v.x) + fpSquare(v.y) + fpSquare(v.z));
+  if (len === 0) return v;
+  return { x: mulDiv(v.x, newLen, len), y: mulDiv(v.y, newLen, len), z: mulDiv(v.z, newLen, len) };
+}
+/** trig.h COS/SIN: maketrig.c's tables, FloatToFix (16 fractional bits) of the angle in 4096ths */
+const cosTable = (angle: number) => Math.trunc(Math.cos(((angle & 4095) * 2 * Math.PI) / 4096) * 65536);
+const sinTable = (angle: number) => Math.trunc(Math.sin(((angle & 4095) * 2 * Math.PI) / 4096) * 65536);
+
+/** The texture's u axis (p1 - p0) and v axis (p2 - p0) on a sloped plane. */
+function slopeTextureAxes(a: number, b: number, c: number, angle: number): [Vec3, Vec3] {
+  const normal = { x: a, y: b, z: c };
+  const orientation = { x: cosTable(angle) >> 6, y: sinTable(angle) >> 6, z: 0 };
+  // normal x orientation = the v axis; v x normal = the u axis; each a square long
+  const v2 = v3Scale(v3Cross(normal, orientation), FINENESS);
+  const v1 = v3Scale(v3Cross(v2, normal), FINENESS);
+  return [v1, v2];
 }
 
 /** drawbsp.c GetFloorHeight (x, y truncated to integers like the C long parameters). */
@@ -369,8 +436,22 @@ export function ceilingHeightAt(s: Sector, x: number, y: number): number {
   return Math.round((-p.a * Math.trunc(x) - p.b * Math.trunc(y) - p.d) / p.c);
 }
 
+/**
+ * A copy of a room whose sectors, sidedefs and walls can change (roomanim.c changes the
+ * loaded room in place) while the room it came from stays as the file has it. The BSP tree
+ * is shared: rooms never change their shape, only heights, textures and flags.
+ */
+export function cloneRoom(room: Room): Room {
+  return {
+    ...room,
+    sectors: room.sectors.map((s) => ({ ...s })),
+    sidedefs: room.sidedefs.map((s) => ({ ...s })),
+    walls: room.walls.map((w) => ({ ...w })),
+  };
+}
+
 /** bspload.c SetWallHeights (the D3D branch for bowties). */
-function setWallHeights(w: Wall, sectors: Sector[]): void {
+export function setWallHeights(w: Wall, sectors: Sector[]): void {
   const S1 = w.posSector ? sectors[w.posSector - 1] : null;
   const S2 = w.negSector ? sectors[w.negSector - 1] : null;
   if (!S1 && !S2) {

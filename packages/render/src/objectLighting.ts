@@ -6,8 +6,11 @@ const COLOR_AMBIENT = 239;
 const LIGHT_NEUTRAL = 192;
 export const MAX_LIGHTS = 32;
 
-/** GetLightPaletteIndex at distance FINENESS (the D3D path; distance falloff is fog). */
-export function lightIndex(sectorLight: number, viewerLight: number, ambient: number, scale = 1024): number {
+/**
+ * GetLightPaletteIndex at distance FINENESS (the D3D path; distance falloff is fog).
+ * `offset` is the object's light adjustment (OF_FLASHING: animate.c lightAdjust).
+ */
+export function lightIndex(sectorLight: number, viewerLight: number, ambient: number, scale = 1024, offset = 0): number {
   let idx: number;
   if (sectorLight > 127) {
     const row = Math.min(255, 8 * viewerLight + ambient);
@@ -16,7 +19,7 @@ export function lightIndex(sectorLight: number, viewerLight: number, ambient: nu
   } else {
     idx = Math.floor((Math.min(255, 16 * viewerLight) * 64) / 256) + Math.floor(sectorLight / 2);
   }
-  return Math.max(0, Math.min(63, idx));
+  return Math.max(0, Math.min(63, idx + offset));
 }
 
 /** d3drender.c D3DRenderFogEndCalc, in fine units. */
@@ -37,6 +40,26 @@ export interface LightSource {
   r: number;
   g: number;
   b: number;
+}
+
+/** trig.h SIN: maketrig.c's table, 16 fractional bits, 4096 angle units */
+const sinTable = (angle: number): number => Math.trunc(Math.sin(((angle & 4095) * 2 * Math.PI) / 4096) * 65536);
+/** FIXED_TO_INT(fpMul(level, SIN(angle))): level * sin, as the client's 8-bit fixed point rounds it */
+export const fixedSin = (level: number, angle: number): number => ((level * sinTable(angle) + 128) >> 8) >> 8;
+
+/** animate.c TIME_FLASH, FLASH_LEVEL (LIGHT_LEVELS / 2) */
+const TIME_FLASH = 1000;
+const FLASH_LEVEL = 32;
+
+/**
+ * animate.c AnimateObject, OF_FLASHING: advance the flash clock by dt (at most 50 ms a
+ * step) and return [new clock, light adjustment]. Kod flashes invisible things this way
+ * for those who can see them (user.kod, detect invisible).
+ */
+export function flashStep(time: number, dt: number): [number, number] {
+  let t = time + Math.min(dt, 50);
+  if (t > TIME_FLASH) t -= TIME_FLASH;
+  return [t, fixedSin(FLASH_LEVEL, Math.trunc((4096 * t) / TIME_FLASH))];
 }
 
 /** d3dlighting.h DLIGHT_SCALE */
@@ -61,6 +84,7 @@ export function objectBrightness(
   viewerLight: number,
   ambient: number,
   lights: LightSource[],
+  lightOffset = 0,
 ): [number, number, number] {
   let nearest: LightSource | null = null;
   let best = (255 * 14000) / 255 + 4000; // DLIGHT_SCALE(255), as in the C code
@@ -72,7 +96,7 @@ export function objectBrightness(
     }
   }
   const add = COLOR_AMBIENT * Math.max(0, 1 - best);
-  const grey = Math.floor((lightIndex(sectorLight, viewerLight, ambient) * COLOR_AMBIENT) / 64);
+  const grey = Math.floor((lightIndex(sectorLight, viewerLight, ambient, 1024, lightOffset) * COLOR_AMBIENT) / 64);
   if (!nearest) {
     const v = Math.min(COLOR_AMBIENT, grey + add) / 255;
     return [v, v, v];

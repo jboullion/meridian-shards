@@ -5,3 +5,4 @@ export * from "./movement.ts";
 export * from "./text.ts";
 export * from "./chatChannel.ts";
 export * from "./combatHit.ts";
+export * from "./roomAnim.ts";

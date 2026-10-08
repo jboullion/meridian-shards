@@ -8,6 +8,9 @@
 //   startup: only used to recover from a framing error (clientd3d/statstrt.c,
 //            blakserv/resync.c + trysync.c): the client sends BEACON every 2 s until
 //            the server answers SERVER_HELLO, then sends CLIENT_ACK and is back in login.
+//            In the game it's the same handshake (blakserv/game.c GameSyncInputChar, after
+//            the server's BP_RESYNC or ours), and the game carries on with the same
+//            security streams; the client asks for its game data again (statstrt.c).
 //   game:    after AP_GAME. Outgoing frames carry the LCG security word and echo
 //            the latest epoch seen; incoming type bytes are XORed by the redbook token.
 
@@ -21,6 +24,8 @@ export const SERVER_HELLO = Uint8Array.of(3, 251, 98, 108, 97, 107, 10, 13, 1);
 export const CLIENT_ACK = Uint8Array.of(7, 230, 98, 108, 97, 107, 10, 13, 8);
 
 const BEACON_INTERVAL_MS = 2000;
+/** statstrt.c BEACON_TIMEOUT: give up on the handshake after a minute */
+const BEACON_TIMEOUT_MS = 60000;
 const PING_INTERVAL_MS = 5000;
 
 export type ConnState = "startup" | "login" | "game" | "closed";
@@ -48,6 +53,8 @@ export class Connection {
 
   private readonly decoder = new FrameDecoder();
   private helloPos = 0;
+  /** Where the startup handshake leads back to */
+  private resumeState: "login" | "game" = "login";
   private beaconTimer: ReturnType<typeof setInterval> | undefined;
   private pingTimer: ReturnType<typeof setInterval> | undefined;
   private readonly sendRaw: (bytes: Uint8Array) => void;
@@ -77,11 +84,40 @@ export class Connection {
 
   /** Recover from a login-mode framing error with the beacon handshake. */
   resyncLogin(): void {
+    this.resumeState = "login";
+    this.startup();
+  }
+
+  /**
+   * com.c Resynchronize in game mode: after a transmission error (BP_RESYNC from the
+   * server, or a bad frame here, when we tell the server with BP_RESYNC first), the beacon
+   * handshake, then the game again. Game messages sent meanwhile are dropped unsent.
+   */
+  resyncGame(tellServer: boolean): void {
+    if (this.state !== "game") return;
+    if (tellServer) this.sendGame(Uint8Array.of(BP.RESYNC)); // RequestGameResync
+    clearInterval(this.pingTimer);
+    this.pingSentAt = 0;
+    this.resumeState = "game";
+    this.startup();
+  }
+
+  private startup(): void {
     this.setState("startup");
     this.helloPos = 0;
     this.sendRaw(BEACON);
     clearInterval(this.beaconTimer);
-    this.beaconTimer = setInterval(() => this.sendRaw(BEACON), BEACON_INTERVAL_MS);
+    let waited = 0;
+    this.beaconTimer = setInterval(() => {
+      // statstrt.c StartupTimerProc: IDS_CONNECTERROR after BEACON_TIMEOUT
+      waited += BEACON_INTERVAL_MS;
+      if (waited >= BEACON_TIMEOUT_MS) {
+        clearInterval(this.beaconTimer);
+        this.events.error?.(new Error("Couldn't connect to server!"));
+        return;
+      }
+      this.sendRaw(BEACON);
+    }, BEACON_INTERVAL_MS);
   }
 
   close(): void {
@@ -101,7 +137,7 @@ export class Connection {
           if (++this.helloPos === SERVER_HELLO.length) {
             clearInterval(this.beaconTimer);
             this.sendRaw(CLIENT_ACK);
-            this.setState("login");
+            this.setState(this.resumeState);
           }
         } else {
           this.helloPos = raw[i] === SERVER_HELLO[0] ? 1 : 0;
@@ -117,9 +153,13 @@ export class Connection {
         this.stats.received++;
         this.dispatch(f.body);
         if ((this.state as ConnState) === "closed") return;
+        // a BP_RESYNC: the rest is the handshake's (the next receive() reads it raw)
+        if ((this.state as ConnState) === "startup") return;
       }
     } catch (err) {
-      this.events.error?.(err as Error);
+      // com.c ProcessMsgHeader: a bad frame in the game means resynchronizing
+      if (this.state === "game") this.resyncGame(true);
+      else this.events.error?.(err as Error);
     }
   }
 
@@ -131,6 +171,8 @@ export class Connection {
 
   /** Send a game-mode (BP_*) message with the security word and current epoch. */
   sendGame(body: Uint8Array): void {
+    // Resynchronizing: drop it before it's encoded, so the security streams stay in step
+    if (this.state === "startup" && this.resumeState === "game") return;
     if (this.state !== "game") throw new Error(`sendGame in state ${this.state}`);
     this.sendRaw(encodeFrame(body, this.streams.securityFor(body), this.epoch));
     this.stats.sent++;
@@ -179,6 +221,11 @@ export class Connection {
           this.events.latency?.(this.latencyMs);
         }
         r.pos = 1;
+      } else if (type === BP.RESYNC) {
+        // server.c HandleGameResync: the server lost track of our frames
+        this.events.message?.(type, r, stateAtReceive);
+        this.resyncGame(false);
+        return;
       } else if (type === BP.QUIT) {
         // Back to the menu (clientd3d GameQuit); the server is in STATE_SYNCHED again.
         clearInterval(this.pingTimer);
