@@ -23,7 +23,7 @@ import { loadSkybox } from "../render/roomLoader.ts";
 import { ORIGINAL_FOV } from "../viewer/roomScene.ts";
 import type { GameAudio } from "./audio.ts";
 import { ScreenOverlays } from "./screenOverlays.ts";
-import { actionsFor, getSettings, isHeld, onSettings, type Action, type Settings } from "./settings.ts";
+import { HALO_COLOR, actionsFor, getSettings, isHeld, mouseCode, onSettings, type Action, type Mods, type Settings } from "./settings.ts";
 
 /** Eye height above the floor (clientd3d/game.c player.height = 3/4 square). */
 const EYE_HEIGHT = 768;
@@ -115,6 +115,10 @@ export class GameScene {
   private lastAttack = 0;
   private settings: Settings = getSettings();
   private altDown = false;
+  private ctrlDown = false;
+  /** Frames since the last FPS report (Show FPS) */
+  private fpsFrames = 0;
+  private fpsSince = performance.now();
   readonly audio: GameAudio;
   private readonly offSettings: () => void;
   fog = true;
@@ -125,6 +129,12 @@ export class GameScene {
   onObjectMenu?: (a: ObjectAction) => void;
   /** A key bound to a panel action (inventory, settings, map zoom) */
   onAction?: (a: Action) => void;
+  /** Say, Tell, Yell, Broadcast, Emote keys: start a chat line with this command */
+  onChatPrefix?: (prefix: string) => void;
+  /** A function key with no action bound: its hotkey alias (alias.c AliasKey), 1..12 */
+  onHotkey?: (n: number) => void;
+  /** Show FPS: frames per second, about twice a second */
+  onFps?: (fps: number) => void;
   /** Type-to-chat: a printable key starts a chat line with this text */
   onTypeChat?: (text: string) => void;
   /** The target changed (the interface shows it) */
@@ -141,7 +151,10 @@ export class GameScene {
     this.assets = assets;
     this.audio = audio;
     this.audio.objectPosition = (id) => session.world.objects.get(id);
-    this.offSettings = onSettings((s) => (this.settings = s));
+    this.offSettings = onSettings((s) => {
+      this.settings = s;
+      this.applyViewSettings();
+    });
     this.mover = new PlayerMover({
       move: (x, y, speed) => session.requestMove(x, y, speed),
       turn: (angle) => session.requestTurn(angle),
@@ -215,6 +228,7 @@ export class GameScene {
     this.xlats = new XlatTable(pal.rgb, lightPal);
     this.objects = new ObjectsView(this.palette, this.xlats, (id) => this.bgf(id), (id) => this.session.resource(id));
     this.scene.add(this.objects.group);
+    this.applyViewSettings();
     this.overlays = new ScreenOverlays(this.labelsEl.parentElement!, pal.rgb, this.xlats, (id) => this.bgf(id));
     await this.syncRoom();
     const loop = (t: number) => {
@@ -326,13 +340,14 @@ export class GameScene {
       return;
     }
     // --- movement (move.c) ---
-    const held = (a: Action) => (isHeld(this.settings.keys, a, this.keys, this.altDown) ? 1 : 0);
+    const held = (a: Action) => (isHeld(this.settings.keys, a, this.keys, this.mods()) ? 1 : 0);
     // EFFECT_PARALYZE: no motion
     const still = world.effects.paralyzed;
     const forward = still ? 0 : held("forward") - held("backward");
     const strafe = still ? 0 : held("strafeRight") - held("strafeLeft");
     const turn = held("turnRight") - held("turnLeft");
-    const run = held("run") === 1;
+    // Always Run (config.ini alwaysrun): the Run/Walk key walks instead
+    const run = (held("run") === 1) !== this.settings.alwaysRun;
     this.mover.turnKeys(turn, run, dt);
     const pitchDir = held("lookUp") - held("lookDown");
     if (pitchDir) this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch + (pitchDir * PITCH_RATE * dt) / 1000));
@@ -359,7 +374,7 @@ export class GameScene {
     }
     this.camera.position.set(
       (this.mover.x + jx) / FINENESS,
-      (this.mover.z + EYE_HEIGHT + this.mover.bounce + jz) / FINENESS,
+      (this.mover.z + EYE_HEIGHT + (this.settings.bounce ? this.mover.bounce : 0) + jz) / FINENESS,
       (this.mover.y + jy) / FINENESS,
     );
     this.camera.rotation.set(this.pitch, yaw, 0, "YXZ");
@@ -377,7 +392,11 @@ export class GameScene {
       fog: this.fog,
     };
     const drawn = [...world.objects.values(), ...this.projectileViews()];
-    this.lights = this.objects.lights(drawn, ctx);
+    // Dynamic Lighting off: no light maps from torches and lamps, nor the targeting light
+    this.lights = this.settings.dynamicLighting ? this.objects.lights(drawn, ctx) : [];
+    const targeted = this.target !== null && this.target !== self.id ? world.objects.get(this.target) : undefined;
+    if (targeted && this.settings.dynamicLighting && this.settings.targetLight && targeted.info.drawingType !== DRAWFX.INVISIBLE)
+      this.lights.push(this.objects.targetLight(targeted, ctx));
     this.roomView.setLights(this.lights);
     this.roomView.setLighting({
       viewerLight: lighting.playerLight,
@@ -395,6 +414,29 @@ export class GameScene {
     this.renderer.render(this.scene, this.camera);
     this.drawLabels(labels);
     this.drawOverlays(room, lighting);
+    this.countFrame(now);
+  }
+
+  /** Show FPS (config.showFPS): frames over the last half second. */
+  private countFrame(now: number): void {
+    if (!this.settings.showFps) return;
+    this.fpsFrames++;
+    if (now - this.fpsSince < 500) return;
+    this.onFps?.(Math.round((this.fpsFrames * 1000) / (now - this.fpsSince)));
+    this.fpsFrames = 0;
+    this.fpsSince = now;
+  }
+
+  /** The Preferences that change how objects are drawn. */
+  private applyViewSettings(): void {
+    if (!this.objects) return;
+    const s = this.settings;
+    this.objects.haloColor = HALO_COLOR[s.haloColor];
+    this.objects.names = { players: s.drawPlayerNames, npcs: s.drawNpcNames, signs: s.drawSignNames };
+  }
+
+  private mods(): Mods {
+    return { alt: this.altDown, ctrl: this.ctrlDown };
   }
 
   /** The player's light for the hand overlays (D3DObjectLightingCalc on the player). */
@@ -410,7 +452,9 @@ export class GameScene {
         ? [0, 0, 0]
         : objectBrightness({ x: this.mover.x, y: this.mover.y, z: this.mover.z }, sectorLight, lighting.playerLight, lighting.ambient, this.lights);
     const alpha = dt === DRAWFX.TRANSLUCENT25 ? 0.25 : dt === DRAWFX.TRANSLUCENT75 ? 0.75 : dt === DRAWFX.TRANSLUCENT50 || dt === DRAWFX.DITHERTRANS || dt === DRAWFX.DITHERINVIS || dt === DRAWFX.DITHERGREY ? 0.5 : dt === DRAWFX.INVISIBLE ? 0.2 : 1;
-    this.overlays.draw(world.playerOverlays, world.effects, light, alpha);
+    // Show your pain (config.pain) off: no red flash when hurt
+    const effects = this.settings.pain ? world.effects : { ...world.effects, pain: 0 };
+    this.overlays.draw(world.playerOverlays, effects, light, alpha);
   }
 
   /** Projectiles as sprites for ObjectsView: fully lit, no name. */
@@ -630,15 +674,24 @@ export class GameScene {
   // ---- input ----
 
   private readonly onMouseDown = (e: MouseEvent) => {
-    if (e.button !== 0) return;
     if (this.selecting) {
-      if (this.hovered !== null) this.select(this.hovered);
+      if (e.button === 0 && this.hovered !== null) this.select(this.hovered);
       return;
     }
-    // Clicking an object selects it as the target (gameuser.c SetUserTargetID)
-    if (this.hovered !== null) this.setTarget(this.hovered);
-    else if (!this.locked) this.lockPointer();
+    // Mouse buttons are bound like keys (config.ini mousetarget=mouse0, examine=mouse1)
+    const actions = actionsFor(this.settings.keys, mouseCode(e.button), { alt: e.altKey, ctrl: e.ctrlKey });
+    for (const a of actions) this.trigger(a);
+    // A left click on nothing captures the mouse for mouselook
+    if (e.button === 0 && !this.locked && (this.hovered === null || !actions.includes("selectTarget"))) this.lockPointer();
   };
+
+  /** Select Target: what's under the cursor (gameuser.c SetUserTargetID); Attack On Target attacks it too. */
+  private selectHovered(): void {
+    if (this.hovered === null) return;
+    this.setTarget(this.hovered);
+    const o = this.session.world.objects.get(this.hovered);
+    if (this.settings.attackOnTarget && o && o.info.flags & OF_ATTACKABLE) this.attack();
+  }
 
   /**
    * Raw mouse movement (no OS acceleration) where the platform has it, like the original's
@@ -659,11 +712,8 @@ export class GameScene {
   private readonly onContextMenu = (e: MouseEvent) => {
     e.preventDefault();
     if (this.selecting) return this.select(null);
-    if (this.settings.rightClickLooks && this.hovered !== null) {
-      // the original: right click examines an object
-      this.session.look(this.hovered);
-      return;
-    }
+    // A right button bound to an action (the original's Examine) did that on mousedown
+    if (actionsFor(this.settings.keys, "Mouse1", { alt: e.altKey, ctrl: e.ctrlKey }).length) return;
     if (this.locked) document.exitPointerLock();
     if (this.hovered === null) return;
     const a = this.actionFor(this.hovered, e.clientX, e.clientY);
@@ -680,24 +730,36 @@ export class GameScene {
 
   private readonly onMouseMove = (e: MouseEvent) => {
     if (!this.locked) return;
-    const speed = this.settings.mouseSpeed;
-    this.mover.turnBy(e.movementX * MOUSE_TURN * speed);
-    const dy = e.movementY * 0.0025 * speed * (this.settings.invertMouse ? -1 : 1);
+    // config.ini mouselookxscale / mouselookyscale, 1..30; 15 is our usual speed
+    const sx = this.settings.mouseXScale / 15,
+      sy = this.settings.mouseYScale / 15;
+    this.mover.turnBy(e.movementX * MOUSE_TURN * sx);
+    const dy = e.movementY * 0.0025 * sy * (this.settings.invertMouse ? -1 : 1);
     this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch - dy));
   };
 
   private readonly onKeyDown = (e: KeyboardEvent) => {
     this.altDown = e.altKey;
+    this.ctrlDown = e.ctrlKey;
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
     if (t?.closest?.(".dialog")) return;
-    const actions = actionsFor(this.settings.keys, e.code, e.altKey);
+    // A modal window (the options, a message box) is up: the game takes no keys, like the original's
+    if (document.querySelector(".mk-modal")) return;
+    const actions = actionsFor(this.settings.keys, e.code, { alt: e.altKey, ctrl: e.ctrlKey });
     // Alt alone would focus the browser menu; Alt+arrows would navigate back/forward.
     if (e.key === "Alt" || actions.length || e.code === "Space" || e.code.startsWith("Arrow")) e.preventDefault();
     for (const a of actions) {
       // held keys repeat: zooming, and attacking (rate-limited like the original)
       if (e.repeat && a !== "mapZoomIn" && a !== "mapZoomOut" && a !== "attack") continue;
       this.trigger(a);
+    }
+    // alias.c: F1..F12 send their hotkey aliases (when no action uses the key)
+    const fkey = /^F(\d{1,2})$/.exec(e.code);
+    if (!actions.length && fkey && Number(fkey[1]) >= 1 && Number(fkey[1]) <= 12 && !e.altKey && !e.ctrlKey) {
+      e.preventDefault();
+      if (!e.repeat) this.onHotkey?.(Number(fkey[1]));
+      return;
     }
     const printable = e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey && !e.altKey;
     if (!actions.length && this.settings.typeToChat && printable) {
@@ -751,20 +813,52 @@ export class GameScene {
         if (this.locked) document.exitPointerLock();
         this.onChatKey?.();
         break;
+      case "examine":
+        // A_LOOK at what's under the cursor (config.ini examine=mouse1)
+        if (this.hovered !== null) this.session.look(this.hovered);
+        break;
+      case "selectTarget":
+        this.selectHovered();
+        break;
+      case "mouselookToggle":
+        // intrface.c A_MOUSELOOK: UserMouselookToggle
+        if (this.locked) document.exitPointerLock();
+        else this.lockPointer();
+        break;
+      case "say":
+      case "tell":
+      case "yell":
+      case "broadcast":
+      case "emote":
+        // Start a chat line with the command, ready for the rest
+        if (this.locked) document.exitPointerLock();
+        this.onChatPrefix?.(`${a} `);
+        break;
       case "inventory":
       case "mapZoomIn":
       case "mapZoomOut":
+      case "map":
       case "settings":
-        if (a === "settings" && this.locked) document.exitPointerLock();
+      case "configuration":
+      case "actions":
+      case "who":
+      case "offer":
+      case "buy":
+      case "deposit":
+      case "withdraw":
+        // Panels and dialogs: free the mouse for them
+        if (this.locked && a !== "mapZoomIn" && a !== "mapZoomOut" && a !== "inventory" && a !== "map") document.exitPointerLock();
         this.onAction?.(a);
         break;
       default:
+        // Tab Forward / Back move focus between the original's windows: not yet (docs/missing-features.md)
         break;
     }
   }
 
   private readonly onKeyUp = (e: KeyboardEvent) => {
     this.altDown = e.altKey;
+    this.ctrlDown = e.ctrlKey;
     this.keys.delete(e.code);
     if (e.key === "Alt") e.preventDefault();
   };
@@ -772,6 +866,7 @@ export class GameScene {
   private readonly onBlur = () => {
     this.keys.clear();
     this.altDown = false;
+    this.ctrlDown = false;
   };
 
   private resize(): void {

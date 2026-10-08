@@ -191,6 +191,9 @@ function createWindow(): void {
     title: "Meridian Shards",
     backgroundColor: "#000000",
     show: false,
+    // Our own title bar (apps/client/src/game/TitleBar.tsx) instead of the system's: no
+    // frame on Windows and Linux; macOS keeps its traffic lights over ours
+    ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 10, y: 9 } } : { frame: false }),
     icon: process.platform === "linux" ? join(app.getAppPath(), "build", "icon.png") : undefined,
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
@@ -231,7 +234,11 @@ function createWindow(): void {
     e.preventDefault();
     openExternal(url);
   });
+  // The page draws maximize or restore, and hides its buttons in fullscreen
+  const sendWindowState = () => w.webContents.send("shards:window-state", { maximized: w.isMaximized(), fullscreen: w.isFullScreen() });
+  for (const ev of ["maximize", "unmaximize", "enter-full-screen", "leave-full-screen"] as const) w.on(ev as "maximize", sendWindowState);
   w.webContents.on("did-finish-load", () => {
+    sendWindowState();
     if (update) w.webContents.send("shards:update", update);
     if (assetProgress) w.webContents.send("shards:assets", assetProgress);
     downloadAssets();
@@ -278,6 +285,16 @@ function setupIpc(): void {
     phase = String(p);
   });
   ipcMain.on("shards:fullscreen", () => win?.setFullScreen(!win.isFullScreen()));
+  // The title bar's buttons. Close goes through the window's close handler, which asks first mid-game.
+  ipcMain.on("shards:window", (_e, action: unknown) => {
+    if (!win) return;
+    if (action === "minimize") win.minimize();
+    else if (action === "maximize") {
+      if (win.isFullScreen()) win.setFullScreen(false);
+      else if (win.isMaximized()) win.unmaximize();
+      else win.maximize();
+    } else if (action === "close") win.close();
+  });
   ipcMain.on("shards:select-server", (_e, origin: unknown) => {
     if (DEV_URL || typeof origin !== "string" || origin === selectedServer()) return;
     if (!selectServer(origin)) return;

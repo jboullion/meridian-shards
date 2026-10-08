@@ -190,11 +190,6 @@ button.link {
   min-height: 0;
 }
 
-.game .hud {
-  grid-column: 1 / span 2;
-  grid-row: 3;
-}
-
 .game .viewport {
   width: 100%;
   height: 100%;
@@ -224,26 +219,6 @@ button.link {
   place-items: center;
   background: rgba(0, 0, 0, 0.6);
   color: var(--muted);
-}
-
-.hud {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  padding: 6px 12px;
-  background: var(--panel);
-  border-top: 2px solid var(--panel-edge);
-  font-size: 13px;
-}
-
-.hud .room-name {
-  color: var(--gold);
-  font-weight: bold;
-}
-
-.hud .muted {
-  color: var(--muted);
-  flex: 1;
 }
 
 /* ---- milestone 4: chat, look, menus ---- */
@@ -665,10 +640,6 @@ button.link {
   color: var(--muted);
 }
 
-.hud {
-  background-repeat: repeat;
-}
-
 /* ---- in-game dialogs (Dialogs.tsx), in the kit's windows ---- */
 .mk-window.game-dialog {
   position: absolute;
@@ -843,10 +814,6 @@ button.link {
     grid-row: 3;
     max-height: 40vh;
   }
-  .game .hud {
-    grid-column: 1;
-    grid-row: 4;
-  }
   .settings {
     grid-template-columns: 1fr;
   }
@@ -931,4 +898,506 @@ button.link {
 
 .asset-download .stat-bar .num {
   line-height: 16px;
+}
+
+/* ---- the title bar and its menu (GameView ☰): Preferences, Configuration, Actions ---- */
+.game {
+  grid-template-rows: auto minmax(0, 1fr) 168px;
+}
+
+.game .game-title {
+  grid-column: 1 / span 2;
+  grid-row: 1;
+}
+
+.game .view {
+  grid-row: 2;
+}
+
+.game .chat {
+  grid-row: 3;
+}
+
+.game .sidebar {
+  grid-row: 2 / span 2;
+}
+
+/* The title bar (TitleBar.tsx): on the desktop it's the window's own, so it drags the window */
+.title-bar {
+  --title-gold: rgb(234, 179, 8);
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 0 0 8px;
+  background: #cccccc;
+  border-bottom: 2px solid #8a8a8a;
+  color: var(--title-gold);
+  font: bold 15px Georgia, "Times New Roman", serif;
+  text-shadow: 1px 1px 0 #000;
+  user-select: none;
+  flex: none;
+}
+
+.title-bar.frameless {
+  -webkit-app-region: drag;
+}
+
+.title-bar.frameless button,
+.title-bar.frameless .latency,
+.title-bar.frameless .title-menu {
+  -webkit-app-region: no-drag;
+}
+
+/* macOS draws its traffic lights over the bar's left end */
+.title-bar.mac {
+  padding-left: 76px;
+}
+
+.title-icon {
+  width: 20px;
+  height: 20px;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.title-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.title-spacer {
+  flex: 1;
+}
+
+.menu-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  color: var(--title-gold);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.menu-button:hover,
+.menu-button.open,
+.menu-button:focus-visible {
+  border-color: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.25);
+  outline: none;
+}
+
+.title-menu {
+  position: absolute;
+  top: 100%;
+  left: 34px;
+  min-width: 190px;
+  margin: 2px 0 0;
+  padding: 4px;
+  list-style: none;
+  background: rgba(27, 22, 18, 0.98);
+  border: 2px solid var(--panel-edge);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+
+.title-menu button {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  background: none;
+  color: #e6dcc8;
+  font: 15px Georgia, "Times New Roman", serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.title-menu button:hover,
+.title-menu button:focus-visible {
+  background: var(--panel-edge);
+  color: #fff;
+  outline: none;
+}
+
+/* The latency meter (lagbox.c): a square, green to 250 ms, yellow to 750 ms, red beyond */
+.latency {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border: 1px solid #000;
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.35);
+  cursor: default;
+  outline: none;
+}
+
+.latency.good {
+  background: rgb(0, 200, 0);
+}
+
+.latency.fair {
+  background: rgb(230, 200, 0);
+}
+
+.latency.poor {
+  background: rgb(220, 30, 30);
+}
+
+.latency.waiting {
+  background: #666;
+}
+
+.latency-tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -8px;
+  display: none;
+  padding: 4px 8px;
+  border: 1px solid var(--panel-edge);
+  background: rgba(27, 22, 18, 0.97);
+  color: #e6dcc8;
+  font: 13px Georgia, "Times New Roman", serif;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.latency:hover .latency-tip,
+.latency:focus-visible .latency-tip {
+  display: block;
+}
+
+/* Minimize, maximize and close, Windows-style */
+.window-buttons {
+  display: flex;
+  align-self: stretch;
+}
+
+.window-buttons button {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #222;
+  cursor: pointer;
+}
+
+.window-buttons svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.window-buttons button:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.window-buttons button.close:hover {
+  background: rgb(196, 43, 28);
+  color: #fff;
+}
+
+/* The desktop's login, character and loading screens under the title bar */
+.app-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app-frame-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.app-frame-body > .mk-backdrop,
+.app-frame-body > .splash {
+  height: 100%;
+}
+
+@media (max-width: 760px) {
+  .game {
+    grid-template-rows: auto minmax(0, 1fr) 140px auto;
+  }
+  .game .game-title {
+    grid-column: 1;
+  }
+  .game .sidebar {
+    grid-column: 1;
+    grid-row: 4;
+  }
+}
+
+/* The Map key: the minimap over the whole view */
+.full-map {
+  position: absolute;
+  inset: 24px;
+  z-index: 4;
+  border: 3px solid var(--panel-edge);
+  box-shadow: 0 0 16px rgba(0, 0, 0, 0.7);
+}
+
+.full-map .minimap {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.minimap.off {
+  background-repeat: repeat;
+}
+
+/* Show FPS */
+.view .fps {
+  position: absolute;
+  right: 8px;
+  top: 6px;
+  color: #fff;
+  font: bold 12px Arial, Helvetica, sans-serif;
+  text-shadow: 1px 1px 0 #000;
+  pointer-events: none;
+}
+
+.chat-time {
+  color: rgb(60, 60, 60);
+}
+
+/* ---- the options windows (OptionsDialogs.tsx) ---- */
+.mk-window.game-dialog.dlu {
+  width: auto;
+}
+
+.mk-check.disabled {
+  opacity: 0.5;
+}
+
+.mk-check.not-yet span {
+  font-style: italic;
+}
+
+.mk-text.right {
+  text-align: right;
+}
+
+.mk-btn.small {
+  font-size: 11px;
+  padding: 0 4px;
+}
+
+.mk-note {
+  margin: 8px 4px 2px;
+  color: var(--muted);
+  font: italic 13px Georgia, "Times New Roman", serif;
+}
+
+.actions-dialog .actions-list {
+  display: grid;
+  gap: 6px;
+  padding: 6px 4px;
+}
+
+.actions-dialog .actions-list .mk-btn {
+  justify-content: flex-start;
+  padding: 6px 12px;
+  text-align: left;
+}
+
+.who-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mk-list li.ignored {
+  color: #888;
+}
+
+.mk-list li.online {
+  color: rgb(255, 64, 64);
+}
+
+.mk-list li.online.selected {
+  color: rgb(192, 0, 0);
+}
+
+.who-count {
+  display: grid;
+  place-items: center;
+  color: #000;
+  background: #e8e4d8;
+}
+
+.alias-row {
+  display: grid;
+  grid-template-columns: 7em 1fr;
+  gap: 8px;
+}
+
+/* The Bind Editor */
+.bind-editor .mk-body {
+  overflow: hidden;
+}
+
+.bind-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px;
+  gap: 12px;
+  min-height: 0;
+}
+
+.bind-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.bind-page {
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.bind-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 18px;
+  padding: 8px;
+}
+
+.bind-row {
+  display: grid;
+  grid-template-columns: 7.5em minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.bind-label {
+  color: var(--ui-text, #e7e7e7);
+  font: 14px "Times New Roman", Times, serif;
+}
+
+.bind-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.bind-key {
+  display: inline-flex;
+}
+
+.bind-keys .mk-btn {
+  min-width: 0;
+  padding: 1px 6px;
+  font-size: 13px;
+}
+
+.bind-keys .mk-btn.x,
+.bind-keys .mk-btn.add {
+  padding: 1px 5px;
+}
+
+.bind-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bind-side .mk-group.flow {
+  display: grid;
+  gap: 4px;
+  padding: 14px 8px 8px;
+}
+
+.bind-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.bind-buttons .mk-btn {
+  flex: 1;
+}
+
+.bind-mouse {
+  display: grid;
+  gap: 14px;
+  padding: 14px 10px;
+  max-width: 420px;
+}
+
+.bind-scale {
+  display: grid;
+  grid-template-columns: 9em minmax(0, 1fr) 2.5em;
+  align-items: center;
+  gap: 8px;
+  color: var(--ui-text, #e7e7e7);
+  font: 14px "Times New Roman", Times, serif;
+}
+
+.bind-scale-value {
+  text-align: right;
+}
+
+@media (max-width: 700px) {
+  .bind-layout {
+    grid-template-columns: 1fr;
+  }
+  .bind-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The options windows are modal over the whole app (OptionsDialogs.tsx Modal) */
+.options-modal .mk-window.options-dialog {
+  max-height: calc(100vh - 24px);
+  display: flex;
+  flex-direction: column;
+}
+
+.options-dialog .mk-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.options-dialog.actions-dialog,
+.options-dialog.guild-dialog {
+  width: min(380px, calc(100vw - 24px));
+}
+
+.options-dialog.bind-editor {
+  width: min(860px, calc(100vw - 24px));
+}
+
+.mk-check.wrap span {
+  white-space: normal;
+  line-height: 1.15;
+}
+
+/* The Bind Editor's seven tabs share the column with the keys: they wrap rather than overlap */
+.bind-editor .bind-main .mk-tabs {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.bind-editor .bind-main .mk-tabs button {
+  padding: 0 8px;
+  font-size: 105%;
+}
+
+.bind-editor .bind-side {
+  padding-top: calc(var(--dy) * 15 + 4px);
 }

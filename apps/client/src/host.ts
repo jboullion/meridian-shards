@@ -27,6 +27,12 @@ export interface DesktopAssetProgress {
   failed: number;
 }
 
+/** The window, for the title bar's maximize / restore button */
+export interface DesktopWindowState {
+  maximized: boolean;
+  fullscreen: boolean;
+}
+
 export interface DesktopConfig {
   version: string;
   /** Running against the Vite dev server (npm run desktop) */
@@ -47,6 +53,10 @@ export interface DesktopBridge extends DesktopConfig {
   /** Progress of the game file download; called at once with the latest state if there is one. */
   onAssets(fn: (p: DesktopAssetProgress) => void): () => void;
   installUpdate(): void;
+  /** The title bar's buttons (the window has no frame of its own); close asks first mid-game */
+  windowControl(action: "minimize" | "maximize" | "close"): void;
+  /** Called at once with the current state */
+  onWindowState(fn: (s: DesktopWindowState) => void): () => void;
 }
 
 export const desktop: DesktopBridge | undefined = (globalThis as { shardsDesktop?: DesktopBridge }).shardsDesktop;

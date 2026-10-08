@@ -103,7 +103,7 @@ void main() {
 
 /**
  * The target halo (d3drender.c, isTargeted chunks): the sprite's shape, stretched 96 /
- * shrink fine units further on each side, drawn behind it in one colour (green by
+ * shrink fine units further on each side, drawn behind it in one colour (red by
  * default, config.halocolor) at twice the object's light.
  */
 const haloFragment = /* glsl */ `
@@ -118,8 +118,10 @@ void main() {
   fragColor = vec4(uColor, 1.0);
 }
 `;
-/** config.halocolor: 0 green (default), 1 red, 2 blue */
-export const HALO_COLORS = [new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1)];
+/** config.h TARGET_COLOR_*: 0 red (the default), 1 blue, 2 green */
+export const HALO_COLORS = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0)];
+/** proto.h LIGHT_BRED, LIGHT_BBLUE, LIGHT_BGREEN: the targeting light's colour, by halo colour */
+const TARGET_LIGHT_COLORS = [0x7c00, 0x001f, 0x03e0];
 
 interface Entry {
   halo: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial> | null;
@@ -141,7 +143,10 @@ export class ObjectsView {
   private readonly getBgf: (resource: number) => Bgf | null | undefined;
   private readonly resourceName: (resource: number) => string | undefined;
   private target: number | null = null;
+  /** config.halocolor (HALO_COLORS) */
   haloColor = 0;
+  /** config.draw_player_names, draw_npc_names, draw_sign_names (d3drender.c D3DRenderNamesDraw3D) */
+  names = { players: true, npcs: true, signs: true };
 
   /**
    * @param getBgf the loaded .bgf for an icon resource; undefined while loading (the
@@ -175,6 +180,15 @@ export class ObjectsView {
       out.push({ x, y, z: ground + top, scale: dlightScale(l.intensity), ...lightColor(l.color) });
     }
     return out;
+  }
+
+  /**
+   * The targeting light (d3dlighting.c, config.target_highlight): a full-strength dynamic
+   * light in the halo's colour on the floor under the target.
+   */
+  targetLight(o: ViewObject, ctx: ObjectViewContext): LightSource {
+    const c = lightColor(TARGET_LIGHT_COLORS[this.haloColor] ?? TARGET_LIGHT_COLORS[0]);
+    return { x: o.x, y: o.y, z: this.ground(o, o.x, o.y, ctx), scale: dlightScale(255), ...c };
   }
 
   /** Floor height under the object minus water depth (or hanging from the ceiling). */
@@ -296,7 +310,9 @@ export class ObjectsView {
       this.updateHalo(e, o.id === this.target, r);
 
       // Name labels (d3drender.c D3DRenderNamesDraw3D)
-      if (o.info.flags & OF.DISPLAY_NAME) {
+      const f = o.info.flags;
+      const hidden = (!this.names.players && f & OF.PLAYER) || (!this.names.npcs && f & OF.NPC) || (!this.names.signs && f & OF.SIGN);
+      if (f & OF.DISPLAY_NAME && !hidden) {
         const dist = Math.hypot(dx, dy);
         if (o.info.flags & OF.SIGN || dist < MAX_NAME_DISTANCE) {
           const c = o.info.nameColor;

@@ -103,6 +103,16 @@ export function buildSay(text: string, info: number = SAY.NORMAL): Uint8Array {
   return new ByteWriter().u8(BP.SAY_TO).u8(info).string(text).finish();
 }
 
+/**
+ * BP_SAY_GROUP (protocol.c PARAM_ID_LIST, PARAM_STRING): a u16 count, the players' ids,
+ * then the text. "tell" and group messages (command.c CommandTell, groupdlg.c).
+ */
+export function buildSayGroup(ids: readonly number[], text: string): Uint8Array {
+  const w = new ByteWriter().u8(BP.SAY_GROUP).u16(ids.length);
+  for (const id of ids) w.u32(objId(id));
+  return w.string(text).finish();
+}
+
 export function buildReqLook(id: number): Uint8Array {
   return new ByteWriter().u8(BP.REQ_LOOK).u32(objId(id)).finish();
 }
@@ -682,7 +692,17 @@ export function readEffect(r: ByteReader): Effect {
 // ---------------------------------------------------------------- user commands (BP_USERCOMMAND)
 
 /** Some user command types (include/proto.h UC_*). */
-export const UC = { REST: 5, STAND: 6, REQ_PREFERENCES: 7, SEND_PREFERENCES: 9, DEPOSIT: 35, WITHDRAW: 36, BALANCE: 37 } as const;
+export const UC = {
+  REST: 5, STAND: 6, REQ_PREFERENCES: 7, SEND_PREFERENCES: 9, RECEIVE_PREFERENCES: 34, DEPOSIT: 35, WITHDRAW: 36, BALANCE: 37,
+} as const;
+
+/**
+ * The game options the server keeps for each player (include/proto.h CF_*): sent with
+ * UC_SEND_PREFERENCES, read back with UC_REQ_PREFERENCES / UC_RECEIVE_PREFERENCES.
+ */
+export const CF = {
+  SAFETY_OFF: 0x0001, TEMPSAFE: 0x0002, GROUPING: 0x0004, AUTOLOOT: 0x0008, AUTOCOMBINE: 0x0010, BAGS: 0x0020, SPELLPOWER: 0x0040,
+} as const;
 
 /** BP_USERCOMMAND, the command type, then its int parameters (protocol.c ToServer). */
 export function buildUserCommand(uc: number, ...ints: number[]): Uint8Array {

@@ -4,7 +4,7 @@
 import { describe, expect, test } from "vitest";
 import {
   BP, ByteReader, ByteWriter, STATS, STAT_TAG, UC, buildReqBuyItems, buildReqCast, buildReqLook, buildReqOffer,
-  buildUserCommand, readBuyList, readPlayWave, readSpells, readStat, readStatGroup,
+  buildSayGroup, buildUserCommand, CF, readBuyList, readPlayWave, readSpells, readStat, readStatGroup,
 } from "../src/index.ts";
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
@@ -75,10 +75,19 @@ describe("trade", () => {
   test("user commands: type, command, int parameters", () => {
     expect(hex(buildUserCommand(UC.DEPOSIT, 100))).toBe(hex(new ByteWriter().u8(BP.USERCOMMAND).u8(35).i32(100).finish()));
     expect(hex(buildUserCommand(UC.BALANCE))).toBe(hex(Uint8Array.of(BP.USERCOMMAND, 37)));
+    // UC_SEND_PREFERENCES with the CF_* flags (merintr.h SendPreferences)
+    expect(hex(buildUserCommand(UC.SEND_PREFERENCES, CF.AUTOLOOT | CF.TEMPSAFE))).toBe(hex(new ByteWriter().u8(BP.USERCOMMAND).u8(9).i32(0x0a).finish()));
   });
 });
 
 test("BP_PLAY_WAVE: resource, object, flags, row, col, radius, volume", () => {
   const r = new ByteReader(new ByteWriter().u32(21447).u32(0).u8(1).i32(1).i32(1).i32(300).i32(100).finish());
   expect(readPlayWave(r)).toEqual({ resource: 21447, object: 0, flags: 1, row: 1, col: 1, radius: 300, maxVolume: 100 });
+});
+
+describe("say group", () => {
+  test("is BP_SAY_GROUP, a u16 count, the plain ids, then the text (protocol.c PARAM_ID_LIST)", () => {
+    const tagged = (2 << 28) | 7; // number items carry a tag; players don't, but ids go out plain either way
+    expect(hex(buildSayGroup([42, tagged], "hi"))).toBe(hex(new ByteWriter().u8(BP.SAY_GROUP).u16(2).u32(42).u32(7).string("hi").finish()));
+  });
 });

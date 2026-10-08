@@ -5,9 +5,9 @@
 import {
   AP, BP, ByteReader, ByteWriter, Connection, ENCHANT, GENDER, SAY, apName, bpName, buildLogin, buildNewCharInfo,
   buildReqAttack, buildReqBuy, buildReqBuyItems, buildReqCast, buildReqDeposit, buildReqGame, buildReqLook, buildReqMove,
-  buildReqOffer, buildReqTurn, buildReqWithdrawal, buildReqWithdrawalItems, buildSay, buildSendEnchantments,
+  buildReqOffer, buildReqTurn, buildReqWithdrawal, buildReqWithdrawalItems, buildSay, buildSayGroup, buildSendEnchantments,
   buildSendSkills, buildSendSpells, buildSendStatGroups, buildSendStats, buildSimple, buildUseCharacter, buildUserCommand,
-  buildSendCharInfo, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
+  buildSendCharInfo, UC, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
   type BuyItem, type CharInfo, type CharacterSlot, type NewCharInfo, type ObjectInfo, type ObjectRef, type PlayWave,
 } from "@shards/protocol";
 import { WorldState, fineToKod } from "./state.ts";
@@ -18,6 +18,10 @@ export interface ChatLine {
   kind: "system" | "say" | "said-resource";
   spans: TextSpan[];
   time: number;
+  /** Who said it (BP_SAID), for ignoring players (msgfiltr.c) */
+  sender?: { id: number; name: string };
+  /** BP_SAID's say type (SAY_*), e.g. SAY_EVERYONE for broadcasts */
+  sayType?: number;
 }
 
 /** BP_LOOK: an object's description (DisplayDescription). */
@@ -90,6 +94,10 @@ export interface SessionEvents {
   trade?: (list: TradeList) => void;
   offer?: (e: OfferEvent) => void;
   sound?: (e: SoundEvent) => void;
+  /** A ping's round trip in ms, every 5 s in the game (lagbox.c) */
+  latency?: (ms: number) => void;
+  /** The game options the server keeps for us (UC_RECEIVE_PREFERENCES: CF_* flags) */
+  preferences?: (flags: number) => void;
   /** Every game message, after WorldState has seen it (for chat, stats, etc. later). */
   message?: (type: number, r: ByteReader) => void;
   debug?: (line: string) => void;
@@ -97,6 +105,8 @@ export interface SessionEvents {
 
 export class GameSession {
   phase: SessionPhase = "connecting";
+  /** The server's game options for us (CF_* flags), once UC_RECEIVE_PREFERENCES arrives */
+  preferences: number | null = null;
   readonly world = new WorldState();
   characters: CharacterSlot[] = [];
   private readonly conn: Connection;
@@ -115,6 +125,7 @@ export class GameSession {
       {
         message: (type, r, state) => (state === "login" ? this.onLogin(type, r) : this.onGame(type, r)),
         error: (e) => this.fail(`protocol error: ${e.message}`),
+        latency: (ms) => this.events.latency?.(ms),
       },
       { pingIntervalMs: opts.pingIntervalMs },
     );
@@ -213,6 +224,17 @@ export class GameSession {
     this.send(buildSay(text, kind));
   }
 
+  /** BP_SAY_GROUP: say something to these players only ("tell", group messages). */
+  sayTo(ids: readonly number[], text: string): void {
+    if (ids.length) this.send(buildSayGroup(ids, text));
+  }
+
+  /** UC_SEND_PREFERENCES: the game options the server keeps for us (CF_* flags). */
+  sendPreferences(flags: number): void {
+    this.preferences = flags;
+    this.userCommand(UC.SEND_PREFERENCES, flags);
+  }
+
   /** BP_SEND_STATS: ask for a stat group (the stats panel asks when its tab opens). */
   requestStats(group: number): void {
     this.send(buildSendStats(group));
@@ -305,10 +327,12 @@ export class GameSession {
     this.send(buildSendSkills());
     this.send(buildSendSpells());
     this.send(buildSendEnchantments(ENCHANT.PLAYER));
+    // mermain.c InterfaceUserChanged: RequestPreferences
+    this.userCommand(UC.REQ_PREFERENCES);
   }
 
-  private chatLine(kind: ChatLine["kind"], text: string): void {
-    this.events.chat?.({ kind, spans: parseMarkup(text, DEFAULT_COLORS[kind]), time: Date.now() });
+  private chatLine(kind: ChatLine["kind"], text: string, extra: Pick<ChatLine, "sender" | "sayType"> = {}): void {
+    this.events.chat?.({ kind, spans: parseMarkup(text, DEFAULT_COLORS[kind]), time: Date.now(), ...extra });
   }
 
   private setPhase(p: SessionPhase): void {
@@ -416,11 +440,20 @@ export class GameSession {
         }
         case BP.SAID: {
           // server.c HandleSaid: sender id, sender name rsc, say type, then a message
-          r.u32();
-          r.u32();
+          const senderId = r.u32();
+          const senderName = this.resource(r.u32()) ?? "";
           const sayType = r.u8();
           const text = formatServerMessage(r.u32(), r, (id) => this.resource(id));
-          if (text !== null) this.chatLine(sayType === SAY.RESOURCE ? "said-resource" : "say", text);
+          if (text !== null)
+            this.chatLine(sayType === SAY.RESOURCE ? "said-resource" : "say", text, { sender: { id: senderId, name: senderName }, sayType });
+          break;
+        }
+        case BP.USERCOMMAND: {
+          // merintr.c HandleUserCommand: only UC_RECEIVE_PREFERENCES matters to us yet
+          if (r.u8() === UC.RECEIVE_PREFERENCES) {
+            this.preferences = r.i32();
+            this.events.preferences?.(this.preferences);
+          }
           break;
         }
         case BP.BUY_LIST:

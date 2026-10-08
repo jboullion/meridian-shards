@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { RsbBundle } from "@shards/formats";
 import { AssetStore } from "./assets.ts";
 import { Game } from "./game/Game.tsx";
+import { Framed } from "./game/TitleBar.tsx";
 import { desktop, devPagesEnabled, serverName, type DesktopBridge } from "./host.ts";
 import { installUiTheme } from "./game/ui/kit.tsx";
 import { RoomViewer } from "./viewer/RoomViewer.tsx";
@@ -29,8 +30,20 @@ export function App() {
       .catch((e: Error) => setError(e.message));
   }, []);
 
-  if (error) return desktop ? <ServerError desktop={desktop} message={error} /> : <div className="splash error">{error}</div>;
-  if (!assets || !rsb) return <div className="splash">Loading…</div>;
+  if (error)
+    return desktop ? (
+      <Framed>
+        <ServerError desktop={desktop} message={error} />
+      </Framed>
+    ) : (
+      <div className="splash error">{error}</div>
+    );
+  if (!assets || !rsb)
+    return (
+      <Framed>
+        <div className="splash">Loading…</div>
+      </Framed>
+    );
   if (isViewer()) return <RoomViewer assets={assets} />;
   return <Game assets={assets} rsb={rsb} />;
 }

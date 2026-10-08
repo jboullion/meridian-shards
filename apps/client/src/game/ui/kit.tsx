@@ -366,7 +366,7 @@ export function GroupBox({ at: r, label, className, children }: { at?: Rect; lab
 
 /** BS_AUTORADIOBUTTON / BS_AUTOCHECKBOX */
 export function Check({
-  at: r, label, checked, onChange, radio, name,
+  at: r, label, checked, onChange, radio, name, disabled, title, className,
 }: {
   at?: Rect;
   label: ReactNode;
@@ -374,10 +374,14 @@ export function Check({
   onChange: (v: boolean) => void;
   radio?: boolean;
   name?: string;
+  /** WS_DISABLED: greyed out */
+  disabled?: boolean;
+  title?: string;
+  className?: string;
 }) {
   return (
-    <label className="mk-check" style={r ? at(r) : undefined}>
-      <input type={radio ? "radio" : "checkbox"} name={name} checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    <label className={`mk-check${disabled ? " disabled" : ""} ${className ?? ""}`} style={r ? at(r) : undefined} title={title}>
+      <input type={radio ? "radio" : "checkbox"} name={name} checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       <span>{label}</span>
     </label>
   );

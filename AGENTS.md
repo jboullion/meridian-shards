@@ -9,6 +9,7 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 - Decisions: [docs/adr/0001-direction.md](docs/adr/0001-direction.md), and the desktop app in [docs/adr/0002-desktop-shell.md](docs/adr/0002-desktop-shell.md)
 - Milestones and progress: [docs/roadmap.md](docs/roadmap.md)
 - Protocol notes: [docs/research/protocol.md](docs/research/protocol.md)
+- What the original has that we don't yet: [docs/missing-features.md](docs/missing-features.md). Add to it whenever something is skipped.
 
 ## Hard rules
 
@@ -29,7 +30,7 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 | `packages/formats/` | Readers for the original files: `.roo` (ported from `bspload.c`), `.bgf`, `.rsb`, `.bsf` sky boxes, and the palette. No Node APIs. |
 | `packages/render/` | Three.js rendering: room geometry exactly as `d3drender.c` builds it (`roomGeometry.ts`, renderer-agnostic), the palette + original lighting shader with light maps (`lighting.ts`), `RoomView`, the sky box, xlats (`xlat.ts`), sprite compositing (`sprites.ts`), object lighting and `ObjectsView`. |
 | `packages/world/` | `GameSession` (login, characters, game actions, chat and look events), `WorldState` (player, room objects with interpolated motion, inventory, online players, lighting), `PlayerMover` (the `move.c` port), the server-text formatter (`text.ts`) and bitmap-group animation. No DOM or Three.js. |
-| `apps/client/` | The browser client (Vite + React): login, character select and the game view (`/`); the room viewer is at `/?viewer` or `/?rid=301`. In `src/game/`: `gameScene.ts` (3D view and input), `audio.ts` (sound, after `audio.c`), `icons.ts` (item pictures), `settings.ts` (sound and key settings, the two key presets), and `ui/` (the interface column, minimap and dialogs, and `kit.tsx`, the dialog kit every menu is drawn with: stone frames, lists, buttons, stat bars, laid out in dialog units from the original `.rc` templates). |
+| `apps/client/` | The browser client (Vite + React): login, character select and the game view (`/`); the room viewer is at `/?viewer` or `/?rid=301`. In `src/game/`: `gameScene.ts` (3D view and input), `audio.ts` (sound, after `audio.c`), `icons.ts` (item pictures), `settings.ts` (every option and key binding, the two key presets), and `ui/` (the interface column, minimap and dialogs, `OptionsDialogs.tsx` for the ☰ menu's Preferences, Configuration and Actions windows, and `kit.tsx`, the dialog kit every menu is drawn with: stone frames, lists, buttons, stat bars, laid out in dialog units from the original `.rc` templates). |
 | `apps/desktop/` | The desktop app (Electron) around the browser client. `src/main.ts` serves the page as `app://shards/`: the client build, and the game files from the chosen server through a disk cache (`assetCache.ts`). Also the preload (`window.shardsDesktop`), the server list and window state (`settings.ts`), and `electron-builder.yml` (installers, the update feed). `apps/client/src/host.ts` is the client's side of it. |
 | `tools/assets/` | `build-assets.ts`: copies the original files into `dist/assets` (git-ignored) with a manifest, plus the client's interface bitmaps as `ui/*.bmp` and `roomlinks.json` (which rooms connect, from the Kod exits). `fetch-assets.ts`: copies a server's game files into `dist/assets`, for packaging without a server build. |
 | `tools/dev/` | `dev.ts`: the one-command dev stack. |
@@ -89,19 +90,28 @@ npm run release -- 0.2.0     # bump, commit, tag and push; CI builds all three O
 - The Browser pane throttles `requestAnimationFrame` while it's hidden, so FPS readouts there are meaningless. Time `renderer.render` instead.
 - **Sprites:** each object's base bitmap and overlays are composited on the CPU into one palette-index image (with each part's xlat applied), then drawn as a single billboard. That keeps exact palette colours and avoids z-fighting between coplanar overlays.
 - **Handedness:** the D3D client's projection uses a *negative* horizontal FOV (`FovHorizontal`), which mirrors its left-handed view back. Our right-handed scene with X = x, Y = height, Z = y matches what players see, both the world and the sprites (bitmap column 0 on the left). Don't "fix" it.
-- **Controls** come from `apps/client/src/game/settings.ts` (rebindable in the settings, O or F10). The modern preset:
-  - Click the view to capture the mouse; Esc releases it.
-  - WASD or arrows to move (left/right arrows turn), Shift to run, Space/E to open a door.
-  - Click an object to target it; E attacks; `]` `[` `\` Esc pick the next, previous, yourself or no target; R looks at the target.
-  - F or double click to pick up or activate, right-click for the actions menu (the original preset: right click looks).
-  - PgUp/PgDn/Home to look up, down and straight, End to turn around, +/- to zoom the map, I for the inventory tab, Enter to chat.
-  - The original preset follows `merintr.c interface_key_table` (Alt+arrows strafe, typing starts a chat line).
+- **Options** come from `apps/client/src/game/settings.ts`, edited in the game's ☰ menu, laid out like the original's windows (`ui/OptionsDialogs.tsx`):
+  - **Preferences** is `client.rc IDD_SETTINGS` without Web Browser (O or F10). Options we don't implement yet are kept anyway and shown in italics; list them in `docs/missing-features.md`.
+  - The Game Options and "Can attack innocent players" live on the **server**: `UC_REQ_PREFERENCES` on entering, `UC_RECEIVE_PREFERENCES` back, `UC_SEND_PREFERENCES` (the `CF_*` flags) on OK.
+  - **Configuration** is the Bind Editor (`m59bind.exe`): the six tabs and Options (Quick Chat, Always Run, Attack On Target, Dynamic Lighting), plus our Interface tab.
+  - Bindings take Alt or Ctrl, and mouse buttons as `Mouse0` (left), `Mouse1` (right), `Mouse2` (middle), like `config.ini`. Unbound F1–F12 send the hotkey aliases.
+  - **Actions** has Who (ignoring players), groups (`BP_SAY_GROUP`), hotkey and command aliases, and a guild placeholder. Emotes and moods are a TODO.
+  - Settings saved by older versions are migrated in `migrate()`; bump `SETTINGS_VERSION` when a saved field changes meaning.
+- **Controls**, the modern preset:
+  - Click the view to capture the mouse (or C, Mouselook Toggle); Esc releases it.
+  - WASD or arrows to move (left/right arrows turn), Shift to run (or walk, with Always Run), Space to open a door.
+  - Left click targets (Select Target); E attacks; `]` `[` `\` Esc pick the next, previous, yourself or no target; R looks at the target.
+  - F or double click to pick up or activate, right-click for the actions menu (the original preset: right click examines).
+  - T, Y, B and ; start a tell, yell, broadcast or emote; Enter chats.
+  - PgUp/PgDn/Home to look up, down and straight, End to turn around, +/- to zoom the map, I for the inventory tab.
+  - The original preset follows `merintr.c interface_key_table` (Alt+arrows strafe, typing starts a chat line). Restore Defaults goes back to the modern preset.
   - In dev, `window.shards` has `gameScene`, `session` and `audio` (`audio.log` lists what played). `gameScene.frame(dt, t)` lets a script drive movement while the Browser pane is hidden (its rAF is throttled).
 - **Object ids:** number items (shillings) carry a tag in the id's top 4 bits. Send plain id fields without it (`objId`, as `protocol.c GetObjId` does) and object-list fields with it plus the amount. Look ids up through `WorldState`'s maps, which ignore the tag like the client's `CompareIdObject`.
 - **Testing combat on our server:** `send object <id> SetHealth amount int 1` and `send object <id> Killed` on the maintenance port force a death; the Underworld's "rip in space" brings you back. Never do this on a server with real players.
 - **The first-person hands** are sized like the D3D client's 800 × 600 back buffer: a bitmap pixel is 1.75/800 of the view's width and 2.25/600 of its height (`screenOverlays.ts`).
 - **Hosting:** blakserv runs on Linux from `deploy/blakserv/Dockerfile`; keep `deploy/blakserv/blakserv.cfg` in step with `server/config/blakserv.cfg`. The game data in the image comes from our Windows build, so rebuild with `serveruild.cmd` and restage after Kod changes. Vite's bundles go to `/assets-client/` because `/assets/` is the game files.
 - **The desktop app** (`apps/desktop`, [ADR 0002](docs/adr/0002-desktop-shell.md)):
+  - The window has no system frame (`frame: false`; macOS keeps its traffic lights with `titleBarStyle: "hidden"`). `apps/client/src/game/TitleBar.tsx` is the title bar on every screen: it drags the window (`-webkit-app-region: drag`, with `no-drag` on anything clickable), and its minimize/maximize/close go over IPC. Close goes through the window's close handler, so it still asks first mid-game.
   - Register the `app` scheme before `ready` (`protocol.registerSchemesAsPrivileged`). Without it the page has no origin of its own: no localStorage, workers or module scripts.
   - The preload is sandboxed, so it must be one CommonJS file importing only `electron`. `vite.config.ts` builds the main process and the preload in two passes.
   - The installer carries `dist/assets`. Files the server has changed since then are cached in `%APPDATA%\Meridian Shards\asset-cache` by name and content hash, checked on download; delete the folder to start over. `logs\main.log` beside it says what came from the install, the cache and the server.

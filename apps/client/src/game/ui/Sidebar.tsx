@@ -13,6 +13,7 @@ import type { AssetStore } from "../../assets.ts";
 import { bareIcon, type Drawable, type IconOptions, type IconRenderer } from "../icons.ts";
 import { useAsyncImage, useWorld } from "./hooks.ts";
 import { useKeyedHalves, useKeyedImage } from "./keyed.ts";
+import type { Settings } from "../settings.ts";
 import { MiniMap } from "./MiniMap.tsx";
 
 /** statmain.c: main stat numbers */
@@ -79,7 +80,7 @@ function StatTab({
 }
 
 /** graphctl.c GraphCtlPaint: frame, value bar, limit bar, background, the number. */
-function StatBar({ stat, main = false }: { stat: Statistic; main?: boolean }) {
+function StatBar({ stat, main = false, xpAsPercent = false }: { stat: Statistic; main?: boolean; xpAsPercent?: boolean }) {
   const n = stat.numeric!;
   const xp = main && stat.num === STAT_XP;
   // StatsMainChange: health and mana run to their current maximum
@@ -89,7 +90,8 @@ function StatBar({ stat, main = false }: { stat: Statistic; main?: boolean }) {
   const value = pct(n.value);
   const limit = xp ? value : Math.max(value, pct(n.currentMax));
   const low = main && stat.num === STAT_VIGOR && n.value < MIN_VIGOR;
-  const text = xp ? `${n.value} XP / ${n.max} XP` : String(n.value);
+  // Display XP as percent (config.xp_display_percent)
+  const text = xp ? (xpAsPercent ? `${Math.floor(value)}% XP` : `${n.value} XP / ${n.max} XP`) : String(n.value);
   return (
     <div className="stat-bar">
       <div className="fill" style={{ width: `${value}%`, background: low ? "rgb(255,0,0)" : undefined }} />
@@ -102,7 +104,7 @@ function StatBar({ stat, main = false }: { stat: Statistic; main?: boolean }) {
 }
 
 export function Sidebar({
-  session, icons, assets, getRoom, tab, onTab, mapZoom, onItemMenu, onDropItem, target, selecting, onSelectObject, onCast,
+  session, icons, assets, getRoom, tab, onTab, settings, onItemMenu, onDropItem, target, selecting, onSelectObject, onCast,
 }: {
   session: GameSession;
   icons: IconRenderer;
@@ -110,7 +112,8 @@ export function Sidebar({
   getRoom: () => Room | null;
   tab: Tab;
   onTab: (t: Tab) => void;
-  mapZoom: number;
+  /** Map zoom, Show dynamic map, Show amounts for inventory items, Display XP as percent */
+  settings: Settings;
   onItemMenu: (m: ItemMenu) => void;
   onDropItem: (o: ObjectInfo) => void;
   /** The selected target, for the self-target ring behind our face */
@@ -154,7 +157,7 @@ export function Sidebar({
             .map((s) => (
               <div className="main-stat" key={s.num}>
                 <ObjIcon icons={icons} object={bareIcon(s.nameRes)} className="stat-icon" />
-                <StatBar stat={s} main />
+                <StatBar stat={s} main xpAsPercent={settings.xpAsPercent} />
               </div>
             ))}
         </div>
@@ -165,7 +168,12 @@ export function Sidebar({
         ))}
       </div>
       <div className="map-frame">
-        <MiniMap world={world} getRoom={getRoom} zoom={mapZoom} paper={assets.url("ui/mapbkgnd.bmp")} />
+        {/* Show dynamic map (config.drawmap) off: just the map paper */}
+        {settings.dynamicMap ? (
+          <MiniMap world={world} getRoom={getRoom} zoom={settings.mapZoom} paper={assets.url("ui/mapbkgnd.bmp")} />
+        ) : (
+          <div className="minimap off" style={{ backgroundImage: `url(${assets.url("ui/mapbkgnd.bmp")})` }} />
+        )}
         <div className="enchantments room">
           {[...world.enchantments.room.values()].map((e) => (
             <ObjIcon key={e.id} icons={icons} object={e} className="enchant" title={rs(e.nameRes)} />
@@ -187,6 +195,7 @@ export function Sidebar({
             onDropItem={onDropItem}
             selecting={selecting}
             onSelectObject={onSelectObject}
+            showAmounts={settings.inventoryNumbers}
           />
         ) : tab === "stats" ? (
           <NumericStats stats={world.stats.get(STAT_GROUP.STATS) ?? []} rs={rs} />
@@ -212,8 +221,10 @@ function PortraitIcon({ icons, object }: { icons: IconRenderer; object: ObjectIn
 
 /** inventry.c: a grid of 40x40 boxes; in-use items sit on the yellow sun (inuse.bmp). */
 function Inventory({
-  session, icons, assets, onItemMenu, onDropItem, selecting, onSelectObject,
+  session, icons, assets, onItemMenu, onDropItem, selecting, onSelectObject, showAmounts,
 }: {
+  /** Show amounts for inventory items (config.inventory_num) */
+  showAmounts: boolean;
   session: GameSession;
   icons: IconRenderer;
   assets: AssetStore;
@@ -256,7 +267,7 @@ function Inventory({
         >
           {world.inUse.has(o.id) && inUseImg && <img className="in-use" src={inUseImg} alt="" draggable={false} />}
           <ObjIcon icons={icons} object={o} />
-          {isNumberItem(o.id) && <span className="inv-num">{o.amount}</span>}
+          {showAmounts && isNumberItem(o.id) && <span className="inv-num">{o.amount}</span>}
         </div>
       ))}
     </div>

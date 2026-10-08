@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { CharInfo, CharacterSlot } from "@shards/protocol";
+import { SAY } from "@shards/protocol";
 import { GameSession, type ChatLine, type LookResult, type OfferEvent, type SessionPhase, type TradeList } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
@@ -9,6 +10,8 @@ import { CharacterCreator } from "./CharacterCreator.tsx";
 import { AssetDownload } from "./AssetDownload.tsx";
 import { CharacterSelect } from "./CharacterSelect.tsx";
 import { GameView, MAX_CHAT_LINES } from "./GameView.tsx";
+import { Framed } from "./TitleBar.tsx";
+import { getSettings } from "./settings.ts";
 import { IconRenderer } from "./icons.ts";
 import { ConnectingScreen, LoginScreen } from "./LoginScreen.tsx";
 
@@ -35,6 +38,18 @@ interface Live {
   offers: Relay<OfferEvent>;
 }
 
+/**
+ * msgfiltr.c: speech from ignored players, all broadcasts or everyone (the Who window's
+ * choices) isn't shown. Our own lines always are.
+ */
+export function ignoredLine(line: ChatLine, ownName: string): boolean {
+  if (!line.sender) return false;
+  const name = line.sender.name.toLowerCase();
+  if (name === ownName.toLowerCase()) return false;
+  const s = getSettings();
+  return s.ignoreEveryone || s.ignored.includes(name) || (s.ignoreBroadcasts && line.sayType === SAY.EVERYONE);
+}
+
 /** Set before reloading for a server update, so the login screen can say why. */
 const UPDATED_KEY = "shards.serverUpdated";
 
@@ -59,6 +74,10 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   const [look, setLook] = useState<LookResult | null>(null);
   /** The creator is open for this empty slot once BP_CHARINFO arrives */
   const [creating, setCreating] = useState<{ slotId: number; info: CharInfo | null } | null>(null);
+  /** The game options the server keeps for us (UC_RECEIVE_PREFERENCES) */
+  const [serverPrefs, setServerPrefs] = useState<number | null>(null);
+  /** The last ping's round trip (lagbox.c) */
+  const [latency, setLatency] = useState<number | null>(null);
 
   // The desktop app asks before closing the window mid-game
   useEffect(() => desktop?.setPhase(phase), [phase]);
@@ -119,7 +138,13 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
         },
         error: setError,
         charInfo: (info) => setCreating((c) => (c ? { ...c, info } : c)),
-        chat: (line) => setChat((c) => [...c.slice(-(MAX_CHAT_LINES - 1)), line]),
+        chat: (line) => {
+          const self = s.world.self;
+          if (ignoredLine(line, self ? (s.resource(self.info.nameRes) ?? "") : "")) return;
+          setChat((c) => [...c.slice(-(MAX_CHAT_LINES - 1)), line]);
+        },
+        preferences: setServerPrefs,
+        latency: setLatency,
         look: setLook,
         trade: trades.emit,
         offer: offers.emit,
@@ -139,21 +164,21 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
 
   if (!live || !session || phase === "offline" || phase === "closed")
     return (
-      <>
+      <Framed assets={assets}>
         <LoginScreen assets={assets} onLogin={login} error={error} onClearError={() => setError(null)} />
         <AssetDownload />
-      </>
+      </Framed>
     );
   if (phase === "connecting" || phase === "login")
     return (
-      <>
+      <Framed assets={assets}>
         <ConnectingScreen />
         <AssetDownload />
-      </>
+      </Framed>
     );
   if (phase === "characters" && creating?.info)
     return (
-      <>
+      <Framed assets={assets}>
         <CharacterCreator
           info={creating.info}
           slotId={creating.slotId}
@@ -167,11 +192,11 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
           onClearError={() => setError(null)}
         />
         <AssetDownload />
-      </>
+      </Framed>
     );
   if (phase === "characters")
     return (
-      <>
+      <Framed assets={assets}>
         <CharacterSelect
           characters={characters}
           motd={motd}
@@ -187,7 +212,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
           }}
         />
         <AssetDownload />
-      </>
+      </Framed>
     );
   return (
     <GameView
@@ -202,6 +227,8 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       look={look}
       onCloseLook={() => setLook(null)}
       onLogout={logout}
+      serverPrefs={serverPrefs}
+      latency={latency}
     />
   );
 }

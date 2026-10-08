@@ -1,17 +1,15 @@
 // Dialogs: buying from a shopkeeper (buy.c), the bank vault (buy.c withdrawal), offering
 // items (offer.c: selling to a shopkeeper is an offer they answer with shillings),
-// depositing, an amount prompt for number items, and the settings. Drawn with the Meridian
+// depositing, and an amount prompt for number items (the options windows are in
+// OptionsDialogs.tsx). Drawn with the Meridian
 // dialog kit; item lists are the client's owner-drawn lists (white on black, the chosen rows
 // black on white).
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { ObjectInfo, ObjectRef } from "@shards/protocol";
 import { isNumberItem, type GameSession, type OfferEvent, type TradeList } from "@shards/world";
 import type { IconRenderer } from "../icons.ts";
-import {
-  ACTION_LABELS, ACTIONS, PRESETS, applyPreset, bindingLabel, updateSettings, type Action, type KeyBinding, type Settings,
-} from "../settings.ts";
-import { Button, Check, GroupBox, Tabs, TextField, Trackbar, Window } from "./kit.tsx";
+import { Button, TextField, Window } from "./kit.tsx";
 import { ObjIcon } from "./Sidebar.tsx";
 
 function Dialog({ title, children, onClose, wide }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
@@ -260,110 +258,6 @@ export function AmountDialog({
           <Button onClick={onClose}>Cancel</Button>
         </div>
       </form>
-    </Dialog>
-  );
-}
-
-const SETTINGS_TABS = ["Preferences", "Keys"] as const;
-
-/** Our settings, as a sheet like the original's Preferences (preferences.c): sound and mouse, and the keys. */
-export function SettingsDialog({ settings, onClose }: { settings: Settings; onClose: () => void }) {
-  const [tab, setTab] = useState<(typeof SETTINGS_TABS)[number]>("Preferences");
-  const [listening, setListening] = useState<{ action: Action; index: number } | null>(null);
-  useEffect(() => {
-    if (!listening) return;
-    const onKey = (e: KeyboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.key === "Alt") return;
-      if (e.key !== "Escape") {
-        const b: KeyBinding = e.altKey ? { code: e.code, alt: true } : { code: e.code };
-        const list = [...settings.keys[listening.action]];
-        list.splice(listening.index, 1, b);
-        updateSettings({ keys: { ...settings.keys, [listening.action]: list } });
-      }
-      setListening(null);
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [listening, settings]);
-
-  const set = (patch: Partial<Settings>) => updateSettings(patch);
-  const remove = (a: Action, i: number) =>
-    set({ keys: { ...settings.keys, [a]: settings.keys[a].filter((_, j) => j !== i) } });
-  const volume = (label: string, value: number, onChange: (v: number) => void) => (
-    <label className="settings-range">
-      <span>{label}</span>
-      <Trackbar min={0} max={100} value={value} onChange={onChange} label={label} ticks={false} />
-    </label>
-  );
-
-  return (
-    <Dialog title="Meridian Shards Preferences" onClose={() => !listening && onClose()} wide>
-      <Tabs tabs={SETTINGS_TABS} active={tab} onChange={setTab} />
-      <div className="mk-page settings-page">
-        {tab === "Preferences" ? (
-          <div className="settings">
-            <GroupBox label="Audio Effects" className="flow">
-              <Check label="Music" checked={settings.music} onChange={(v) => set({ music: v })} />
-              {volume("Music volume", settings.musicVolume, (v) => set({ musicVolume: v }))}
-              <Check label="Sounds" checked={settings.sound} onChange={(v) => set({ sound: v })} />
-              {volume("Sound volume", settings.soundVolume, (v) => set({ soundVolume: v }))}
-              <Check label="Steady sounds (ambience)" checked={settings.loopSounds} onChange={(v) => set({ loopSounds: v })} />
-              <Check label="Atmospheric sounds (birds, waves)" checked={settings.randomSounds} onChange={(v) => set({ randomSounds: v })} />
-            </GroupBox>
-            <GroupBox label="Mouse" className="flow">
-              <label className="settings-range">
-                <span>Mouselook speed</span>
-                <Trackbar min={0.25} max={3} step={0.05} value={settings.mouseSpeed} onChange={(v) => set({ mouseSpeed: v })} label="Mouselook speed" ticks={false} />
-              </label>
-              <Check label="Invert mouse up/down" checked={settings.invertMouse} onChange={(v) => set({ invertMouse: v })} />
-            </GroupBox>
-          </div>
-        ) : (
-          <div className="settings-keys">
-            <div className="preset">
-              <Button className={settings.preset === "modern" ? "active" : ""} onClick={() => applyPreset("modern")}>
-                Modern (WASD)
-              </Button>
-              <Button className={settings.preset === "original" ? "active" : ""} onClick={() => applyPreset("original")}>
-                Original
-              </Button>
-              <Check label="Typing a letter starts a chat line" checked={settings.typeToChat} onChange={(v) => set({ typeToChat: v })} />
-            </div>
-            <table className="keys">
-              <tbody>
-                {ACTIONS.map((a) => (
-                  <tr key={a}>
-                    <td>{ACTION_LABELS[a]}</td>
-                    <td>
-                      {settings.keys[a].map((b, i) => (
-                        <span key={i} className="key">
-                          <Button onClick={() => setListening({ action: a, index: i })}>
-                            {listening?.action === a && listening.index === i ? "press a key…" : bindingLabel(b)}
-                          </Button>
-                          <Button className="x" title="Remove" onClick={() => remove(a, i)}>
-                            ×
-                          </Button>
-                        </span>
-                      ))}
-                      <Button className="add" title="Add a key" onClick={() => setListening({ action: a, index: settings.keys[a].length })}>
-                        {listening?.action === a && listening.index === settings.keys[a].length ? "press a key…" : "+"}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Button onClick={() => set({ keys: PRESETS[settings.preset] })}>Reset keys to the {settings.preset} preset</Button>
-          </div>
-        )}
-      </div>
-      <div className="mk-buttons">
-        <Button isDefault onClick={onClose}>
-          OK
-        </Button>
-      </div>
     </Dialog>
   );
 }

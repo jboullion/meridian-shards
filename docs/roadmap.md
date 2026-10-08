@@ -126,6 +126,26 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 - [ ] macOS and Linux builds from CI, tried on real machines (pointer lock, sound, WebGL).
 - [ ] Signing before going public: Windows (Azure Trusted Signing) and macOS (an Apple Developer account and notarization).
 
+### 9. Options (2026-10-07)
+
+- [x] The ☰ menu in a title bar showing the room (the window title follows it): Preferences, Configuration, Actions.
+- [x] **Preferences** as `IDD_SETTINGS`, without Web Browser. Working:
+  - targeting: the halo colour (red by default, the original's), Show targeting light, Can attack innocent players;
+  - drawing: pain flash, player/NPC/sign names, inventory amounts, bounce;
+  - sound, scroll lock, chat timestamps, dynamic map, colored text, FPS, XP as percent;
+  - the six server-kept Game Options (`UC_SEND_PREFERENCES`), tested against our server.
+  - The rest are kept for later ([missing features](missing-features.md)).
+- [x] **Configuration** as the Bind Editor: six tabs plus Interface, Alt/Ctrl and mouse-button bindings, Quick Chat, Always Run, Attack On Target, Dynamic Lighting, mouselook X/Y scales.
+- [x] **Actions**:
+  - Who (ignore players, all broadcasts, everyone);
+  - groups with group messages and `tell` (`BP_SAY_GROUP`, tested);
+  - hotkey aliases on F1–F12 and command aliases;
+  - the Map key's full-screen map.
+  - Guilds wait for the guild messages.
+- [ ] Emotes and moods, as their own menu (`TODO.md`).
+- [x] The title bar on the desktop is our own: the system frame is gone, with the flower icon, ☰, the room name (no longer over the 3D view), the latency meter, and minimize / maximize / close (close logs off, asking first mid-game).
+  - The latency meter is lagbox.c's ping-to-echo round trip: green to 250 ms, yellow to 750 ms, red beyond, with its wording on hover ("fast connection: approximately 73ms latency"). "Show latency meter" in Preferences turns it off.
+
 ## What the slice must prove
 
 - [x] An unmodified Server 104 `blakserv` (plus config changes only) serves browser players through the gateway (the protocol side; proven with the headless client).

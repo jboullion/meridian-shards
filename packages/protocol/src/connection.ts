@@ -30,6 +30,8 @@ export interface ConnectionEvents {
   message?: (type: number, r: ByteReader, state: ConnState) => void;
   state?: (state: ConnState) => void;
   error?: (err: Error) => void;
+  /** The round trip of a BP_PING to its BP_ECHO_PING, in milliseconds (lagbox.c's latency) */
+  latency?: (ms: number) => void;
 }
 
 export class Connection {
@@ -39,6 +41,10 @@ export class Connection {
   readonly token = new ServerToken();
   /** Messages received/sent since connect, for diagnostics. */
   stats = { received: 0, sent: 0, pings: 0, echoes: 0 };
+  /** The last ping's round trip in ms, null before the first echo */
+  latencyMs: number | null = null;
+  /** When the unanswered ping went out (performance.now()), 0 when none is out */
+  private pingSentAt = 0;
 
   private readonly decoder = new FrameDecoder();
   private helloPos = 0;
@@ -144,6 +150,8 @@ export class Connection {
     if (this.state !== "game") return;
     this.sendGame(Uint8Array.of(BP.PING));
     this.stats.pings++;
+    // Time the first unanswered ping only, so a slow echo isn't timed from a later ping
+    if (!this.pingSentAt) this.pingSentAt = performance.now();
   }
 
   private dispatch(body: Uint8Array): void {
@@ -165,6 +173,11 @@ export class Connection {
       if (type === BP.ECHO_PING && body.length >= 6) {
         this.token.onEchoPing(r.u8(), r.u32());
         this.stats.echoes++;
+        if (this.pingSentAt) {
+          this.latencyMs = Math.round(performance.now() - this.pingSentAt);
+          this.pingSentAt = 0;
+          this.events.latency?.(this.latencyMs);
+        }
         r.pos = 1;
       } else if (type === BP.QUIT) {
         // Back to the menu (clientd3d GameQuit); the server is in STATE_SYNCHED again.
