@@ -24,12 +24,13 @@ Phase 2 is done: the original's command table, emotes and moods, resting, the Sp
 
 ## Social systems (phase 3)
 
+Phase 3 is done: the news globes, mail, stat reallocation and guilds. What's left:
+
 | What | Original | What it needs |
 |---|---|---|
-| News globes | `mailnews.c:278-305`, `newsread.c`, `newssend.c` | `BP_LOOK_NEWSGROUP`, the article list and reading (`BP_REQ_ARTICLES`/`ARTICLES`, `REQ_ARTICLE`/`ARTICLE`), posting and deleting. The Inn and the Hall of Raza each have one; looking at it does nothing today. |
-| Mail | `mailread.c`, `mailsend.c`, `mailfile.c` | `BP_MAIL`, `REQ_GET_MAIL`, `DELETE_MAIL`, `SEND_MAIL`, name lookups, and the read and send windows. The original keeps the mailbox on the client after the server deletes it, so we need a local store per character. Every new character gets mail. |
-| Stat reallocation | `module/stats` | `BP_STAT_CHANGE` from an elder (Raza's Rodric) and `BP_CHANGED_STATS` back: the stats page with the school levels, which can only go down. |
-| Guilds | `guild*.c` | `UC_GUILDINFO` and the rest: the guild window (members and ranks, allies and enemies, invite, guildmaster, the shield), creating a guild, renting a hall. The Actions window has a placeholder. |
+| The mailbox in a file | `mailfile.c` (a file per message in the mail folder) | We keep it in the page's storage (`localStorage`, per server and character), which the browser can clear. The desktop and Android apps could keep it in a file instead, through `host.ts`. |
+| Mail and news dates as the original shows them | `mailnews.c DateFromSeconds` | Nothing: we add Kod's time base (Unix time less 1760000000, `blakserv ccode.c`). The original client still adds an older base, so it shows dates about five years early against this server. Noted here so nobody "fixes" ours to match. |
+| A guild hall's password, checked live | `guildmtr.c` | Written and sent on closing the window, but not tried: renting a hall needs a guild that has existed for a while, so our test guild couldn't. |
 
 ## Interface (phase 4)
 

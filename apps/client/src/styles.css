@@ -1416,8 +1416,7 @@ button.link {
   overflow: auto;
 }
 
-.options-dialog.actions-dialog,
-.options-dialog.guild-dialog {
+.options-dialog.actions-dialog {
   width: min(380px, calc(100vw - 24px));
 }
 
@@ -1714,4 +1713,89 @@ canvas.server-wait {
 .look-list li.caret {
   outline: 1px dotted #fff;
   outline-offset: -1px;
+}
+
+/* module/mailnews windows: list views with column headings, the text below */
+.mk-window.game-dialog.mail-dialog {
+  width: min(600px, calc(100% - 16px));
+}
+
+.mail-dialog .mail-header {
+  padding: 0 4px;
+  color: var(--hl);
+  text-shadow: 1px 1px 0 #000;
+}
+
+.mail-dialog .mail-list {
+  display: block;
+  height: 180px;
+}
+
+.mail-dialog .mail-list .mk-list {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.mail-columns {
+  display: grid;
+  gap: 8px;
+}
+
+.mail-columns > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mail-dialog .mail-buttons {
+  flex-wrap: wrap;
+}
+
+.mail-dialog .mail-info,
+.mail-dialog .news-desc {
+  min-height: 1.2em;
+  margin: 4px 0;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.mail-dialog .mk-edit.area {
+  display: block;
+  height: 200px;
+}
+
+.mail-dialog .mk-edit.area textarea {
+  width: 100%;
+  height: 100%;
+  resize: none;
+}
+
+/* Static text with a sunken edge (SS_SUNKEN), as the guild and stats windows show values */
+.mk-text.sunken {
+  padding: 0 3px;
+  box-shadow: inset 1px 1px 0 #141414, inset -1px -1px 0 #6a6a6a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* guildmem.c: members who are logged on are listed in red */
+.mk-list li.guild-online {
+  color: #ff3030;
+}
+
+.mk-list li.guild-online.selected {
+  color: #b00000;
+}
+
+/* guildshi.c: the shield, stretched into its box */
+.guild-shield-box {
+  display: grid;
+  place-items: center;
+}
+
+.guild-shield-box .guild-shield,
+.guild-shield-box .guild-shield img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
 }

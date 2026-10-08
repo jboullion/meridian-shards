@@ -146,3 +146,56 @@ describe("room changes (server.c HandleSectorMove and the rest)", () => {
     expect(rc(BP.SAID, new ByteWriter())).toBeNull();
   });
 });
+
+describe("mail and news (module/mailnews)", () => {
+  test("byte layouts", async () => {
+    const m = await import("../src/index.ts");
+    const idx = m.readArticles(new ByteReader(new ByteWriter().u16(3).u8(1).u8(2).u16(1).u32(5).u32(1000).string("Bob").string("Hi").finish()));
+    expect(idx).toEqual({ newsgroup: 3, part: 1, maxPart: 2, articles: [{ num: 5, time: 1000, poster: "Bob", title: "Hi" }] });
+    expect(m.readMailHeader(new ByteReader(new ByteWriter().u32(9).string("Angel").u32(77).u16(1).string("Shardbot").finish()))).toEqual({
+      index: 9, sender: "Angel", time: 77, recipients: ["Shardbot"],
+    });
+    expect(hex(m.buildSendMail([12, 13], "Subject: a\nb"))).toBe(hex(new ByteWriter().u8(BP.SEND_MAIL).u16(2).u32(12).u32(13).string("Subject: a\nb").finish()));
+    expect(hex(m.buildReqLookupNames(["Bob", "Ann"]))).toBe(hex(new ByteWriter().u8(BP.REQ_LOOKUP_NAMES).u16(2).string("Bob,Ann").finish()));
+    expect(hex(m.buildReqArticle(3, 5))).toBe(hex(new ByteWriter().u8(BP.REQ_ARTICLE).u16(3).u32(5).finish()));
+    expect(hex(m.buildPostArticle(3, "T", "x"))).toBe(hex(new ByteWriter().u8(BP.POST_ARTICLE).u16(3).string("T").string("x").finish()));
+  });
+});
+
+describe("guilds (merintr.c guild messages)", () => {
+  test("readers", async () => {
+    const m = await import("../src/index.ts");
+    const w = new ByteWriter().string("Slashers").u8(1).string("pw").u32(m.GC.INVITE | m.GC.DISBAND).u32(4000);
+    for (const [a, b] of [["I", "i"], ["M", "m"], ["L", "l"], ["H", "h"], ["G", "g"]]) w.string(a).string(b);
+    w.u32(6981).u16(1).u32(6981).string("Shardbot").u8(5).u8(m.GUILD_GENDER.MALE);
+    expect(m.readGuildInfo(new ByteReader(w.finish()))).toEqual({
+      name: "Slashers", password: "pw", flags: m.GC.INVITE | m.GC.DISBAND, guildId: 4000,
+      maleRanks: ["I", "M", "L", "H", "G"], femaleRanks: ["i", "m", "l", "h", "g"], currentVote: 6981,
+      members: [{ id: 6981, name: "Shardbot", rank: 5, gender: m.GUILD_GENDER.MALE }],
+    });
+    // No hall: no password string follows the flag
+    const noHall = new ByteWriter().string("X").u8(0).u32(0).u32(1);
+    for (let i = 0; i < 10; i++) noHall.string("");
+    expect(m.readGuildInfo(new ByteReader(noHall.u32(0).u16(0).finish())).password).toBeNull();
+    const list = new ByteWriter().u16(2).u32(1).string("A").u32(2).string("B").u16(1).u32(1).u16(0).u16(0).u16(1).u32(2);
+    expect(m.readGuildList(new ByteReader(list.finish()))).toEqual({
+      guilds: [{ id: 1, name: "A" }, { id: 2, name: "B" }], allies: [1], enemies: [], otherAllies: [], otherEnemies: [2],
+    });
+    expect(m.readGuildShield(new ByteReader(new ByteWriter().u32(4000).string("Slashers").u8(3).u8(7).u8(2).finish()))).toEqual({
+      id: 4000, name: "Slashers", color1: 3, color2: 7, pattern: 2,
+    });
+    expect(m.readGuildHalls(new ByteReader(new ByteWriter().u16(1).u32(10).u32(20).i32(5000).i32(-1).finish()))).toEqual([{ id: 10, nameRes: 20, cost: 5000, rent: -1 }]);
+  });
+
+  test("builders", async () => {
+    const m = await import("../src/index.ts");
+    const uc = (n: number) => new ByteWriter().u8(BP.USERCOMMAND).u8(n);
+    expect(hex(m.buildSetRank(6981, 3))).toBe(hex(uc(UC.SET_RANK).u32(6981).u8(3).finish()));
+    expect(hex(m.buildClaimShield(1, 2, 3, true))).toBe(hex(uc(UC.CLAIM_SHIELD).u8(1).u8(2).u8(3).u8(1).finish()));
+    expect(hex(m.buildGuildRent(10, "pw"))).toBe(hex(uc(UC.GUILD_RENT).u32(10).string("pw").finish()));
+    // guildbuy.c IDOK: the name, then each rank's male and female names, lowest first, then the secret flag
+    const create = uc(UC.GUILD_CREATE).string("S");
+    for (let i = 1; i <= 5; i++) create.string(`m${i}`).string(`f${i}`);
+    expect(hex(m.buildGuildCreate("S", ["m1", "m2", "m3", "m4", "m5"], ["f1", "f2", "f3", "f4", "f5"], false))).toBe(hex(create.u8(0).finish()));
+  });
+});

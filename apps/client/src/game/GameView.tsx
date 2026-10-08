@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { CF, SAY, UA, UC, type ObjectInfo } from "@shards/protocol";
 import {
-  isNumberItem, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
+  isNumberItem, type GuildEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
   type TradeList,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
@@ -12,11 +12,17 @@ import { getSettings, onSettings, updateSettings, type ChatTab, type Settings } 
 import {
   BAD_COMMAND, defineAlias, filterSayMessage, findSpell, groupAdd, groupDelete, groupNew, interpretLine, resolveTell, type CommandId, type GroupResult,
 } from "./commands.ts";
+import { gameSocketUrl } from "../host.ts";
+import { loadMailbox, newMailMessage, nextMailNumber, replyRecipients, replySubject, saveMailbox, type MailMessage } from "./mailbox.ts";
+import { StatChangeDialog } from "./ui/StatChangeDialog.tsx";
+import { GuildCreateDialog, GuildHallsDialog, GuildWindow, legalShield, type GuildState } from "./ui/GuildDialogs.tsx";
+import { ReadMailDialog, ReadNewsDialog, SendMailDialog, type MailDraft, type Newsgroup } from "./ui/MailNewsDialogs.tsx";
+import type { NewsArticle } from "@shards/protocol";
 import { AmountDialog, GiveDialog, OfferDialog, PasswordDialog, SuicideDialog, TradeDialog, reduceOffer } from "./ui/Dialogs.tsx";
 import { DESC, DescriptionDialog, LookListDialog, type DescAction, type LookListChoice } from "./ui/LookDialogs.tsx";
 import { MiniMap } from "./ui/MiniMap.tsx";
 import {
-  ActionsDialog, CommandAliasesDialog, ConfigurationDialog, GroupsDialog, GuildDialog, HotkeyAliasesDialog, PreferencesDialog, WhoDialog,
+  ActionsDialog, CommandAliasesDialog, ConfigurationDialog, GroupsDialog, HotkeyAliasesDialog, PreferencesDialog, WhoDialog,
   type ActionWindow,
 } from "./ui/OptionsDialogs.tsx";
 import { Sidebar, type Tab } from "./ui/Sidebar.tsx";
@@ -116,7 +122,7 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, onLogout, trades, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, onLogout, trades, offers, serverPrefs, latency,
 }: {
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
@@ -130,6 +136,12 @@ export function GameView({
   chat: ChatLine[];
   /** Subscribe to descriptions from the session (BP_LOOK, UC_LOOK_PLAYER) */
   looks: (fn: (l: LookResult) => void) => () => void;
+  /** BP_REQ_STAT_CHANGE (module/stats): an elder offers to rearrange our stats */
+  statChange: (fn: (e: { stats: number[]; levels: number[] }) => void) => () => void;
+  /** The guild messages (merintr guild*.c: UC_GUILDINFO, UC_GUILD_ASK, ...) */
+  guild: (fn: (e: GuildEvent) => void) => () => void;
+  /** Mail and the news globes (module/mailnews) */
+  mailNews: (fn: (e: MailNewsEvent) => void) => () => void;
   /** Subscribe to container contents (BP_OBJECT_CONTENTS) */
   contents: (fn: (c: ContainerContents) => void) => () => void;
   /** Subscribe to the damage we deal (for the numbers over what we hit) */
@@ -167,6 +179,23 @@ export function GameView({
     const now = Date.now();
     return { all: now, chat: now, combat: now, server: now };
   });
+  /** Read Mail (mailread.c), open or not; the kept messages; its info line */
+  const [mailOpen, setMailOpen] = useState(false);
+  const [mailbox, setMailbox] = useState<MailMessage[]>([]);
+  const [mailInfo, setMailInfo] = useState("");
+  /** Send Mail windows' drafts (one at a time, as the original allows) */
+  const [mailDraft, setMailDraft] = useState<MailDraft | null>(null);
+  /** The Send Mail window waiting for BP_LOOKUP_NAMES */
+  const lookupRef = useRef<((ids: number[]) => void) | null>(null);
+  /** The newsgroup a globe opened, its index and the chosen article's text */
+  const [news, setNews] = useState<{ group: Newsgroup; articles: NewsArticle[] | null; article: { num: number; text: string } | null } | null>(null);
+  const requestedArticle = useRef(-1);
+  /** The stat change sheet (module/stats), with what the server says we have */
+  const [statChangeAt, setStatChangeAt] = useState<{ stats: number[]; levels: number[] } | null>(null);
+  /** The guild window (guild.c), Create New Guild (UC_GUILD_ASK) and Rent Guild Hall (UC_GUILD_HALLS) */
+  const [guildState, setGuildState] = useState<GuildState | null>(null);
+  const [guildAsk, setGuildAsk] = useState<{ cost: number; secretCost: number } | null>(null);
+  const [guildHalls, setGuildHalls] = useState<Extract<GuildEvent, { type: "halls" }>["halls"] | null>(null);
   /** command.c pinfo.resting: after "rest", until "stand" */
   const restingRef = useRef(false);
   useWorld(session.world, ["spells"]);
@@ -271,6 +300,63 @@ export function GameView({
   );
   useEffect(() => offers((e) => setOffer((prev) => reduceOffer(prev, e))), [offers]);
   useEffect(() => damage((d) => sceneRef.current?.showDamage(d)), [damage]);
+  useEffect(() => statChange(setStatChangeAt), [statChange]);
+  useEffect(
+    () =>
+      guild((e) => {
+        switch (e.type) {
+          case "info":
+            // guild.c GuildConfigInit: (re)open the sheet with what the server says
+            return setGuildState((g) => ({ info: e.info, list: g?.list ?? null, shield: g?.shield ?? null, patterns: g?.patterns ?? [], ownShield: g?.ownShield ?? false }));
+          case "list":
+            return setGuildState((g) => (g ? { ...g, list: e.list } : g));
+          case "shield":
+            return setGuildState((g) =>
+              g ? { ...g, shield: e.shield, ownShield: g.ownShield || (e.shield.id === g.info.guildId && legalShield(e.shield.color1, e.shield.color2)) } : g,
+            );
+          case "shields":
+            return setGuildState((g) => (g ? { ...g, patterns: e.patterns } : g));
+          case "ask":
+            return setGuildAsk({ cost: e.cost, secretCost: e.secretCost });
+          case "halls":
+            return setGuildHalls(e.halls);
+        }
+      }),
+    [guild],
+  );
+  // module/mailnews: keep each new message (then tell the server), the globes' news
+  useEffect(
+    () =>
+      mailNews((e) => {
+        switch (e.type) {
+          case "newsgroup":
+            requestedArticle.current = -1;
+            return setNews({ group: e, articles: null, article: null });
+          case "articles":
+            return setNews((n) => (n && n.group.newsgroup === e.newsgroup ? { ...n, articles: e.articles } : n));
+          case "article":
+            return setNews((n) => (n ? { ...n, article: { num: requestedArticle.current, text: e.text } } : n));
+          case "mail": {
+            // mailfile.c MailNewMessage: keep it; only then may the server forget it
+            const self = session.world.self;
+            const name = self ? (session.resource(self.info.nameRes) ?? "") : "";
+            const list = loadMailbox(localStorage, gameSocketUrl(), name);
+            const next = [...list, newMailMessage(nextMailNumber(list), e.sender, e.recipients, e.text, e.time)];
+            if (saveMailbox(localStorage, gameSocketUrl(), name, next)) session.deleteMail(e.index);
+            setMailbox(next);
+            return setMailInfo("");
+          }
+          case "noMoreMail":
+            return setMailInfo("You have no new mail.");
+          case "lookupNames": {
+            const waiting = lookupRef.current;
+            lookupRef.current = null;
+            return waiting?.(e.ids);
+          }
+        }
+      }),
+    [mailNews, session],
+  );
 
   // New lines scroll the chat to the bottom, unless "Lock text window in place when
   // scrolling back" is on and you've scrolled up to read (config.scroll_lock)
@@ -360,6 +446,26 @@ export function GameView({
   /** Back to the view: nothing focused, so the game's keys work (SetFocus(hMain)) */
   const focusView = () => (document.activeElement as HTMLElement | null)?.blur();
 
+  /** Our character's name (the mailbox is kept per character) */
+  const ownName = () => {
+    const self = session.world.self;
+    return self ? (session.resource(self.info.nameRes) ?? "") : "";
+  };
+
+  /** mailread.c UserReadMail: the kept messages, and ask the server for new ones */
+  const openMail = () => {
+    setMailbox(loadMailbox(localStorage, gameSocketUrl(), ownName()));
+    setMailOpen(true);
+    setMailInfo("Looking for new messages...");
+    session.requestMail();
+  };
+
+  const deleteMail = (m: MailMessage) => {
+    const next = loadMailbox(localStorage, gameSocketUrl(), ownName()).filter((x) => x.num !== m.num);
+    saveMailbox(localStorage, gameSocketUrl(), ownName(), next);
+    setMailbox(next);
+  };
+
   /** Speech, filtered as say.c FilterSayMessage does */
   const say = (text: string, kind: number) => {
     const t = filterSayMessage(text);
@@ -423,13 +529,20 @@ export function GameView({
     return true;
   };
 
+  /** The Actions menu's windows; the guild's comes from the server (command.c CommandGuild: UC_REQ_GUILDINFO) */
+  const openWindow = (w: ActionWindow) => {
+    if (w !== "guild") return setModal({ type: "action", window: w });
+    setModal(null);
+    session.userCommand(UC.REQ_GUILDINFO);
+  };
+
   /** command.c Command*: one command, with the words after its name */
   const runParsed = (id: CommandId, args: string): void => {
     const world = session.world;
     const players = () => [...world.players.values()].map((p) => ({ id: p.id, name: p.name }));
     const window = COMMAND_WINDOWS[id];
     // "alias word command" defines a command alias; alone it opens the window
-    if (window && !((id === "alias" || id === "cmdalias") && args)) return setModal({ type: "action", window });
+    if (window && !((id === "alias" || id === "cmdalias") && args)) return openWindow(window);
     const ua = USER_ACTIONS[id];
     if (ua !== undefined) return session.action(ua);
     const option = OPTION_COMMANDS[id];
@@ -477,7 +590,7 @@ export function GameView({
       case "help":
         return session.localMessage("The help pages aren't in Meridian Shards yet.");
       case "mail":
-        return session.localMessage("Mail isn't in Meridian Shards yet.");
+        return openMail();
       case "suicid":
         return session.localMessage('Type the entire word "suicide" to restart your character.');
       case "suicide":
@@ -749,6 +862,8 @@ export function GameView({
           // actions.c: each item runs its typed command
           { label: "Actions", items: ACTIONS_MENU.map((a) => (a ? { label: a[1], onSelect: () => runCommand(a[0]) } : { label: "", separator: true })) },
           ...(spellsMenu.length ? [{ label: "Spells", items: spellsMenu }] : []),
+          // mailnews.c's toolbar button, until the toolbar
+          { label: "Mail…", onSelect: openMail },
           { label: "Change password…", onSelect: () => setModal({ type: "password" }) },
           { label: "Log off", onSelect: onLogout },
         ]}
@@ -821,6 +936,49 @@ export function GameView({
             onClose={() => setModal(null)}
           />
         )}
+        {mailOpen && (
+          <ReadMailDialog
+            mailbox={mailbox}
+            info={mailInfo}
+            onWrite={() => setMailDraft({ to: [], subject: "" })}
+            onReply={(m, all) => setMailDraft({ to: replyRecipients(m, all, ownName()), subject: replySubject(m.subject) })}
+            onRescan={() => {
+              setMailInfo("Looking for new messages...");
+              session.requestMail();
+            }}
+            onDelete={deleteMail}
+            onClose={() => setMailOpen(false)}
+          />
+        )}
+        {mailDraft && (
+          <SendMailDialog
+            session={session}
+            draft={mailDraft}
+            onLookup={(fn) => (lookupRef.current = fn)}
+            onClose={() => {
+              lookupRef.current = null;
+              setMailDraft(null);
+            }}
+          />
+        )}
+        {news && (
+          <ReadNewsDialog
+            session={session}
+            group={news.group}
+            articles={news.articles}
+            article={news.article}
+            ignored={(n) => settings.ignored.includes(n.toLowerCase())}
+            onRequestArticle={(num) => {
+              requestedArticle.current = num;
+              session.requestArticle(news.group.newsgroup, num);
+            }}
+            onMailAuthor={(a) => setMailDraft({ to: [a.poster], subject: replySubject(a.title) })}
+            onClose={() => setNews(null)}
+          />
+        )}
+        {statChangeAt && (
+          <StatChangeDialog session={session} stats={statChangeAt.stats} levels={statChangeAt.levels} onClose={() => setStatChangeAt(null)} />
+        )}
         {modal?.type === "suicide" && <SuicideDialog session={session} onClose={() => setModal(null)} />}
         {modal?.type === "password" && <PasswordDialog session={session} onClose={() => setModal(null)} />}
         {modal?.type === "preferences" && (
@@ -838,7 +996,7 @@ export function GameView({
         )}
         {modal?.type === "configuration" && <ConfigurationDialog settings={settings} onApply={updateSettings} onClose={() => setModal(null)} />}
         {modal?.type === "actions" && (
-          <ActionsDialog onOpen={(w) => setModal({ type: "action", window: w })} onCommand={(c) => runCommand(c)} onClose={() => setModal(null)} />
+          <ActionsDialog onOpen={openWindow} onCommand={(c) => runCommand(c)} onClose={() => setModal(null)} />
         )}
         {modal?.type === "action" && modal.window === "who" && (
           <WhoDialog session={session} settings={settings} onApply={updateSettings} onClose={() => setModal(null)} />
@@ -847,12 +1005,14 @@ export function GameView({
           <GroupsDialog session={session} settings={settings} onApply={updateSettings} onClose={() => setModal(null)} />
         )}
         {modal?.type === "action" && modal.window === "hotkeys" && (
-          <HotkeyAliasesDialog settings={settings} onApply={updateSettings} onOpen={(w) => setModal({ type: "action", window: w })} onClose={() => setModal(null)} />
+          <HotkeyAliasesDialog settings={settings} onApply={updateSettings} onOpen={openWindow} onClose={() => setModal(null)} />
         )}
         {modal?.type === "action" && modal.window === "commands" && (
-          <CommandAliasesDialog settings={settings} onApply={updateSettings} onOpen={(w) => setModal({ type: "action", window: w })} onClose={() => setModal(null)} />
+          <CommandAliasesDialog settings={settings} onApply={updateSettings} onOpen={openWindow} onClose={() => setModal(null)} />
         )}
-        {modal?.type === "action" && modal.window === "guild" && <GuildDialog onClose={() => setModal(null)} />}
+        {guildState && <GuildWindow session={session} state={guildState} icons={icons} onClose={() => setGuildState(null)} />}
+        {guildAsk && <GuildCreateDialog session={session} cost={guildAsk.cost} secretCost={guildAsk.secretCost} onClose={() => setGuildAsk(null)} />}
+        {guildHalls && <GuildHallsDialog session={session} halls={guildHalls} onClose={() => setGuildHalls(null)} />}
         {offer && (
           <OfferDialog key={offer.from?.id ?? 0} state={offer} session={session} icons={icons} onLook={(id) => lookAt(id, DESC.NONE)} onClose={() => setOffer(null)} />
         )}

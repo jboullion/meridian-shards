@@ -141,7 +141,7 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
   - groups with group messages and `tell` (`BP_SAY_GROUP`, tested);
   - hotkey aliases on F1–F12 and command aliases;
   - the Map key's full-screen map.
-  - Guilds wait for the guild messages.
+  - Guilds (milestone 13): the guild window comes from the server.
 - [x] Emotes and moods, on the Actions menu (milestone 13).
 
 ### 10. Looking and picking up (2026-10-07)
@@ -208,7 +208,12 @@ The goal: everything the original client and its modules do. The comparison (the
   - **Chat:** Up and Down go through the last 20 lines; `say.c`'s filter (control characters, runs of spaces and colour codes); a ding (`imp.ogg`) for tells, and `BP_SAY_BLOCKED` when an ignored player's tell is hidden. Speech from non-players always shows, as in the original.
   - **Smaller:** the pick lists' Find box, right click on an enchantment looks, Tab Forward / Back (Tab in the original preset) between the view, the inventory and the chat line, and `UC_SEND_QUIT`.
   - Tested on our server with Shardbot and a scripted Shardpal: the commands' replies, password changes (right and wrong old password), the tell ding and the blocked notice, inventory order kept by the server.
-- [ ] **Phase 3: social systems.** News globes, mail with a local mailbox, stat reallocation, guilds.
+- [x] **Phase 3: social systems** (2026-10-08).
+  - **News globes** (`newsread.c`, `newssend.c`): looking at a globe opens its newsgroup (`BP_LOOK_NEWSGROUP`), with the articles (Subject, Author, Date), the chosen one's text (in parts, `BP_ARTICLE`), Reply, Mail author, Post (`IDD_NEWSPOST`), Rescan and Delete, as the globe's permissions allow. Posters you ignore aren't listed.
+  - **Mail** (`mailread.c`, `mailsend.c`, `mailfile.c`): `mail` or the ☰ menu opens Read Mail. New messages come from the server one at a time (`BP_REQ_GET_MAIL`, `BP_MAIL`); each is kept in the page's storage per server and character (`apps/client/src/game/mailbox.ts`), and only then deleted on the server (`BP_DELETE_MAIL`). Write, Reply and Reply All open Send Mail, which checks the names first (`BP_REQ_LOOKUP_NAMES`) and says which one is wrong.
+  - **Stat reallocation** (`module/stats`): when an elder offers it (`BP_REQ_STAT_CHANGE`), the "Adjust your character" sheet: the six stats sharing 220 points, the eight schools that can only go down, intellect no lower than the levels you keep need, the original's three warnings, then `BP_CHANGED_STATS`.
+  - **Guilds** (`guild*.c`): the guild window from `UC_GUILDINFO` (the `guild` command or the Actions window), with Membership (ranks, exile, support for guildmaster, abdicating, leaving; members logged on in red), Alliances, Invite, Guildmaster (the hall's password, abandoning the hall, disbanding) and Shield (colours and pattern, who has claimed a design, claiming), each only as your rank allows. Create New Guild (`UC_GUILD_ASK`) and Rent Guild Hall (`UC_GUILD_HALLS`) open when Frular offers them. The Actions window's placeholder is gone.
+  - Tested on our server with Shardbot and a scripted Shardpal: the Inn's and Hall's globes (posting, reading, deleting), mail both ways and a wrong name, a stat change with a `StatsResetToken`, and creating a guild, claiming a shield, inviting Shardpal (the invitation arrived), asking for a hall (refused: the guild is too new) and disbanding.
 - [ ] **Phase 4: interface.** Toolbar, tooltips, map annotations, profanity filter, logout timer, About and intro, cursors, borders, language, quick start, desktop command line.
 - [ ] **Phase 5: mini-games and admin.** Chess, and a basic admin console.
 

@@ -21,7 +21,7 @@ import { ObjIcon } from "./ui/Sidebar.tsx";
 const TABS = ["Name", "Appearance", "Statistics", "Spells", "Skills"] as const;
 type TabName = (typeof TABS)[number];
 
-const STAT_NAMES = ["Might", "Intellect", "Stamina", "Agility", "Mysticism", "Aim"];
+export const STAT_NAMES = ["Might", "Intellect", "Stamina", "Agility", "Mysticism", "Aim"];
 const STAT_MIN = 1,
   STAT_MAX = 50,
   STAT_START = 25;
@@ -35,7 +35,7 @@ const PRESETS: { label: string; note: string; stats: number[] }[] = [
   { label: "Trickster", note: "Riija pure fighter", stats: [35, 35, 40, 30, 30, 50] },
 ];
 /** char.rc IDD_CHARSTATS: each stat's label row, bar row, and its two description lines */
-const STAT_ROWS: { y: number; bar: number; textY: number; text: [string, string] }[] = [
+export const STAT_ROWS: { y: number; bar: number; textY: number; text: [string, string] }[] = [
   { y: 26, bar: 24, textY: 23, text: ["Might affects how much you can carry and the", "damage you inflict. Important for warriors."] },
   { y: 44, bar: 43, textY: 42, text: ["With a high intellect, you can learn more spells and", "skills faster than others. Used for advanced magics."] },
   { y: 64, bar: 62, textY: 61, text: ["Stamina helps you weather the rough times when", "you are hurt and tired. Used for Kraanan spells."] },

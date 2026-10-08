@@ -679,22 +679,3 @@ export function CommandAliasesDialog({ settings, onApply, onOpen, onClose }: { s
     </DluDialog>
   );
 }
-
-/** guild.c's guild dialogs need the server's guild messages, which aren't in yet. */
-export function GuildDialog({ onClose }: { onClose: () => void }) {
-  return (
-    <Modal>
-      <Window title="Guild Configuration" onClose={onClose} className="options-dialog guild-dialog">
-        <p className="mk-message-text">
-          Guilds aren't in Meridian Shards yet: creating and joining a guild, members and ranks, allies and enemies, and guild halls. They're on the
-          list of missing features.
-        </p>
-        <div className="mk-buttons center">
-          <Button isDefault onClick={onClose}>
-            OK
-          </Button>
-        </div>
-      </Window>
-    </Modal>
-  );
-}

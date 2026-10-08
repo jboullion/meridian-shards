@@ -884,3 +884,214 @@ export function readPlayWave(r: ByteReader): PlayWave {
 }
 
 export { AP, BP };
+
+// ---------------------------------------------------------------- mail and news (module/mailnews)
+
+/** news.h NEWS_READ, NEWS_POST: what BP_LOOK_NEWSGROUP lets us do */
+export const NEWS = { READ: 0x01, POST: 0x02 } as const;
+
+/**
+ * BP_LOOK_NEWSGROUP (mailnews.c HandleLookNewsgroup): the newsgroup's id, our permissions
+ * and the globe; its description follows as a server message (format resource and
+ * parameters), which the caller formats.
+ */
+export function readLookNewsgroup(r: ByteReader): { newsgroup: number; permission: number; object: ObjectInfo } {
+  const newsgroup = r.u16();
+  const permission = r.u8();
+  return { newsgroup, permission, object: readObject(r) };
+}
+
+export interface NewsArticle {
+  /** The article's number in its newsgroup */
+  num: number;
+  /** Server time (see mailnews.c DateFromSeconds) */
+  time: number;
+  poster: string;
+  title: string;
+}
+
+/** BP_ARTICLES (HandleArticles): one part of a newsgroup's index. */
+export function readArticles(r: ByteReader): { newsgroup: number; part: number; maxPart: number; articles: NewsArticle[] } {
+  const newsgroup = r.u16();
+  const part = r.u8();
+  const maxPart = r.u8();
+  const n = r.u16();
+  const articles: NewsArticle[] = [];
+  for (let i = 0; i < n; i++) articles.push({ num: r.u32(), time: r.u32(), poster: r.string(), title: r.string() });
+  return { newsgroup, part, maxPart, articles };
+}
+
+/**
+ * BP_MAIL (HandleMail): one message, its index on the server, who sent it, when, and to
+ * whom; the text follows as a server message, which the caller formats. No recipients
+ * means there's no more mail.
+ */
+export function readMailHeader(r: ByteReader): { index: number; sender: string; time: number; recipients: string[] } {
+  const index = r.u32();
+  const sender = r.string();
+  const time = r.u32();
+  const n = r.u16();
+  const recipients: string[] = [];
+  for (let i = 0; i < n; i++) recipients.push(r.string());
+  return { index, sender, time, recipients };
+}
+
+/** BP_LOOKUP_NAMES (HandleLookupNames): the recipients' object ids, 0 for a name that isn't a player. */
+export function readLookupNames(r: ByteReader): number[] {
+  const n = r.u16();
+  const ids: number[] = [];
+  for (let i = 0; i < n; i++) ids.push(r.u32());
+  return ids;
+}
+
+export const buildReqGetMail = (): Uint8Array => Uint8Array.of(BP.REQ_GET_MAIL);
+
+/** BP_DELETE_MAIL: the server may forget the message (we've kept it) */
+export const buildDeleteMail = (index: number): Uint8Array => new ByteWriter().u8(BP.DELETE_MAIL).u32(objId(index)).finish();
+
+/** BP_SEND_MAIL (mailsend.c MailRecipientsReceived): PARAM_ID_ARRAY, then "Subject: ...\n" and the text */
+export function buildSendMail(ids: readonly number[], text: string): Uint8Array {
+  const w = new ByteWriter().u8(BP.SEND_MAIL).u16(ids.length);
+  for (const id of ids) w.u32(id);
+  return w.string(text).finish();
+}
+
+/** BP_REQ_LOOKUP_NAMES: how many names, then the names separated by commas */
+export const buildReqLookupNames = (names: readonly string[]): Uint8Array =>
+  new ByteWriter().u8(BP.REQ_LOOKUP_NAMES).u16(names.length).string(names.join(",")).finish();
+
+export const buildReqArticles = (newsgroup: number): Uint8Array => new ByteWriter().u8(BP.REQ_ARTICLES).u16(newsgroup).finish();
+
+export const buildReqArticle = (newsgroup: number, num: number): Uint8Array =>
+  new ByteWriter().u8(BP.REQ_ARTICLE).u16(newsgroup).u32(objId(num)).finish();
+
+export const buildPostArticle = (newsgroup: number, title: string, text: string): Uint8Array =>
+  new ByteWriter().u8(BP.POST_ARTICLE).u16(newsgroup).string(title).string(text).finish();
+
+export const buildDeleteNews = (newsgroup: number, num: number): Uint8Array =>
+  new ByteWriter().u8(BP.DELETE_NEWS).u16(newsgroup).u32(objId(num)).finish();
+
+// ---------------------------------------------------------------- stat reallocation (module/stats)
+
+/**
+ * BP_REQ_STAT_CHANGE (Kod BP_STAT_CHANGE, stats.c HandleStatChangeRequest): our six stats
+ * (might, intellect, stamina, agility, mysticism, aim) and eight school levels (Shal'ille,
+ * Qor, Kraanan, Faren, Riija, Jala, Weaponcraft, Crafting).
+ */
+export function readStatChange(r: ByteReader): { stats: number[]; levels: number[] } {
+  const stats = Array.from({ length: 6 }, () => r.u8());
+  const levels = Array.from({ length: 8 }, () => r.u8());
+  return { stats, levels };
+}
+
+/** BP_CHANGED_STATS (stats.h SendNewCharInfo): the new stats and levels, a byte each */
+export function buildChangedStats(stats: readonly number[], levels: readonly number[]): Uint8Array {
+  return Uint8Array.of(BP.CHANGED_STATS, ...stats.slice(0, 6), ...levels.slice(0, 8));
+}
+
+// ---------------------------------------------------------------- guilds (merintr.c, guild*.c)
+
+/** guild.h GC_*: what our rank lets us do in the guild */
+export const GC = {
+  INVITE: 0x1, EXILE: 0x2, RENOUNCE: 0x4, VOTE: 0x20, ABDICATE: 0x40, MAKE_ALLIANCE: 0x100, END_ALLIANCE: 0x200,
+  DECLARE_ENEMY: 0x400, END_ENEMY: 0x800, SET_RANK: 0x1000, DISBAND: 0x2000, ABANDON: 0x4000,
+} as const;
+
+/** guild.h GUILD_MALE, GUILD_FEMALE */
+export const GUILD_GENDER = { MALE: 1, FEMALE: 2 } as const;
+
+export interface GuildMember {
+  id: number;
+  name: string;
+  /** 1 (lowest) to 5 */
+  rank: number;
+  gender: number;
+}
+
+export interface GuildInfo {
+  name: string;
+  /** The guild hall's password, or null without a hall */
+  password: string | null;
+  flags: number;
+  guildId: number;
+  /** Rank names, lowest first */
+  maleRanks: string[];
+  femaleRanks: string[];
+  /** Who we support for guildmaster (0 for nobody) */
+  currentVote: number;
+  members: GuildMember[];
+}
+
+/** UC_GUILDINFO (merintr.c HandleGuildInfo), after the command byte */
+export function readGuildInfo(r: ByteReader): GuildInfo {
+  const name = r.string();
+  const password = r.u8() ? r.string() : null;
+  const flags = r.u32();
+  const guildId = r.u32();
+  const maleRanks: string[] = [];
+  const femaleRanks: string[] = [];
+  for (let i = 0; i < 5; i++) {
+    maleRanks.push(r.string());
+    femaleRanks.push(r.string());
+  }
+  const currentVote = r.u32();
+  const n = r.u16();
+  const members: GuildMember[] = [];
+  for (let i = 0; i < n; i++) members.push({ id: r.u32(), name: r.string(), rank: r.u8(), gender: r.u8() });
+  return { name, password, flags, guildId, maleRanks, femaleRanks, currentVote, members };
+}
+
+/** UC_GUILD_LIST (HandleGuildList): every guild, then the ids of our allies and enemies, and who counts us as theirs */
+export function readGuildList(r: ByteReader): {
+  guilds: { id: number; name: string }[];
+  allies: number[];
+  enemies: number[];
+  otherAllies: number[];
+  otherEnemies: number[];
+} {
+  const n = r.u16();
+  const guilds: { id: number; name: string }[] = [];
+  for (let i = 0; i < n; i++) guilds.push({ id: r.u32(), name: r.string() });
+  const ids = () => Array.from({ length: r.u16() }, () => r.u32());
+  return { guilds, allies: ids(), enemies: ids(), otherAllies: ids(), otherEnemies: ids() };
+}
+
+/** UC_GUILD_SHIELD (HandleGuildShield): who has these colours and this pattern (0 for nobody) */
+export function readGuildShield(r: ByteReader): { id: number; name: string; color1: number; color2: number; pattern: number } {
+  return { id: r.u32(), name: r.string(), color1: r.u8(), color2: r.u8(), pattern: r.u8() };
+}
+
+/** UC_GUILD_SHIELDS (HandleGuildShields): the shield patterns' pictures */
+export function readGuildShields(r: ByteReader): number[] {
+  return Array.from({ length: r.u16() }, () => r.u32());
+}
+
+/** UC_GUILD_HALLS (HandleGuildHalls): the halls for rent */
+export function readGuildHalls(r: ByteReader): { id: number; nameRes: number; cost: number; rent: number }[] {
+  return Array.from({ length: r.u16() }, () => ({ id: r.u32(), nameRes: r.u32(), cost: r.i32(), rent: r.i32() }));
+}
+
+const userCommand = (uc: number) => new ByteWriter().u8(BP.USERCOMMAND).u8(uc);
+
+/** UC_INVITE, UC_EXILE, UC_ABDICATE, UC_VOTE, alliances and enemies: a command naming one object */
+export const buildGuildObjectCommand = (uc: number, id: number): Uint8Array => userCommand(uc).u32(objId(id)).finish();
+
+/** UC_SET_RANK: the member and their new rank (1..5) */
+export const buildSetRank = (id: number, rank: number): Uint8Array => userCommand(UC.SET_RANK).u32(objId(id)).u8(rank).finish();
+
+/** UC_GUILD_CREATE (guildbuy.c): the name, the rank names (male then female, lowest first) and the secret flag */
+export function buildGuildCreate(name: string, maleRanks: readonly string[], femaleRanks: readonly string[], secret: boolean): Uint8Array {
+  const w = userCommand(UC.GUILD_CREATE).string(name);
+  for (let i = 0; i < 5; i++) w.string(maleRanks[i] ?? "").string(femaleRanks[i] ?? "");
+  return w.u8(secret ? 1 : 0).finish();
+}
+
+/** UC_CLAIM_SHIELD (guildshi.c): colours and pattern; claim false only asks who has it */
+export const buildClaimShield = (color1: number, color2: number, pattern: number, claim: boolean): Uint8Array =>
+  userCommand(UC.CLAIM_SHIELD).u8(color1).u8(color2).u8(pattern).u8(claim ? 1 : 0).finish();
+
+/** UC_GUILD_RENT (guildhal.c): a hall and its password */
+export const buildGuildRent = (hall: number, password: string): Uint8Array => userCommand(UC.GUILD_RENT).u32(objId(hall)).string(password).finish();
+
+/** UC_GUILD_SET_PASSWORD (guildmtr.c) */
+export const buildGuildPassword = (password: string): Uint8Array => userCommand(UC.GUILD_SET_PASSWORD).string(password).finish();

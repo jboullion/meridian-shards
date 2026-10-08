@@ -3,6 +3,7 @@ import type { CharInfo, CharacterSlot } from "@shards/protocol";
 import { SAY } from "@shards/protocol";
 import {
   GameSession, type ChatLine, type ContainerContents, type DamageDealt, type LookResult, type OfferEvent, type SessionPhase, type TradeList,
+  type MailNewsEvent, type GuildEvent,
 } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
@@ -41,6 +42,9 @@ interface Live {
   looks: Relay<LookResult>;
   contents: Relay<ContainerContents>;
   damage: Relay<DamageDealt>;
+  mailNews: Relay<MailNewsEvent>;
+  statChange: Relay<{ stats: number[]; levels: number[] }>;
+  guild: Relay<GuildEvent>;
 }
 
 /**
@@ -133,6 +137,9 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     const looks = new Relay<LookResult>();
     const contents = new Relay<ContainerContents>();
     const damage = new Relay<DamageDealt>();
+    const mailNews = new Relay<MailNewsEvent>();
+    const statChange = new Relay<{ stats: number[]; levels: number[] }>();
+    const guild = new Relay<GuildEvent>();
     const s = new GameSession(
       { url: gameSocketUrl(), username, password, secretKey: __SECRET_KEY__, lookupResource: (id) => rsb.get(id), pingIntervalMs: 0 },
       {
@@ -162,6 +169,9 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
         preferences: setServerPrefs,
         latency: setLatency,
         look: looks.emit,
+        mailNews: mailNews.emit,
+        statChange: (stats, levels) => statChange.emit({ stats, levels }),
+        guild: guild.emit,
         contents: (container, items) => contents.emit({ container, items }),
         trade: trades.emit,
         offer: offers.emit,
@@ -170,7 +180,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       },
     );
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => s.resource(id)), trades, offers, looks, contents, damage });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => s.resource(id)), trades, offers, looks, contents, damage, mailNews, statChange, guild });
   };
 
   const logout = () => {
@@ -245,6 +255,9 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       looks={live.looks.on}
       contents={live.contents.on}
       damage={live.damage.on}
+      mailNews={live.mailNews.on}
+      statChange={live.statChange.on}
+      guild={live.guild.on}
       onLogout={logout}
       serverPrefs={serverPrefs}
       latency={latency}

@@ -8,7 +8,9 @@ import {
   buildReqCounteroffer, buildReqOffer, buildReqTurn, buildReqWithdrawal, buildReqWithdrawalItems, buildSay, buildSayGroup, buildSendEnchantments,
   buildSendSkills, buildSendSpells, buildChangeDescription, buildChangeUrl, buildReqApply,
   buildReqGetFromContainer, buildReqObjectContents, buildReqPut, buildSendStatGroups, buildSendStats, buildSimple, buildUseCharacter, buildUserCommand,
-  buildSendCharInfo, buildAction, buildAppeal, buildChangePassword, buildReqInventoryMove, buildSayBlocked, UC, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
+  buildSendCharInfo, buildDeleteMail, buildDeleteNews, buildPostArticle, buildReqArticle, buildReqArticles, buildReqGetMail,
+  buildReqLookupNames, buildSendMail, buildChangedStats, readStatChange, readGuildInfo, readGuildList, readGuildShield, readGuildShields,
+  readGuildHalls, type GuildInfo, readArticles, readLookNewsgroup, readLookupNames, readMailHeader, type NewsArticle, buildAction, buildAppeal, buildChangePassword, buildReqInventoryMove, buildSayBlocked, UC, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
   type BuyItem, type CharInfo, type CharacterSlot, type NewCharInfo, type ObjectInfo, type ObjectRef, type PlayWave,
 } from "@shards/protocol";
 import { WorldState, fineToKod } from "./state.ts";
@@ -78,6 +80,33 @@ export type OfferEvent =
   | { type: "counteroffered"; items: ObjectInfo[] }
   | { type: "canceled" };
 
+/** Mail and the news globes (module/mailnews), as the server sends them. */
+export type MailNewsEvent =
+  /** BP_LOOK_NEWSGROUP: we looked at a news globe */
+  | { type: "newsgroup"; newsgroup: number; permission: number; object: ObjectInfo; name: string; description: string }
+  /** BP_ARTICLES, all parts: the newsgroup's index */
+  | { type: "articles"; newsgroup: number; articles: NewsArticle[] }
+  /** BP_ARTICLE: the text of the article asked for */
+  | { type: "article"; text: string }
+  /** BP_MAIL: a message, to keep (then BP_DELETE_MAIL its index on the server) */
+  | { type: "mail"; index: number; sender: string; time: number; recipients: string[]; text: string }
+  /** BP_MAIL with no recipients: no more new mail */
+  | { type: "noMoreMail" }
+  /** BP_LOOKUP_NAMES: the recipients' ids, 0 for a name that isn't a player */
+  | { type: "lookupNames"; ids: number[] };
+
+/** The guild windows' news from the server (merintr.c HandleGuild*) */
+export type GuildEvent =
+  /** UC_GUILDINFO: our guild, for the guild window */
+  | { type: "info"; info: GuildInfo }
+  /** UC_GUILD_ASK: create a guild, at these costs (plain, secret) */
+  | { type: "ask"; cost: number; secretCost: number }
+  | { type: "list"; list: ReturnType<typeof readGuildList> }
+  | { type: "shield"; shield: ReturnType<typeof readGuildShield> }
+  | { type: "shields"; patterns: number[] }
+  /** UC_GUILD_HALLS: halls to rent */
+  | { type: "halls"; halls: ReturnType<typeof readGuildHalls> };
+
 /** Sound and music from the server (server.c HandlePlayWave / HandleStopWave / HandlePlayMusic). */
 export type SoundEvent =
   | { type: "play"; wave: PlayWave; file: string }
@@ -115,6 +144,12 @@ export interface SessionEvents {
   error?: (message: string) => void;
   chat?: (line: ChatLine) => void;
   look?: (look: LookResult) => void;
+  /** BP_REQ_STAT_CHANGE (module/stats): an elder offers to rearrange our stats and school levels */
+  statChange?: (stats: number[], levels: number[]) => void;
+  /** Guilds (merintr.c guild*.c) */
+  guild?: (e: GuildEvent) => void;
+  /** Mail and news (module/mailnews) */
+  mailNews?: (e: MailNewsEvent) => void;
   /** BP_OBJECT_CONTENTS: what's inside a container we asked about (gameuser.c GotObjectContents) */
   contents?: (container: number, items: ObjectInfo[]) => void;
   trade?: (list: TradeList) => void;
@@ -409,6 +444,51 @@ export class GameSession {
     this.send(buildReqInventoryMove(id, before));
   }
 
+  /** mailnews.c ReceiveArticles: the index parts so far, and the last part number */
+  private articleParts: NewsArticle[] = [];
+  private lastArticlePart = 0;
+
+  /** BP_CHANGED_STATS (statsmake.c VerifySettings) */
+  changeStats(stats: readonly number[], levels: readonly number[]): void {
+    this.send(buildChangedStats(stats, levels));
+  }
+
+  /** BP_REQ_GET_MAIL: send us our new mail (each comes as BP_MAIL) */
+  requestMail(): void {
+    this.send(buildReqGetMail());
+  }
+
+  /** BP_DELETE_MAIL: we've kept the message; the server may forget it */
+  deleteMail(index: number): void {
+    this.send(buildDeleteMail(index));
+  }
+
+  /** BP_REQ_LOOKUP_NAMES: mail recipients' names to ids (answered with BP_LOOKUP_NAMES) */
+  lookupNames(names: readonly string[]): void {
+    this.send(buildReqLookupNames(names));
+  }
+
+  /** BP_SEND_MAIL: "Subject: ...", a newline, then the message */
+  sendMail(ids: readonly number[], text: string): void {
+    this.send(buildSendMail(ids, text));
+  }
+
+  requestArticles(newsgroup: number): void {
+    this.send(buildReqArticles(newsgroup));
+  }
+
+  requestArticle(newsgroup: number, num: number): void {
+    this.send(buildReqArticle(newsgroup, num));
+  }
+
+  postArticle(newsgroup: number, title: string, text: string): void {
+    this.send(buildPostArticle(newsgroup, title, text));
+  }
+
+  deleteArticle(newsgroup: number, num: number): void {
+    this.send(buildDeleteNews(newsgroup, num));
+  }
+
   /** Whether this is the account's password (command.c SuicideVerifyDialogProc checks the typed one). */
   passwordMatches(password: string): boolean {
     return password === this.opts.password;
@@ -621,6 +701,19 @@ export class GameSession {
             const schools: number[] = [];
             for (let i = 0; i < n; i++) schools.push(r.u32());
             this.world.setSpellSchools(schools);
+          } else if (uc === UC.GUILDINFO) {
+            this.events.guild?.({ type: "info", info: readGuildInfo(r) });
+          } else if (uc === UC.GUILD_ASK) {
+            const cost = r.i32();
+            this.events.guild?.({ type: "ask", cost, secretCost: r.i32() });
+          } else if (uc === UC.GUILD_LIST) {
+            this.events.guild?.({ type: "list", list: readGuildList(r) });
+          } else if (uc === UC.GUILD_SHIELD) {
+            this.events.guild?.({ type: "shield", shield: readGuildShield(r) });
+          } else if (uc === UC.GUILD_SHIELDS) {
+            this.events.guild?.({ type: "shields", patterns: readGuildShields(r) });
+          } else if (uc === UC.GUILD_HALLS) {
+            this.events.guild?.({ type: "halls", halls: readGuildHalls(r) });
           } else if (uc === UC.SEND_QUIT) {
             // merintr.c HandleSendQuit: the server wants us out (after a suicide, a rescue)
             this.send(buildSimple(BP.REQ_QUIT));
@@ -706,6 +799,49 @@ export class GameSession {
           if (file) this.events.sound?.({ type: "music", file });
           break;
         }
+        case BP.REQ_STAT_CHANGE: {
+          const { stats, levels } = readStatChange(r);
+          this.events.statChange?.(stats, levels);
+          break;
+        }
+        case BP.LOOK_NEWSGROUP: {
+          // mailnews.c HandleLookNewsgroup: a news globe, instead of BP_LOOK
+          const { newsgroup, permission, object } = readLookNewsgroup(r);
+          const description = formatServerMessage(r.u32(), r, (id) => this.resource(id)) ?? "";
+          this.events.mailNews?.({ type: "newsgroup", newsgroup, permission, object, name: this.resource(object.nameRes) ?? "", description });
+          break;
+        }
+        case BP.ARTICLES: {
+          // ReceiveArticles: parts arrive in order; the index is whole at the last one
+          const { newsgroup, part, maxPart, articles } = readArticles(r);
+          if (part !== this.lastArticlePart + 1) {
+            this.lastArticlePart = 0;
+            break;
+          }
+          this.lastArticlePart = part;
+          this.articleParts = part === 1 ? articles : [...this.articleParts, ...articles];
+          if (part === maxPart) {
+            this.lastArticlePart = 0;
+            this.events.mailNews?.({ type: "articles", newsgroup, articles: this.articleParts });
+          }
+          break;
+        }
+        case BP.ARTICLE:
+          this.events.mailNews?.({ type: "article", text: r.string() });
+          break;
+        case BP.MAIL: {
+          const { index, sender, time, recipients } = readMailHeader(r);
+          if (!recipients.length) {
+            this.events.mailNews?.({ type: "noMoreMail" });
+            break;
+          }
+          const text = formatServerMessage(r.u32(), r, (id) => this.resource(id)) ?? "";
+          this.events.mailNews?.({ type: "mail", index, sender, time, recipients, text });
+          break;
+        }
+        case BP.LOOKUP_NAMES:
+          this.events.mailNews?.({ type: "lookupNames", ids: readLookupNames(r) });
+          break;
         case BP.LOOK: {
           const object = readObject(r);
           const flags = r.u8();
