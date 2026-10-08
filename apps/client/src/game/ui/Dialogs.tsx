@@ -150,23 +150,40 @@ export function GiveDialog({
 }
 
 /**
- * offer.c's two dialogs. Ours (Send Offer): what we offered, and the other side's
- * counteroffer to accept. Theirs (Receive Offer): what someone offers us.
+ * Where an offer stands (offer.c). We offered (`from` null): `mine` went out, `theirs` is
+ * their counteroffer once it comes. They offered (`from` set): `theirs` is what they
+ * offer, `mine` our counteroffer once the server echoes it (BP_COUNTEROFFERED).
+ */
+export interface OfferState {
+  mine: ObjectInfo[];
+  theirs: ObjectInfo[] | null;
+  from: ObjectInfo | null;
+}
+
+/**
+ * offer.c's two dialogs. Ours (SendOfferDialogProc): what we offered, and the other
+ * side's counteroffer to accept. Theirs (RcvOfferDialogProc, IDD_OFFERRECEIVE): what
+ * someone offers us; we answer with a counteroffer ("Set items..." or "Offer nothing"),
+ * and only they can then accept. Double clicking an item looks at it.
  */
 export function OfferDialog({
-  state, session, icons, onClose,
+  state, session, icons, onLook, onClose,
 }: {
-  state: { mine: ObjectInfo[]; theirs: ObjectInfo[] | null; from: ObjectInfo | null };
+  state: OfferState;
   session: GameSession;
   icons: IconRenderer;
+  onLook: (id: number) => void;
   onClose: () => void;
 }) {
+  const [picking, setPicking] = useState(false);
+  const [chosen, setChosen] = useState(new Map<number, number>());
+  const [answered, setAnswered] = useState(false);
   const rs = (id: number) => session.resource(id) ?? "";
   const list = (items: ObjectInfo[]) => (
     <span className="mk-edit list item-frame">
       <ul className="mk-list item-picker readonly">
         {items.map((o) => (
-          <li key={o.id}>
+          <li key={o.id} onDoubleClick={() => onLook(o.id)}>
             <ObjIcon icons={icons} object={o} className="pick-icon" />
             <span className="pick-name">
               {isNumberItem(o.id) ? `${o.amount} ` : ""}
@@ -186,15 +203,49 @@ export function OfferDialog({
     session.acceptOffer();
     onClose();
   };
+  // offer.c IDC_SETITEMS falls through to IDOK: send the counteroffer, then wait
+  const answer = (items: ObjectRef[]) => {
+    session.counteroffer(items);
+    setPicking(false);
+    setAnswered(true);
+  };
+  if (state.from && picking) {
+    // offer.c IDC_SETITEMS: UserInventoryList(IDS_OFFERITEMS)
+    const items = [...session.world.inventory.values()].filter((o) => !session.world.inUse.has(o.id));
+    return (
+      <Dialog title="Offer items" onClose={() => setPicking(false)}>
+        <ItemPicker items={items} icons={icons} rs={rs} chosen={chosen} setChosen={setChosen} />
+        <div className="mk-buttons">
+          <Button isDefault onClick={() => answer(refs(chosen))} disabled={!chosen.size}>
+            OK
+          </Button>
+          <Button onClick={() => setPicking(false)}>Cancel</Button>
+        </div>
+      </Dialog>
+    );
+  }
   if (state.from) {
     return (
-      <Dialog title={`${rs(state.from.nameRes)} offers you`} onClose={cancel}>
-        {list(state.theirs ?? [])}
+      <Dialog title={`Offer from ${rs(state.from.nameRes)}`} onClose={cancel} wide>
+        <div className="offer-columns">
+          <div>
+            <h4 className="dialog-heading">Receive</h4>
+            {list(state.theirs ?? [])}
+          </div>
+          <div>
+            <h4 className="dialog-heading">Send</h4>
+            {list(state.mine)}
+          </div>
+        </div>
+        <p className="muted">{answered ? "Waiting for response..." : "Select Set items to respond to offer."}</p>
         <div className="mk-buttons">
-          <Button isDefault onClick={accept}>
-            Accept
+          <Button isDefault onClick={() => setPicking(true)} disabled={answered}>
+            Set items...
           </Button>
-          <Button onClick={cancel}>Decline</Button>
+          <Button onClick={() => answer([])} disabled={answered}>
+            Offer nothing
+          </Button>
+          <Button onClick={cancel}>Cancel</Button>
         </div>
       </Dialog>
     );
@@ -215,10 +266,7 @@ export function OfferDialog({
 }
 
 /** Follows the offer exchange from the session's events. */
-export function reduceOffer(
-  prev: { mine: ObjectInfo[]; theirs: ObjectInfo[] | null; from: ObjectInfo | null } | null,
-  e: OfferEvent,
-): { mine: ObjectInfo[]; theirs: ObjectInfo[] | null; from: ObjectInfo | null } | null {
+export function reduceOffer(prev: OfferState | null, e: OfferEvent): OfferState | null {
   switch (e.type) {
     case "offered":
       return { mine: e.items, theirs: null, from: null };
@@ -226,6 +274,9 @@ export function reduceOffer(
       return prev ? { ...prev, theirs: e.items } : { mine: [], theirs: e.items, from: null };
     case "received":
       return prev ? prev : { mine: [], theirs: e.items, from: e.offerer };
+    case "counteroffered":
+      // offer.c Counteroffered: only shown while the Receive Offer dialog is up
+      return prev?.from ? { ...prev, mine: e.items } : prev;
     case "canceled":
       return null;
   }

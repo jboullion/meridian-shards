@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { SAY, UC, type ObjectInfo } from "@shards/protocol";
-import { isNumberItem, type ChatLine, type ContainerContents, type GameSession, type LookResult, type OfferEvent, type SessionPhase, type TradeList } from "@shards/world";
+import {
+  isNumberItem, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
+  type TradeList,
+} from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import type { AudioPreview, GameAudio } from "./audio.ts";
 import { GameScene, type GameSceneStatus } from "./gameScene.ts";
@@ -162,7 +165,7 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, onLogout, trades, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, onLogout, trades, offers, serverPrefs, latency,
 }: {
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
@@ -178,6 +181,8 @@ export function GameView({
   looks: (fn: (l: LookResult) => void) => () => void;
   /** Subscribe to container contents (BP_OBJECT_CONTENTS) */
   contents: (fn: (c: ContainerContents) => void) => () => void;
+  /** Subscribe to the damage we deal (for the numbers over what we hit) */
+  damage: (fn: (d: DamageDealt) => void) => () => void;
   onLogout: () => void;
   /** Subscribe to shop and offer events from the session */
   trades: (fn: (t: TradeList) => void) => () => void;
@@ -306,6 +311,7 @@ export function GameView({
     [looks],
   );
   useEffect(() => offers((e) => setOffer((prev) => reduceOffer(prev, e))), [offers]);
+  useEffect(() => damage((d) => sceneRef.current?.showDamage(d)), [damage]);
 
   // New lines scroll the chat to the bottom, unless "Lock text window in place when
   // scrolling back" is on and you've scrolled up to read (config.scroll_lock)
@@ -392,7 +398,7 @@ export function GameView({
     if (word === "look" && input.trim().split(/\s+/).length === 1) return sceneRef.current?.lookInView();
     if (word === "put" && input.trim().split(/\s+/).length === 1) return putAway();
     // command.c CommandBuy, CommandOffer: A_BUY, A_OFFER
-    if ((word === "buy" || word === "offer") && input.trim().split(/s+/).length === 1) return handleAction(word);
+    if ((word === "buy" || word === "offer") && input.trim().split(/\s+/).length === 1) return handleAction(word);
     if (NOT_YET_COMMANDS[word]) return session.localMessage(NOT_YET_COMMANDS[word]);
     const tell = parseTell(input, [...session.world.players.values()].map((p) => ({ id: p.id, name: p.name })));
     if (tell) {
@@ -682,7 +688,9 @@ export function GameView({
           <CommandAliasesDialog settings={settings} onApply={updateSettings} onOpen={(w) => setModal({ type: "action", window: w })} onClose={() => setModal(null)} />
         )}
         {modal?.type === "action" && modal.window === "guild" && <GuildDialog onClose={() => setModal(null)} />}
-        {offer && <OfferDialog state={offer} session={session} icons={icons} onClose={() => setOffer(null)} />}
+        {offer && (
+          <OfferDialog key={offer.from?.id ?? 0} state={offer} session={session} icons={icons} onLook={(id) => lookAt(id, DESC.NONE)} onClose={() => setOffer(null)} />
+        )}
       </div>
       <div className="chat">
         <div className="chat-resize" onPointerDown={resizeChat} title="Drag to resize the chat window" aria-hidden />

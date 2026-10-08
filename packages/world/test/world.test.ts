@@ -147,6 +147,14 @@ describe("combat state (milestone 6)", () => {
     expect(world.effects.paralyzed).toBe(false);
   });
 
+  test("fireworks last until the weather clears (effect.c EFFECT_FIREWORKS)", () => {
+    const world = new WorldState();
+    feed(world, BP.EFFECT, new ByteWriter().u16(18));
+    expect(world.effects.fireworks).toBe(true);
+    feed(world, BP.EFFECT, new ByteWriter().u16(11));
+    expect(world.effects.fireworks).toBe(false);
+  });
+
   test("player overlays fill their slot (overlay.c SetPlayerOverlay)", () => {
     const world = new WorldState();
     // hotspot SE (5), object id 2 = slot 2, no lighting

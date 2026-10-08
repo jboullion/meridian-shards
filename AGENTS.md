@@ -6,7 +6,7 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 
 **Meridian Shards** is a faithful browser port of the Meridian 59 client. It talks to **our own** server, which runs the unmodified Server 104 `blakserv` through a WebSocket-to-TCP gateway. It's the third experiment beside the UE remaster (`E:\2026_Experiments\meridian-unreal`) and the Roblox spin-off "Fantasy Blocks".
 
-- Decisions: [docs/adr/0001-direction.md](docs/adr/0001-direction.md), and the desktop app in [docs/adr/0002-desktop-shell.md](docs/adr/0002-desktop-shell.md)
+- Decisions: [docs/adr/0001-direction.md](docs/adr/0001-direction.md), the desktop app in [docs/adr/0002-desktop-shell.md](docs/adr/0002-desktop-shell.md), and the proposed Android app in [docs/adr/0003-android.md](docs/adr/0003-android.md)
 - Milestones and progress: [docs/roadmap.md](docs/roadmap.md)
 - Protocol notes: [docs/research/protocol.md](docs/research/protocol.md)
 - What the original has that we don't yet: [docs/missing-features.md](docs/missing-features.md). Add to it whenever something is skipped.
@@ -32,6 +32,8 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 | `packages/world/` | `GameSession` (login, characters, game actions, chat and look events), `WorldState` (player, room objects with interpolated motion, inventory, online players, lighting), `PlayerMover` (the `move.c` port), the server-text formatter (`text.ts`) and bitmap-group animation. No DOM or Three.js. |
 | `apps/client/` | The browser client (Vite + React): login, character select and the game view (`/`); the room viewer is at `/?viewer` or `/?rid=301`. In `src/game/`: `gameScene.ts` (3D view and input), `audio.ts` (sound, after `audio.c`), `icons.ts` (item pictures), `settings.ts` (every option and key binding, the two key presets), and `ui/` (the interface column, minimap and dialogs, `OptionsDialogs.tsx` for the ☰ menu's Preferences, Configuration and Actions windows, and `kit.tsx`, the dialog kit every menu is drawn with: stone frames, lists, buttons, stat bars, laid out in dialog units from the original `.rc` templates). |
 | `apps/desktop/` | The desktop app (Electron) around the browser client. `src/main.ts` serves the page as `app://shards/`: the client build, and the game files from the chosen server through a disk cache (`assetCache.ts`). Also the preload (`window.shardsDesktop`), the server list and window state (`settings.ts`), and `electron-builder.yml` (installers, the update feed). `apps/client/src/host.ts` is the client's side of it. |
+| `apps/android/` | The Android app (Capacitor) around the browser client ([ADR 0003](docs/adr/0003-android.md)). `capacitor.config.ts`, and the native project in `android/`, where `app/src/main/java/net/meridianshards/client/` holds our code: `ShardsPlugin` (sets the page up before it loads), `ShardsHost` (`window.shardsAndroid`: the server list and choice) and `ShardsWebViewClient` (answers `/assets/*` from the selected server). `apps/client/src/host.ts` turns `shardsAndroid` into the same bridge the desktop has. |
+| `tools/android/` | `run.ts`: builds the Android app and runs it on a phone or the emulator (`npm run android`). |
 | `tools/assets/` | `build-assets.ts`: copies the original files into `dist/assets` (git-ignored) with a manifest, plus the client's interface bitmaps as `ui/*.bmp` and `roomlinks.json` (which rooms connect, from the Kod exits). `fetch-assets.ts`: copies a server's game files into `dist/assets`, for packaging without a server build. |
 | `tools/dev/` | `dev.ts`: the one-command dev stack. |
 | `tools/gateway/` | WebSocket-to-TCP bridge in front of blakserv (`ws`). |
@@ -61,7 +63,12 @@ npm run desktop:build       # an unpacked build in apps/desktop/dist/win-unpacke
 npm run desktop:dist        # installers + latest*.yml for this OS, with dist/assets inside
 npm run desktop:release     # the same, uploaded to a draft GitHub release (CI does this on a v* tag)
 npm run release -- 0.2.0     # bump, commit, tag and push; CI builds all three OSes and publishes v0.2.0
+npm run android             # build the client and the debug APK, install it on the phone or emulator, adb reverse 5173, launch
+npm run android -- --no-build --device emulator-5554   # reinstall and relaunch only, on one of several devices
+npm run android:sync        # build the client and copy it into apps/android/android (then build in Android Studio)
 ```
+
+- **Android** needs Android Studio (the SDK; `apps/android/android/local.properties` says where, e.g. `sdk.dir=J\:/AndroidSDK`) and a JDK 21 for Gradle (`org.gradle.java.home` in `~/.gradle/gradle.properties`). Android Studio's own JDK 25 can't run the template's Gradle 8.14; in Android Studio, set Settings → Build Tools → Gradle → Gradle JDK to the JDK 21 too. Debug builds list "Local (dev)" (`http://localhost:5173` on the device, through `adb reverse`) next to the VM; pick it on the login screen.
 
 - Our build of the original Windows client (for parity tests): `server\build.cmd Bclient Bmodules`, then `server\setup-client.cmd`, then run `server\src\run\localclient\meridian.exe /U:<user> /W:<pass> /H:localhost /P:5959`. Never use the installed 104 client's `rsc0000.rsb` or rooms with our server.
 - blakserv takes about 35 s to load a fresh game. It's ready when ports 5959 and 9998 listen.
@@ -111,6 +118,8 @@ npm run release -- 0.2.0     # bump, commit, tag and push; CI builds all three O
   - PgUp/PgDn/Home to look up, down and straight, End to turn around, +/- to zoom the map, I for the inventory tab.
   - The original preset follows `merintr.c interface_key_table` (Alt+arrows strafe, typing starts a chat line). Restore Defaults goes back to the modern preset.
   - In dev, `window.shards` has `gameScene`, `session` and `audio` (`audio.log` lists what played). `gameScene.frame(dt, t)` lets a script drive movement while the Browser pane is hidden (its rAF is throttled).
+- **Two-player tests on our server:** the test accounts are `shardbot` and `shardpal` (password = name). If `shardpal` is missing on a fresh server: `node tools/maint/maint.ts "create account user shardpal shardpal none"`, then `"create user <account id>"`, then log in once with `npm run headless -- --user shardpal --pass shardpal` to create its character. Script the second player with a `GameSession` in Node (Node 24 has `WebSocket`), and put both in one room with `TeleportTo`.
+- **Trading with players** (`offer.c`): the receiver answers an offer with a counteroffer (`BP_REQ_COUNTEROFFER`, possibly empty); only then may the offerer accept (`BP_ACCEPT_OFFER`). The server cancels an accept that comes before the counteroffer (`user.kod UserAcceptOffer`).
 - **Object ids:** number items (shillings) carry a tag in the id's top 4 bits. Send plain id fields without it (`objId`, as `protocol.c GetObjId` does) and object-list fields with it plus the amount. Look ids up through `WorldState`'s maps, which ignore the tag like the client's `CompareIdObject`.
 - **Testing combat on our server:** `send object <id> SetHealth amount int 1` and `send object <id> Killed` on the maintenance port force a death; the Underworld's "rip in space" brings you back. Never do this on a server with real players.
 - **The first-person hands** are sized like the D3D client's 800 × 600 back buffer: a bitmap pixel is 1.75/800 of the view's width and 2.25/600 of its height (`screenOverlays.ts`).
@@ -130,10 +139,19 @@ npm run release -- 0.2.0     # bump, commit, tag and push; CI builds all three O
   - To drive it from a script, start it with `--remote-debugging-port=9222` and use the Chrome DevTools Protocol.
 - **Settings** live in `localStorage`. Hot reloading `settings.ts` makes a second copy of its listeners, so reload the page after editing it.
 - **Chat tabs** (ours; the original has one text window): `packages/world/src/chatChannel.ts` puts each line in Chat (everything `BP_SAID`), Combat or Server. Server messages have no kind, so Combat is matched on the message's *format string*, before names are filled in; add words there when a fight message lands in Server. `appendChatLine` caps each channel at 300 lines.
+- **Damage numbers** (ours) come from the attacker's hit message (`battler_attacker_hit` / `_mob` in `battler.kod`), matched by its format string and read from its parameters (`packages/world/src/combatHit.ts`). The message names the target but doesn't give its id, so `GameScene.showDamage` uses the target when the name matches, else the nearest object with that name.
 - **Saves renumber objects.** blakserv's garbage collection (every save, or `save game` on the maintenance port) compacts object ids. Clients get `BP_WAIT`, then `BP_INVALIDATE_DATA`, and must ask for everything again (`GameSession` does). Maintenance commands that name an object id are only good until the next save: `show object` it again first.
 - **The sun and moon** are background overlays (`packages/render/src/skyOverlays.ts`), sent at logon and every game hour. Kod's negative heights arrive as WORDs above 32767 and aren't drawn (below the horizon). To see one in daylight, check `window.shards.session.world.bgOverlays`.
 - **The message of the day:** blakserv reads `motd.txt` from the run folder at startup or on `node tools/maint/maint.ts "reload motd"`, and *moves* it into `memmap\`, so the run folder copy disappears; that's normal. Without one it sends `[MessageOfTheDay] Default` ("<Default>"), which the client hides. To change it, edit `server/config/motd.txt`, run `server\setup-run.cmd`, then `reload motd`.
 - **Trying shops and rooms quickly:** `node tools/maint/maint.ts "send object <player id> TeleportTo RID int 303"` moves a logged-in character on our server (303 smithy, 332 vault, 333 bank, 330 Outskirts).
 - **Movement is client-authoritative but checked:** keep `PlayerMover` byte-for-byte faithful to `move.c` (units, step sizes, thresholds). The server only rejects off-map destinations, and other players' original clients see our moves.
 - **Uniform arrays** in Three.js `ShaderMaterial`s must be flat typed arrays (or `Vector` objects), not nested JS arrays.
+- **The Android app** (`apps/android`, [ADR 0003](docs/adr/0003-android.md)):
+  - The page is `https://localhost/`, served from the APK by Capacitor. `/assets/*` never reaches Capacitor's server: `ShardsWebViewClient` fetches it from the selected server, so the client asks for files exactly as in the browser. For now nothing is cached on the device (ADR 0003 phase 2).
+  - `ShardsPlugin` is registered before `super.onCreate` and does its work in `load()`, which runs before the page loads. A JavaScript interface added later only appears after a reload.
+  - Debug builds allow cleartext to localhost (`src/debug`) and mixed content (the dev stack's `ws://` from the `https://localhost` page). Release builds allow neither.
+  - Vite listens on `127.0.0.1` because `adb reverse` connects to IPv4. With Vite on `::1` only, the app's proxy gets "unexpected end of stream".
+  - `cap run android` fails on Windows (it runs `./gradlew` through cmd.exe); `npm run android` replaces it.
+  - The app's Origin is `https://localhost`, so the VM's `GATEWAY_ORIGINS` must list it before the app (debug or release) can log in there.
+  - To drive the app from a script: `adb forward tcp:9223 localabstract:webview_devtools_remote_<pid>` (the pid from `adb shell cat /proc/net/unix`), then the Chrome DevTools Protocol on `localhost:9223`. Debug builds only.
 - On Windows, never `spawn` with `shell: true` when the command path has spaces (Node's own path does). Use the shell only for `.cmd` shims such as `npx`.

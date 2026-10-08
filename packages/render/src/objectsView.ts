@@ -320,7 +320,7 @@ export class ObjectsView {
             id: o.id,
             name: this.resourceName(o.info.nameRes) ?? "",
             color: `rgb(${col.join(",")})`,
-            position: new THREE.Vector3(x / FINENESS, (e.z + Math.max(e.composite.baseTop, e.composite.top)) / FINENESS, y / FINENESS),
+            position: this.topOf(o.id)!,
           });
         }
       }
@@ -332,6 +332,13 @@ export class ObjectsView {
       }
     }
     return labels;
+  }
+
+  /** Where an object's name label would go (the top of its sprite), or null when it isn't drawn. */
+  topOf(id: number): THREE.Vector3 | null {
+    const e = this.entries.get(id);
+    if (!e?.composite || !e.mesh.visible) return null;
+    return new THREE.Vector3(e.x / FINENESS, (e.z + Math.max(e.composite.baseTop, e.composite.top)) / FINENESS, e.y / FINENESS);
   }
 
   /**

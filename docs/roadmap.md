@@ -72,7 +72,7 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 - [x] Buying (`BP_BUY_LIST` dialog), selling by offer (`BP_OFFERED`/`COUNTEROFFER`, accept or cancel), the vault (withdraw and deposit lists), bank money commands (`deposit N`, `withdraw N`, `balance`), and an amount prompt for dropping part of a stack. Tested with Tomas the smith, Gamos the banker and Bentu the vaultman.
 - [x] Sound and music (`audio.c` rules on Web Audio): one music track per room, up to 24 sounds, 2D or 3D with the original's rolloff and stereo pan, loops stopped on leaving a room, the wading splash. Settings: music and sound on/off and volume, looping and random sounds.
 - [x] Settings (O or F10): sound, mouselook speed and inversion, and key bindings with two presets. **Modern** is WASD plus mouselook. **Original** is the original's table: arrows, Alt+arrows to strafe, PgUp/PgDn/Home/End, Space, Enter to look, and typing a letter starts a chat line. Every key can be rebound.
-- Not yet: `tell`, the who list and the players window, mail, guilds, and casting at a chosen target (with combat, in milestone 6). Double clicking a spell casts it now; a spell that needs a target is cast on yourself.
+- Not yet at the time: `tell`, the who list, mail, guilds, and casting at a chosen target. Casting landed in milestone 6, and `tell` and the who list in milestone 9; mail and guilds are in milestone 13.
 - To judge by ear against the original: how loud far-away sounds are. `audio.c` gives irrKlang a 32-square max distance, which in irrKlang means "stop getting quieter" (not "silent"), so Raza's country ambience at square (1, 1) plays at about 16% across the town.
 
 ### 6. Combat and creation (done 2026-10-07)
@@ -165,6 +165,34 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 - [x] Mouselook keeps the cursor in the window (a plain pointer lock); the Preferences window plays its audio choices as you make them.
 - [x] The chat window: tabs (All, Chat, Combat, Server), each keeping its own 300 lines, with a mark for new lines; drag its top edge to resize. Both are remembered.
 - [x] The desktop app's window and taskbar button use the shard icon, grouped with the installer's shortcuts (`AppUserModelId`).
+- [x] Damage numbers (ours): the damage we deal rises over what we hit and fades. It's read from `battler.kod`'s "Your mace bashes the centipede for 4 damage." (melee, ranged and attack spells), so the server is unchanged. Turn it off with Damage Numbers in the Bind Editor's Options.
+
+### 12. Android (proposed, 2026-10-08)
+
+- [x] The investigation: Capacitor around the same client, a native port of the asset cache, a touch layout for phones in landscape, and a signed APK on GitHub releases before the Play Store ([ADR 0003](adr/0003-android.md)).
+- [x] Phase 0: the hosted web build on an Android phone runs well; the space is cramped. The phone layout: health, mana and vigor on the view, with the interface column and a full-screen chat sliding out. Frame time and memory aren't measured yet.
+- [x] Phase 1: the shell (`apps/android`, Capacitor 8.5) and the host seam. The app logs in to the local stack in the emulator and draws the game; `npm run android` builds, installs and launches it.
+- [ ] Phase 2: the game files (bundled, cached, downloaded).
+- [ ] Phase 3: touch controls and the phone layout.
+- [ ] Phase 4: lifecycle, the update notice, CI and the signed APK.
+
+### 13. Feature parity (planned 2026-10-08)
+
+The goal: everything the original client and its modules do. The comparison (the original's message tables against ours, the Kod that sends them, and our UI) is written up as the checklist in [missing-features.md](missing-features.md). Our own additions stay beside the original's features. World fidelity comes first.
+
+- [x] **Phase 0: bookkeeping and fixes.**
+  - The checklist.
+  - Receiving a trade: our Accept sent `BP_ACCEPT_OFFER`, which the server rejects until you have counteroffered. The Receive Offer dialog is now `IDD_OFFERRECEIVE`: Receive and Send lists, Set items... or Offer nothing (`BP_REQ_COUNTEROFFER`), the echo (`BP_COUNTEROFFERED`), and double click to look. Tested between two local accounts, scripted and in the browser.
+  - The wait state while the server saves (`BP_WAIT` to `BP_UNWAIT`): no movement, the wait cursor.
+  - `BP_UNLOAD_MODULE` and `BP_LOAD_MODULE` reach the client as a `module` event.
+  - `AP_TIMEOUT` and `AP_DOWNLOAD` end the login with a reason instead of hanging.
+  - `EFFECT_FIREWORKS` is kept.
+  - Fixed `buy`/`offer` with words after them being taken as the command.
+- [ ] **Phase 1: world fidelity.** Rooms that change (lifts, wall animation, texture changes, sector flags), sloped-texture rotation, blur, waver and xlat override, weather and fireworks, flashing and bouncing objects, remote view, resync in the game, the crypt.
+- [ ] **Phase 2: commands and interaction.** merintr's command table with prefix matching, emotes and moods, resting, the Spells menu, inventory reordering and keys, chat history and filtering, ignored tells, the Find box.
+- [ ] **Phase 3: social systems.** News globes, mail with a local mailbox, stat reallocation, guilds.
+- [ ] **Phase 4: interface.** Toolbar, tooltips, map annotations, profanity filter, logout timer, About and intro, cursors, borders, language, quick start, desktop command line.
+- [ ] **Phase 5: mini-games and admin.** Chess, and a basic admin console.
 
 ## What the slice must prove
 

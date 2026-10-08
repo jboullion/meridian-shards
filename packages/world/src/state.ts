@@ -96,7 +96,9 @@ export type WorldEvent =
    * Object ids are about to change (BP_WAIT before a save) or have changed (BP_INVALIDATE_DATA
    * after it): the target and anything else holding an id is stale
    */
-  | { type: "idsStale" };
+  | { type: "idsStale" }
+  /** BP_WAIT / BP_UNWAIT: the server is saving (game.c GameWait / GameUnwait) */
+  | { type: "wait"; waiting: boolean };
 
 /** The sun or the moon on the sky (boverlay.c), with its animation. */
 export interface BgOverlayState {
@@ -150,11 +152,13 @@ export interface Effects {
   raining: boolean;
   snowing: boolean;
   sand: boolean;
+  /** EFFECT_FIREWORKS: until EFFECT_CLEARWEATHER (effect.c:107) */
+  fireworks: boolean;
 }
 
 const noEffects = (): Effects => ({
   paralyzed: false, blind: false, pain: 0, whiteout: 0, invert: 0, shake: 0, blur: 0, waver: 0,
-  flashXlat: 0, flashTime: 0, xlatOverride: 0, raining: false, snowing: false, sand: false,
+  flashXlat: 0, flashTime: 0, xlatOverride: 0, raining: false, snowing: false, sand: false, fireworks: false,
 });
 
 /**
@@ -283,6 +287,18 @@ export class WorldState {
   /** BP_WAIT: a save is coming and will renumber objects; drop what holds an id (the target). */
   emitIdsStale(): void {
     this.emit({ type: "idsStale" });
+  }
+
+  /**
+   * Set while the server saves (BP_WAIT until BP_UNWAIT): the original enters GAME_WAIT,
+   * where it shows the wait cursor and neither moves nor animates (statgame.c, animate.c:95).
+   */
+  waiting = false;
+
+  setWaiting(waiting: boolean): void {
+    if (this.waiting === waiting) return;
+    this.waiting = waiting;
+    this.emit({ type: "wait", waiting });
   }
 
   /**
@@ -549,7 +565,8 @@ export class WorldState {
           case EFFECT.SEE: fx.blind = false; break;
           case EFFECT.RAINING: fx.raining = true; break;
           case EFFECT.SNOWING: fx.snowing = true; break;
-          case EFFECT.CLEARWEATHER: fx.raining = fx.snowing = false; break;
+          case EFFECT.FIREWORKS: fx.fireworks = true; break;
+          case EFFECT.CLEARWEATHER: fx.raining = fx.snowing = fx.fireworks = false; break;
           case EFFECT.SAND: fx.sand = true; break;
           case EFFECT.CLEARSAND: fx.sand = false; break;
           case EFFECT.PAIN: fx.pain = capped(e.duration, 10000); break;

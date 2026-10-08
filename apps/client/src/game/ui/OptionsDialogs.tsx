@@ -311,6 +311,7 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
               <Check label="Always Run" checked={d.alwaysRun} onChange={(v) => set({ alwaysRun: v })} />
               <Check label="Attack On Target" checked={d.attackOnTarget} onChange={(v) => set({ attackOnTarget: v })} />
               <Check label="Dynamic Lighting" checked={d.dynamicLighting} onChange={(v) => set({ dynamicLighting: v })} />
+              <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
             </GroupBox>
             <Button onClick={() => set({ ...presetSettings("modern"), keys: PRESETS.modern })}>Restore Defaults</Button>
             <div className="bind-buttons">

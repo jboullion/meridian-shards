@@ -16,7 +16,7 @@ import {
   DRAWFX, OF, ObjectsView, RoomView, SkyOverlaysView, XlatTable, disposeSkybox, objectBrightness, paletteTexture, type LightSource,
   type NameLabel, type ViewObject,
 } from "@shards/render";
-import { PlayerMover, animStep, type GameSession, type WorldObject } from "@shards/world";
+import { PlayerMover, animStep, type DamageDealt, type GameSession, type WorldObject } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import { RoomCache } from "../render/roomCache.ts";
 import { loadSkybox } from "../render/roomLoader.ts";
@@ -45,6 +45,21 @@ const CLOSE_DISTANCE = 5 * FINENESS;
 const SHAKE_AMPLITUDE = FINENESS / 4;
 /** A wall within this many squares of a label's anchor doesn't hide it: signs hang on walls */
 const LABEL_OCCLUSION_SLACK = 0.1;
+/** Damage numbers (ours): how long one shows, how far it rises on screen, and when it starts to fade (0..1) */
+const DAMAGE_LIFE_MS = 1200;
+const DAMAGE_RISE_PX = 48;
+const DAMAGE_FADE = 0.6;
+
+/** A damage number floating over what we hit */
+interface DamageFloat {
+  id: number;
+  born: number;
+  /** The top of the object's sprite, last seen (kept if it dies or goes out of sight) */
+  pos: THREE.Vector3 | null;
+  /** Pixels sideways, so quick hits don't stack exactly */
+  dx: number;
+  el: HTMLDivElement;
+}
 
 export interface GameSceneStatus {
   roomName: string;
@@ -101,6 +116,7 @@ export class GameScene {
   private readonly unsubscribe: () => void;
   private readonly resizeObserver: ResizeObserver;
   private labelPool: HTMLDivElement[] = [];
+  private damageFloats: DamageFloat[] = [];
   private readonly raycaster = new THREE.Raycaster();
   /** For hiding name labels behind walls */
   private readonly labelRay = new THREE.Raycaster();
@@ -185,6 +201,7 @@ export class GameScene {
             this.contentsArrived = new Promise((r) => (this.contentsResolve = r));
             // game.c EnterNewRoom: SetUserTargetID(INVALID_ID)
             this.setTarget(null);
+            this.clearDamage();
           }
           // BP_PLAYER carries the room's background too (teleports change both)
           void this.syncRoom();
@@ -210,11 +227,16 @@ export class GameScene {
         case "objectRemoved":
           if (this.target !== null && e.id === this.target) this.setTarget(null);
           break;
+        case "wait":
+          // cursor.c GameWindowSetCursor: the wait cursor in GAME_WAIT
+          this.canvas.classList.toggle("server-wait", e.waiting);
+          break;
         case "idsStale":
           // server.c HandleWait / HandleInvalidateData: SetUserTargetID(INVALID_ID)
           this.setTarget(null);
           if (this.selecting) this.select(null);
           this.drag = null;
+          this.clearDamage();
           break;
 
       }
@@ -355,8 +377,8 @@ export class GameScene {
     }
     // --- movement (move.c) ---
     const held = (a: Action) => (isHeld(this.settings.keys, a, this.keys, this.mods()) ? 1 : 0);
-    // EFFECT_PARALYZE: no motion
-    const still = world.effects.paralyzed;
+    // EFFECT_PARALYZE, and GAME_WAIT while the server saves: no motion
+    const still = world.effects.paralyzed || world.waiting;
     const forward = still ? 0 : held("forward") - held("backward");
     const strafe = still ? 0 : held("strafeRight") - held("strafeLeft");
     const turn = held("turnRight") - held("turnLeft");
@@ -435,6 +457,7 @@ export class GameScene {
     this.objects.setTarget(this.target);
     this.renderer.render(this.scene, this.camera);
     this.drawLabels(labels);
+    this.drawDamage();
     this.drawOverlays(room, lighting);
     this.countFrame(now);
   }
@@ -656,6 +679,67 @@ export class GameScene {
       el.style.display = "";
     }
     for (let i = n; i < this.labelPool.length; i++) this.labelPool[i].style.display = "none";
+  }
+
+  /**
+   * A hit of ours (combatHit.ts): its damage floats up over what we hit. The message names it
+   * rather than giving its id, so it's the target when the name matches (attacks and spells go
+   * there), else the nearest object with that name.
+   */
+  showDamage(hit: DamageDealt): void {
+    if (!this.settings.damageNumbers) return;
+    const world = this.session.world;
+    const self = world.self;
+    const name = hit.name.toLowerCase();
+    const named = (o: WorldObject) => o.id !== self?.id && (this.session.resource(o.info.nameRes) ?? "").toLowerCase() === name;
+    let hurt = this.target !== null ? world.objects.get(this.target) : undefined;
+    if (!hurt || !named(hurt)) {
+      hurt = undefined;
+      let best = Infinity;
+      for (const o of world.objects.values()) {
+        const d = self ? Math.hypot(o.x - self.x, o.y - self.y) : 0;
+        if (d >= best || !named(o)) continue;
+        hurt = o;
+        best = d;
+      }
+    }
+    if (!hurt) return;
+    const el = this.labelsEl.appendChild(document.createElement("div"));
+    el.className = "damage-number";
+    el.textContent = String(hit.damage);
+    el.style.display = "none";
+    this.damageFloats.push({ id: hurt.id, born: performance.now(), pos: this.objects?.topOf(hurt.id) ?? null, dx: (Math.random() - 0.5) * 24, el });
+  }
+
+  private drawDamage(): void {
+    if (!this.damageFloats.length) return;
+    const now = performance.now();
+    const w = this.canvas.clientWidth,
+      h = this.canvas.clientHeight;
+    const v = new THREE.Vector3();
+    this.damageFloats = this.damageFloats.filter((f) => {
+      const t = (now - f.born) / DAMAGE_LIFE_MS;
+      if (t >= 1) {
+        f.el.remove();
+        return false;
+      }
+      f.pos = this.objects?.topOf(f.id) ?? f.pos;
+      if (!f.pos) return true;
+      v.copy(f.pos).project(this.camera);
+      if (v.z > 1 || v.z < -1) {
+        f.el.style.display = "none";
+        return true;
+      }
+      f.el.style.display = "";
+      f.el.style.opacity = String(t < DAMAGE_FADE ? 1 : (1 - t) / (1 - DAMAGE_FADE));
+      f.el.style.transform = `translate(${((v.x + 1) / 2) * w + f.dx}px, ${((1 - v.y) / 2) * h - DAMAGE_RISE_PX * t}px) translate(-50%, -130%)`;
+      return true;
+    });
+  }
+
+  private clearDamage(): void {
+    for (const f of this.damageFloats) f.el.remove();
+    this.damageFloats = [];
   }
 
   /** The room being shown (for the minimap). */

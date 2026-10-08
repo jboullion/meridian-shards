@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { SAY } from "@shards/protocol";
+import type { ObjectInfo } from "@shards/protocol";
 import type { ChatLine } from "@shards/world";
+import { reduceOffer } from "./ui/Dialogs.tsx";
 import { appendChatLine, parseActionCommand, parseChatCommand } from "./GameView.tsx";
 import { PRESETS, actionsFor, isHeld } from "./settings.ts";
 
@@ -68,5 +70,21 @@ describe("chat tabs keep their own history", () => {
     expect(lines.map((l) => l.time)).toEqual([1, 3, 4]);
     lines = appendChatLine(lines, line("chat", 5), 2);
     expect(lines.map((l) => l.time)).toEqual([1, 3, 4, 5]);
+  });
+});
+
+describe("offers (offer.c)", () => {
+  const item = (id: number) => ({ id }) as unknown as ObjectInfo;
+  test("someone offers us items; our counteroffer shows once the server echoes it", () => {
+    let s = reduceOffer(null, { type: "received", offerer: item(5), items: [item(1)] });
+    expect(s).toEqual({ mine: [], theirs: [item(1)], from: item(5) });
+    s = reduceOffer(s, { type: "counteroffered", items: [item(2)] });
+    expect(s?.mine).toEqual([item(2)]);
+    expect(reduceOffer(s, { type: "canceled" })).toBeNull();
+  });
+  test("a counteroffered echo without a Receive Offer dialog is dropped", () => {
+    expect(reduceOffer(null, { type: "counteroffered", items: [item(2)] })).toBeNull();
+    const ours = reduceOffer(null, { type: "offered", items: [item(3)] });
+    expect(reduceOffer(ours, { type: "counteroffered", items: [item(2)] })).toBe(ours);
   });
 });

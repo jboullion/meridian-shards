@@ -19,6 +19,8 @@
     "desktop:build": "npm run build && npm run build -w @shards/desktop && npm run pack -w @shards/desktop",
     "desktop:dist": "npm run build && npm run build -w @shards/desktop && npm run dist -w @shards/desktop",
     "desktop:release": "npm run build && npm run build -w @shards/desktop && npm run release -w @shards/desktop",
+    "android": "node tools/android/run.ts",
+    "android:sync": "npm run build && npm run sync -w @shards/android",
     "assets:fetch": "node tools/assets/fetch-assets.ts",
     "release": "node tools/deploy/release.ts",
     "assets": "node tools/assets/build-assets.ts",

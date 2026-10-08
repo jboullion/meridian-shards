@@ -1,8 +1,10 @@
-// Where the client runs: a plain browser tab, or the desktop app (apps/desktop), whose
-// preload exposes `window.shardsDesktop`. In the browser everything is same-origin
-// (/assets and /ws on the page's host). On the desktop the page is app://shards, the main
-// process serves /assets from the chosen server (with a disk cache), and the game socket
-// goes straight to that server's /ws.
+// Where the client runs: a plain browser tab, the desktop app (apps/desktop), whose
+// preload exposes `window.shardsDesktop`, or the Android app (apps/android), whose
+// ShardsHost exposes `window.shardsAndroid`. In the browser everything is same-origin
+// (/assets and /ws on the page's host). In the apps the page is app://shards or
+// https://localhost, the native side serves /assets from the chosen server, and the game
+// socket goes straight to that server's /ws. Both apps give the page a DesktopBridge, so
+// `desktop` below means "an app with a server list", whichever platform it is.
 
 export interface DesktopServer {
   name: string;
@@ -59,7 +61,45 @@ export interface DesktopBridge extends DesktopConfig {
   onWindowState(fn: (s: DesktopWindowState) => void): () => void;
 }
 
-export const desktop: DesktopBridge | undefined = (globalThis as { shardsDesktop?: DesktopBridge }).shardsDesktop;
+/** apps/android ShardsHost.java (a WebView JavaScript interface: synchronous, strings only) */
+interface AndroidHost {
+  /** DesktopConfig as JSON */
+  config(): string;
+  /** Remembers the choice; false if it isn't one of the servers */
+  selectServer(origin: string): boolean;
+  setPhase(phase: string): void;
+}
+
+/** The Android app's side of DesktopBridge: no window to control, and no updates or downloads yet (ADR 0003 phases 2 and 4). */
+function androidBridge(a: AndroidHost): DesktopBridge {
+  const config = JSON.parse(a.config()) as DesktopConfig;
+  const none = () => () => {};
+  return {
+    ...config,
+    selectServer: (origin) => {
+      // The page's files (manifest, rsc0000.rsb, rooms) come from the server: start over
+      if (origin !== config.server && a.selectServer(origin)) location.reload();
+    },
+    setPhase: (phase) => a.setPhase(phase),
+    toggleFullscreen: () => {},
+    onUpdate: none,
+    onAssets: none,
+    installUpdate: () => {},
+    windowControl: () => {},
+    onWindowState: (fn) => {
+      fn({ maximized: false, fullscreen: true });
+      return () => {};
+    },
+  };
+}
+
+const androidHost = (globalThis as { shardsAndroid?: AndroidHost }).shardsAndroid;
+
+export const desktop: DesktopBridge | undefined =
+  (globalThis as { shardsDesktop?: DesktopBridge }).shardsDesktop ?? (androidHost ? androidBridge(androidHost) : undefined);
+
+/** The Android app: no window frame or title bar of its own to draw. */
+export const isAndroid = desktop?.platform === "android";
 
 /** Developer pages (the room viewer): always in the browser, only in development on the desktop. */
 export const devPagesEnabled = !desktop || desktop.dev;

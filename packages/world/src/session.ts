@@ -5,7 +5,7 @@
 import {
   AP, BP, ByteReader, ByteWriter, Connection, ENCHANT, GENDER, SAY, apName, bpName, buildLogin, buildNewCharInfo,
   buildReqAttack, buildReqBuy, buildReqBuyItems, buildReqCast, buildReqDeposit, buildReqGame, buildReqLook, buildReqMove,
-  buildReqOffer, buildReqTurn, buildReqWithdrawal, buildReqWithdrawalItems, buildSay, buildSayGroup, buildSendEnchantments,
+  buildReqCounteroffer, buildReqOffer, buildReqTurn, buildReqWithdrawal, buildReqWithdrawalItems, buildSay, buildSayGroup, buildSendEnchantments,
   buildSendSkills, buildSendSpells, buildChangeDescription, buildChangeUrl, buildReqApply,
   buildReqGetFromContainer, buildReqObjectContents, buildReqPut, buildSendStatGroups, buildSendStats, buildSimple, buildUseCharacter, buildUserCommand,
   buildSendCharInfo, UC, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
@@ -14,6 +14,7 @@ import {
 import { WorldState, fineToKod } from "./state.ts";
 import { formatServerMessage, parseMarkup, type TextSpan } from "./text.ts";
 import { messageChannel, type ChatChannel } from "./chatChannel.ts";
+import { readDamageDealt, type DamageDealt } from "./combatHit.ts";
 
 /** A line for the chat window, with the original client's default colour for its kind. */
 export interface ChatLine {
@@ -66,12 +67,15 @@ export interface TradeList {
 /**
  * The offer exchange (offer.c), from our side: we offered `items` to `target`
  * (BP_OFFERED echoes them); the other side answers with a counteroffer
- * (BP_COUNTEROFFER, e.g. a shopkeeper's shillings), or cancels.
+ * (BP_COUNTEROFFER, e.g. a shopkeeper's shillings), or cancels. From theirs:
+ * someone offers us items (BP_OFFER), we answer with a counteroffer
+ * (BP_REQ_COUNTEROFFER, echoed as BP_COUNTEROFFERED) and they accept or cancel.
  */
 export type OfferEvent =
   | { type: "offered"; items: ObjectInfo[] }
   | { type: "counteroffer"; items: ObjectInfo[] }
   | { type: "received"; offerer: ObjectInfo; items: ObjectInfo[] }
+  | { type: "counteroffered"; items: ObjectInfo[] }
   | { type: "canceled" };
 
 /** Sound and music from the server (server.c HandlePlayWave / HandleStopWave / HandlePlayMusic). */
@@ -116,10 +120,17 @@ export interface SessionEvents {
   trade?: (list: TradeList) => void;
   offer?: (e: OfferEvent) => void;
   sound?: (e: SoundEvent) => void;
+  /** We hurt something, and by how much (combatHit.ts: for damage numbers over its head) */
+  damageDealt?: (hit: DamageDealt) => void;
   /** A ping's round trip in ms, every 5 s in the game (lagbox.c) */
   latency?: (ms: number) => void;
   /** The game options the server keeps for us (UC_RECEIVE_PREFERENCES: CF_* flags) */
   preferences?: (flags: number) => void;
+  /**
+   * BP_LOAD_MODULE / BP_UNLOAD_MODULE: the server loads or unloads one of the client's
+   * modules by file name (modules.c), e.g. "chess.dll" for a chess game or "stats.dll".
+   */
+  module?: (name: string, loaded: boolean) => void;
   /** Every game message, after WorldState has seen it (for chat, stats, etc. later). */
   message?: (type: number, r: ByteReader) => void;
   debug?: (line: string) => void;
@@ -319,6 +330,14 @@ export class GameSession {
     this.send(buildReqOffer(target, items));
   }
 
+  /**
+   * BP_REQ_COUNTEROFFER: answer someone's offer with these items (none for "Offer
+   * nothing"). The server only lets them accept after this (offer.c RcvOfferDialogProc IDOK).
+   */
+  counteroffer(items: ObjectRef[]): void {
+    this.send(buildReqCounteroffer(items));
+  }
+
   acceptOffer(): void {
     this.send(buildSimple(BP.ACCEPT_OFFER));
   }
@@ -429,6 +448,21 @@ export class GameSession {
       case AP.CLIENT_PATCH:
         this.fail("The server rejected this client (wrong secret key or version).");
         break;
+      case AP.TIMEOUT:
+        // server.c HandleTimeout -> LoginTimeout: IDS_TIMEOUT
+        this.fail("Login timed out.");
+        break;
+      case AP.DOWNLOAD: {
+        // server.c HandleDownload: the server has update files for the original client
+        // (download.c fetches them). Our game files come from the asset manifest instead,
+        // so say why rather than waiting for a login that never comes.
+        r.u16(); // number of files
+        r.string(); // machine
+        r.string(); // path
+        const reason = r.string();
+        this.fail(`The server wants to send client updates, which Meridian Shards can't install${reason ? `: ${reason}` : "."}`);
+        break;
+      }
       case AP.NOCHARACTERS:
         this.fail("This account has no character slots.");
         break;
@@ -460,6 +494,14 @@ export class GameSession {
           this.events.debug?.(`load module ${name}`);
           // The char module (char.dll) asks for the character list when it loads.
           if (/char/i.test(name) && this.phase !== "game") this.conn.sendGame(buildSimple(BP.SEND_CHARACTERS));
+          this.events.module?.(name, true);
+          break;
+        }
+        case BP.UNLOAD_MODULE: {
+          // server.c HandleUnloadModule -> modules.c ModuleExitByRsc (the mini-games close theirs)
+          const name = this.resource(r.u32()) ?? "";
+          this.events.debug?.(`unload module ${name}`);
+          this.events.module?.(name, false);
           break;
         }
         case BP.CHARACTERS: {
@@ -487,9 +529,15 @@ export class GameSession {
         case BP.SYS_MESSAGE: {
           // server.c HandleStringMessage -> GameMessage (system colour); the tab from the format
           const format = r.u32();
+          const params = new ByteReader(r.buf.subarray(r.pos));
           const text = formatServerMessage(format, r, (id) => this.resource(id));
-          const channel = type === BP.SYS_MESSAGE ? "server" : messageChannel(this.resource(format) ?? "");
+          const formatText = this.resource(format) ?? "";
+          const channel = type === BP.SYS_MESSAGE ? "server" : messageChannel(formatText);
           if (text !== null) this.chatLine("system", text, channel);
+          if (type === BP.MESSAGE) {
+            const hit = readDamageDealt(formatText, params, (id) => this.resource(id));
+            if (hit) this.events.damageDealt?.(hit);
+          }
           break;
         }
         case BP.SAID: {
@@ -529,6 +577,11 @@ export class GameSession {
         case BP.WAIT:
           // server.c HandleWait: the system is saving; the target's id won't survive it
           this.world.emitIdsStale();
+          this.world.setWaiting(true);
+          break;
+        case BP.UNWAIT:
+          // server.c HandleUnwait -> game.c GameUnwait: back to playing
+          this.world.setWaiting(false);
           break;
         case BP.INVALIDATE_DATA:
           // server.c HandleInvalidateData -> game.c ResetUserData: every id we hold is stale,
@@ -551,6 +604,9 @@ export class GameSession {
           break;
         case BP.COUNTEROFFER:
           this.events.offer?.({ type: "counteroffer", items: readObjectList(r) });
+          break;
+        case BP.COUNTEROFFERED:
+          this.events.offer?.({ type: "counteroffered", items: readObjectList(r) });
           break;
         case BP.OFFER: {
           const { offerer, items } = readOffer(r);

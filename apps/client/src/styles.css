@@ -239,6 +239,18 @@ button.link {
   text-decoration: underline;
 }
 
+/* Damage numbers (ours): the damage we deal, rising over what we hit (gameScene.ts drawDamage) */
+.damage-number {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  color: rgb(255, 215, 64);
+  font: bold 20px Georgia, "Times New Roman", serif;
+  text-shadow:
+    -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 4px #000;
+}
+
 /* The original chat window: grey background (color.c COLOR_MAINEDITBGD 120,120,120) */
 .chat {
   position: relative;
@@ -723,6 +735,13 @@ button.link {
   margin: 8px 0 0;
   text-align: right;
   text-shadow: 1px 1px 0 #000;
+}
+
+/* offer.c IDD_OFFERRECEIVE: Receive and Send side by side */
+.offer-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
 .dialog-heading {
@@ -1620,4 +1639,9 @@ button.link {
 .look-list-amount input {
   padding: 0 2px;
   font-size: 0.9em;
+}
+
+/* GAME_WAIT (BP_WAIT until BP_UNWAIT): the server is saving */
+canvas.server-wait {
+  cursor: wait !important;
 }

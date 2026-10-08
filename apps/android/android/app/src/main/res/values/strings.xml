@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Meridian Shards</string>
+    <string name="title_activity_main">Meridian Shards</string>
+    <string name="package_name">net.meridianshards.client</string>
+    <string name="custom_url_scheme">net.meridianshards.client</string>
+</resources>

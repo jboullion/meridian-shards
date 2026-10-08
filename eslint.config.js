@@ -4,7 +4,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist/**", "server/**", "**/node_modules/**", "apps/client/dist/**", "apps/desktop/out/**", "apps/desktop/dist/**", "deploy/.stage/**"] },
+  { ignores: ["dist/**", "server/**", "**/node_modules/**", "apps/client/dist/**", "apps/desktop/out/**", "apps/desktop/dist/**", "apps/android/android/**", "deploy/.stage/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

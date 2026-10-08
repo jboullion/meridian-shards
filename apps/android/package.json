@@ -1,0 +1,21 @@
+{
+  "name": "@shards/android",
+  "version": "0.1.5",
+  "private": true,
+  "description": "Meridian Shards: the Android app (Capacitor around the browser client).",
+  "license": "GPL-2.0-only",
+  "type": "module",
+  "scripts": {
+    "sync": "cap sync android",
+    "open": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/keyboard": "^8.0.6"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3"
+  }
+}

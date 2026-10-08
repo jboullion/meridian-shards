@@ -17,6 +17,10 @@ export default defineConfig({
     __SECRET_KEY__: JSON.stringify(secretKey),
   },
   server: {
+    // IPv4 loopback rather than "localhost" (::1 only on this machine): `adb reverse`, which
+    // the Android app's dev server goes through, connects to 127.0.0.1. Browsers and the
+    // desktop app still open http://localhost:5173.
+    host: "127.0.0.1",
     port: 5173,
     proxy: {
       // Same-origin WebSocket in dev, like /ws behind Caddy in production.

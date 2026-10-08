@@ -254,6 +254,8 @@ export interface Settings {
   attackOnTarget: boolean;
   /** Dynamic Lighting: the light maps around torches and lamps */
   dynamicLighting: boolean;
+  /** Damage Numbers (ours): the damage we deal floats up over what we hit */
+  damageNumbers: boolean;
   /** Mouselook X / Y scale, 1..30 (config.ini mouselookxscale / mouselookyscale) */
   mouseXScale: number;
   mouseYScale: number;
@@ -320,6 +322,7 @@ export const DEFAULT_SETTINGS: Settings = {
   alwaysRun: false,
   attackOnTarget: false,
   dynamicLighting: true,
+  damageNumbers: true,
   mouseXScale: 15,
   mouseYScale: 15,
   invertMouse: false,

@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "vitest";
 import {
-  BP, ByteReader, ByteWriter, STATS, STAT_TAG, UC, buildReqBuyItems, buildReqCast, buildReqLook, buildReqOffer,
+  BP, ByteReader, ByteWriter, STATS, STAT_TAG, UC, buildReqBuyItems, buildReqCast, buildReqCounteroffer, buildReqLook, buildReqOffer,
   buildSayGroup, buildUserCommand, CF, buildChangeDescription, buildChangeUrl, buildReqApply, buildReqGetFromContainer, buildReqObjectContents, buildReqPut, readBgOverlay, ANIMATE, readBuyList, readPlayWave, readSpells, readStat, readStatGroup,
 } from "../src/index.ts";
 
@@ -69,6 +69,11 @@ describe("trade", () => {
       hex(new ByteWriter().u8(BP.REQ_BUY_ITEMS).u32(2650).u16(2).u32(9001).u32(NUMBER | 9002).u32(7).finish()),
     );
     expect(hex(buildReqOffer(2650, [{ id: 7 }]))).toBe(hex(new ByteWriter().u8(BP.REQ_OFFER).u32(2650).u16(1).u32(7).finish()));
+    // offer.c RcvOfferDialogProc IDOK: RequestCounteroffer, an object list (empty for "Offer nothing")
+    expect(hex(buildReqCounteroffer([]))).toBe(hex(new ByteWriter().u8(BP.REQ_COUNTEROFFER).u16(0).finish()));
+    expect(hex(buildReqCounteroffer([{ id: 7 }, { id: 9 | NUMBER, amount: 3 }]))).toBe(
+      hex(new ByteWriter().u8(BP.REQ_COUNTEROFFER).u16(2).u32(7).u32(9 | NUMBER).u32(3).finish()),
+    );
     expect(hex(buildReqCast(5569, []))).toBe(hex(new ByteWriter().u8(BP.REQ_CAST).u32(5569).u16(0).finish()));
   });
 

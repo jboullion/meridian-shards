@@ -6,7 +6,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { AssetStore } from "../assets.ts";
-import { desktop, type DesktopWindowState } from "../host.ts";
+import { desktop, isAndroid, type DesktopWindowState } from "../host.ts";
 
 export interface TitleBarMenuItem {
   label: string;
@@ -93,8 +93,8 @@ export function TitleBar({
       window.removeEventListener("keydown", esc);
     };
   }, [open]);
-  const frameless = !!desktop;
-  const ownButtons = desktop !== undefined && desktop.platform !== "darwin";
+  const frameless = !!desktop && !isAndroid;
+  const ownButtons = frameless && desktop?.platform !== "darwin";
   return (
     <header
       className={`title-bar${frameless ? " frameless" : ""}${desktop?.platform === "darwin" ? " mac" : ""} ${className ?? ""}`}
@@ -142,9 +142,9 @@ function LatencyMeter({ ms }: { ms: number | null }) {
   );
 }
 
-/** A page under the title bar on the desktop (the login, character and loading screens); just the page in a browser. */
+/** A page under the title bar on the desktop (the login, character and loading screens); just the page in a browser or on Android. */
 export function Framed({ assets, children }: { assets?: AssetStore | null; children: ReactNode }) {
-  if (!desktop) return <>{children}</>;
+  if (!desktop || isAndroid) return <>{children}</>;
   return (
     <div className="app-frame">
       <TitleBar assets={assets} title="Meridian Shards" />

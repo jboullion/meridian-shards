@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import type { CharInfo, CharacterSlot } from "@shards/protocol";
 import { SAY } from "@shards/protocol";
-import { GameSession, type ChatLine, type ContainerContents, type LookResult, type OfferEvent, type SessionPhase, type TradeList } from "@shards/world";
+import {
+  GameSession, type ChatLine, type ContainerContents, type DamageDealt, type LookResult, type OfferEvent, type SessionPhase, type TradeList,
+} from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
 import { desktop, gameSocketUrl } from "../host.ts";
@@ -38,6 +40,7 @@ interface Live {
   offers: Relay<OfferEvent>;
   looks: Relay<LookResult>;
   contents: Relay<ContainerContents>;
+  damage: Relay<DamageDealt>;
 }
 
 /**
@@ -128,6 +131,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     const offers = new Relay<OfferEvent>();
     const looks = new Relay<LookResult>();
     const contents = new Relay<ContainerContents>();
+    const damage = new Relay<DamageDealt>();
     const s = new GameSession(
       { url: gameSocketUrl(), username, password, secretKey: __SECRET_KEY__, lookupResource: (id) => rsb.get(id), pingIntervalMs: 0 },
       {
@@ -153,10 +157,11 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
         trade: trades.emit,
         offer: offers.emit,
         sound: (e) => audio.handle(e),
+        damageDealt: damage.emit,
       },
     );
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => s.resource(id)), trades, offers, looks, contents });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => s.resource(id)), trades, offers, looks, contents, damage });
   };
 
   const logout = () => {
@@ -230,6 +235,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       chat={chat}
       looks={live.looks.on}
       contents={live.contents.on}
+      damage={live.damage.on}
       onLogout={logout}
       serverPrefs={serverPrefs}
       latency={latency}
