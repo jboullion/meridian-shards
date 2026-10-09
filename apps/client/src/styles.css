@@ -3177,6 +3177,22 @@ canvas.server-wait {
   bottom: calc(120px * var(--hud-scale, 1));
 }
 
+/* Hide Interface (GameView hudHidden): the HUD and the character window away. The chat stays in
+   place, unseen, so its line can take focus (a chat key), which brings it back while typing. */
+.game.modern-ui.hud-hidden .unit-frame,
+.game.modern-ui.hud-hidden .target-frame,
+.game.modern-ui.hud-hidden .map-cluster,
+.game.modern-ui.hud-hidden .action-bar,
+.game.modern-ui.hud-hidden .character-window-anchor,
+.game.modern-ui.hud-hidden .view .fps {
+  display: none;
+}
+
+.game.modern-ui.hud-hidden .chat:not(:focus-within) {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* The camera view just chosen (GameView viewNote): its name, fading away */
 .view-note {
   position: absolute;

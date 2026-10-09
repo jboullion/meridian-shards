@@ -57,7 +57,6 @@ The Modern layout (`ui/ModernHud.tsx`, `ui/CharacterWindow.tsx`) has no counterp
 
 | What | What it needs |
 |---|---|
-| Hiding the interface | A key to hide the HUD for screenshots. |
 | Minecraft's click to carry | Items move by drag and drop and double clicks, not by picking a stack up on the cursor and splitting it. |
 | A separate spell bar | The remaster has items on the hotbar and spells on their own bar; ours mixes both in ten slots. |
 | Searching the spell list | The remaster's spell and skill pages filter as you type. |

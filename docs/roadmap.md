@@ -259,6 +259,7 @@ Ours, beside the original's layout: Minecraft- and Diablo-style HUD clusters ove
   - The camera stops short of the first wall between it and us (a ray against the room, as the name labels' occlusion). The wheel moves it nearer or farther; out of first person it starts the chase view, all the way in from chase goes back.
   - Modern interface on the desktop only; Classic and the phone stay in first person.
   - Tested on our server: all four views in the Outskirts and the Inn, the camera pulling in against the Inn's walls, and chase steering (S turned Shardbot round toward the camera and walked him to it).
+- [x] **Hide Interface** (H in the modern preset, the Bind Editor's Interface tab): the HUD, chat, character window and FPS away for screenshots, and back with the same key, with a short note each way. A chat key still brings the chat line out to type in. Names, damage numbers, the hands and open dialogs stay. Modern interface only.
 - [x] **HUD Size** (the Bind Editor's Options, under Modern Interface): 75–150 %, the bars, quick slots, map, target, chat and character window together, each grown where it stands (CSS `zoom`).
 - Tested on our server with Shardbot: a helmet, a ring of acid resistance and a metal shield put on and taken off, the mace on Weapon, the layout at 1024 × 768 and 1600 × 900, the chat's fading and hover panel, the target frame, and switching to Classic and back while playing.
 

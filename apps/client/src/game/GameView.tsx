@@ -8,7 +8,7 @@ import type { AssetStore } from "../assets.ts";
 import type { AudioPreview, GameAudio } from "./audio.ts";
 import { GameScene, type GameSceneStatus, type TouchMove, type ViewMode } from "./gameScene.ts";
 import type { IconRenderer } from "./icons.ts";
-import { getSettings, onSettings, touchUi, updateSettings, type Action, type ChatTab, type Settings } from "./settings.ts";
+import { bindingLabel, getSettings, onSettings, touchUi, updateSettings, type Action, type ChatTab, type Settings } from "./settings.ts";
 import {
   BAD_COMMAND, defineAlias, filterSayMessage, findSpell, groupAdd, groupDelete, groupNew, interpretLine, resolveTell, type CommandId, type GroupResult,
 } from "./commands.ts";
@@ -205,6 +205,12 @@ export function GameView({
   const touch = touchUi(settings);
   /** The Modern interface (ours, desktop only): the view fills the window, the HUD over it (ui/ModernHud.tsx) */
   const modern = !touch && settings.interfaceStyle === "modern";
+  /**
+   * Hide Interface (ours, the Modern interface): the HUD, chat and character window put away, for
+   * screenshots. The chat line still comes out to type in. Back with the same key.
+   */
+  const [hudHidden, setHudHidden] = useState(false);
+  if (hudHidden && !modern) setHudHidden(false);
   /** The Modern interface's character window (ui/CharacterWindow.tsx), on the `tab` shown */
   const [characterOpen, setCharacterOpen] = useState(false);
   /** itemslots.json: where worn items go on its paper doll */
@@ -239,6 +245,13 @@ export function GameView({
     if (sceneRef.current) sceneRef.current.mapMode = touch && fullMap;
   }, [touch, fullMap]);
   const [fps, setFps] = useState<number | null>(null);
+  /** Hide Interface just pressed: what it did and how to undo it, for a moment */
+  const [hideNote, setHideNote] = useState<{ hidden: boolean; at: number } | null>(null);
+  useEffect(() => {
+    if (!hideNote) return;
+    const t = setTimeout(() => setHideNote(null), VIEW_NOTE_MS);
+    return () => clearTimeout(t);
+  }, [hideNote]);
   /** The camera view just chosen (Camera View, the wheel), named over the view for a moment */
   const [viewNote, setViewNote] = useState<{ mode: ViewMode; at: number } | null>(null);
   useEffect(() => {
@@ -636,6 +649,11 @@ export function GameView({
     if (a.startsWith("quickSlot")) return activateSlot(Number(a.slice("quickSlot".length)) - 1);
     const toggle = (type: "preferences" | "configuration" | "actions") => setModal((m) => (m?.type === type ? null : { type }));
     switch (a) {
+      case "hideInterface":
+        if (!modern) return;
+        setHudHidden(!hudHidden);
+        // `at` only keys the note, so a second press restarts its fade
+        return setHideNote((n) => ({ hidden: !hudHidden, at: (n?.at ?? 0) + 1 }));
       case "inventory":
         // The Modern interface: the key opens and closes the character window, on its bag
         if (modern) setCharacterOpen((open) => !open || tab !== "inventory");
@@ -1212,6 +1230,9 @@ export function GameView({
 
   // Ours: of mermain.c default_buttons and mailnews.c mail_buttons, only Rest/Stand and the
   // mailbox, beside the portrait instead of a toolbar over the view
+  /** Hide Interface's first key, for its note */
+  const hideKey = settings.keys.hideInterface[0];
+  const hideKeyLabel = hideKey ? bindingLabel(hideKey) : "Hide Interface";
   const toolbarButtons =
     settings.toolbar && !touch
       ? [
@@ -1222,7 +1243,7 @@ export function GameView({
 
   return (
     <div
-      className={`game${touch ? " touch-ui" : ""}${modern ? " modern-ui" : ""}${touch && chatOpen ? " chat-open" : ""}${touch && drawerOpen ? " drawer-open" : ""}`}
+      className={`game${touch ? " touch-ui" : ""}${modern ? " modern-ui" : ""}${hudHidden ? " hud-hidden" : ""}${touch && chatOpen ? " chat-open" : ""}${touch && drawerOpen ? " drawer-open" : ""}`}
       ref={gameRef}
       style={
         {
@@ -1400,6 +1421,11 @@ export function GameView({
           </>
         )}
         {viewNote && <div key={viewNote.at} className="view-note">{VIEW_NAMES[viewNote.mode]}</div>}
+        {hideNote && (
+          <div key={hideNote.at} className="view-note">
+            {hideNote.hidden ? `Interface hidden (${hideKeyLabel} shows it)` : "Interface shown"}
+          </div>
+        )}
         {selecting && !touch && <div className="select-hint">Choose a target, or your face or bars for yourself (Esc or right click cancels)</div>}
         {(phase === "entering" || status?.loading) && <div className="loading">Entering…</div>}
         {desc && (

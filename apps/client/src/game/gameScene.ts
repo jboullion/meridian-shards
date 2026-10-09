@@ -1668,8 +1668,9 @@ export class GameScene {
       case "quickSlot8":
       case "quickSlot9":
       case "quickSlot10":
+      case "hideInterface":
         // Panels and dialogs: free the mouse for them
-        if (this.locked && a !== "mapZoomIn" && a !== "mapZoomOut" && a !== "inventory" && a !== "map" && !a.startsWith("quickSlot")) document.exitPointerLock();
+        if (this.locked && a !== "mapZoomIn" && a !== "mapZoomOut" && a !== "inventory" && a !== "map" && a !== "hideInterface" && !a.startsWith("quickSlot")) document.exitPointerLock();
         this.onAction?.(a);
         break;
       case "tabForward":

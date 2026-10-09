@@ -21,7 +21,7 @@ export const ACTION_TABS = {
   Map: ["map", "mapZoomIn", "mapZoomOut"],
   // Ours: keys for our own panels and menus, and the quick slots (quickSlots.ts)
   Interface: [
-    "inventory", "settings", "configuration", "actions", "cameraView",
+    "inventory", "settings", "configuration", "actions", "cameraView", "hideInterface",
     "quickSlot1", "quickSlot2", "quickSlot3", "quickSlot4", "quickSlot5", "quickSlot6", "quickSlot7", "quickSlot8", "quickSlot9",
     "quickSlot10",
   ],
@@ -76,6 +76,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   configuration: "Configuration",
   actions: "Actions",
   cameraView: "Camera View",
+  hideInterface: "Hide Interface",
   quickSlot1: "Quick Slot 1",
   quickSlot2: "Quick Slot 2",
   quickSlot3: "Quick Slot 3",
@@ -151,6 +152,8 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     actions: [],
     // Ours: first person, chase, behind, front (the Modern interface only; gameScene.ts ViewMode)
     cameraView: k("KeyV"),
+    // Ours: the Modern interface's HUD away and back, for screenshots (GameView hudHidden)
+    hideInterface: k("KeyH"),
     quickSlot1: k("Digit1", "Numpad1"),
     quickSlot2: k("Digit2", "Numpad2"),
     quickSlot3: k("Digit3", "Numpad3"),
@@ -208,6 +211,7 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     configuration: [],
     actions: [],
     cameraView: [],
+    hideInterface: [],
     // Typing starts a chat line in the original preset, digits too: no keys unless the player adds them
     quickSlot1: [],
     quickSlot2: [],
