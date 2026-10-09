@@ -47,7 +47,7 @@ We want a downloadable client for Windows, macOS and Linux that keeps the web st
 6. **Releases on GitHub:** installers and the update feeds (`latest*.yml`) are assets of a GitHub release of this (public) repo.
    - `.github/workflows/desktop.yml` builds all three OSes on a `v*` tag and uploads them to a draft release. It gets the game files from the VM's `/assets/` (`tools/assets/fetch-assets.ts`), cached by manifest.
    - Publishing the release ships it. electron-updater's github provider downloads only the changed blocks of the installer.
-   - GitHub doesn't charge for release bandwidth, so installs and updates cost the VM nothing. Caddy serves only a small download page (`/download/`), which lists the latest release.
+   - GitHub doesn't charge for release bandwidth, so installs and updates cost the VM nothing. A small download page lists the latest release. It was served by Caddy at `/download/` until 2026-10-08; now it's on GitHub Pages, and the VM redirects there.
 7. **Signing is deferred.**
    - Unsigned Windows builds get a SmartScreen warning.
    - Unsigned macOS builds need right-click → Open, and macOS can't auto-update them.

@@ -50,7 +50,6 @@ services:
     volumes:
       - ./web/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./.stage/assets:/srv/assets:ro
-      - ./web/site:/srv/site:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:

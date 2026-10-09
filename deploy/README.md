@@ -6,7 +6,7 @@ The hosted stack is three containers on one small Linux VM:
 |---|---|
 | `blakserv` | The unmodified Server 104 server, built for Linux (32-bit), with the compiled Kod, resources and rooms from our build. Game state lives on the `savegame` volume. |
 | `gateway` | The WebSocket-to-TCP gateway (`tools/gateway/gateway.ts`). |
-| `web` | Caddy: HTTPS (Let's Encrypt), the game assets at `/assets/`, the gateway at `/ws`, and the desktop app's download page (`/download/`; the installers are on GitHub Releases). Every other path, `/` included, redirects to the download page: the browser client isn't hosted (since 2026-10-08), so players use the desktop or Android app. |
+| `web` | Caddy: HTTPS (Let's Encrypt), the game assets at `/assets/` and the gateway at `/ws`. Every other path, `/` and the old `/download/` included, redirects to the download page on GitHub Pages (`https://jboullion.github.io/meridian-shards/`). The browser client isn't hosted (since 2026-10-08), so players use the desktop or Android app. |
 
 Port 5959 is also open for original Windows clients built with our `SecretKey`. Our apps only need 443.
 
@@ -93,7 +93,7 @@ From the repo root on your PC:
 node tools/deploy/push.ts --host shards@<EXTERNAL_IP> --key $HOME/.ssh/meridian_shards
 ```
 
-The first push uploads about 450 MB (mostly the game assets). For code-only updates add `--skip-assets`. The first start takes a minute: Docker builds blakserv, and Caddy fetches the certificate. Then open `https://<dashed-ip>.sslip.io`, which should show the download page.
+The first push uploads about 450 MB (mostly the game assets). For code-only updates add `--skip-assets`. The first start takes a minute: Docker builds blakserv, and Caddy fetches the certificate. Then open `https://<dashed-ip>.sslip.io`, which should redirect to the download page.
 
 ## 6. The desktop app
 
@@ -116,7 +116,12 @@ The script prints each job's progress and ends with the release link, or names t
 
 Don't create releases by hand. A release that already exists for the tag makes the builds skip their uploads, and the script refuses a version that has one.
 
-Installed apps find the new release at their next launch, download the changed blocks in the background, and offer "Restart to update" on the login screen. Unsigned macOS builds can't update themselves. The download page at `https://<dashed-ip>.sslip.io/download/` always lists the latest published release.
+Installed apps find the new release at their next launch, download the changed blocks in the background, and offer "Restart to update" on the login screen. Unsigned macOS builds can't update themselves. The download page always lists the latest published release.
+
+**The download page** (`deploy/web/site/download/`) is on GitHub Pages at `https://jboullion.github.io/meridian-shards/`, and the VM's `/` redirects there:
+- It reads the latest release from GitHub's API when it's opened, so releases never need it republished.
+- `.github/workflows/pages.yml` publishes it when that folder changes on `main`, or from the Actions tab.
+- The repository's Pages source must be **GitHub Actions** (Settings → Pages).
 
 To build only Windows locally: `npm run desktop:dist` makes the installer in `apps/desktop/dist/`. `npm run desktop:release` uploads it to the draft release too, with a token in `GH_TOKEN`.
 

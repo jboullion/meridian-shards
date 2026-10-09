@@ -1,8 +1,9 @@
-# Caddy: HTTPS for the site, the game assets, the WebSocket gateway at /ws, and the
-# desktop app's download page at /download/ (the installers themselves are on GitHub
-# Releases). The browser client isn't hosted: players use the desktop or Android app. SITE_ADDRESS is the hostname (e.g. 34-123-45-67.sslip.io); Caddy
-# gets its certificate from Let's Encrypt by itself. For a local test without TLS,
-# set SITE_ADDRESS=http://localhost.
+# Caddy: HTTPS for the game assets and the WebSocket gateway at /ws. The browser client isn't
+# hosted: players use the desktop or Android app, from the download page on GitHub Pages
+# (deploy/web/site/download/, .github/workflows/pages.yml), where every other path redirects.
+# The apps themselves are GitHub Releases. SITE_ADDRESS is the hostname (e.g.
+# 34-123-45-67.sslip.io); Caddy gets its certificate from Let's Encrypt by itself. For a local
+# test without TLS, set SITE_ADDRESS=http://localhost.
 
 {$SITE_ADDRESS} {
 	encode zstd gzip
@@ -25,17 +26,9 @@
 		file_server
 	}
 
-	# The download page (deploy/web/site)
-	redir /download /download/
-	handle /download/* {
-		root * /srv/site
-		header Cache-Control "no-cache"
-		file_server
-	}
-
-	# Everything else, the front page included, goes to the download page
+	# Everything else, the front page and the old /download/ included, goes to the download page
 	handle {
-		redir * /download/
+		redir * https://jboullion.github.io/meridian-shards/
 	}
 
 	log {

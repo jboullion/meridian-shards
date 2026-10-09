@@ -1,0 +1,42 @@
+# Publishes the download page (deploy/web/site/download/) to GitHub Pages:
+# https://jboullion.github.io/meridian-shards/. The page lists the latest published release's
+# files itself (GitHub's API, when it's opened), so a release needs nothing from here; this runs
+# only when the page changes on main, or from the Actions tab. The VM's / and /download/
+# redirect here (deploy/web/Caddyfile).
+#
+# Pages must use GitHub Actions as its source: Settings → Pages → Build and deployment.
+
+name: Download page
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/web/site/download/**"
+      - ".github/workflows/pages.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer push replaces one that hasn't started
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: deploy/web/site/download
+      - id: deployment
+        uses: actions/deploy-pages@v4
