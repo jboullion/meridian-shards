@@ -2196,8 +2196,22 @@ canvas.server-wait {
   background: rgba(0, 0, 0, 0.3);
 }
 
+/* The map covers the whole view, under the controls: the joystick still moves us, by the map's
+   directions (gameScene.ts mapMode), and the Map button, now ✕, closes it */
 .game.touch-ui .full-map {
-  inset: 52px 8px 8px;
+  inset: 0;
+  z-index: 2;
+  border: none;
+  box-shadow: none;
+}
+
+/* The title bar keeps its icon and latency meter clear of a phone's curved edges */
+.game.touch-ui .game-title {
+  padding-left: max(28px, env(safe-area-inset-left));
+  padding-right: max(28px, env(safe-area-inset-right));
+  /* Android's status bar is hidden (MainActivity hides it again when we're back), but while it
+     shows, the title bar goes under it rather than behind it */
+  padding-top: env(safe-area-inset-top);
 }
 
 .touch-controls {
@@ -2325,8 +2339,9 @@ canvas.server-wait {
   bottom: 22px;
   display: grid;
   place-items: center;
-  width: 128px;
-  height: 128px;
+  /* 20% smaller after a first phone test: we nearly always run, so the edge must be close */
+  width: 102px;
+  height: 102px;
   border: 2px solid rgba(214, 180, 90, 0.45);
   border-radius: 50%;
   background: rgba(20, 20, 20, 0.3);
@@ -2335,8 +2350,8 @@ canvas.server-wait {
 }
 
 .touch-knob {
-  width: 54px;
-  height: 54px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: rgba(214, 180, 90, 0.6);
   box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
@@ -2358,5 +2373,14 @@ canvas.server-wait {
 .touch-actions .attack { right: 0; bottom: 0; }
 .touch-actions .go { right: 11px; bottom: 92px; }
 .touch-actions .interact { right: 92px; bottom: 0; }
-.touch-actions .lookAt { right: 82px; bottom: 70px; }
-.touch-actions .targetNext { right: 164px; bottom: 6px; }
+.touch-actions .targetNext { right: 82px; bottom: 70px; }
+
+/* Resting: the button stays lit, like the toolbar's pressed rest.bmp */
+.touch-button.pressed {
+  background: rgba(214, 180, 90, 0.45);
+}
+
+.touch-button.close {
+  min-width: 52px;
+  font: bold 18px Arial, sans-serif;
+}

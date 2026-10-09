@@ -10,7 +10,7 @@
 // --bundle puts the game files (dist/assets, about 430 MB) in the debug APK, as release builds have them.
 // --release builds the signed release APK as players get it (app/build.gradle: the key in
 // ~/.meridian-shards), with the game files and only the hosted server. Android won't put it over a
-// debug build (another key), so the app is uninstalled first, and its cached files with it.
+// debug build (another key) or the other way round; then the app is uninstalled first, data and all.
 //
 // The SDK comes from ANDROID_HOME, ANDROID_SDK_ROOT or apps/android/android/local.properties.
 // `cap run android` would do steps 2 and 3, but it runs `./gradlew`, which cmd.exe can't.
@@ -100,9 +100,20 @@ const onDevice = (label: string, ...args: string[]) => step(label, adb, ["-s", d
 const apk = opt.release
   ? join(PROJECT, "app", "build", "outputs", "apk", "release", "app-release.apk")
   : join(PROJECT, "app", "build", "outputs", "apk", "debug", "app-debug.apk");
-// A build signed with another key won't install over the one there: start clean (not an error if it isn't installed)
-if (opt.release) spawnSync(adb, ["-s", device, "uninstall", APP_ID], { stdio: "ignore" });
-onDevice(`installing on ${device}`, "install", "-r", apk);
+// An update keeps the app's data; a build signed with another key (a debug build over a release
+// one, or the other way) won't go over the one there, so that's uninstalled first, data and all
+console.log(`[android] installing on ${device}`);
+const install = spawnSync(adb, ["-s", device, "install", "-r", apk], { encoding: "utf8" });
+const said = `${install.stdout ?? ""}${install.stderr ?? ""}`;
+if (install.status !== 0 && /INSTALL_FAILED_UPDATE_INCOMPATIBLE/.test(said)) {
+  console.log("[android] the installed app is signed with another key: uninstalling it first");
+  spawnSync(adb, ["-s", device, "uninstall", APP_ID], { stdio: "ignore" });
+  onDevice(`installing on ${device}`, "install", "-r", apk);
+} else if (install.status !== 0) {
+  console.error(said.trim());
+  console.error("[android] installing failed");
+  process.exit(install.status ?? 1);
+} else console.log(said.trim().split("\n").pop());
 onDevice("forwarding the device's localhost:5173 to the dev stack", "reverse", "tcp:5173", "tcp:5173");
 onDevice("launching", "shell", "am", "start", "-n", `${APP_ID}/.MainActivity`);
 console.log("[android] running. Console and DevTools: chrome://inspect in Chrome on this machine.");

@@ -194,6 +194,21 @@ export function onBackButton(fn: () => boolean): () => void {
   };
 }
 
+let awayHandler: (() => void) | null = null;
+
+/**
+ * The Android app kept the connection while the player was in another app, for as long as it
+ * allows (ConnectionService.java), and now the player is to be logged off. Returns the unsubscribe.
+ */
+export function onAndroidAway(fn: () => void): () => void {
+  awayHandler = fn;
+  return () => {
+    if (awayHandler === fn) awayHandler = null;
+  };
+}
+
+(globalThis as { shardsAndroidAway?: () => void }).shardsAndroidAway = () => awayHandler?.();
+
 /** Closes the Android app (after logging off); nothing elsewhere. */
 export function exitApp(): void {
   capacitorApp?.exitApp();

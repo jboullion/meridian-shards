@@ -24,10 +24,12 @@ public class ShardsHost {
     private static final String PREFS = "shards";
     private static final String KEY_SERVER = "server";
 
+    private final Context appContext;
     private final SharedPreferences prefs;
     private final ConnectivityManager connectivity;
     private final AssetCache assets;
-    private volatile String phase = "offline";
+    /** The session phase the page last reported (apps/client/src/game/Game.tsx), per process like the page */
+    private static volatile String phase = "offline";
     /**
      * The game file download (AssetCache.downloadAll) and its latest progress, as JSON. Per
      * process, like the cache: a recreated activity's page joins the running download, and the
@@ -38,6 +40,7 @@ public class ShardsHost {
     private static volatile WebView progressView;
 
     ShardsHost(Context context, AssetCache assets, WebView webView) {
+        appContext = context.getApplicationContext();
         prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         connectivity = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
         this.assets = assets;
@@ -60,9 +63,15 @@ public class ShardsHost {
         return saved != null && known(saved) ? saved : servers()[0][1];
     }
 
-    /** The session phase the page last reported (apps/client/src/game/Game.tsx). */
-    String phase() {
-        return phase;
+    /** In the game (not the login or character screens): leaving the app keeps the connection (ConnectionService). */
+    static boolean inGame() {
+        return "game".equals(phase);
+    }
+
+    /** Away too long (ConnectionService): the page logs off, and says why (host.ts onAndroidAway). */
+    static void notifyAway() {
+        WebView view = progressView;
+        if (view != null) view.post(() -> view.evaluateJavascript("window.shardsAndroidAway?.()", null));
     }
 
     @JavascriptInterface
@@ -92,6 +101,9 @@ public class ShardsHost {
     @JavascriptInterface
     public void setPhase(String p) {
         phase = String.valueOf(p);
+        // Logged off or disconnected while away: nothing left to keep
+        if (!inGame()) ConnectionService.stop(appContext);
+        else MainActivity.askForNotifications();
     }
 
     /**

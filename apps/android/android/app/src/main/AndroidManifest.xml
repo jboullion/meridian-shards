@@ -25,6 +25,16 @@
 
         </activity>
 
+        <!-- Keeps the game connection a few minutes while the player is in another app (ConnectionService) -->
+        <service
+            android:name=".ConnectionService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps an online game's connection open for a few minutes while the player is in another app" />
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -41,4 +51,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Whether the network is metered: the full game file download waits for an unmetered one (ShardsHost) -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- ConnectionService: staying connected for a few minutes in the background, with its notification -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

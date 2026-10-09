@@ -179,6 +179,9 @@ npm run android:sync        # build the client and copy it into apps/android/and
     - The version is the desktop's (`apps/desktop/package.json`).
     - Release builds look for a newer release's APK on GitHub and offer it on the login screen (`host.ts newerApk`). Debug builds don't.
   - Release builds aren't debuggable: no DevTools through `adb forward`. Use a debug build, or `adb logcat -s ShardsAssets`.
+  - **The background:** Android freezes a background app within seconds, and blakserv drops a game connection silent for 30 seconds.
+    - `ConnectionService` (a foreground service with a notification) keeps the app pinging for 5 minutes after the player leaves it in the game, then the page logs off (`host.ts onAndroidAway`).
+    - `adb shell dumpsys activity processes` shows `isFrozen`, and `adb logcat | grep am_freeze` when it happened.
   - `ShardsPlugin` is registered before `super.onCreate` and does its work in `load()`, which runs before the page loads. A JavaScript interface added later only appears after a reload.
   - Debug builds allow cleartext to localhost (`src/debug`) and mixed content (the dev stack's `ws://` from the `https://localhost` page). Release builds allow neither.
   - Vite listens on `127.0.0.1` because `adb reverse` connects to IPv4. With Vite on `::1` only, the app's proxy gets "unexpected end of stream".

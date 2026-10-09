@@ -39,8 +39,8 @@ const LONG_PRESS_MS = 500;
 /** A second tap this soon and this close is a double tap (activate); ms, px */
 const DOUBLE_TAP_MS = 350;
 const DOUBLE_TAP_SLOP = 40;
-/** Dragging on the view turns this much less than the mouse does per pixel: fingers cover more pixels */
-const TOUCH_LOOK = 0.8;
+/** Dragging on the view turns this much more than the mouse does per pixel (doubled, then 10% more, after phone tests) */
+const TOUCH_LOOK = 1.76;
 
 /** The on-screen joystick's move, like the keys (-1, 0 or 1) */
 export interface TouchMove {
@@ -386,8 +386,12 @@ export class GameScene {
     const p = this.session.world.player;
     if (!p || !this.rooms || p.roomRes === this.roomRes) {
       // game.c HandlePlayer loads the room again even when it's the same one; the server
-      // then sends its changes again (user.kod ToCliPlayer)
-      if (!this.entering) this.resetLiveRoom();
+      // then sends its changes again (user.kod ToCliPlayer). The room's name may have changed
+      // language (language.c MenuLanguageChosen asks for everything again): the title follows
+      if (!this.entering) {
+        this.resetLiveRoom();
+        this.status(false);
+      }
       return void this.syncSky();
     }
     this.roomRes = p.roomRes;
@@ -536,7 +540,15 @@ export class GameScene {
     const rv = remote?.view.flags ?? 0;
     const still = world.effects.paralyzed || world.waiting || this.resting || (remote !== null && (rv & REMOTE_VIEW.CONTROL || !(rv & REMOTE_VIEW.MOVE)));
     // The keys and the on-screen joystick add up, as two keys for the same move would
-    const tm = this.touchMove;
+    let tm = this.touchMove;
+    // With the map open (ours, the phone layout), the joystick moves by the map's directions, up
+    // being north: we turn to face that way and walk forward, so the server sees plain turns
+    if (this.mapMode && (tm.forward || tm.strafe) && !still && !remote) {
+      const facing = Math.round((Math.atan2(-tm.forward, tm.strafe) * 4096) / (2 * Math.PI)) & 4095;
+      const diff = ((facing - this.mover.angle + 6144) % 4096) - 2048;
+      if (diff) this.mover.turnBy(diff);
+      tm = { forward: 1, strafe: 0, run: tm.run };
+    }
     const clamp1 = (v: number) => Math.max(-1, Math.min(1, v));
     const forward = still ? 0 : clamp1(held("forward") - held("backward") + tm.forward);
     const strafe = still ? 0 : clamp1(held("strafeRight") - held("strafeLeft") + tm.strafe);
@@ -1271,6 +1283,9 @@ export class GameScene {
   setTouchMove(m: TouchMove): void {
     this.touchMove = m;
   }
+
+  /** The phone layout's map is over the view: the joystick moves by the map's directions. */
+  mapMode = false;
 
   /** An on-screen button: the action its key would do. */
   press(a: Action): void {

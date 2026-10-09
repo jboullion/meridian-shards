@@ -1,11 +1,11 @@
 // The phone layout's controls over the view (ours, ADR 0003; Touch Controls in the Bind Editor):
 //   - health, mana and vigor bars at the top left, our enchantments and the last few chat lines
 //     under them
-//   - Map, Chat and the interface drawer (inventory, spells...) at the top right, the room's
-//     enchantments under them
+//   - Rest/Stand, Map, Chat and the interface drawer (inventory, spells...) at the top right, the
+//     room's enchantments under them
 //   - a joystick at the bottom left: forward, back and sliding, digital like the keys (move.c),
-//     running when pushed to the edge
-//   - Attack, Open, Get, Look and Next Target at the bottom right, the actions of their keys
+//     running when pushed to the edge; with the map open it moves by the map's directions
+//   - Attack (held, it keeps attacking), Open, Get and Next Target at the bottom right
 // Turning and looking up or down is a drag on the view, tap targets, double tap activates and a
 // long press examines (gameScene.ts, onPointerDown...).
 
@@ -17,18 +17,21 @@ import type { Action, Settings } from "../settings.ts";
 import { HudBars, HudEnchantments } from "./Sidebar.tsx";
 
 /** The joystick's knob travel, px; past DEAD of it the move starts, past RUN it runs */
-const RADIUS = 46;
+const RADIUS = 37;
 const DEAD = 0.35;
 const RUN = 0.85;
 /** Chat lines stay over the view this long, ms */
 const TICKER_MS = 8000;
 const TICKER_LINES = 3;
 
-const BUTTONS: { action: Action; label: string; big?: boolean }[] = [
-  { action: "attack", label: "Attack", big: true },
+/** A held button with `repeat` acts again this often; the game rate-limits attacks itself (gameuser.c: one per 250 ms) */
+const REPEAT_MS = 100;
+
+const BUTTONS: { action: Action; label: string; big?: boolean; repeat?: boolean }[] = [
+  // Held, it keeps attacking, as a held attack key does
+  { action: "attack", label: "Attack", big: true, repeat: true },
   { action: "go", label: "Open" },
   { action: "interact", label: "Get" },
-  { action: "lookAt", label: "Look" },
   { action: "targetNext", label: "Next" },
 ];
 
@@ -91,6 +94,47 @@ function Joystick({ onMove }: { onMove: (m: TouchMove) => void }) {
   );
 }
 
+/**
+ * An action on press, not on release (an attack waits for no lifted finger). With `repeat` it
+ * goes on while the finger stays down.
+ */
+function ActionButton({
+  action, label, big, repeat, onPress,
+}: {
+  action: Action;
+  label: string;
+  big?: boolean;
+  repeat?: boolean;
+  onPress: (a: Action) => void;
+}) {
+  const timer = useRef(0);
+  const stop = () => {
+    clearInterval(timer.current);
+    timer.current = 0;
+  };
+  useEffect(() => stop, []);
+  return (
+    <button
+      type="button"
+      className={`touch-button${big ? " big" : ""} ${action}`}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        onPress(action);
+        if (!repeat) return;
+        // The finger's up and cancel come here even if it slides off the button
+        e.currentTarget.setPointerCapture(e.pointerId);
+        stop();
+        timer.current = window.setInterval(() => onPress(action), REPEAT_MS);
+      }}
+      onPointerUp={stop}
+      onPointerCancel={stop}
+      onLostPointerCapture={stop}
+    >
+      {label}
+    </button>
+  );
+}
+
 /** The last few chat lines, for a few seconds, while the chat is put away. */
 function ChatTicker({ chat, colored }: { chat: ChatLine[]; colored: boolean }) {
   // A clock ticking once a second; a line newer than it shows until it's TICKER_MS old
@@ -117,7 +161,7 @@ function ChatTicker({ chat, colored }: { chat: ChatLine[]; colored: boolean }) {
 }
 
 export function TouchControls({
-  session, icons, settings, chat, chatUnread, onMove, onPress, onChat, onDrawer, onMap, onLook,
+  session, icons, settings, chat, chatUnread, onMove, onPress, onChat, onDrawer, onMap, mapOpen, onLook, resting, onRest,
 }: {
   session: GameSession;
   icons: IconRenderer;
@@ -130,8 +174,13 @@ export function TouchControls({
   onChat: () => void;
   onDrawer: () => void;
   onMap: () => void;
+  /** The map is over the view: its button closes it */
+  mapOpen: boolean;
   /** An enchantment tapped: its description */
   onLook: (id: number) => void;
+  /** command.c pinfo.resting, for the Rest / Stand button (the toolbar's rest.bmp) */
+  resting: boolean;
+  onRest: () => void;
 }) {
   return (
     <div className="touch-controls">
@@ -142,8 +191,12 @@ export function TouchControls({
       </div>
       <HudEnchantments session={session} icons={icons} kind="room" onLook={onLook} />
       <div className="touch-top-buttons">
-        <button type="button" className="touch-button small" onClick={onMap}>
-          Map
+        {/* The toolbar's Rest/Stand (mermain.c default_buttons): typed "rest" or "stand" */}
+        <button type="button" className={`touch-button small${resting ? " pressed" : ""}`} onClick={onRest}>
+          {resting ? "Stand" : "Rest"}
+        </button>
+        <button type="button" className={`touch-button small${mapOpen ? " close" : ""}`} onClick={onMap} aria-label={mapOpen ? "Close the map" : "Map"}>
+          {mapOpen ? "✕" : "Map"}
         </button>
         <button type="button" className={`touch-button small${chatUnread ? " unread" : ""}`} onClick={onChat}>
           Chat
@@ -155,18 +208,7 @@ export function TouchControls({
       <Joystick onMove={onMove} />
       <div className="touch-actions">
         {BUTTONS.map((b) => (
-          <button
-            key={b.action}
-            type="button"
-            className={`touch-button${b.big ? " big" : ""} ${b.action}`}
-            // On press, not on release: an attack waits for no lifted finger
-            onPointerDown={(e) => {
-              e.preventDefault();
-              onPress(b.action);
-            }}
-          >
-            {b.label}
-          </button>
+          <ActionButton key={b.action} action={b.action} label={b.label} big={b.big} repeat={b.repeat} onPress={onPress} />
         ))}
       </div>
     </div>

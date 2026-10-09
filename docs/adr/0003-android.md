@@ -164,7 +164,13 @@ Android's System WebView is Chromium, the engine we test in. Most of the client 
      - health, mana and vigor at the top left, with the last chat lines under them;
      - Map, Chat and Items at the top right;
      - the joystick at the bottom left;
-     - Attack, Open, Get, Look and Next around the right thumb.
+     - Attack, Open, Get, Next (Target Next) and Rest/Stand around the right thumb. Held, Attack keeps attacking at the game's pace (one every 250 ms), as a held key does.
+   - After the first test on a real phone (2026-10-08):
+     - turning by drag doubled;
+     - the joystick 20% smaller, so running (the edge) is closer;
+     - Look replaced by Rest/Stand;
+     - the map covers the whole view under the controls: it drags around, the joystick still moves you, and the Map button becomes ✕ while it's open;
+     - the title bar keeps 28 px clear of curved screen edges.
    - Touch on the view (`gameScene.ts`):
      - drag to turn and look up or down;
      - tap to target, or to pick up something close by;
@@ -178,7 +184,13 @@ Android's System WebView is Chromium, the engine we test in. Most of the client 
    - Found along the way:
      - the canvas needs `touch-action: none`, or the browser takes a drag over after a few moves;
      - the drawer parked off screen made the browser zoom the page out, so the layout clips and the viewport has `user-scalable=no`.
-   - A minute in the background kept the connection.
+   - A minute in the background kept the connection in the emulator. On a real phone (Pixel 10a, Android 17) it didn't, so `ConnectionService` was added:
+     - The cause: Android froze the app (`am_freeze`) about 10 seconds after the player switched apps, and blakserv drops a game connection silent for 30 seconds (`[Inactive] Game`).
+     - Leaving the app in the game starts a foreground service (type `specialUse`) with a "Still connected" notification. It keeps the process unfrozen and pinging.
+     - After 5 minutes the page logs off cleanly and the login screen says why. Coming back sooner stops the service.
+     - The notification permission is asked for once, on entering the game. Without it the connection is kept all the same.
+     - Tested in the emulator: 100 seconds away, the process was never frozen, and chat still went through on return.
+   - Android shows its status bar again after another app was in front: `MainActivity.onWindowFocusChanged` hides it again, and while it shows, the title bar steps below it (`env(safe-area-inset-top)`).
    - Not yet:
      - a hotbar for the F1–F12 hotkey aliases and favourite spells (spells cast from the drawer's Spells tab for now);
      - the toolbar (Help, Drop, Get, Rest, Mail), which the phone layout hides; Mail is in ☰, and Rest is typed;

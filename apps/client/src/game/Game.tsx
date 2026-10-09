@@ -7,7 +7,7 @@ import {
 } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
-import { desktop, gameSocketUrl } from "../host.ts";
+import { desktop, gameSocketUrl, onAndroidAway } from "../host.ts";
 import { GameAudio } from "./audio.ts";
 import { Intro } from "./Intro.tsx";
 import { CharacterCreator } from "./CharacterCreator.tsx";
@@ -228,6 +228,15 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     setIntro(true);
     setIntroAudio((a) => a ?? new GameAudio(assets));
   };
+
+  // The Android app was in the background longer than it keeps the connection: log off, and say why
+  useEffect(() =>
+    onAndroidAway(() => {
+      if (!session) return;
+      logout();
+      setError("You were away from the game for 5 minutes, so you've been logged off.");
+    }),
+  );
 
   // login.c GetLogin: with /Q, no login dialog; log on with /U and /W at once
   const autoLogin = useRef(launch?.quickstart === true && !!launch.username && !!launch.password);

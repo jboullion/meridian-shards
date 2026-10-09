@@ -198,6 +198,10 @@ export function GameView({
   const [chatSeenAt, setChatSeenAt] = useState(() => Date.now());
   const touchMove = useCallback((m: TouchMove) => sceneRef.current?.setTouchMove(m), []);
   const touchPress = useCallback((a: Action) => sceneRef.current?.press(a), []);
+  // The phone layout's map: the joystick moves by its directions while it's open
+  useEffect(() => {
+    if (sceneRef.current) sceneRef.current.mapMode = touch && fullMap;
+  }, [touch, fullMap]);
   const [fps, setFps] = useState<number | null>(null);
   /** The chat window's height while its edge is being dragged (saved on letting go) */
   const [dragHeight, setDragHeight] = useState<number | null>(null);
@@ -1144,6 +1148,9 @@ export function GameView({
             onChat={() => setChatOpen(true)}
             onDrawer={() => setDrawerOpen((v) => !v)}
             onMap={() => setFullMap((v) => !v)}
+            mapOpen={fullMap}
+            resting={resting}
+            onRest={() => setResting(!restingRef.current)}
             // enchant.c WM_RBUTTONDOWN: look at the enchantment, as the interface's do
             onLook={(id) => lookAt(id, DESC.NONE)}
           />
