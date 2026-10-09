@@ -23,12 +23,46 @@ import { loadSkybox, type LoadedRoom } from "../render/roomLoader.ts";
 import { ORIGINAL_FOV } from "../viewer/roomScene.ts";
 import type { GameAudio } from "./audio.ts";
 import { ScreenOverlays } from "./screenOverlays.ts";
-import { HALO_COLOR, actionsFor, getSettings, isHeld, mouseCode, onSettings, type Action, type Mods, type Settings } from "./settings.ts";
+import { HALO_COLOR, actionsFor, getSettings, isHeld, mouseCode, onSettings, touchUi, type Action, type Mods, type Settings } from "./settings.ts";
 
 /** Eye height above the floor (clientd3d/game.c player.height = 3/4 square). */
 const EYE_HEIGHT = 768;
 /** Mouse sensitivity in client angle units per pixel (4096 per circle). */
 const MOUSE_TURN = 2.5;
+
+/**
+ * Ours (the Modern interface, desktop): the camera views Camera View (V) cycles, as the UE
+ * remaster's (its docs/sprites.md, MRCharacter EMRViewMode):
+ *   - first: our eyes, as the original
+ *   - chase: behind us, orbiting with the mouse; we turn to walk the way the keys point, as seen
+ *     from the camera (turned to face it, then forward, as the phone's map mode moves)
+ *   - behind: fixed behind us; the mouse turns us, as in first person
+ *   - front: fixed in front, looking back at us; the mouse turns us, and up looks down at us
+ * The outside views draw our own sprite (walking while we move) and no first-person hands.
+ */
+export type ViewMode = "first" | "chase" | "behind" | "front";
+const VIEW_ORDER: readonly ViewMode[] = ["first", "chase", "behind", "front"];
+/** The outside views' camera, from our eyes: its distance to start with, the nearest and farthest (fine units) */
+const ARM_START = 3 * FINENESS;
+const ARM_MIN = 0.8 * FINENESS;
+const ARM_MAX = 5 * FINENESS;
+/** A wheel notch moves the camera this much nearer or farther (fine units) */
+const ARM_STEP = FINENESS / 4;
+/** How far the outside views tilt from eye level (the remaster's mr.Camera.ThirdPersonPitch, 20°) */
+const THIRD_PERSON_PITCH = (20 * Math.PI) / 180;
+/**
+ * The outside views turn about our head and zoom toward it, from a little above (OUTSIDE_PITCH).
+ * The camera also rises HEAD_DROP's worth of its distance, looking the same way, so we stand low
+ * in the view (the action bar may cover our legs) with the head at the same place at any distance.
+ */
+const CAMERA_AIM_HEIGHT = EYE_HEIGHT;
+const OUTSIDE_PITCH = (-6 * Math.PI) / 180;
+const HEAD_DROP = Math.tan((3.5 * Math.PI) / 180);
+/** The camera stops this far short of a wall behind it, and never nearer our eyes than the second (squares) */
+const CAMERA_WALL_GAP = 0.15;
+const CAMERA_NEAREST = 0.1;
+/** Our sprite keeps walking this long after the last step (the mover's steps come in bursts), ms */
+const WALK_LINGER_MS = 150;
 /** Keyboard look up/down speed, radians per second (A_LOOKUP / A_LOOKDOWN held). */
 const PITCH_RATE = 1.2;
 const MAX_PITCH = 1.2;
@@ -162,6 +196,17 @@ export class GameScene {
   private readonly bgfLoads = new Map<number, Promise<void>>();
   private lights: LightSource[] = [];
   private pitch = 0;
+  /** The camera view (ours, the Modern interface): first person unless Camera View changes it */
+  viewMode: ViewMode = "first";
+  /** The camera view changed (for the HUD's note) */
+  onViewMode?: (mode: ViewMode) => void;
+  /** The outside views' camera distance from our eyes (fine units) */
+  private arm = ARM_START;
+  /** The chase view's own heading, as our angle (0..4095) */
+  private chaseAngle = 0;
+  /** Where we stood last frame and when we last moved: our sprite walks while we do */
+  private lastPos = { x: 0, y: 0 };
+  private lastStepAt = -Infinity;
   private readonly keys = new Set<string>();
   private mouse: { x: number; y: number } | null = null;
   private touchMove: TouchMove = { forward: 0, strafe: 0, run: false };
@@ -180,6 +225,8 @@ export class GameScene {
   private labelPool: HTMLDivElement[] = [];
   private damageFloats: DamageFloat[] = [];
   private readonly raycaster = new THREE.Raycaster();
+  /** From our eyes to the outside views' camera, for the wall in between */
+  private readonly cameraRay = new THREE.Raycaster();
   /** For hiding name labels behind walls */
   private readonly labelRay = new THREE.Raycaster();
   private overlays: ScreenOverlays | null = null;
@@ -244,6 +291,8 @@ export class GameScene {
     this.offSettings = onSettings((s) => {
       this.settings = s;
       this.applyViewSettings();
+      // The outside views are the Modern interface's: back to our eyes without it
+      if (this.viewMode !== "first" && !this.outsideViews()) this.setViewMode("first");
     });
     this.mover = new PlayerMover({
       move: (x, y, speed) => session.requestMove(x, y, speed),
@@ -287,6 +336,7 @@ export class GameScene {
             this.mover.place(self.x, self.y, performance.now());
             this.mover.setAngle(self.angle);
             this.pitch = 0;
+            this.chaseAngle = self.angle;
           }
           break;
         case "selfMoved":
@@ -324,6 +374,7 @@ export class GameScene {
     // Touch on the view (the phone layout): drag to look, tap, double tap, long press
     canvas.addEventListener("pointerdown", this.onPointerDown);
     canvas.addEventListener("pointermove", this.onPointerMove);
+    canvas.addEventListener("wheel", this.onWheel, { passive: false });
     canvas.addEventListener("pointerup", this.onPointerUp);
     canvas.addEventListener("pointercancel", this.onPointerCancel);
     void this.init();
@@ -558,8 +609,17 @@ export class GameScene {
       tm = { forward: 1, strafe: 0, run: tm.run };
     }
     const clamp1 = (v: number) => Math.max(-1, Math.min(1, v));
-    const forward = still ? 0 : clamp1(held("forward") - held("backward") + tm.forward);
-    const strafe = still ? 0 : clamp1(held("strafeRight") - held("strafeLeft") + tm.strafe);
+    let forward = still ? 0 : clamp1(held("forward") - held("backward") + tm.forward);
+    let strafe = still ? 0 : clamp1(held("strafeRight") - held("strafeLeft") + tm.strafe);
+    // The chase view: the keys point the way to go as the camera sees it; we turn to face that way
+    // and walk forward, so the server sees plain turns and steps (as the map mode above)
+    if (this.viewMode === "chase" && (forward || strafe) && !remote) {
+      const facing = (this.chaseAngle + Math.round((Math.atan2(strafe, forward) * 4096) / (2 * Math.PI))) & 4095;
+      const diff = ((facing - this.mover.angle + 6144) % 4096) - 2048;
+      if (diff) this.mover.turnBy(diff);
+      forward = 1;
+      strafe = 0;
+    }
     const turn = remote && !(rv & REMOTE_VIEW.TURN) ? 0 : held("turnRight") - held("turnLeft");
     // Always Run (config.ini alwaysrun): the Run/Walk key walks instead
     // mermain.c: too tired to run below MIN_VIGOR (10)
@@ -575,7 +635,7 @@ export class GameScene {
       this.mover.setAngle(angleBefore);
     }
     const pitchDir = held("lookUp") - held("lookDown");
-    if (pitchDir) this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch + (pitchDir * PITCH_RATE * dt) / 1000));
+    if (pitchDir) this.pitch = this.clampPitch(this.pitch + (pitchDir * PITCH_RATE * dt) / 1000);
     this.mover.roomFlags = world.player?.roomFlags ?? 0;
     this.mover.overrideDepths = (world.player?.depths ?? [0, 0, 0]).map((d) => d << 4) as [number, number, number];
     this.mover.update({ forward, strafe, run }, dt, now, world.objects.values(), self.id);
@@ -598,8 +658,20 @@ export class GameScene {
       const jiggle = () => Math.floor(Math.random() * amp) - amp / 2;
       [jx, jy, jz] = [jiggle(), jiggle(), jiggle()];
     }
-    this.camera.position.set((eye.x + jx) / FINENESS, (eye.z + jz) / FINENESS, (eye.y + jy) / FINENESS);
-    this.camera.rotation.set(this.pitch, yaw, 0, "YXZ");
+    // The outside views (ours): the camera swung out from our eyes, short of any wall
+    const outside = this.viewMode !== "first" && !remote;
+    const viewer = outside ? this.placeOutsideCamera(eye.x, eye.y, this.mover.z + CAMERA_AIM_HEIGHT) : { x: eye.x, y: eye.y };
+    const viewYaw = outside ? this.camera.rotation.y : yaw;
+    if (!outside) {
+      this.camera.position.set((eye.x + jx) / FINENESS, (eye.z + jz) / FINENESS, (eye.y + jy) / FINENESS);
+      this.camera.rotation.set(this.pitch, yaw, 0, "YXZ");
+    }
+    // Our sprite, seen from outside, walks while we move (the server never moves us: we do)
+    if (this.mover.x !== this.lastPos.x || this.mover.y !== this.lastPos.y) this.lastStepAt = now;
+    this.lastPos = { x: this.mover.x, y: this.mover.y };
+    const walking = outside && now - this.lastStepAt < WALK_LINGER_MS;
+    const selfLook = walking ? self.moving : self.normal;
+    if (self.look !== selfLook) self.look = selfLook;
 
     this.animate(world.objects.values(), dt);
     const lighting = world.lighting;
@@ -609,8 +681,8 @@ export class GameScene {
       overrideDepths: this.mover.overrideDepths,
       ambient: lighting.ambient,
       viewerLight: remote && rv & REMOTE_VIEW.VALID_LIGHT ? remote.view.light : lighting.playerLight,
-      viewer: { x: eye.x, y: eye.y },
-      yaw,
+      viewer,
+      yaw: viewYaw,
       fog: this.fog,
       dt,
     };
@@ -629,7 +701,8 @@ export class GameScene {
       fog: this.fog,
     });
     this.roomView.update(now);
-    const labels = this.objects.update(drawn, ctx, this.lights, self.id);
+    // Outside, our own sprite is drawn too (but not our name over it)
+    const labels = this.objects.update(drawn, ctx, this.lights, outside ? -1 : self.id).filter((l) => l.id !== self.id);
     this.sky?.position.copy(this.camera.position);
     this.camera.updateMatrixWorld();
     // drawbsp.c doDrawBackground: no sun or moon when blind
@@ -748,7 +821,9 @@ export class GameScene {
     const alpha = dt === DRAWFX.TRANSLUCENT25 ? 0.25 : dt === DRAWFX.TRANSLUCENT75 ? 0.75 : dt === DRAWFX.TRANSLUCENT50 || dt === DRAWFX.DITHERTRANS || dt === DRAWFX.DITHERINVIS || dt === DRAWFX.DITHERGREY ? 0.5 : dt === DRAWFX.INVISIBLE ? 0.2 : 1;
     // Show your pain (config.pain) off: no red flash when hurt
     const effects = this.settings.pain ? world.effects : { ...world.effects, pain: 0 };
-    this.overlays.draw(world.playerOverlays, effects, light, alpha);
+    // The outside views show our sprite holding them, not the first-person hands
+    const hands = this.viewMode === "first" || this.remoteView() ? world.playerOverlays : [null, null];
+    this.overlays.draw(hands, effects, light, alpha);
   }
 
   /** BP_SET_VIEW's object, when it's in the room (game.c SetPlayerRemoteView falls back to our eyes) */
@@ -928,7 +1003,7 @@ export class GameScene {
     if (ndc) {
       this.raycaster.setFromCamera(ndc, this.camera);
       this.raycaster.far = 40;
-      id = this.objects.pick(this.raycaster);
+      id = this.objects.pick(this.raycaster, this.session.world.self?.id);
     }
     // cursor.c GameWindowSetCursor: a cross over an object (with Shift over a container, the
     // "inside" one), the target cursor while choosing; nothing more (the halo is the target's alone)
@@ -1099,7 +1174,7 @@ export class GameScene {
    */
   private objectsUnderCursor(test: (o: WorldObject) => boolean = () => true): number[] {
     if (!this.objects || !this.cursorRay()) return [];
-    const hits = this.objects.pickAll(this.raycaster);
+    const hits = this.objects.pickAll(this.raycaster, this.session.world.self?.id);
     const out: WorldObject[] = [];
     for (const h of hits) {
       const o = this.session.world.objects.get(h.id);
@@ -1281,7 +1356,9 @@ export class GameScene {
       sy = this.settings.mouseYScale / 15;
     const remote = this.remoteView();
     const rv = remote?.view.flags ?? 0;
-    if (!remote) this.mover.turnBy(dx * MOUSE_TURN * sx);
+    // The chase view orbits the camera, not us
+    if (!remote && this.viewMode === "chase") this.chaseAngle = (this.chaseAngle + Math.round(dx * MOUSE_TURN * sx) + 4096) & 4095;
+    else if (!remote) this.mover.turnBy(dx * MOUSE_TURN * sx);
     else if (rv & REMOTE_VIEW.TURN) {
       // move.c: turning through another's eyes turns them only with REMOTE_VIEW_CONTROL
       const before = this.mover.angle;
@@ -1291,9 +1368,83 @@ export class GameScene {
         this.mover.setAngle(before);
       }
     }
-    const pitch = dy * 0.0025 * sy * (this.settings.invertMouse ? -1 : 1);
-    this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch - pitch));
+    // In front of us, moving the mouse up looks down at us (as the remaster's front view)
+    const pitch = dy * 0.0025 * sy * (this.settings.invertMouse ? -1 : 1) * (this.viewMode === "front" && !remote ? -1 : 1);
+    this.pitch = this.clampPitch(this.pitch - pitch);
   }
+
+  /** Looking up and down: as far as the original lets us, or the outside views' smaller tilt. */
+  private clampPitch(p: number): number {
+    const limit = this.viewMode === "first" ? MAX_PITCH : THIRD_PERSON_PITCH;
+    return Math.max(-limit, Math.min(limit, p));
+  }
+
+  // ---- the camera views (ours, the Modern interface) ----
+
+  /** The outside views are the Modern interface's, on the desktop. */
+  private outsideViews(): boolean {
+    return this.settings.interfaceStyle === "modern" && !touchUi(this.settings);
+  }
+
+  setViewMode(mode: ViewMode): void {
+    if (mode !== "first" && !this.outsideViews()) mode = "first";
+    if (mode === this.viewMode) return;
+    // The chase camera starts behind us; the outside views start a little above, looking down
+    if (mode === "chase") this.chaseAngle = this.mover.angle;
+    this.viewMode = mode;
+    this.pitch = mode === "first" ? 0 : OUTSIDE_PITCH;
+    const self = this.session.world.self;
+    if (mode === "first" && self) self.look = self.normal;
+    this.onViewMode?.(mode);
+  }
+
+  /** Camera View: first person, chase, behind, front, and round again. */
+  private cycleView(): void {
+    if (!this.outsideViews()) return;
+    this.setViewMode(VIEW_ORDER[(VIEW_ORDER.indexOf(this.viewMode) + 1) % VIEW_ORDER.length]);
+  }
+
+  /**
+   * Puts the camera `arm` behind our head (x, y, z in fine units) along the view's heading tilted by
+   * the pitch, raised by HEAD_DROP of that, pulled in short of the first wall or ceiling between.
+   * Returns where it is (fine units).
+   */
+  private placeOutsideCamera(x: number, y: number, z: number): { x: number; y: number } {
+    const heading = this.viewMode === "chase" ? this.chaseAngle : this.viewMode === "front" ? (this.mover.angle + 2048) & 4095 : this.mover.angle;
+    const a = (heading * 2 * Math.PI) / 4096;
+    const p = this.pitch;
+    // The way the camera looks, in the scene (X = x, Y = z, Z = y), and the way it goes out from
+    // the head: back along that, and up by HEAD_DROP of the distance
+    const look = new THREE.Vector3(Math.cos(a) * Math.cos(p), Math.sin(p), Math.sin(a) * Math.cos(p));
+    const out = look.clone().negate().add(new THREE.Vector3(0, HEAD_DROP, 0));
+    const reach = out.length();
+    out.divideScalar(reach);
+    const pivot = new THREE.Vector3(x / FINENESS, z / FINENESS, y / FINENESS);
+    let dist = (this.arm / FINENESS) * reach;
+    if (this.roomView) {
+      this.cameraRay.set(pivot, out);
+      this.cameraRay.far = dist + CAMERA_WALL_GAP;
+      const hit = this.roomView.firstHit(this.cameraRay);
+      if (hit !== null) dist = Math.max(CAMERA_NEAREST, hit - CAMERA_WALL_GAP);
+    }
+    this.camera.position.copy(pivot).addScaledVector(out, dist);
+    this.camera.rotation.set(p, Math.atan2(-Math.cos(a), -Math.sin(a)), 0, "YXZ");
+    return { x: this.camera.position.x * FINENESS, y: this.camera.position.z * FINENESS };
+  }
+
+  /** The wheel (ours): nearer or farther in the outside views; out of first person into the chase view. */
+  private readonly onWheel = (e: WheelEvent) => {
+    if (!this.outsideViews() || this.remoteView() || e.deltaY === 0) return;
+    e.preventDefault();
+    const out = e.deltaY > 0;
+    if (this.viewMode === "first") {
+      if (out) this.setViewMode("chase");
+      return;
+    }
+    // In the chase view, all the way in goes back to our eyes (as the remaster's)
+    if (!out && this.arm <= ARM_MIN && this.viewMode === "chase") return this.setViewMode("first");
+    this.arm = Math.max(ARM_MIN, Math.min(ARM_MAX, this.arm + (out ? ARM_STEP : -ARM_STEP)));
+  };
 
   // ---- touch (ours, ADR 0003): the phone layout's view ----
 
@@ -1452,7 +1603,10 @@ export class GameScene {
         this.lookInView();
         break;
       case "lookStraight":
-        this.pitch = 0;
+        this.pitch = this.viewMode === "first" ? 0 : OUTSIDE_PITCH;
+        break;
+      case "cameraView":
+        this.cycleView();
         break;
       case "flip":
         this.mover.turnBy(2048); // A_FLIP
@@ -1574,6 +1728,7 @@ export class GameScene {
     window.removeEventListener("blur", this.onBlur);
     this.canvas.removeEventListener("pointerdown", this.onPointerDown);
     this.canvas.removeEventListener("pointermove", this.onPointerMove);
+    this.canvas.removeEventListener("wheel", this.onWheel);
     this.canvas.removeEventListener("pointerup", this.onPointerUp);
     this.canvas.removeEventListener("pointercancel", this.onPointerCancel);
     for (const t of this.touches.values()) clearTimeout(t.timer);

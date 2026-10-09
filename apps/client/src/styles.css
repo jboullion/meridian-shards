@@ -2120,9 +2120,21 @@ canvas.server-wait {
 /* Graph bars (InterfaceDrawBarBorder): the 5 x 17 ends, 2 px above and below */
 .stat-bar::after {
   inset: -2px -5px;
-  background-image: var(--ui-t-barleft), var(--ui-t-barright), var(--ui-t-bartop), var(--ui-t-barbottom);
-  background-position: left top, right top, left 5px top, left 5px bottom;
-  background-repeat: no-repeat, no-repeat, repeat-x, repeat-x;
+  background-image: var(--ui-t-barleft), var(--ui-t-barright);
+  background-position: left top, right top;
+}
+
+/* The top and bottom strips, from the bar's left edge to its right only, as InterfaceDrawBarBorder
+   tiles them. (Tiled across the ends with repeat-x, they showed past the ends' rounded corners.) */
+.stat-bar::before {
+  content: "";
+  position: absolute;
+  inset: -2px 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image: var(--ui-t-bartop), var(--ui-t-barbottom);
+  background-position: left top, left bottom;
+  background-repeat: repeat-x, repeat-x;
 }
 
 /* The ☰ menu's check marks (TitleBar.tsx checked) */
@@ -3165,6 +3177,30 @@ canvas.server-wait {
   bottom: calc(120px * var(--hud-scale, 1));
 }
 
+/* The camera view just chosen (GameView viewNote): its name, fading away */
+.view-note {
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  z-index: 5;
+  transform: translateX(-50%);
+  font: 22px var(--font-title);
+  color: var(--hl);
+  text-shadow: 1px 1px 0 #000, 0 0 6px #000;
+  pointer-events: none;
+  animation: view-note 1.5s ease-in forwards;
+}
+
+@keyframes view-note {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 .game.modern-ui .view .fps {
   top: auto;
   bottom: 10px;
@@ -3358,6 +3394,18 @@ canvas.server-wait {
 .equip-figure .obj-icon {
   width: 104px;
   height: 200px;
+}
+
+/* Dragged to turn the figure (CharacterWindow.tsx Figure) */
+.equip-figure {
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.cw-sort {
+  align-self: flex-start;
+  margin-top: 6px;
 }
 
 .cw-info {

@@ -375,16 +375,17 @@ export class ObjectsView {
    * The object under a ray (mouse or crosshair), ignoring transparent pixels, nearest
    * first. Returns its id or null.
    */
-  pick(raycaster: THREE.Raycaster): number | null {
-    return this.pickAll(raycaster)[0]?.id ?? null;
+  pick(raycaster: THREE.Raycaster, ignore?: number): number | null {
+    return this.pickAll(raycaster, ignore)[0]?.id ?? null;
   }
 
   /**
    * Every object drawn under the ray (an opaque pixel of its sprite), nearest first, with the
    * distance along the ray: client3d.c GetObjects3D at a screen point, for choosing among them.
    */
-  pickAll(raycaster: THREE.Raycaster): { id: number; distance: number }[] {
-    const meshes = [...this.entries.values()].filter((e) => e.mesh.visible && e.composite).map((e) => e.mesh);
+  pickAll(raycaster: THREE.Raycaster, ignore?: number): { id: number; distance: number }[] {
+    // `ignore`: our own sprite, drawn in the third-person views but never picked
+    const meshes = [...this.entries.entries()].filter(([id, e]) => id !== ignore && e.mesh.visible && e.composite).map(([, e]) => e.mesh);
     const out: { id: number; distance: number }[] = [];
     for (const hit of raycaster.intersectObjects(meshes, false)) {
       const id = Number(hit.object.name.split(" ")[1]);

@@ -21,7 +21,7 @@ export const ACTION_TABS = {
   Map: ["map", "mapZoomIn", "mapZoomOut"],
   // Ours: keys for our own panels and menus, and the quick slots (quickSlots.ts)
   Interface: [
-    "inventory", "settings", "configuration", "actions",
+    "inventory", "settings", "configuration", "actions", "cameraView",
     "quickSlot1", "quickSlot2", "quickSlot3", "quickSlot4", "quickSlot5", "quickSlot6", "quickSlot7", "quickSlot8", "quickSlot9",
     "quickSlot10",
   ],
@@ -75,6 +75,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   settings: "Preferences",
   configuration: "Configuration",
   actions: "Actions",
+  cameraView: "Camera View",
   quickSlot1: "Quick Slot 1",
   quickSlot2: "Quick Slot 2",
   quickSlot3: "Quick Slot 3",
@@ -148,16 +149,18 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     settings: k("KeyO", "F10"),
     configuration: [],
     actions: [],
-    quickSlot1: k("Digit1"),
-    quickSlot2: k("Digit2"),
-    quickSlot3: k("Digit3"),
-    quickSlot4: k("Digit4"),
-    quickSlot5: k("Digit5"),
-    quickSlot6: k("Digit6"),
-    quickSlot7: k("Digit7"),
-    quickSlot8: k("Digit8"),
-    quickSlot9: k("Digit9"),
-    quickSlot10: k("Digit0"),
+    // Ours: first person, chase, behind, front (the Modern interface only; gameScene.ts ViewMode)
+    cameraView: k("KeyV"),
+    quickSlot1: k("Digit1", "Numpad1"),
+    quickSlot2: k("Digit2", "Numpad2"),
+    quickSlot3: k("Digit3", "Numpad3"),
+    quickSlot4: k("Digit4", "Numpad4"),
+    quickSlot5: k("Digit5", "Numpad5"),
+    quickSlot6: k("Digit6", "Numpad6"),
+    quickSlot7: k("Digit7", "Numpad7"),
+    quickSlot8: k("Digit8", "Numpad8"),
+    quickSlot9: k("Digit9", "Numpad9"),
+    quickSlot10: k("Digit0", "Numpad0"),
   },
   original: {
     forward: k("ArrowUp", "Numpad8"),
@@ -204,6 +207,7 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     settings: k("F10"),
     configuration: [],
     actions: [],
+    cameraView: [],
     // Typing starts a chat line in the original preset, digits too: no keys unless the player adds them
     quickSlot1: [],
     quickSlot2: [],
@@ -369,7 +373,7 @@ export function touchUi(s: Settings): boolean {
   return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 }
 
-const SETTINGS_VERSION = 6;
+const SETTINGS_VERSION = 7;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
@@ -463,6 +467,15 @@ export function migrate(s: SavedSettings): Settings {
   if (version < 5) out.touchControls = "auto";
   // Version 6 (the Modern interface): new players get it, players who had settings keep the layout they knew
   if (version < 6) out.interfaceStyle = "classic";
+  // Version 7: the numpad's digits use the quick slots too (modern preset), unless already bound to something
+  if (version < 7 && preset === "modern") {
+    const used = new Set(Object.values(keys).flatMap((list) => list.filter((b) => !b.alt && !b.ctrl).map((b) => b.code)));
+    for (let i = 1; i <= 10; i++) {
+      const code = `Numpad${i % 10}`;
+      const slot = `quickSlot${i}` as Action;
+      if (!used.has(code)) keys[slot] = [...keys[slot], { code }];
+    }
+  }
   delete (out as SavedSettings).mouseSpeed;
   delete (out as SavedSettings).rightClickLooks;
   if (!Array.isArray(out.hotkeyAliases) || out.hotkeyAliases.length !== 12) out.hotkeyAliases = DEFAULT_HOTKEY_ALIASES;

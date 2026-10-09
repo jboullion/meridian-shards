@@ -169,16 +169,21 @@ export class RoomView {
    * The D3D client depth-tests the name labels against the room (D3DRenderNamesDraw3D).
    */
   occludes(raycaster: THREE.Raycaster): boolean {
+    return this.firstHit(raycaster) !== null;
+  }
+
+  /** How far along `raycaster` (up to its far) the room's first drawn pixel is, or null for none. */
+  firstHit(raycaster: THREE.Raycaster): number | null {
     const fract = (v: number) => v - Math.floor(v);
     for (const hit of raycaster.intersectObjects(this.meshes, false)) {
-      if (!hit.uv) return true;
+      if (!hit.uv) return hit.distance;
       const map = ((hit.object as THREE.Mesh).material as THREE.ShaderMaterial).uniforms.uMap.value as THREE.DataTexture;
       const { data, width, height } = map.image as { data: Uint8Array; width: number; height: number };
       const x = Math.min(width - 1, Math.floor(fract(hit.uv.x) * width));
       const y = Math.min(height - 1, Math.floor(fract(hit.uv.y) * height));
-      if (data[y * width + x] !== 254) return true;
+      if (data[y * width + x] !== 254) return hit.distance;
     }
-    return false;
+    return null;
   }
 
   /** Advance texture animations to `timeMs` (any monotonic clock). */

@@ -4,18 +4,20 @@
 // wear (equipment.ts, by itemslots.json), what we wield, our weight and bulk (the Stats group's
 // "Weight Carried" and "Bulk Carried", user.kod), and the bag under them. The window isn't modal:
 // the game keeps its keys while it's open. Drag its title to move it (kept in the settings);
-// double click the title to put it back beside the map.
+// double click the title to put it back beside the map. Drag the figure to turn it; drop an item
+// on it to put it on. Sort puts the bag in the original's order for lists (inventoryOrder.ts).
 
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { STAT_GROUP, type ObjectInfo } from "@shards/protocol";
 import type { GameSession } from "@shards/world";
 import type { AssetStore } from "../../assets.ts";
 import { EQUIP_COLUMNS, layoutEquipment, wieldedWeapon, wornSlot, type EquipKey } from "../equipment.ts";
+import { sortByNameAndNumber, sortMoves } from "../inventoryOrder.ts";
 import type { IconRenderer } from "../icons.ts";
 import { DRAG_ITEM } from "../quickSlots.ts";
 import { updateSettings, type Settings } from "../settings.ts";
 import { useWorld } from "./hooks.ts";
-import { Window } from "./kit.tsx";
+import { Button, Window } from "./kit.tsx";
 import { Inventory, NumericStats, ObjIcon, StatBar, StatList, StatTab, TABS, type Tab } from "./Sidebar.tsx";
 
 /** How much of the window stays in the view however it's dragged or the window shrinks: its title, px */
@@ -75,10 +77,57 @@ function EquipBox({
   );
 }
 
-/** Our figure, from the front (drawbmp.c DrawObject at angle 0). */
+/** The figure's eight views (drawbmp.c angles, 4096 a turn), and how far a drag goes for one, of its width */
+const VIEW_STEP = 4096 / 8;
+const DRAG_PER_VIEW = 0.175;
+
+/**
+ * Our figure (drawbmp.c DrawObject), from the front at first. Dragging across it turns it through
+ * its eight views, as the UE remaster's inventory does; an item from the bag dropped on it is used.
+ */
 function Figure({ session, icons }: { session: GameSession; icons: IconRenderer }) {
-  const self = session.world.self;
-  return <div className="equip-figure">{self && <ObjIcon icons={icons} object={self.info} opts={{ group: 0 }} />}</div>;
+  const world = session.world;
+  const self = world.self;
+  const [angle, setAngle] = useState(0);
+  const turn = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    const width = el.getBoundingClientRect().width;
+    const startX = e.clientX,
+      startAngle = angle;
+    const move = (ev: PointerEvent) => {
+      const views = Math.round((ev.clientX - startX) / (width * DRAG_PER_VIEW));
+      setAngle((((startAngle - views * VIEW_STEP) % 4096) + 4096) % 4096);
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  };
+  return (
+    <div
+      className="equip-figure"
+      title="Drag to turn; drop an item here to put it on"
+      onPointerDown={turn}
+      onDoubleClick={() => setAngle(0)}
+      onDragOver={(e) => e.dataTransfer.types.includes(DRAG_ITEM) && e.preventDefault()}
+      onDrop={(e) => {
+        const o = world.inventory.get(Number(e.dataTransfer.getData(DRAG_ITEM)));
+        if (!o) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!world.inUse.has(o.id)) session.use(o.id);
+      }}
+    >
+      {self && <ObjIcon icons={icons} object={self.info} opts={{ group: 0, angle }} />}
+    </div>
+  );
 }
 
 export function CharacterWindow({
@@ -180,6 +229,15 @@ export function CharacterWindow({
       }
     : undefined;
 
+  /** Sort: the bag in object.c CompareObjectNameAndNumber's order, by the server's own moves */
+  const sortBag = () => {
+    const items = [...world.inventory.values()];
+    const wanted = sortByNameAndNumber(items, rs).map((o) => o.id);
+    for (const [what, where] of sortMoves(items.map((o) => o.id), wanted)) {
+      if (world.moveInventoryItem(what, where)) session.inventoryMove(what, where);
+    }
+  };
+
   const box = (key: EquipKey, label: string) => (
     <EquipBox key={key} session={session} icons={icons} label={label} object={slots[key]} tooltips={settings.tooltips} onLook={onLookItem} />
   );
@@ -218,6 +276,9 @@ export function CharacterWindow({
                     <StatBar stat={bulk} />
                   </div>
                 )}
+                <Button className="cw-sort" title="Shillings and other amounts first, then by name" onClick={sortBag}>
+                  Sort
+                </Button>
               </div>
             </div>
             {/* "inventory-panel": where dragging an object from the view picks it up (mermain.c A_ENDDRAG) */}

@@ -3,8 +3,10 @@
 
 ## Current TODOS
 
-- Are we able to have the same third person views in our modern UI that our Meridian Unreal has?
-  - Similarly, could we have a portrait rotate on drag in the character inventory so they can see themselves all the way around
+
+- Some torches seem very bright. Could you investigate the light sources in The Grand Museum of Raza and the torches in the Mausoleum in raza to see what could be causing this?
+![The Grand Museum of Raza Too bright](image.png)
+![Mausoleum too bright](image-1.png)
 
 ## Releases
 
@@ -13,11 +15,13 @@
 ## UI
 
 
+## Modern UI
+
+- Could we attempt to enable some post processing or other effects which make meridian look nicer?
+  - Perhaps just to a whole suite of experiements and see what looks good!
 
 
-## Desktop UI
-
-
+## Classic UI
 
 
 

@@ -6,7 +6,7 @@ import {
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import type { AudioPreview, GameAudio } from "./audio.ts";
-import { GameScene, type GameSceneStatus, type TouchMove } from "./gameScene.ts";
+import { GameScene, type GameSceneStatus, type TouchMove, type ViewMode } from "./gameScene.ts";
 import type { IconRenderer } from "./icons.ts";
 import { getSettings, onSettings, touchUi, updateSettings, type Action, type ChatTab, type Settings } from "./settings.ts";
 import {
@@ -29,6 +29,7 @@ import {
 import { Sidebar, type Tab } from "./ui/Sidebar.tsx";
 import { ActionBar, MapCluster, TargetFrame, UnitFrame } from "./ui/ModernHud.tsx";
 import { CharacterWindow } from "./ui/CharacterWindow.tsx";
+import { sortByNameAndNumber } from "./inventoryOrder.ts";
 import { TouchControls, tickerColor } from "./ui/TouchControls.tsx";
 import { MessageBox, closeTopWindow } from "./ui/kit.tsx";
 import { isProfane } from "./profanity.ts";
@@ -52,6 +53,10 @@ const CHAT_TABS: { tab: ChatTab; label: string }[] = [
   { tab: "combat", label: "Combat" },
   { tab: "server", label: "Server" },
 ];
+/** The camera views' names (gameScene.ts ViewMode), shown for VIEW_NOTE_MS when one is chosen */
+const VIEW_NAMES: Record<ViewMode, string> = { first: "First person", chase: "Chase camera", behind: "Behind", front: "Front" };
+const VIEW_NOTE_MS = 1500;
+
 /** The Modern interface's chat: lines show this long after they come, then fade (until hovered), ms */
 const CHAT_FRESH_MS = 10000;
 /** Its width, dragged by its right edge: at least this */
@@ -74,12 +79,6 @@ export function appendChatLine(lines: readonly ChatLine[], line: ChatLine, max: 
   return [...lines.slice(0, drop), ...lines.slice(drop + 1), line];
 }
 
-/** object.c CompareObjectNameAndNumber: number items first, then by name. */
-export function sortByNameAndNumber(items: ObjectInfo[], name: (res: number) => string): ObjectInfo[] {
-  return [...items].sort(
-    (a, b) => Number(isNumberItem(b.id)) - Number(isNumberItem(a.id)) || name(a.nameRes).toLowerCase().localeCompare(name(b.nameRes).toLowerCase()),
-  );
-}
 const OF_PLAYER = 0x4;
 const OF_GETTABLE = 0x10;
 const OF_CONTAINER = 0x20;
@@ -240,6 +239,13 @@ export function GameView({
     if (sceneRef.current) sceneRef.current.mapMode = touch && fullMap;
   }, [touch, fullMap]);
   const [fps, setFps] = useState<number | null>(null);
+  /** The camera view just chosen (Camera View, the wheel), named over the view for a moment */
+  const [viewNote, setViewNote] = useState<{ mode: ViewMode; at: number } | null>(null);
+  useEffect(() => {
+    if (!viewNote) return;
+    const t = setTimeout(() => setViewNote(null), VIEW_NOTE_MS);
+    return () => clearTimeout(t);
+  }, [viewNote]);
   /** The chat window's height while its edge is being dragged (saved on letting go) */
   const [dragHeight, setDragHeight] = useState<number | null>(null);
   /** The Modern chat's width while its edge is being dragged */
@@ -366,6 +372,7 @@ export function GameView({
     sceneRef.current = scene;
     scene.onStatus = setStatus;
     scene.onChatKey = () => inputRef.current?.focus();
+    scene.onViewMode = (mode) => setViewNote({ mode, at: performance.now() });
     scene.onTypeChat = (t) => {
       setText((v) => v + t);
       inputRef.current?.focus();
@@ -1392,6 +1399,7 @@ export function GameView({
             )}
           </>
         )}
+        {viewNote && <div key={viewNote.at} className="view-note">{VIEW_NAMES[viewNote.mode]}</div>}
         {selecting && !touch && <div className="select-hint">Choose a target, or your face or bars for yourself (Esc or right click cancels)</div>}
         {(phase === "entering" || status?.loading) && <div className="loading">Entering…</div>}
         {desc && (

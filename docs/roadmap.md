@@ -247,6 +247,18 @@ Ours, beside the original's layout: Minecraft- and Diablo-style HUD clusters ove
   - Where a worn item goes comes from `itemslots.json`, which the asset build reads from each Kod item class's `viUse_type` and pictures (`tools/assets/itemSlots.ts`; 154 pictures on our server). Used items with no slot stay in the bag with the sun.
   - Double click or drag to put on and take off; right click looks.
   - Drag its title to move it; the spot is kept (`characterWindowAt`) and its title always stays in view. Double click the title to put it back beside the map.
+- [x] **From play testing** (2026-10-09):
+  - drag across the figure to turn it through its eight views (double click faces it front again);
+  - drop an item on the figure to put it on;
+  - **Sort** puts the bag in the original's list order (amounts first, then by name) with the server's own inventory moves (`inventoryOrder.ts`), and an item dropped on the bag's empty space goes to the end; dragging onto another item still takes its place;
+  - the numpad's digits use the quick slots too (modern preset; added to saved keys by settings version 7);
+  - the graph bars' top and bottom strips no longer show past their rounded ends (Classic's too).
+- [x] **Camera views** (Camera View, V; the wheel): first person, then chase, behind and front, as the UE remaster's.
+  - The outside views draw our own sprite (walking while we move) and hide the first-person hands. They tilt at most 20° and start a little above. They turn about our head and zoom toward it. The camera sits a little higher than the line to the head, looking the same way, so we stand low in the view (the action bar may cover our legs) with the head at the same place at any distance.
+  - Chase orbits with the mouse; the keys point the way as the camera sees it, and we turn to face that way and walk forward, so the server sees plain turns and steps. Behind and front are fixed to us; the mouse turns us.
+  - The camera stops short of the first wall between it and us (a ray against the room, as the name labels' occlusion). The wheel moves it nearer or farther; out of first person it starts the chase view, all the way in from chase goes back.
+  - Modern interface on the desktop only; Classic and the phone stay in first person.
+  - Tested on our server: all four views in the Outskirts and the Inn, the camera pulling in against the Inn's walls, and chase steering (S turned Shardbot round toward the camera and walked him to it).
 - [x] **HUD Size** (the Bind Editor's Options, under Modern Interface): 75–150 %, the bars, quick slots, map, target, chat and character window together, each grown where it stands (CSS `zoom`).
 - Tested on our server with Shardbot: a helmet, a ring of acid resistance and a metal shield put on and taken off, the mace on Weapon, the layout at 1024 × 768 and 1600 × 900, the chat's fading and hover panel, the target frame, and switching to Classic and back while playing.
 

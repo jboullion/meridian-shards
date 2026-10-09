@@ -61,7 +61,8 @@ The Modern layout (`ui/ModernHud.tsx`, `ui/CharacterWindow.tsx`) has no counterp
 | Minecraft's click to carry | Items move by drag and drop and double clicks, not by picking a stack up on the cursor and splitting it. |
 | A separate spell bar | The remaster has items on the hotbar and spells on their own bar; ours mixes both in ten slots. |
 | Searching the spell list | The remaster's spell and skill pages filter as you type. |
-| The phone | The touch layout is unchanged. |
+| The phone | The touch layout is unchanged, and stays in first person. |
+| Our own actions in the outside views | Our sprite walks while we move. Whether the attack, cast and emote poses the server sends with `BP_CHANGE` show on it isn't checked yet (the UE remaster plays them, ADR 0012 M4). |
 | The target's health and enchantment timers | The server sends neither. |
 
 ## Deliberately different or left out

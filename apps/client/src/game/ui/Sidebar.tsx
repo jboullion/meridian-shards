@@ -365,7 +365,7 @@ export function Inventory({
   hidden?: ReadonlySet<number>;
   /** Ours: empty boxes after the items, up to this many cells in all */
   minCells?: number;
-  /** Ours: an item dropped on the bag's empty space (taking it off the paper doll) */
+  /** Ours: an item from the paper doll dropped in the bag (taking it off) */
   onDropOnGrid?: (id: number) => void;
   /** Our item names on hover, with Show tooltips */
   tooltips: boolean;
@@ -410,14 +410,18 @@ export function Inventory({
     <div
       className="inventory-grid"
       ref={gridRef}
-      onDragOver={(e) => onDropOnGrid && e.dataTransfer.types.includes("application/x-shards-item") && e.preventDefault()}
+      onDragOver={(e) => e.dataTransfer.types.includes("application/x-shards-item") && e.preventDefault()}
+      // Ours: dropped on the bag's empty space, an item goes to the end (after the last item, where
+      // the server puts it too); one from the paper doll is taken off instead
       onDrop={(e) => {
-        if (!onDropOnGrid) return;
         const id = Number(e.dataTransfer.getData("application/x-shards-item"));
         if (!world.inventory.get(id)) return;
         e.preventDefault();
         e.stopPropagation();
-        onDropOnGrid(id);
+        if (hidden?.has(id)) return onDropOnGrid?.(id);
+        const all = [...world.inventory.values()];
+        const last = all[all.length - 1];
+        if (last && world.moveInventoryItem(id, last.id)) session.inventoryMove(id, last.id);
       }}
     >
       {items.map((o) => (
