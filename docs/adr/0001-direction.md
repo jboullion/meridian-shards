@@ -5,7 +5,7 @@
 
 ## Context
 
-Meridian Shards is the third Meridian 59 experiment, beside the UE 5.8 "Meridian Remastered" (`E:\2026_Experiments\meridian-unreal`) and the Roblox spin-off "Fantasy Blocks". It is a faithful browser port of the original client. It talks to our own server, which runs the unmodified Server 104 `blakserv`.
+Meridian Shards is the third Meridian 59 experiment, beside the UE 5.8 "Unreal Meridian" (`E:\2026_Experiments\meridian-unreal`) and the Roblox spin-off "Fantasy Blocks". It is a faithful browser port of the original client. It talks to our own server, which runs the unmodified Server 104 `blakserv`.
 
 The name comes from the lore: every server or world is a "shard" of one original universe.
 

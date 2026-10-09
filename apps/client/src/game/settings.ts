@@ -19,8 +19,12 @@ export const ACTION_TABS = {
   Interaction: ["go", "interact", "lookAt", "examine", "offer", "buy", "deposit", "withdraw", "attack"],
   Targeting: ["targetNext", "targetPrevious", "targetClear", "targetSelf", "tabForward", "tabBackward", "selectTarget"],
   Map: ["map", "mapZoomIn", "mapZoomOut"],
-  // Ours: keys for our own panels and menus
-  Interface: ["inventory", "settings", "configuration", "actions"],
+  // Ours: keys for our own panels and menus, and the quick slots (quickSlots.ts)
+  Interface: [
+    "inventory", "settings", "configuration", "actions",
+    "quickSlot1", "quickSlot2", "quickSlot3", "quickSlot4", "quickSlot5", "quickSlot6", "quickSlot7", "quickSlot8", "quickSlot9",
+    "quickSlot10",
+  ],
 } as const;
 
 export type ActionTab = keyof typeof ACTION_TABS;
@@ -71,6 +75,16 @@ export const ACTION_LABELS: Record<Action, string> = {
   settings: "Preferences",
   configuration: "Configuration",
   actions: "Actions",
+  quickSlot1: "Quick Slot 1",
+  quickSlot2: "Quick Slot 2",
+  quickSlot3: "Quick Slot 3",
+  quickSlot4: "Quick Slot 4",
+  quickSlot5: "Quick Slot 5",
+  quickSlot6: "Quick Slot 6",
+  quickSlot7: "Quick Slot 7",
+  quickSlot8: "Quick Slot 8",
+  quickSlot9: "Quick Slot 9",
+  quickSlot10: "Quick Slot 10",
 };
 
 /**
@@ -134,6 +148,16 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     settings: k("KeyO", "F10"),
     configuration: [],
     actions: [],
+    quickSlot1: k("Digit1"),
+    quickSlot2: k("Digit2"),
+    quickSlot3: k("Digit3"),
+    quickSlot4: k("Digit4"),
+    quickSlot5: k("Digit5"),
+    quickSlot6: k("Digit6"),
+    quickSlot7: k("Digit7"),
+    quickSlot8: k("Digit8"),
+    quickSlot9: k("Digit9"),
+    quickSlot10: k("Digit0"),
   },
   original: {
     forward: k("ArrowUp", "Numpad8"),
@@ -180,6 +204,17 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     settings: k("F10"),
     configuration: [],
     actions: [],
+    // Typing starts a chat line in the original preset, digits too: no keys unless the player adds them
+    quickSlot1: [],
+    quickSlot2: [],
+    quickSlot3: [],
+    quickSlot4: [],
+    quickSlot5: [],
+    quickSlot6: [],
+    quickSlot7: [],
+    quickSlot8: [],
+    quickSlot9: [],
+    quickSlot10: [],
   },
 };
 
@@ -268,6 +303,7 @@ export interface Settings {
   damageNumbers: boolean;
   /**
    * Touch Controls (ours, ADR 0003): the phone layout, with a joystick and buttons on the view.
+   * Not in the Bind Editor any more (Auto is what everyone gets); set by hand for testing.
    * Auto: on a touch screen (a coarse pointer), as the Android app and phone browsers have
    */
   touchControls: TouchControls;
@@ -277,6 +313,8 @@ export interface Settings {
    * are said unless they start with a command (or "/").
    */
   originalCommands: boolean;
+  /** Ours: how fast a drag on the phone's view turns and looks, 1..30 (15 as it was) */
+  touchLookScale: number;
   /** Mouselook X / Y scale, 1..30 (config.ini mouselookxscale / mouselookyscale) */
   mouseXScale: number;
   mouseYScale: number;
@@ -314,7 +352,7 @@ export function touchUi(s: Settings): boolean {
   return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 }
 
-const SETTINGS_VERSION = 4;
+const SETTINGS_VERSION = 5;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
@@ -358,6 +396,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dynamicLighting: true,
   damageNumbers: true,
   touchControls: "auto",
+  touchLookScale: 15,
   originalCommands: false,
   mouseXScale: 15,
   mouseYScale: 15,
@@ -399,6 +438,8 @@ export function migrate(s: SavedSettings): Settings {
     const used = Object.values(keys).some((list) => list.some((b) => b.code === "Mouse1"));
     if (!used) keys.examine = [...keys.examine, { code: "Mouse1" }];
   }
+  // Version 5: Touch Controls left the Bind Editor, so nothing could undo an On or Off saved before
+  if (version < 5) out.touchControls = "auto";
   delete (out as SavedSettings).mouseSpeed;
   delete (out as SavedSettings).rightClickLooks;
   if (!Array.isArray(out.hotkeyAliases) || out.hotkeyAliases.length !== 12) out.hotkeyAliases = DEFAULT_HOTKEY_ALIASES;

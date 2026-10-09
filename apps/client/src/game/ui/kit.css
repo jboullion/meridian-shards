@@ -64,7 +64,11 @@
 
 .mk-window {
   --s: 1;
-  --dx: calc(1.5px * var(--s));
+  /* --w: wider on a phone (Window wide), the text and heights staying as they are */
+  --w: 1;
+  /* --grow: taller for a FlowPage (Window) */
+  --grow: 0px;
+  --dx: calc(1.5px * var(--s) * var(--w));
   --dy: calc(1.625px * var(--s));
   position: relative;
   flex: none;
@@ -541,11 +545,43 @@
   box-shadow: inset 1px 1px 0 #141414, inset -1px -1px 0 #6a6a6a;
 }
 
+/* kit.tsx FlowPage: blocks one under the other, scrolling if they don't fit */
+.mk-flow {
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* CharacterCreator.tsx StatRows: name, bar and description (char.rc IDD_CHARSTATS), a row
+   growing when its description wraps further */
+.mk-stat-rows {
+  flex: none;
+  display: grid;
+  grid-template-columns: calc(var(--dx) * 38) calc(var(--dx) * 106) calc(var(--dx) * 170);
+  grid-auto-rows: minmax(calc(var(--dy) * 19), auto);
+}
+
+.mk-stat-rows .mk-stat-name {
+  padding-top: calc(var(--dy) * 3);
+}
+
+.mk-stat-rows .mk-stat-bar {
+  position: relative;
+  height: calc(var(--dy) * 14);
+  margin: calc(var(--dy) * 1) 0 0 calc(var(--dx) * 4);
+}
+
+.mk-stat-rows .mk-stat-text {
+  padding-left: calc(var(--dx) * 5);
+}
+
+/* Square however wide the window (Window wide) */
 .mk-face .face {
   display: block;
-  width: 100%;
   height: 100%;
-  padding: 4%;
+  aspect-ratio: 1;
+  padding: calc(var(--dy) * 5);
 }
 
 .mk-face .face img {

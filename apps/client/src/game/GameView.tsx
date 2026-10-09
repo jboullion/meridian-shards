@@ -22,11 +22,11 @@ import { AmountDialog, GiveDialog, OfferDialog, PasswordDialog, SuicideDialog, T
 import { DESC, DescriptionDialog, LookListDialog, type DescAction, type LookListChoice } from "./ui/LookDialogs.tsx";
 import { MiniMap } from "./ui/MiniMap.tsx";
 import {
-  ActionsDialog, CommandAliasesDialog, ConfigurationDialog, GroupsDialog, HotkeyAliasesDialog, LogoutTimerDialog, PreferencesDialog, WhoDialog,
+  ActionsDialog, CommandAliasesDialog, ConfigurationDialog, GroupsDialog, HotkeyAliasesDialog, LogoutTimerDialog, PreferencesDialog, TouchConfigDialog,
+  WhoDialog,
   type ActionWindow,
 } from "./ui/OptionsDialogs.tsx";
 import { Sidebar, type Tab } from "./ui/Sidebar.tsx";
-import { Toolbar } from "./ui/Toolbar.tsx";
 import { TouchControls } from "./ui/TouchControls.tsx";
 import { MessageBox, closeTopWindow } from "./ui/kit.tsx";
 import { isProfane } from "./profanity.ts";
@@ -38,6 +38,8 @@ import { languageName } from "./languages.ts";
 import { MAX_ANNOTATIONS, annotationAt, loadAnnotations, saveAnnotations, type MapAnnotation } from "./annotations.ts";
 import { useWorld } from "./ui/hooks.ts";
 import { TitleBar } from "./TitleBar.tsx";
+import { emptySlots, loadLastSlot, loadQuickSlots, saveLastSlot, saveQuickSlots, slotItem, slotSpell, type QuickSlot, type QuickSlots } from "./quickSlots.ts";
+import { Hotbar, QuickSlotPicker } from "./ui/QuickSlots.tsx";
 
 const MAX_LINES = 300;
 
@@ -114,6 +116,7 @@ type Modal =
   | { type: "give"; kind: "offer" | "deposit"; target: { id: number; name: string } }
   | { type: "amount"; object: ObjectInfo }
   | { type: "suicide" }
+  | { type: "quickSlot"; index: number }
   | { type: "password" }
   | { type: "preferences" }
   | { type: "configuration" }
@@ -184,6 +187,9 @@ export function GameView({
   const [text, setText] = useState("");
   const [tab, setTab] = useState<Tab>("inventory");
   const [modal, setModal] = useState<Modal | null>(null);
+  /** askTrader: the trader asked for a withdrawal list, until a list comes back or we ask to buy */
+  const traderAsked = useRef<{ id: number; timer: number } | null>(null);
+  const askTraderRef = useRef<(id: number) => void>(() => {});
   const [offer, setOffer] = useState<ReturnType<typeof reduceOffer>>(null);
   const [settings, setSettings] = useState<Settings>(getSettings);
   const [target, setTarget] = useState<number | null>(null);
@@ -267,8 +273,39 @@ export function GameView({
   const [chess, setChess] = useState<ChessState | null>(null);
   /** The same, for the toolbar's Rest/Stand toggle */
   const [resting, setRestingShown] = useState(false);
-  useWorld(session.world, ["spells"]);
+  useWorld(session.world, ["spells", "player", "roomContents"]);
   const spells = session.world.spells;
+  // The quick slots (quickSlots.ts), kept per character: loaded once we know who we are
+  const selfInfo = session.world.self;
+  const charName = selfInfo ? (session.resource(selfInfo.info.nameRes) ?? "") : "";
+  // `last`: the slot used last, which a tap on the phone's Cast button uses again
+  const [quick, setQuick] = useState<{ name: string; slots: QuickSlots; last: number | null }>({ name: "", slots: emptySlots(), last: null });
+  if (charName && quick.name !== charName)
+    setQuick({
+      name: charName,
+      slots: loadQuickSlots(localStorage, gameSocketUrl(), charName),
+      last: loadLastSlot(localStorage, gameSocketUrl(), charName),
+    });
+  const setLastSlot = (i: number) => {
+    if (quick.name) saveLastSlot(localStorage, gameSocketUrl(), quick.name, i);
+    setQuick((q) => ({ ...q, last: i }));
+  };
+  const changeSlots = (change: (slots: QuickSlots) => QuickSlots) =>
+    setQuick((q) => {
+      const slots = change([...q.slots]);
+      if (q.name) saveQuickSlots(localStorage, gameSocketUrl(), q.name, slots);
+      return { ...q, slots };
+    });
+  const setSlot = (i: number, slot: QuickSlot | null) =>
+    changeSlots((slots) => {
+      slots[i] = slot;
+      return slots;
+    });
+  const swapSlots = (a: number, b: number) =>
+    changeSlots((slots) => {
+      [slots[a], slots[b]] = [slots[b], slots[a]];
+      return slots;
+    });
   const spellSchools = session.world.spellSchools;
   /** textin.c: the lines typed, newest first, and where Up/Down has got to (-1 = the line being typed) */
   const historyRef = useRef<string[]>([]);
@@ -313,6 +350,12 @@ export function GameView({
     scene.onChoose = (title, ids, then, initial) =>
       setModal({ type: "list", title, items: roomObjects(ids), initial, onDone: (c) => c[0] && then(c[0].id) });
     scene.onContents = (id) => session.requestContents(id);
+    scene.onBuy = (id) => askTraderRef.current(id);
+    // command.c CommandDeposit with no amount, on this banker
+    scene.onDeposit = (id) => {
+      const o = session.world.objects.get(id);
+      if (o) setModal({ type: "give", kind: "deposit", target: { id, name: session.resource(o.info.nameRes) ?? "" } });
+    };
     scene.onAction = (a) => actionRef.current(a);
     scene.onChatPrefix = (prefix) => {
       setText(prefix);
@@ -326,7 +369,14 @@ export function GameView({
     };
   }, [session, assets, audio]);
 
-  useEffect(() => trades((list) => setModal({ type: "trade", list })), [trades]);
+  useEffect(
+    () =>
+      trades((list) => {
+        traderAsked.current = null; // answered: no need to ask the other way (askTrader)
+        setModal({ type: "trade", list });
+      }),
+    [trades],
+  );
   // game.c ResetUserData: AbortLookList; the description and pick lists hold stale ids
   useEffect(
     () =>
@@ -543,6 +593,7 @@ export function GameView({
 
   /** Keys and typed commands that open panels and dialogs or talk to traders. */
   const handleAction = (a: string): void => {
+    if (a.startsWith("quickSlot")) return activateSlot(Number(a.slice("quickSlot".length)) - 1);
     const toggle = (type: "preferences" | "configuration" | "actions") => setModal((m) => (m?.type === type ? null : { type }));
     switch (a) {
       case "inventory":
@@ -652,11 +703,52 @@ export function GameView({
     setModal({ type: "list", title, items, multiple: true, amounts: true, onDone });
   };
 
+  /**
+   * Ours: a double click or tap on a shopkeeper or banker (OF_BUYABLE). Vault keepers and
+   * shopkeepers look the same here, and user.kod answers BP_REQ_WITHDRAWAL only for a vault
+   * keeper (MobIsVaultman), while BP_REQ_BUY to one would list our stored things for sale. So
+   * ask to withdraw first, and to buy if no list has come back in about a round trip.
+   */
+  const askTrader = (id: number) => {
+    window.clearTimeout(traderAsked.current?.timer);
+    session.requestWithdrawal(id);
+    const timer = window.setTimeout(() => {
+      if (traderAsked.current?.id !== id) return;
+      traderAsked.current = null;
+      session.requestBuy(id);
+    }, Math.max(500, 2 * (latency ?? 150) + 300));
+    traderAsked.current = { id, timer };
+  };
+  useEffect(() => {
+    askTraderRef.current = askTrader;
+  });
+
   /** mermain.c A_CASTSPELL: not while paralyzed or resting */
   const castSpell = (spell: number, numTargets: number) => {
     if (session.world.effects.paralyzed) return session.localMessage("You can't lift your hands to cast the spell!");
     if (restingRef.current) return session.localMessage("You can't cast spells while you're resting.");
     sceneRef.current?.castSpell(spell, numTargets);
+  };
+
+  /**
+   * A quick slot's key, click or tap: cast its spell, or use its item as a double click in the
+   * inventory would (inventry.c A_TOGGLEUSE). An empty slot opens the picker.
+   */
+  const activateSlot = (i: number) => {
+    const slot = quick.slots[i];
+    if (!slot) return setModal({ type: "quickSlot", index: i });
+    setLastSlot(i);
+    const rs = (id: number) => session.resource(id) ?? "";
+    if (slot.kind === "spell") {
+      const s = slotSpell(slot, session.world.spells, rs);
+      if (!s) return session.localMessage(`You don't know the spell ${slot.name}.`);
+      return castSpell(s.object.id, s.numTargets);
+    }
+    const o = slotItem(slot, session.world.inventory.values(), session.world.inUse, rs);
+    if (!o) return session.localMessage(`You aren't carrying ${slot.name}.`);
+    if (o.flags & OF_APPLYABLE) return sceneRef.current?.beginSelect((t) => session.apply(o.id, t));
+    if (session.world.inUse.has(o.id)) session.unuse(o.id);
+    else session.use(o.id);
   };
 
   /** command.c CommandRest / CommandStand: the server's resting, and ours (no moving or fighting) */
@@ -1089,22 +1181,8 @@ export function GameView({
         latency={settings.latencyMeter ? latency : undefined}
         tooltips={settings.tooltips}
       />
-      {settings.toolbar && !touch && (
-        <Toolbar
-          assets={assets}
-          tooltips={settings.tooltips}
-          buttons={[
-            // mermain.c default_buttons and mailnews.c mail_buttons: each runs its typed command
-            { bitmap: "help.bmp", name: "Help", onClick: () => runCommand("help") },
-            { bitmap: "drop.bmp", name: "Drop items", onClick: () => runCommand("drop") },
-            { bitmap: "get.bmp", name: "Get items", onClick: () => runCommand("get") },
-            { bitmap: "rest.bmp", name: "Rest/Stand", pressed: resting, onClick: () => runCommand(resting ? "stand" : "rest") },
-            { bitmap: "mailbox.bmp", name: "Read mail", onClick: () => runCommand("mail") },
-          ]}
-        />
-      )}
-      {/* drawint.c: the view's corner treatment in the gap around it */}
-      <div className="view-frame treat-view">
+      {/* Ours: the view fills its cell, without drawint.c's stone corners and the gap for them */}
+      <div className="view-frame">
       <div
         className="view"
         onDragOver={(e) => e.dataTransfer.types.includes("application/x-shards-item") && e.preventDefault()}
@@ -1153,9 +1231,28 @@ export function GameView({
             onRest={() => setResting(!restingRef.current)}
             // enchant.c WM_RBUTTONDOWN: look at the enchantment, as the interface's do
             onLook={(id) => lookAt(id, DESC.NONE)}
+            quickSlots={quick.slots}
+            lastSlot={quick.last}
+            onUseSlot={activateSlot}
+            onEditSlot={(i) => setModal({ type: "quickSlot", index: i })}
+            selecting={selecting}
+            onSelectSelf={() => selfInfo && selectObject(selfInfo.id)}
+            onCancelSelect={() => sceneRef.current?.select(null)}
           />
         )}
-        {selecting && <div className="select-hint">Choose a target (Esc or right click cancels)</div>}
+        {!touch && (
+          <Hotbar
+            session={session}
+            icons={icons}
+            slots={quick.slots}
+            settings={settings}
+            onUse={activateSlot}
+            onEdit={(i) => setModal({ type: "quickSlot", index: i })}
+            onSet={setSlot}
+            onSwap={swapSlots}
+          />
+        )}
+        {selecting && !touch && <div className="select-hint">Choose a target, or your face or bars for yourself (Esc or right click cancels)</div>}
         {(phase === "entering" || status?.loading) && <div className="loading">Entering…</div>}
         {desc && (
           <DescriptionDialog
@@ -1244,6 +1341,16 @@ export function GameView({
           <StatChangeDialog session={session} stats={statChangeAt.stats} levels={statChangeAt.levels} onClose={() => setStatChangeAt(null)} />
         )}
         {modal?.type === "suicide" && <SuicideDialog session={session} onClose={() => setModal(null)} />}
+        {modal?.type === "quickSlot" && (
+          <QuickSlotPicker
+            session={session}
+            icons={icons}
+            index={modal.index}
+            current={quick.slots[modal.index]}
+            onPick={(slot) => setSlot(modal.index, slot)}
+            onClose={() => setModal(null)}
+          />
+        )}
         {modal?.type === "password" && <PasswordDialog session={session} onClose={() => setModal(null)} />}
         {modal?.type === "preferences" && (
           <PreferencesDialog
@@ -1262,7 +1369,12 @@ export function GameView({
         {modal?.type === "logoutTimer" && (
           <LogoutTimerDialog settings={settings} iconUrl={assets.url("ui/clock.ico")} onApply={updateSettings} onClose={() => setModal(null)} />
         )}
-        {modal?.type === "configuration" && <ConfigurationDialog settings={settings} onApply={updateSettings} onClose={() => setModal(null)} />}
+        {modal?.type === "configuration" &&
+          (touch ? (
+            <TouchConfigDialog settings={settings} onApply={updateSettings} onClose={() => setModal(null)} />
+          ) : (
+            <ConfigurationDialog settings={settings} onApply={updateSettings} onClose={() => setModal(null)} />
+          ))}
         {modal?.type === "actions" && (
           <ActionsDialog onOpen={openWindow} onCommand={(c) => runCommand(c)} onClose={() => setModal(null)} />
         )}
@@ -1424,6 +1536,16 @@ export function GameView({
         selecting={selecting}
         onSelectObject={selectObject}
         onCast={castSpell}
+        // Ours: of mermain.c default_buttons and mailnews.c mail_buttons, only Rest/Stand and the
+        // mailbox, beside the portrait instead of a toolbar over the view
+        buttons={
+          settings.toolbar && !touch
+            ? [
+                { bitmap: "rest.bmp", name: "Rest/Stand", pressed: resting, onClick: () => runCommand(resting ? "stand" : "rest") },
+                { bitmap: "mailbox.bmp", name: "Read mail", onClick: () => runCommand("mail") },
+              ]
+            : undefined
+        }
         annotations={annotations?.list ?? []}
         onAnnotate={annotateAt}
       />

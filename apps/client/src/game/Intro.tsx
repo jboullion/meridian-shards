@@ -20,7 +20,7 @@ const BUTTON_XSIZE = 300;
 export function Intro({ assets, audio, onDone }: { assets: AssetStore; audio: GameAudio; onDone: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const [width, setWidth] = useState<number | null>(null);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -43,7 +43,7 @@ export function Intro({ assets, audio, onDone }: { assets: AssetStore; audio: Ga
         }
         ctx.putImageData(img, 0, 0);
       }
-      setWidth(b ? b.width : BUTTON_XSIZE);
+      setSize(b ? { w: b.width, h: b.height } : { w: BUTTON_XSIZE, h: 0 });
       buttonRef.current?.focus();
     });
     // PlayMusicProc (GameAudio checks the Music option)
@@ -56,7 +56,8 @@ export function Intro({ assets, audio, onDone }: { assets: AssetStore; audio: Ga
 
   return (
     <div className="intro">
-      <div className="intro-stack" style={width ? { width } : undefined}>
+      {/* The picture's width, less to fit the screen (it keeps its shape), and the button as wide */}
+      <div className="intro-stack" style={size ? { width: size.h ? `min(${size.w}px, 100%, calc((100vh - 80px) * ${size.w / size.h}))` : size.w } : undefined}>
         <canvas ref={canvasRef} className="intro-picture" />
         {/* MainButtonProc: a click, Enter or Space logs on */}
         <button ref={buttonRef} type="button" className="intro-button" onClick={onDone}>

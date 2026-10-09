@@ -17,7 +17,7 @@ describe("settings", () => {
 
   it("migrates version 2 settings: one mouse speed, right click looks", () => {
     const s = migrate({ version: 2, preset: "modern", mouseSpeed: 2, rightClickLooks: true, musicVolume: 40 } as never);
-    expect(s.version).toBe(4);
+    expect(s.version).toBe(5);
     expect(s.mouseXScale).toBe(30);
     expect(s.mouseYScale).toBe(30);
     expect(s.keys.examine).toEqual([{ code: "Mouse1" }]);
@@ -32,6 +32,14 @@ describe("settings", () => {
     expect(migrate(v3).keys.examine).toEqual([{ code: "Mouse1" }]);
     const taken = migrate({ ...v3, keys: { ...v3.keys, attack: [{ code: "Mouse1" }] } });
     expect(taken.keys.examine).toEqual([]);
+  });
+
+  it("migrates version 4 settings: Touch Controls back to Auto, a look speed added", () => {
+    const s = migrate({ version: 4, preset: "modern", touchControls: "off", dynamicLighting: false });
+    expect(s.touchControls).toBe("auto");
+    expect(s.touchLookScale).toBe(15);
+    expect(s.dynamicLighting).toBe(false);
+    expect(migrate({ version: 5, touchControls: "on" }).touchControls).toBe("on");
   });
 
   it("matches modifiers exactly, with plain keys still working under an unbound modifier", () => {

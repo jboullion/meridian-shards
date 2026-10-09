@@ -113,6 +113,12 @@ public class ShardsHost {
      * machine's), and not on a metered network: there the files still load, and are kept, as
      * the game needs them.
      */
+    /** Before the game: the phone may turn upright (MainActivity.allowPortrait). */
+    @JavascriptInterface
+    public void allowPortrait(boolean allow) {
+        MainActivity.allowPortrait(allow);
+    }
+
     @JavascriptInterface
     public void downloadAssets() {
         synchronized (ShardsHost.class) {

@@ -2,7 +2,7 @@
 
 ## Context
 
-We already have two experiments: the UE 5.8 "Meridian Remastered" (meridian-unreal) and the Roblox spin-off "Fantasy Blocks". The third is **Meridian Shards**: a faithful browser port of the original client.
+We already have two experiments: the UE 5.8 "Unreal Meridian" (meridian-unreal) and the Roblox spin-off "Fantasy Blocks". The third is **Meridian Shards**: a faithful browser port of the original client.
 
 - It connects to our own server running the unmodified Server 104 `blakserv`.
 - It looks and plays like the original, with modernised controls and UI.

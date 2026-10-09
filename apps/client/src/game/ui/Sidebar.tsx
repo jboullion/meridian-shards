@@ -15,7 +15,9 @@ import { useAsyncImage, useWorld } from "./hooks.ts";
 import { useKeyedHalves, useKeyedImage } from "./keyed.ts";
 import type { Settings } from "../settings.ts";
 import { MiniMap } from "./MiniMap.tsx";
+import { ToolbarButtonView, type ToolbarButton } from "./Toolbar.tsx";
 import type { MapAnnotation } from "../annotations.ts";
+import { DRAG_SPELL } from "../quickSlots.ts";
 
 /** include/proto.h OF_APPLYABLE: used on something else */
 const OF_APPLYABLE = 0x1000;
@@ -109,14 +111,15 @@ function StatBar({ stat, main = false, xpAsPercent = false }: { stat: Statistic;
 }
 
 /** Health, mana and vigor over the view, for the phone layout (ours; TouchControls.tsx): the interface's bars without XP. */
-export function HudBars({ session, icons }: { session: GameSession; icons: IconRenderer }) {
+export function HudBars({ session, icons, onSelectSelf }: { session: GameSession; icons: IconRenderer; onSelectSelf?: () => void }) {
   const world = session.world;
   useWorld(world, ["stats"]);
   const bars = (world.stats.get(STAT_GROUP.MAIN) ?? [])
     .filter((s) => s.type === STATS.NUMERIC && s.numeric?.tag === STAT_TAG.INT && s.num !== STAT_XP)
     .sort((a, b) => a.num - b.num);
   return (
-    <div className="hud-bars">
+    // Picking a spell target: a tap on our bars picks us (the interface's face does on the desktop)
+    <div className={onSelectSelf ? "hud-bars selecting" : "hud-bars"} onClick={onSelectSelf}>
       {bars.map((s) => (
         <div className="main-stat" key={s.num}>
           <ObjIcon icons={icons} object={bareIcon(s.nameRes)} className="stat-icon" />
@@ -164,8 +167,10 @@ export function HudEnchantments({
 
 export function Sidebar({
   session, icons, assets, getRoom, tab, onTab, settings, onLookItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, target, selecting, onSelectObject, onCast,
-  annotations, onAnnotate,
+  annotations, onAnnotate, buttons,
 }: {
+  /** Ours: the toolbar buttons we keep (Rest/Stand, the mailbox), beside the portrait */
+  buttons?: ToolbarButton[];
   /** The room's map annotations (annotate.c), drawn with Map annotations on */
   annotations: readonly MapAnnotation[];
   /** A right click on the minimap, in room coordinates: add or edit an annotation */
@@ -216,6 +221,13 @@ export function Sidebar({
   return (
     <aside className="sidebar" style={{ backgroundImage: ui("bkgnd.bmp") }}>
       <div className="user-area">
+        {buttons && (
+          <div className="user-buttons" role="toolbar" aria-label="Toolbar">
+            {buttons.map((b) => (
+              <ToolbarButtonView key={b.bitmap} assets={assets} button={b} tooltips={settings.tooltips} />
+            ))}
+          </div>
+        )}
         <div
           className={selecting ? "portrait selecting" : "portrait"}
           title={self ? tip(rs(self.info.nameRes)) : undefined}
@@ -229,7 +241,8 @@ export function Sidebar({
           {self && target === self.id && selfTargetImg && <img className="self-target" src={selfTargetImg} alt="" draggable={false} />}
           {self && <PortraitIcon icons={icons} object={self.info} />}
         </div>
-        <div className="main-stats">
+        {/* Ours: picking a spell target, a click on our bars picks us, as on our face */}
+        <div className={selecting ? "main-stats selecting" : "main-stats"} onClick={() => self && selecting && onSelectObject(self.id)}>
           {main
             .sort((a, b) => a.num - b.num)
             .map((s) => (
@@ -479,6 +492,12 @@ function StatList({
         key={`${s.num}:${i}`}
         className={`stat-list-row${header ? " header" : ""}${selected === i ? " selected" : ""}`}
         onClick={() => setSelected(i)}
+        // Ours: a spell dragged onto a quick slot fills it (QuickSlots.tsx Hotbar)
+        draggable={group === STAT_GROUP.SPELLS && !!l.id}
+        onDragStart={(e) => {
+          e.dataTransfer.setData(DRAG_SPELL, String(l.id));
+          e.dataTransfer.effectAllowed = "copy";
+        }}
         onDoubleClick={() => {
           if (group === STAT_GROUP.SPELLS && l.id) onCast(l.id, spellFor(l.id)?.numTargets ?? 0);
           else if (l.id) onLook(l.id);

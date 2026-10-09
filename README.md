@@ -2,6 +2,27 @@
 
 A faithful port of the classic Meridian 59 client to the desktop (Windows, macOS and Linux) and, in progress, Android: the original 2.5D look, sprites and textures, rendered with WebGL at modern resolutions, with modern controls beside the original ones. It connects to our own server, which runs the original Server 104 server code unchanged. Every server is a "shard" of one original universe.
 
+## Screenshots
+
+The Inn of Raza in the original Windows client (left) and in Meridian Shards on the desktop (right):
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/original-screen.png" alt="The Inn of Raza in the original Meridian 59 client"></td>
+    <td width="50%"><img src="docs/images/meridian-shards-raza.png" alt="The Inn of Raza in the Meridian Shards desktop app"></td>
+  </tr>
+  <tr>
+    <td align="center">The original client</td>
+    <td align="center">Meridian Shards (desktop)</td>
+  </tr>
+</table>
+
+On an Android phone, with the touch controls, the ☰ menu open, and a fight in the Mausoleum:
+
+<img src="docs/images/mobile-raza-inn.png" alt="Meridian Shards on Android in the Inn of Raza, with the menu open" width="100%">
+
+<img src="docs/images/mobile-fighting.png" alt="Meridian Shards on Android, fighting a mummy in the Mausoleum" width="100%">
+
 ## Status
 
 The client does what the original client and its modules do. What's still missing is listed, with the original's source for each, in [docs/missing-features.md](docs/missing-features.md).

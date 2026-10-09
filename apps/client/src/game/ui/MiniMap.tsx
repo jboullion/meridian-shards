@@ -36,6 +36,12 @@ const COLOR = {
 };
 const WF_MAP_NEVER = 0x8;
 const PLAYER_WIDTH = (31 * 64) / 4; // game.c player.width
+/**
+ * Ours: the player's arrow is never shorter than this from its middle to its tip (px). The
+ * original sizes it with the map only, which leaves a few pixels, no direction to see, when a big
+ * room fills a phone's map.
+ */
+const MIN_ARROW = 9;
 const OBJECT_RADIUS = FINENESS / 4;
 
 export function MiniMap({
@@ -58,13 +64,17 @@ export function MiniMap({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const zoomRef = useRef(zoom);
   const annotationsRef = useRef(annotations);
+  // Callers pass a new getRoom on every render (typing, zooming); keeping it in a ref stops
+  // the drawing loop restarting, which dropped the paper for a frame or two.
+  const getRoomRef = useRef(getRoom);
   /** The last frame's mapping (map.c xoffsetMiniMap, yoffsetMiniMap, scaleMiniMap) for MapScreenToRoom */
   const mapping = useRef<{ xo: number; yo: number; scale: number } | null>(null);
   const [hoverText, setHoverText] = useState<string | undefined>(undefined);
   useEffect(() => {
     zoomRef.current = zoom;
     annotationsRef.current = annotations;
-  }, [zoom, annotations]);
+    getRoomRef.current = getRoom;
+  }, [zoom, annotations, getRoom]);
   /** MapScreenToRoom with bMiniMap */
   const toRoom = (e: { clientX: number; clientY: number }): [number, number] | null => {
     const m = mapping.current;
@@ -99,7 +109,7 @@ export function MiniMap({
         canvas.width = w;
         canvas.height = h;
       }
-      const room = getRoom();
+      const room = getRoomRef.current();
       const self = world.self;
       if (!room || !self) {
         ctx.fillStyle = pattern ?? "#bbb";
@@ -186,7 +196,8 @@ export function MiniMap({
       ctx.strokeStyle = mm & MM.TEMPSAFE ? COLOR.tempsafe : mm & MM.NO_PVP ? COLOR.noPvp : COLOR.player;
       ctx.lineWidth = 2;
       const a = (self.angle * 2 * Math.PI) / 4096;
-      const off = (d: number, ang: number) => [Math.trunc(d * Math.cos(ang) * scale), Math.trunc(d * Math.sin(ang) * scale)];
+      const arrowScale = Math.max(scale, MIN_ARROW / ((PLAYER_WIDTH * 3) / 4));
+      const off = (d: number, ang: number) => [Math.trunc(d * Math.cos(ang) * arrowScale), Math.trunc(d * Math.sin(ang) * arrowScale)];
       const [dx, dy] = off((PLAYER_WIDTH * 3) / 4, a);
       const [ldx, ldy] = off(PLAYER_WIDTH / 4, a + Math.PI / 2);
       const [rdx, rdy] = off(PLAYER_WIDTH / 4, a - Math.PI / 2);
@@ -202,7 +213,7 @@ export function MiniMap({
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [world, getRoom, paper, annotationIcon]);
+  }, [world, paper, annotationIcon]);
 
   return (
     <canvas

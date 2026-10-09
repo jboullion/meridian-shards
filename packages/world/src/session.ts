@@ -575,8 +575,8 @@ export class GameSession {
    */
   language = 0;
 
-  /** A string in English, for matching format strings written in it */
-  private englishResource(id: number): string | undefined {
+  /** A string in English, for matching format strings and names written in it */
+  englishResource(id: number): string | undefined {
     return this.world.dynamicResources.get(id) ?? this.opts.lookupResource(id);
   }
 
@@ -724,7 +724,11 @@ export class GameSession {
           this.events.characters?.(this.characters, "");
           break;
         case BP.QUIT:
-          this.setPhase("closed");
+          // game.c GameQuit: back to the menu, still logged in (after a suicide, a rescue). The
+          // server is in STATE_SYNCHED again and offers the menu (AP_GETCHOICE), which onLogin
+          // answers with AP_REQ_GAME, so we come back to the character list.
+          this.world.resetData();
+          this.setPhase("login");
           break;
         case BP.MESSAGE:
         case BP.SYS_MESSAGE: {

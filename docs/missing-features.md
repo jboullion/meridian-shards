@@ -69,4 +69,6 @@ Phase 5 is done: chess and the basic admin console. What's left:
 | The intro's logo and splash | The original fades in `logo.bmp` (Near Death Studios' logo), then shows `splash.bgf`, which in the Server 104 files names that server. We skip the logo and show `xsplash.bgf`, the original Meridian 59 splash, with the same button and music. |
 | One desktop app at a time | The original ran as many clients as you liked. Ours share one profile (storage, the asset cache), so a second start brings the first forward (`requestSingleInstanceLock`). |
 | `/H` and `/P` | The original connects to that host and port; our desktop app takes the listed server with that host (and port), else `https://host:port` (http for localhost), or a whole origin, for this run only. |
+| The toolbar and the view's border | The original has a button bar over the view (Help, Drop, Get, Rest/Stand, mail) and stone corners around it. We keep only Rest/Stand and the mail button, left of the portrait (Show toolbar still hides them), and the view fills its cell without the border. |
+| The hands' shape | The original stretches the hands with the window; ours keep the shape they have at 4:3 (`screenOverlays.ts`). |
 | The character screen's ad panels (`BP_AD_SELECTED`), Print Map, font and colour choices, mipmaps and anti-aliasing | Low value. Settings save themselves, so there's no Save Now. |

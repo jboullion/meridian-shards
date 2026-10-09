@@ -10,9 +10,10 @@
 // Layout is in dialog units straight from the .rc templates, scaled by --s per window.
 
 import {
-  useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode,
+  createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode,
 } from "react";
 import type { AssetStore } from "../../assets.ts";
+import { getSettings, touchUi } from "../settings.ts";
 import { fixCmapLanguages } from "./font.ts";
 import { GRAPH_SIDE_BORDER, GRAPH_SLIDER_HEIGHT, graphFraction, graphValueAt } from "./graph.ts";
 import { keyOut } from "./keyed.ts";
@@ -33,16 +34,25 @@ const FLOW_SCALE = 1.3;
  */
 const CHROME_X = 20 + 20 + 2 * 12;
 const CHROME_Y = 16 + 20 + 34 + 2 * 12;
+/** The backdrop's margin above and below a window */
+const BACKDROP_MARGIN = 2 * 12;
+/** The title strip's part of CHROME_Y */
+const TITLE_Y = 34;
+/** How much wider a `wide` window may get on a phone, the text staying the same size */
+const WIDE = 1.5;
 
-/** CSS for a control placed at `r` (dialog units) inside a dialog body. */
-export function at(r: Rect): CSSProperties {
+/**
+ * CSS for a control placed at `r` (dialog units) inside a dialog body. In a window that grows
+ * for its FlowPage (--grow), `grow` "h" makes it that much taller and "y" moves it that much down.
+ */
+export function at(r: Rect, grow?: "h" | "y"): CSSProperties {
   const [x, y, w, h] = r;
   return {
     position: "absolute",
     left: `calc(var(--dx) * ${x})`,
-    top: `calc(var(--dy) * ${y})`,
+    top: grow === "y" ? `calc(var(--dy) * ${y} + var(--grow))` : `calc(var(--dy) * ${y})`,
     width: `calc(var(--dx) * ${w})`,
-    height: `calc(var(--dy) * ${h})`,
+    height: grow === "h" ? `calc(var(--dy) * ${h} + var(--grow))` : `calc(var(--dy) * ${h})`,
   };
 }
 
@@ -51,13 +61,11 @@ export function at(r: Rect): CSSProperties {
 /** drawint.c ELEMENT_E*: the edge treatment's corner halves and repeat strips (merintr.rc IDB_E*) */
 const EDGE_PIECES = ["ultop", "ulleft", "urtop", "urright", "llbottom", "llleft", "lrbottom", "lrright", "urepeat", "brepeat", "lrepeat", "rrepeat"];
 /**
- * merintr drawint.c's treatments around the game's areas, drawn transparently: the view's
- * corners (IDB_UL*..LR*), the map's (IDB_M*), the inventory's (IDB_I*) and the graph bars'
- * (IDB_BAR*). Each becomes --ui-t-<file> (styles.css .treat-*).
+ * merintr drawint.c's treatments around the game's areas, drawn transparently: the map's
+ * (IDB_M*), the inventory's (IDB_I*) and the graph bars' (IDB_BAR*). Ours: the view has none
+ * (drawint.c's IDB_UL*..LR* corners). Each becomes --ui-t-<file> (styles.css .treat-*).
  */
 const TREATMENT_PIECES = [
-  "viewtreat_ul_top", "viewtreat_ul_left", "viewtreat_ur_top", "viewtreat_ur_right",
-  "viewtreat_ll_left", "viewtreat_ll_bottom", "viewtreat_lr_right", "viewtreat_lr_bottom",
   "maptreat_ul", "maptreat_ur", "maptreat_ll", "maptreat_lr", "maptreat_urepeat", "maptreat_brepeat", "maptreat_lrepeat", "maptreat_rrepeat",
   "iultop", "iulleft", "iurtop", "iurright", "illbottom", "illleft", "ilrbottom", "ilrright", "itop", "ibottom", "ileft", "iright",
   "barleft", "barright", "bartop", "barbottom",
@@ -156,13 +164,19 @@ export function EdgeFrame() {
   );
 }
 
-/** The scale that fits a body of w x h dialog units in the browser window, up to MAX_SCALE. */
-function useDluScale(dlu: readonly [number, number] | undefined): number {
-  const fit = () => {
+/**
+ * The scale that fits a body of w x h dialog units in the browser window, up to MAX_SCALE, and
+ * how much wider than that the body is: up to WIDE for a `wide` window on a phone, as far as the
+ * screen allows (so not when it's upright).
+ */
+function useDluScale(dlu: readonly [number, number] | undefined, titled: boolean, wide: boolean): [number, number] {
+  const fit = (): [number, number] => {
     // Windows laid out by the page (not a template) get text the size of the in-game panels
-    if (!dlu) return FLOW_SCALE;
-    const s = Math.min((innerWidth - CHROME_X) / (dlu[0] * DLU_X), (innerHeight - CHROME_Y) / (dlu[1] * DLU_Y), MAX_SCALE);
-    return Math.max(MIN_SCALE, Math.floor(s * 20) / 20);
+    if (!dlu) return [FLOW_SCALE, 1];
+    const roomX = innerWidth - CHROME_X, roomY = innerHeight - CHROME_Y + (titled ? 0 : TITLE_Y);
+    const s = Math.max(MIN_SCALE, Math.floor(Math.min(roomX / (dlu[0] * DLU_X), roomY / (dlu[1] * DLU_Y), MAX_SCALE) * 20) / 20);
+    const w = wide && touchUi(getSettings()) ? Math.min(WIDE, Math.max(1, Math.floor((roomX / (dlu[0] * DLU_X * s)) * 20) / 20)) : 1;
+    return [s, w];
   };
   const [s, setS] = useState(fit);
   useEffect(() => {
@@ -170,7 +184,7 @@ function useDluScale(dlu: readonly [number, number] | undefined): number {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dlu?.[0], dlu?.[1]]);
+  }, [dlu?.[0], dlu?.[1], titled, wide]);
   return s;
 }
 
@@ -179,38 +193,127 @@ function useDluScale(dlu: readonly [number, number] | undefined): number {
  * With `dlu` the body is that many dialog units and children are placed with `at()`.
  */
 export function Window({
-  title, onClose, dlu, className, style, children,
+  title, onClose, closeButton = true, showTitle = true, wide = false, dlu, className, style, children,
 }: {
+  /** The title strip, and the dialog's name for screen readers */
   title: string;
-  /** The X button and Escape */
+  /** The X button, Escape and Android's back button */
   onClose?: () => void;
+  /** false: no X button (Escape and the back button still close it) */
+  closeButton?: boolean;
+  /** false: no title strip */
+  showTitle?: boolean;
+  /** On a phone, up to 50% wider (with `dlu`; anything there drawn square must say so in CSS) */
+  wide?: boolean;
   dlu?: readonly [number, number];
   className?: string;
   style?: CSSProperties;
   children: ReactNode;
 }) {
-  const s = useDluScale(dlu);
+  const [s, w] = useDluScale(dlu, showTitle, wide);
   useEscape(onClose);
-  const vars = { "--s": s, ...style } as CSSProperties;
+  // A FlowPage whose text wraps further than the template allows asks for more height (--grow),
+  // as much as the screen has room for; beyond that it scrolls
+  const ref = useRef<HTMLDivElement>(null);
+  const [grow, setGrow] = useState(0);
+  const askGrow = useCallback((px: number) => {
+    setGrow((g) => {
+      const el = ref.current;
+      const room = el ? innerHeight - BACKDROP_MARGIN - (el.offsetHeight - g) : 0;
+      return Math.max(0, Math.min(Math.ceil(px), Math.floor(room)));
+    });
+  }, []);
+  const vars = { "--s": s, "--w": w, "--grow": `${grow}px`, ...style } as CSSProperties;
   return (
-    <div className={`mk-window ${className ?? ""}`} style={vars} role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
+    <div ref={ref} className={`mk-window ${className ?? ""}`} style={vars} role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
       <EdgeFrame />
-      <div className="mk-title">
-        <span>{title}</span>
-        {onClose && (
-          <button type="button" className="mk-close" aria-label="Close" onClick={onClose}>
-            ×
-          </button>
-        )}
-      </div>
-      <div className={dlu ? "mk-body dlu" : "mk-body"} style={dlu ? { width: `calc(var(--dx) * ${dlu[0]})`, height: `calc(var(--dy) * ${dlu[1]})` } : undefined}>
-        {children}
+      {showTitle && (
+        <div className="mk-title">
+          <span>{title}</span>
+          {onClose && closeButton && (
+            <button type="button" className="mk-close" aria-label="Close" onClick={onClose}>
+              ×
+            </button>
+          )}
+        </div>
+      )}
+      <div className={dlu ? "mk-body dlu" : "mk-body"} style={dlu ? { width: `calc(var(--dx) * ${dlu[0]})`, height: `calc(var(--dy) * ${dlu[1]} + var(--grow))` } : undefined}>
+        <GrowContext.Provider value={askGrow}>{children}</GrowContext.Provider>
       </div>
     </div>
   );
 }
 
 // ---- controls ----
+
+// ---- flow layout ----
+// The templates assume MS Sans Serif; a wider font (a phone's) wraps text the template gave one
+// or two lines. In a FlowPage, FlowText pushes what follows it down, and Fixed holds a stretch of
+// the template placed with at() as it is. The page scrolls if it all gets too tall.
+
+const dx = (n: number) => `calc(var(--dx) * ${n})`;
+const dy = (n: number) => `calc(var(--dy) * ${n})`;
+
+/** A FlowPage asks its Window for more height with this (px beyond the template's). */
+const GrowContext = createContext<((px: number) => void) | null>(null);
+
+/**
+ * A column of FlowText and Fixed blocks at `r`. When they need more than its height, the window
+ * grows to fit them if the screen has room (whatever is placed below with at(r, "y") moves down),
+ * and they scroll if it hasn't.
+ */
+export function FlowPage({ at: r, children }: { at: Rect; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const askGrow = useContext(GrowContext);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !askGrow) return;
+    const measure = () => {
+      // What the blocks need (not the Spacer's share), less the template's height
+      let need = 0;
+      for (const c of el.children) {
+        if (c instanceof HTMLElement && !c.dataset.spacer) need += c.offsetHeight + parseFloat(getComputedStyle(c).marginTop);
+      }
+      const grown = parseFloat(getComputedStyle(el).getPropertyValue("--grow")) || 0;
+      askGrow(need - (el.clientHeight - grown));
+    };
+    // Again whenever the page (a new scale, the phone turned) or a block (text wrapping) changes size
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    for (const c of el.children) watch.observe(c);
+    return () => watch.disconnect();
+  });
+  // Back to the template's height when the page goes (another tab)
+  useEffect(() => () => askGrow?.(0), [askGrow]);
+  return (
+    <div ref={ref} className="mk-flow" style={at(r, "h")}>
+      {children}
+    </div>
+  );
+}
+
+/** Wrapping text `x` from the left and `w` wide, `top` below what's above, at least `minH` high (dialog units). */
+export function FlowText({ x = 0, w, top = 0, minH = 0, className, children }: { x?: number; w: number; top?: number; minH?: number; className?: string; children: ReactNode }) {
+  return (
+    <div className={`mk-text wrap ${className ?? ""}`} style={{ flex: "none", marginLeft: dx(x), marginTop: dy(top), width: dx(w), minHeight: dy(minH) }}>
+      {children}
+    </div>
+  );
+}
+
+/** `h` dialog units of the template from its y = `y` on: children are placed with at() in the template's coordinates. */
+export function Fixed({ y, h, children }: { y: number; h: number; children: ReactNode }) {
+  return (
+    <div style={{ position: "relative", flex: "none", height: dy(h) }}>
+      <div style={{ position: "absolute", left: 0, width: "100%", top: dy(-y) }}>{children}</div>
+    </div>
+  );
+}
+
+/** Takes up the room left in a FlowPage, so what follows sits at the bottom. */
+export function Spacer() {
+  return <div data-spacer="1" style={{ flex: 1 }} />;
+}
 
 /** LTEXT: one line by default; `wrap` for a multi-line static. */
 export function Text({ at: r, wrap, className, children }: { at?: Rect; wrap?: boolean; className?: string; children: ReactNode }) {

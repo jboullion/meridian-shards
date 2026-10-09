@@ -73,6 +73,10 @@ const OF_GETTABLE = 0x10;
 const OF_CONTAINER = 0x20;
 const OF_NOEXAMINE = 0x40;
 const OF_ACTIVATABLE = 0x800;
+/** include/proto.h OF_BUYABLE: a shopkeeper or vault keeper (BP_REQ_BUY) */
+const OF_BUYABLE = 0x400;
+/** include/proto.h OF_OFFERABLE: takes things (monster.kod: MOB_BUYER or MOB_RECEIVE), a banker among them */
+const OF_OFFERABLE = 0x200;
 /** gameuser.c: at most one attack every 250 ms; the closest target must be this near */
 const ATTACK_DELAY = 250;
 const CLOSE_DISTANCE = 5 * FINENESS;
@@ -209,6 +213,10 @@ export class GameScene {
   onChoose?: (title: string, ids: number[], then: (id: number) => void, initial?: number) => void;
   /** Look inside a container (BP_SEND_OBJECT_CONTENTS; the contents come back as BP_OBJECT_CONTENTS) */
   onContents?: (id: number) => void;
+  /** Ours: a double click on a shopkeeper or vault keeper asks for their wares or our vault */
+  onBuy?: (id: number) => void;
+  /** Ours: a double click on someone who only takes things (a banker): the Deposit window */
+  onDeposit?: (id: number) => void;
   /** A key bound to a panel action (inventory, settings, map zoom) */
   onAction?: (a: Action) => void;
   /** Say, Tell, Yell, Broadcast, Emote keys: start a chat line with this command */
@@ -1218,6 +1226,10 @@ export class GameScene {
   /**
    * Double click (merintr.c EventMouseClick: A_ACTIVATEMOUSE, gameuser.c UserActivateMouse):
    * activate what's under the cursor, or look inside a container, if it's close by and not a player.
+   * Ours: a shopkeeper or vault keeper (OF_BUYABLE) shows what they sell or what we keep with
+   * them, as typing "buy" or "withdraw" does; someone who only takes things (OF_OFFERABLE, not
+   * attackable: a banker) opens Deposit, as typing "deposit" does. The phone has no other way.
+   * At any distance: the server doesn't check it (user.kod), and they often stand behind a counter.
    */
   private readonly onDoubleClick = (e: MouseEvent) => {
     // A double tap is the touch handlers' (the browser still sends a dblclick for it)
@@ -1228,12 +1240,18 @@ export class GameScene {
 
   private activateUnderCursor(): void {
     const ids = this.objectsUnderCursor(
-      (o) => (o.info.flags & (OF_ACTIVATABLE | OF_CONTAINER)) !== 0 && !(o.info.flags & OF_PLAYER) && this.distanceTo(o.id) <= CLOSE_DISTANCE,
+      (o) =>
+        !(o.info.flags & OF_PLAYER) &&
+        (((o.info.flags & (OF_ACTIVATABLE | OF_CONTAINER)) !== 0 && this.distanceTo(o.id) <= CLOSE_DISTANCE) ||
+          (o.info.flags & OF_BUYABLE) !== 0 ||
+          (o.info.flags & (OF_OFFERABLE | OF_ATTACKABLE)) === OF_OFFERABLE),
     );
     this.choose("Activate", ids, (id) => {
       const o = this.session.world.objects.get(id);
       if (o && o.info.flags & OF_CONTAINER) this.onContents?.(id);
-      else this.session.activate(id);
+      else if (o && o.info.flags & OF_ACTIVATABLE) this.session.activate(id);
+      else if (o && o.info.flags & OF_BUYABLE) this.onBuy?.(id);
+      else if (o && o.info.flags & OF_OFFERABLE) this.onDeposit?.(id);
     });
   }
 
@@ -1316,7 +1334,8 @@ export class GameScene {
       t.moved = true;
       clearTimeout(t.timer);
     }
-    if (t.moved && !t.held) this.look((e.clientX - t.x) * TOUCH_LOOK, (e.clientY - t.y) * TOUCH_LOOK);
+    const k = (TOUCH_LOOK * this.settings.touchLookScale) / 15; // Look Speed (the phone's Configuration)
+    if (t.moved && !t.held) this.look((e.clientX - t.x) * k, (e.clientY - t.y) * k);
     t.x = e.clientX;
     t.y = e.clientY;
   };
@@ -1485,8 +1504,18 @@ export class GameScene {
       case "buy":
       case "deposit":
       case "withdraw":
+      case "quickSlot1":
+      case "quickSlot2":
+      case "quickSlot3":
+      case "quickSlot4":
+      case "quickSlot5":
+      case "quickSlot6":
+      case "quickSlot7":
+      case "quickSlot8":
+      case "quickSlot9":
+      case "quickSlot10":
         // Panels and dialogs: free the mouse for them
-        if (this.locked && a !== "mapZoomIn" && a !== "mapZoomOut" && a !== "inventory" && a !== "map") document.exitPointerLock();
+        if (this.locked && a !== "mapZoomIn" && a !== "mapZoomOut" && a !== "inventory" && a !== "map" && !a.startsWith("quickSlot")) document.exitPointerLock();
         this.onAction?.(a);
         break;
       case "tabForward":

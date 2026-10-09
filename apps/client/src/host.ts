@@ -82,6 +82,8 @@ interface AndroidHost {
   downloadAssets(): void;
   /** Its latest progress (DesktopAssetProgress) as JSON, "" before any; later ones come to window.shardsAndroidAssets */
   assetProgress(): string;
+  /** Lets the phone turn upright (before the game) or keeps it landscape */
+  allowPortrait(allow: boolean): void;
 }
 
 /** The releases the apps come from (apps/desktop/electron-builder.yml publish); the APK is one of each release's files */
@@ -226,6 +228,15 @@ export const desktop: DesktopBridge | undefined =
 
 /** The Android app: no window frame or title bar of its own to draw. */
 export const isAndroid = desktop?.platform === "android";
+
+/** The Android app may turn upright while this is on (the screens before the game, for typing); nothing elsewhere. */
+export function allowPortrait(allow: boolean): void {
+  try {
+    androidHost?.allowPortrait(allow);
+  } catch {
+    // stays landscape
+  }
+}
 
 /** Developer pages (the room viewer): always in the browser, only in development on the desktop. */
 export const devPagesEnabled = !desktop || desktop.dev;

@@ -3,41 +3,37 @@
 
 ## Current TODOS
 
-- After a suicide we go to the main menu screen and we can't log back in. I think we should probably go to the character select screen. It looks like we ARE still loged in on the server so I think the issue is we can't get past the login screen because we are technically still loged in.
-- 
+- Have claude go through and build a powerpoint about the development process for each build. What we learned. What worked, what didn't.
+  - Start with comparison images of the same place in the original client and our clients.
+  - Search our previous conversations for that project to get a comprehensive understanding of what we did.
+  - Have it run the tests and user the screenshots in the presentations. Or if possible just load the images directly from previous conversations
+  - Perhaps do a third combined presentation which compares the original, Shards, and Unreal. 
 
 
 ## Releases
 
 
 
-
 ## UI
 
-- Minimap
-  - Typing in the chat window and zooming in both cause the minimap to "flash" a little bit. The zoom issue might just be that any keyboard input causes the minimap to flash. It looks like while zooming the map is solid gray and after zooming stops we add the texture / noise.
-  - Also the arrow that shows the user lookos strange. Kind of curved I think.
-  - 
 
 
 
-- LOTS AND LOTS of tiny UI Polish
-  - Character Creator could use a lot of polish and spacing tweaks.
-    - We should probably do this by hand at this point so it looks how we want.
-  - Remove the "X" button from the select character dialog.
+## Desktop UI
 
 
-- Dropdown Menu
-  - "Help pages aren't in merdian shards yet"
-  - 
 
 
-- Game window:
-  - The mace gets stretched depending on the ratio / height of the game window. Can we prevent that?
-  - Let's remove the border around the game window. I know the classic has this, but it really just adds uneeded padding.
-  - Let's move the Help, stand, and mail buttons on top of the game window once we remove the padding. We no longer need the drop or get items buttons
+
+
+## Mobile UI
+
 
 ## Interactions
+
+
+
+## Publish / Package
 
 
 

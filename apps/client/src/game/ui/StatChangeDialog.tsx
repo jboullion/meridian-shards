@@ -3,10 +3,10 @@
 // eight school levels can only go down, and intellect can't go below what the levels you
 // keep need. Two warnings, then BP_CHANGED_STATS.
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import type { GameSession } from "@shards/world";
-import { STAT_NAMES, STAT_ROWS } from "../CharacterCreator.tsx";
-import { Button, GraphBar, GroupBox, MessageBox, Text, Window, type Rect } from "./kit.tsx";
+import { STAT_ROWS_END, STAT_ROWS_Y, StatRows } from "../CharacterCreator.tsx";
+import { Button, Fixed, FlowPage, FlowText, GraphBar, GroupBox, MessageBox, Text, Window, type Rect } from "./kit.tsx";
 
 /** statsstat.c: stats 1..50, 220 points in all (initStatsFromServer), schools 0..6 */
 const STAT_MIN = 1;
@@ -44,15 +44,6 @@ export function intellectNeeded(levels: readonly number[]): number {
   }
   levelsCount += ones;
   return levelsCount <= 8 ? 1 : (levelsCount - schools - 8) * 5;
-}
-
-/** A right-aligned label (the .rc LTEXTs that end at their control) */
-function Label({ at: r, children }: { at: Rect; children: ReactNode }) {
-  return (
-    <Text at={r} className="right">
-      {children}
-    </Text>
-  );
 }
 
 const CONFIRM_POINTS = "You have some points remaining to allocate to statistics; are you sure you want to discard these points?";
@@ -96,36 +87,36 @@ export function StatChangeDialog({
 
   return (
     <div className="mk-modal">
-      <Window title="Adjust your character" dlu={[320, 316]} onClose={onClose}>
-        <Text at={[37, 6, 200, 8]}>Change your character&apos;s statistics.</Text>
-        {STAT_ROWS.map((r, i) => [
-          <Label key="l" at={[0, r.y, 38, 8]}>
-            {STAT_NAMES[i]}
-          </Label>,
-          <GraphBar key="g" at={[42, r.bar, 102, 14]} label={STAT_NAMES[i]} min={STAT_MIN} max={STAT_MAX} value={stats[i]} onChange={(v) => setStat(i, v)} />,
-          <Text key="t1" at={[149, r.textY, 165, 8]}>
-            {r.text[0]}
-          </Text>,
-          <Text key="t2" at={[149, r.textY + 8, 165, 8]}>
-            {r.text[1]}
-          </Text>,
-        ])}
-        <Text at={[67, 136, 60, 8]}>Stat points left</Text>
-        <GraphBar at={[43, 147, 98, 11]} kind="points" label="Stat points left" min={0} max={STAT_POINTS_INITIAL} value={points} />
-        <Text at={[44, 170, 260, 8]}>NOTE: To reduce intellect, you may have to forfeit school levels below.</Text>
-        <GroupBox at={[16, 186, 286, 100]} label="Schools" />
-        {SCHOOL_ROWS.map((s, i) => [
-          <Text key="l" at={s.label}>
-            {s.name}
-          </Text>,
-          <GraphBar key="g" at={s.bar} label={s.name} min={0} max={SCHOOL_MAX} value={levels[i]} onChange={(v) => setLevel(i, v)} />,
-        ])}
-        <Button at={[200, 295, 50, 14]} isDefault onClick={done}>
-          OK
-        </Button>
-        <Button at={[256, 295, 50, 14]} onClick={onClose}>
-          Cancel
-        </Button>
+      <Window title="Adjust your character" wide dlu={[320, 316]} onClose={onClose}>
+        {/* Laid out as the template, the stat rows and the note growing when they wrap further (kit.tsx FlowPage) */}
+        <FlowPage at={[0, 0, 320, 316]}>
+          <Fixed y={0} h={STAT_ROWS_Y}>
+            <Text at={[37, 6, 200, 8]}>Change your character&apos;s statistics.</Text>
+          </Fixed>
+          <StatRows stats={stats} onChange={setStat} />
+          <Fixed y={STAT_ROWS_END} h={170 - STAT_ROWS_END}>
+            <Text at={[67, 136, 60, 8]}>Stat points left</Text>
+            <GraphBar at={[43, 147, 98, 11]} kind="points" label="Stat points left" min={0} max={STAT_POINTS_INITIAL} value={points} />
+          </Fixed>
+          <FlowText x={44} w={260} minH={16}>
+            NOTE: To reduce intellect, you may have to forfeit school levels below.
+          </FlowText>
+          <Fixed y={186} h={130}>
+            <GroupBox at={[16, 186, 286, 100]} label="Schools" />
+            {SCHOOL_ROWS.map((s, i) => [
+              <Text key="l" at={s.label}>
+                {s.name}
+              </Text>,
+              <GraphBar key="g" at={s.bar} label={s.name} min={0} max={SCHOOL_MAX} value={levels[i]} onChange={(v) => setLevel(i, v)} />,
+            ])}
+            <Button at={[200, 295, 50, 14]} isDefault onClick={done}>
+              OK
+            </Button>
+            <Button at={[256, 295, 50, 14]} onClick={onClose}>
+              Cancel
+            </Button>
+          </Fixed>
+        </FlowPage>
       </Window>
       {asking && (
         <MessageBox

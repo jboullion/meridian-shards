@@ -7,7 +7,7 @@ import {
 } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
-import { desktop, gameSocketUrl, onAndroidAway } from "../host.ts";
+import { allowPortrait, desktop, gameSocketUrl, onAndroidAway } from "../host.ts";
 import { GameAudio } from "./audio.ts";
 import { Intro } from "./Intro.tsx";
 import { CharacterCreator } from "./CharacterCreator.tsx";
@@ -104,6 +104,9 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
 
   // The desktop app asks before closing the window mid-game
   useEffect(() => desktop?.setPhase(phase), [phase]);
+  // On a phone, the screens before the game may turn upright (easier for typing); the game is landscape
+  const upright = phase !== "entering" && phase !== "game";
+  useEffect(() => allowPortrait(upright), [upright]);
 
   // Keep-alive pings from a worker, so background tabs stay connected.
   useEffect(() => {
@@ -164,7 +167,11 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       {
         phase: (p) => {
           setPhase(p);
-          if (p === "closed") setLive(null);
+          if (p === "closed") {
+            // Never leave the socket open behind the login screen: the server would keep the account in use
+            s.close();
+            setLive(null);
+          }
           if (p === "game" || p === "closed") quickstart.current = false;
         },
         characters: (c, m) => {

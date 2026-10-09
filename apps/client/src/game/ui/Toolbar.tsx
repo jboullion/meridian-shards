@@ -1,7 +1,7 @@
-// The button bar over the view (clientd3d/toolbar.c), with the buttons merintr adds
-// (mermain.c default_buttons: Help, Drop, Get, Rest/Stand) and mailnews's mailbox
-// (mailnews.c mail_buttons). merintr's separator takes no room: ToolbarAddButton leaves
-// num_separators out of the position. Each bitmap holds the button out (left half) and in
+// The toolbar's buttons (clientd3d/toolbar.c). Ours: no bar over the view; of the buttons
+// merintr adds (mermain.c default_buttons: Help, Drop, Get, Rest/Stand) and mailnews's mailbox
+// (mailnews.c mail_buttons), GameView keeps Rest/Stand and the mailbox, and the Sidebar draws
+// them beside the portrait. Each bitmap holds the button out (left half) and in
 // (right half), drawn transparently over the window background. Rest/Stand is a toggle:
 // it stays in while resting (command.c CommandRest / CommandStand ToolbarSetButtonState).
 
@@ -18,7 +18,7 @@ export interface ToolbarButton {
   pressed?: boolean;
 }
 
-function Button({ assets, button, tooltips }: { assets: AssetStore; button: ToolbarButton; tooltips: boolean }) {
+export function ToolbarButtonView({ assets, button, tooltips }: { assets: AssetStore; button: ToolbarButton; tooltips: boolean }) {
   const halves = useKeyedHalves(assets.url(`ui/${button.bitmap}`));
   // ToolbarDrawButton: the right half while held down (ODS_SELECTED) or toggled in
   const [down, setDown] = useState(false);
@@ -42,15 +42,5 @@ function Button({ assets, button, tooltips }: { assets: AssetStore; button: Tool
     >
       {!halves && button.name}
     </button>
-  );
-}
-
-export function Toolbar({ assets, buttons, tooltips }: { assets: AssetStore; buttons: ToolbarButton[]; tooltips: boolean }) {
-  return (
-    <div className="toolbar" role="toolbar" aria-label="Toolbar">
-      {buttons.map((b) => (
-        <Button key={b.bitmap} assets={assets} button={b} tooltips={tooltips} />
-      ))}
-    </div>
   );
 }

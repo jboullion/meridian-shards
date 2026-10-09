@@ -52,7 +52,7 @@ export function CharacterSelect({
 
   return (
     <Backdrop>
-      <Window title="Select character" dlu={[215, 182]} onClose={() => setConfirmLogoff(true)}>
+      <Window title="Select character" closeButton={false} dlu={[215, 182]} onClose={() => setConfirmLogoff(true)}>
         <ListBox
           at={[9, 9, 118, 51]}
           label="Characters"

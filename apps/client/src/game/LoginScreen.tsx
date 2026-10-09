@@ -9,21 +9,22 @@ import type { AssetStore } from "../assets.ts";
 import { desktop, devPagesEnabled, isAndroid, type DesktopBridge, type DesktopUpdate } from "../host.ts";
 import { Backdrop, Button, GroupBox, MessageBox, Select, Text, TextField, Window, at, type Rect } from "./ui/kit.tsx";
 
-/** Control rectangles: client.rc IDD_LOGIN (251 x 175) for the desktop, the same less the Server row for the browser. */
+/** Control rectangles: client.rc IDD_LOGIN (251 x 175, a little roomier) for the desktop, the same less the Server row for the browser. */
 const LAYOUT = desktop
   ? {
-      size: [251, 175] as const,
+      // Ours: 3 DLU more between the name and the password, 6 more before the Server
+      size: [251, 184] as const,
       intro: [36, 6, 206, 18] as Rect,
       newBox: [37, 33, 207, 49] as Rect,
       newText: [45, 49, 190, 29] as Rect,
-      accountBox: [37, 94, 207, 69] as Rect,
+      accountBox: [37, 94, 207, 78] as Rect,
       nameLabel: [43, 110, 48, 10] as Rect,
       name: [93, 107, 143, 13] as Rect,
-      passLabel: [43, 123, 48, 10] as Rect,
-      pass: [93, 121, 143, 13] as Rect,
-      serverLabel: [43, 139, 48, 10] as Rect,
-      server: [93, 137, 143, 13] as Rect,
-      ok: [137, 155, 100, 14] as Rect,
+      passLabel: [43, 126, 48, 10] as Rect,
+      pass: [93, 124, 143, 13] as Rect,
+      serverLabel: [43, 148, 48, 10] as Rect,
+      server: [93, 146, 143, 13] as Rect,
+      ok: [137, 164, 100, 14] as Rect,
     }
   : {
       size: [251, 160] as const,
@@ -69,7 +70,6 @@ export function LoginScreen({
   };
   return (
     <Backdrop>
-      <h1 className="mk-shard-title">Meridian Shards</h1>
       <Window title="Login" dlu={LAYOUT.size}>
         <form onSubmit={submit}>
           <img className="mk-login-icon" src={assets.url("ui/icon1.ico")} alt="" style={at([6, 6, 20, 20])} />

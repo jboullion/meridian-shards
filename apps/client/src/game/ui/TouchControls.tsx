@@ -1,20 +1,26 @@
-// The phone layout's controls over the view (ours, ADR 0003; Touch Controls in the Bind Editor):
+// The phone layout's controls over the view (ours, ADR 0003; on a touch screen, settings.ts touchUi):
 //   - health, mana and vigor bars at the top left, our enchantments and the last few chat lines
 //     under them
 //   - Rest/Stand, Map, Chat and the interface drawer (inventory, spells...) at the top right, the
 //     room's enchantments under them
 //   - a joystick at the bottom left: forward, back and sliding, digital like the keys (move.c),
 //     running when pushed to the edge; with the map open it moves by the map's directions
-//   - Attack (held, it keeps attacking), Open, Get and Next Target at the bottom right
+//   - Attack (held, it keeps attacking; it shows the weapon we wield), Open, Get, Cast (the quick
+//     slots' wheel, QuickSlots.tsx, showing the last slot used) and Target (Target Next) at the
+//     bottom right
 // Turning and looking up or down is a drag on the view, tap targets, double tap activates and a
 // long press examines (gameScene.ts, onPointerDown...).
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import type { ChatLine, GameSession } from "@shards/world";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import type { ObjectInfo } from "@shards/protocol";
+import type { ChatLine, GameSession, WorldState } from "@shards/world";
 import type { TouchMove } from "../gameScene.ts";
 import type { IconRenderer } from "../icons.ts";
 import type { Action, Settings } from "../settings.ts";
-import { HudBars, HudEnchantments } from "./Sidebar.tsx";
+import { HudBars, HudEnchantments, ObjIcon } from "./Sidebar.tsx";
+import { useWorld } from "./hooks.ts";
+import { QuickWheel } from "./QuickSlots.tsx";
+import type { QuickSlots } from "../quickSlots.ts";
 
 /** The joystick's knob travel, px; past DEAD of it the move starts, past RUN it runs */
 const RADIUS = 37;
@@ -32,7 +38,7 @@ const BUTTONS: { action: Action; label: string; big?: boolean; repeat?: boolean 
   { action: "attack", label: "Attack", big: true, repeat: true },
   { action: "go", label: "Open" },
   { action: "interact", label: "Get" },
-  { action: "targetNext", label: "Next" },
+  { action: "targetNext", label: "Target" },
 ];
 
 const NO_MOVE: TouchMove = { forward: 0, strafe: 0, run: false };
@@ -99,13 +105,15 @@ function Joystick({ onMove }: { onMove: (m: TouchMove) => void }) {
  * goes on while the finger stays down.
  */
 function ActionButton({
-  action, label, big, repeat, onPress,
+  action, label, big, repeat, onPress, children,
 }: {
   action: Action;
   label: string;
   big?: boolean;
   repeat?: boolean;
   onPress: (a: Action) => void;
+  /** Drawn instead of the label (it stays the button's name) */
+  children?: ReactNode;
 }) {
   const timer = useRef(0);
   const stop = () => {
@@ -129,10 +137,71 @@ function ActionButton({
       onPointerUp={stop}
       onPointerCancel={stop}
       onLostPointerCapture={stop}
+      aria-label={label}
     >
-      {label}
+      {children ?? label}
     </button>
   );
+}
+
+/**
+ * The weapon we wield: the right hand's overlay carries its name (player.kod AddWindowOverlay:
+ * PWO_RIGHT_HAND, @GetName); the bare hand's has none. The inventory item in use with that name.
+ */
+function wieldedWeapon(world: WorldState): ObjectInfo | undefined {
+  const hand = world.playerOverlays[1];
+  if (!hand?.info.nameRes) return undefined;
+  for (const o of world.inventory.values()) if (o.nameRes === hand.info.nameRes && world.inUse.has(o.id)) return o;
+  return undefined;
+}
+
+/** The Attack button's face: the weapon we wield over the word, or just the word bare handed. */
+function AttackFace({ session, icons }: { session: GameSession; icons: IconRenderer }) {
+  useWorld(session.world, ["playerOverlays", "inUse", "inventory"]);
+  const weapon = wieldedWeapon(session.world);
+  if (!weapon) return <>Attack</>;
+  return (
+    <span className="attack-face">
+      <ObjIcon icons={icons} object={weapon} className="attack-weapon" />
+      <span>Attack</span>
+    </span>
+  );
+}
+
+/**
+ * How bright the ticker's colours are at least: relative luminance (WCAG, 0-1), so a blue gets
+ * as light as a red to the eye, not only by HSL lightness. It's over the 3D view.
+ */
+const TICKER_LUMINANCE = 0.5;
+
+const toLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const luminance = (r: number, g: number, b: number) => 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+
+/** HSL (h in degrees, s and l 0-1) to RGB (0-1) */
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  return [f(0), f(8), f(4)];
+}
+
+/**
+ * A server text colour (rgb(), as text.ts and session.ts give them) lifted for the ticker: the
+ * same hue, made lighter until it's TICKER_LUMINANCE bright. The chat window keeps the originals.
+ */
+export function tickerColor(color: string | undefined): string | undefined {
+  const m = color && /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(color);
+  if (!m) return color;
+  const [r, g, b] = [m[1], m[2], m[3]].map((v) => Number(v) / 255);
+  if (luminance(r, g, b) >= TICKER_LUMINANCE) return color;
+  const max = Math.max(r, g, b),
+    min = Math.min(r, g, b);
+  const d = max - min;
+  let l = (max + min) / 2;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  const h = d === 0 ? 0 : 60 * (max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4);
+  while (l < 1 && luminance(...hslToRgb(h, s, l)) < TICKER_LUMINANCE) l += 0.01;
+  return `hsl(${Math.round(h)}, ${Math.round(s * 100)}%, ${Math.round(Math.min(1, l) * 100)}%)`;
 }
 
 /** The last few chat lines, for a few seconds, while the chat is put away. */
@@ -150,7 +219,7 @@ function ChatTicker({ chat, colored }: { chat: ChatLine[]; colored: boolean }) {
       {recent.map((l, i) => (
         <div key={`${l.time}-${i}`} className="touch-ticker-line">
           {l.spans.map((s, j) => (
-            <span key={j} style={colored ? { color: s.color, fontWeight: s.bold ? "bold" : undefined } : undefined}>
+            <span key={j} style={colored ? { color: tickerColor(s.color), fontWeight: s.bold ? "bold" : undefined } : undefined}>
               {s.text}
             </span>
           ))}
@@ -162,7 +231,17 @@ function ChatTicker({ chat, colored }: { chat: ChatLine[]; colored: boolean }) {
 
 export function TouchControls({
   session, icons, settings, chat, chatUnread, onMove, onPress, onChat, onDrawer, onMap, mapOpen, onLook, resting, onRest,
+  quickSlots, lastSlot, onUseSlot, onEditSlot, selecting, onSelectSelf, onCancelSelect,
 }: {
+  quickSlots: QuickSlots;
+  /** The quick slot used last: a tap on Cast uses it again */
+  lastSlot: number | null;
+  onUseSlot: (i: number) => void;
+  onEditSlot: (i: number) => void;
+  /** Picking a spell target: our bars pick us, and the hint can cancel */
+  selecting: boolean;
+  onSelectSelf: () => void;
+  onCancelSelect: () => void;
   session: GameSession;
   icons: IconRenderer;
   settings: Settings;
@@ -185,7 +264,7 @@ export function TouchControls({
   return (
     <div className="touch-controls">
       <div className="touch-hud">
-        <HudBars session={session} icons={icons} />
+        <HudBars session={session} icons={icons} onSelectSelf={selecting ? onSelectSelf : undefined} />
         <HudEnchantments session={session} icons={icons} kind="player" onLook={onLook} />
         <ChatTicker chat={chat} colored={settings.coloredText} />
       </div>
@@ -208,9 +287,20 @@ export function TouchControls({
       <Joystick onMove={onMove} />
       <div className="touch-actions">
         {BUTTONS.map((b) => (
-          <ActionButton key={b.action} action={b.action} label={b.label} big={b.big} repeat={b.repeat} onPress={onPress} />
+          <ActionButton key={b.action} action={b.action} label={b.label} big={b.big} repeat={b.repeat} onPress={onPress}>
+            {b.action === "attack" ? <AttackFace session={session} icons={icons} /> : undefined}
+          </ActionButton>
         ))}
+        <QuickWheel session={session} icons={icons} slots={quickSlots} last={lastSlot} onUse={onUseSlot} onEdit={onEditSlot} />
       </div>
+      {selecting && (
+        <div className="touch-select-hint">
+          <span>Tap a target, or your health bars for yourself</span>
+          <button type="button" className="touch-button small close" onClick={onCancelSelect} aria-label="Cancel">
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }

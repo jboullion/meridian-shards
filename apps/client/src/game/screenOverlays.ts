@@ -14,7 +14,9 @@ import type { Effects, PlayerOverlayState } from "@shards/world";
  * D3DComputePlayerOverlayArea: the D3D client renders to a fixed 800 x 600 back buffer
  * stretched over the view (d3ddriver.c gScreenWidth/Height), and draws an overlay pixel
  * 1.75 back-buffer pixels wide and 2.25 tall. So a pixel is 1.75/800 of the view's width
- * and 2.25/600 of its height, whatever the window size.
+ * and 2.25/600 of its height there. Ours: we measure that on the largest 4:3 area that fits
+ * the view, so the hands keep the shape they have at 800 x 600 in a wide or tall window
+ * (the original stretches them with the window).
  */
 const OVERLAY_SX = 1.75 / 800;
 const OVERLAY_SY = 2.25 / 600;
@@ -86,8 +88,9 @@ export class ScreenOverlays {
       ctx.fillRect(0, 0, w, h);
     }
 
-    const sx = OVERLAY_SX * w,
-      sy = OVERLAY_SY * h;
+    const w43 = Math.min(w, (h * 4) / 3);
+    const sx = OVERLAY_SX * w43,
+      sy = OVERLAY_SY * ((w43 * 3) / 4);
     overlays.forEach((ov, slot) => {
       if (!ov || ov.hotspot < 1 || ov.hotspot > HOTSPOT.CENTER) return;
       const c = this.picture(slot, ov, light);

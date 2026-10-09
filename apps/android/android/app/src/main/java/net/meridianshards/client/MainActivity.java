@@ -2,6 +2,7 @@ package net.meridianshards.client;
 
 import android.Manifest;
 import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -41,6 +42,7 @@ public class MainActivity extends BridgeActivity {
         super.onResume();
         current = new WeakReference<>(this);
         ConnectionService.stop(this);
+        applyOrientation();
     }
 
     private static WeakReference<MainActivity> current = new WeakReference<>(null);
@@ -59,6 +61,23 @@ public class MainActivity extends BridgeActivity {
             prefs.edit().putBoolean("askedNotifications", true).apply();
             ActivityCompat.requestPermissions(a, new String[] { Manifest.permission.POST_NOTIFICATIONS }, 1);
         });
+    }
+
+    /**
+     * The screens before the game let the phone turn upright, for typing (host.ts allowPortrait); the
+     * game is landscape (AndroidManifest.xml sensorLandscape). Both follow the sensor.
+     */
+    static void allowPortrait(boolean allow) {
+        portrait = allow;
+        MainActivity a = current.get();
+        // Before the first onResume (the page can ask that early), onResume applies it
+        if (a != null) a.runOnUiThread(a::applyOrientation);
+    }
+
+    private static volatile boolean portrait;
+
+    private void applyOrientation() {
+        setRequestedOrientation(portrait ? ActivityInfo.SCREEN_ORIENTATION_SENSOR : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
     }
 
     /**

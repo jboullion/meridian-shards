@@ -115,7 +115,7 @@ export function DescriptionDialog({
 
   return (
     <div className="mk-modal look-modal desc-modal">
-      <Window title={look.player ? "Player Description" : "Object Description"} onClose={onClose} className="desc-dialog">
+      <Window title="" onClose={onClose} className="desc-dialog">
         <div className="desc-layout">
           <div className="desc-picture">
             <ObjIcon icons={icons} object={o} opts={group !== undefined ? { group } : undefined} />

@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "re
 import { CF } from "@shards/protocol";
 import type { GameSession } from "@shards/world";
 import {
-  ACTION_LABELS, ACTION_TABS, PRESETS, bindingLabel, mouseCode, presetSettings,
+  ACTION_LABELS, ACTION_TABS, DEFAULT_SETTINGS, PRESETS, bindingLabel, mouseCode, presetSettings,
   type Action, type ActionTab, type HaloColor, type HotkeyAlias, type KeyBinding, type Settings,
 } from "../settings.ts";
 import type { AudioPreview } from "../audio.ts";
@@ -394,11 +394,22 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
                 <div className="bind-grid">
                   {ACTION_TABS[tab].map((a: Action) => (
                     <div key={a} className="bind-row">
-                      <span className="bind-label">{ACTION_LABELS[a]}</span>
+                      <span className="bind-label">
+                        {/* Add a key: before the name, apart from the keys' × buttons */}
+                        <Button className="add" title="Add a key" onClick={() => setListening({ action: a, index: d.keys[a].length })}>
+                          +
+                        </Button>
+                        <span>{ACTION_LABELS[a]}</span>
+                      </span>
                       <span className="bind-keys">
                         {d.keys[a].map((b, i) => (
                           <span key={i} className="bind-key">
-                            <Button onClick={() => setListening({ action: a, index: i })} title="Click, then press a key or mouse button">
+                            {/* Drawn as an edit field (styles.css .key-field), so it reads as a value to change */}
+                            <Button
+                              className={listening?.action === a && listening.index === i ? "key-field listening" : "key-field"}
+                              onClick={() => setListening({ action: a, index: i })}
+                              title="Click, then press a key or mouse button"
+                            >
                               {listening?.action === a && listening.index === i ? "press a key…" : bindingLabel(b)}
                             </Button>
                             <Button className="x" title="Remove this key" onClick={() => remove(a, i)}>
@@ -406,9 +417,14 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
                             </Button>
                           </span>
                         ))}
-                        <Button className="add" title="Add a key" onClick={() => setListening({ action: a, index: d.keys[a].length })}>
-                          {listening?.action === a && listening.index === d.keys[a].length ? "press a key…" : "+"}
-                        </Button>
+                        {/* The key being added, until it's pressed */}
+                        {listening?.action === a && listening.index === d.keys[a].length && (
+                          <span className="bind-key">
+                            <Button className="key-field listening" onClick={() => setListening(null)} title="Press a key or mouse button (Esc cancels)">
+                              press a key…
+                            </Button>
+                          </span>
+                        )}
                       </span>
                     </div>
                   ))}
@@ -423,18 +439,6 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
               <Check label="Attack On Target" checked={d.attackOnTarget} onChange={(v) => set({ attackOnTarget: v })} />
               <Check label="Dynamic Lighting" checked={d.dynamicLighting} onChange={(v) => set({ dynamicLighting: v })} />
               <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
-              <label className="bind-select">
-                <span>Touch Controls</span>
-                <Select
-                  value={d.touchControls}
-                  options={[
-                    { key: "auto", label: "Auto" },
-                    { key: "on", label: "On" },
-                    { key: "off", label: "Off" },
-                  ]}
-                  onChange={(v) => set({ touchControls: v })}
-                />
-              </label>
               <Check
                 label="Original Command Typing"
                 title="Every typed line is a command, as in the original: speech needs say, and the start of a command's name will do"
@@ -800,5 +804,46 @@ export function CommandAliasesDialog({ settings, onApply, onOpen, onClose }: { s
         Hotkey Aliases...
       </Button>
     </DluDialog>
+  );
+}
+
+/**
+ * Ours: the phone's Configuration instead of the Bind Editor (no keys to bind there): how fast a
+ * drag looks around, and the Bind Editor's options that matter on a touch screen.
+ */
+export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Settings; onApply: (patch: Patch) => void; onClose: () => void }) {
+  const [d, setD] = useState<Settings>(settings);
+  const set = (patch: Patch) => setD((s) => ({ ...s, ...patch }));
+  return (
+    <Modal>
+      <Window title="Configuration" onClose={onClose} className="options-dialog touch-config">
+        <label className="touch-config-scale">
+          <span>Look Speed</span>
+          <Trackbar min={1} max={30} value={d.touchLookScale} onChange={(v) => set({ touchLookScale: v })} label="Look Speed" />
+          <span className="bind-scale-value">{d.touchLookScale}</span>
+        </label>
+        <Check label="Dynamic Lighting" checked={d.dynamicLighting} onChange={(v) => set({ dynamicLighting: v })} />
+        <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
+        <Check label="Attack On Target" checked={d.attackOnTarget} onChange={(v) => set({ attackOnTarget: v })} />
+        <div className="touch-config-buttons">
+          <Button onClick={() => set({ touchLookScale: DEFAULT_SETTINGS.touchLookScale })}>Default Speed</Button>
+          <Button
+            isDefault
+            onClick={() => {
+              onApply({
+                touchLookScale: d.touchLookScale,
+                dynamicLighting: d.dynamicLighting,
+                damageNumbers: d.damageNumbers,
+                attackOnTarget: d.attackOnTarget,
+              });
+              onClose();
+            }}
+          >
+            OK
+          </Button>
+          <Button onClick={onClose}>Cancel</Button>
+        </div>
+      </Window>
+    </Modal>
   );
 }
