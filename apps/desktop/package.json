@@ -1,6 +1,6 @@
 {
   "name": "@shards/desktop",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "productName": "Meridian Shards",
   "private": true,
   "description": "Meridian Shards: the desktop client (Electron around the browser client).",
