@@ -103,7 +103,7 @@ export function PreferencesDialog({
   };
   return (
     <>
-      <DluDialog title="Meridian Shards Preferences" size={[375, 288]} onClose={onClose}>
+      <DluDialog title="Preferences" size={[375, 288]} onClose={onClose}>
         <form onSubmit={ok}>
           <GroupBox at={[6, 3, 91, 67]} label="Targeting" />
           <Check
@@ -379,7 +379,7 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
   );
   return (
     <Modal>
-      <Window title="Meridian Shards Bind Editor" onClose={() => !listening && onClose()} className="options-dialog bind-editor">
+      <Window title="Bind Editor" onClose={() => !listening && onClose()} className="options-dialog bind-editor">
         <div className="bind-layout">
           <div className="bind-main">
             <Tabs tabs={CONFIG_TABS} active={tab} onChange={setTab} />
