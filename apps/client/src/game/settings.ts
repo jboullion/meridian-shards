@@ -352,6 +352,8 @@ export interface Settings {
    * view's pixels), or null for its place beside the map
    */
   characterWindowAt: [number, number] | null;
+  /** The Modern layout's HUD size, % (75..150): the bars, slots, map, chat and character window */
+  hudScale: number;
 }
 
 export type InterfaceStyle = "modern" | "classic";
@@ -428,6 +430,7 @@ export const DEFAULT_SETTINGS: Settings = {
   interfaceStyle: "modern",
   chatWidth: 340,
   characterWindowAt: null,
+  hudScale: 100,
 };
 
 const STORAGE_KEY = "shards.settings";

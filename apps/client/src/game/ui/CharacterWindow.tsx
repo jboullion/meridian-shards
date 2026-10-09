@@ -128,6 +128,8 @@ export function CharacterWindow({
   const anchorRef = useRef<HTMLDivElement>(null);
   const [dragAt, setDragAt] = useState<[number, number] | null>(null);
   const at = dragAt ?? settings.characterWindowAt;
+  /** The HUD size: the window is zoomed by it, so its left and top are in view pixels / zoom */
+  const zoom = settings.hudScale / 100;
   /** When the title was last pressed: a second press soon after is a double click. (Not
    * onDoubleClick: the pointer capture makes the window, not the title, its target.) */
   const lastPress = useRef(0);
@@ -171,10 +173,10 @@ export function CharacterWindow({
   // Where it was put, kept in view if the window has shrunk since; it grows down to the view's bottom
   const moved: CSSProperties | undefined = at
     ? {
-        left: `clamp(${KEEP_X}px - 100%, ${at[0]}px, 100% - ${KEEP_X}px)`,
-        top: `clamp(0px, ${at[1]}px, 100% - ${KEEP_Y}px)`,
+        left: `clamp(${KEEP_X}px - 100%, ${at[0] / zoom}px, 100% - ${KEEP_X}px)`,
+        top: `clamp(0px, ${at[1] / zoom}px, 100% - ${KEEP_Y}px)`,
         right: "auto",
-        maxHeight: `calc(100% - min(${at[1]}px, 100% - ${KEEP_Y}px) - ${BOTTOM_GAP}px)`,
+        maxHeight: `calc(100% - min(${at[1] / zoom}px, 100% - ${KEEP_Y}px) - ${BOTTOM_GAP}px)`,
       }
     : undefined;
 

@@ -446,6 +446,12 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
                 checked={d.interfaceStyle === "modern"}
                 onChange={(v) => set({ interfaceStyle: v ? "modern" : "classic" })}
               />
+              {/* Ours: the Modern HUD's size (CSS zoom on its clusters) */}
+              <label className={d.interfaceStyle === "modern" ? "hud-scale" : "hud-scale disabled"} title="The size of the Modern interface's bars, quick slots, map, chat and character window">
+                <span>HUD Size</span>
+                <Trackbar min={75} max={150} step={5} value={d.hudScale} onChange={(v) => set({ hudScale: v })} label="HUD size" />
+                <span className="bind-scale-value">{d.hudScale}%</span>
+              </label>
               <Check
                 label="Original Command Typing"
                 title="Every typed line is a command, as in the original: speech needs say, and the start of a command's name will do"

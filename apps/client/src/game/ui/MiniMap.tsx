@@ -83,7 +83,9 @@ export function MiniMap({
     const canvas = canvasRef.current;
     if (!m || !canvas || m.scale === 0) return null;
     const r = canvas.getBoundingClientRect();
-    return [Math.trunc((e.clientX - r.left - m.xo) / m.scale), Math.trunc((e.clientY - r.top - m.yo) / m.scale)];
+    // Ours: the canvas may be zoomed (the Modern HUD's size), so page pixels to the canvas's own
+    const k = r.width ? canvas.clientWidth / r.width : 1;
+    return [Math.trunc(((e.clientX - r.left) * k - m.xo) / m.scale), Math.trunc(((e.clientY - r.top) * k - m.yo) / m.scale)];
   };
 
   useEffect(() => {

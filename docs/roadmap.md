@@ -247,6 +247,7 @@ Ours, beside the original's layout: Minecraft- and Diablo-style HUD clusters ove
   - Where a worn item goes comes from `itemslots.json`, which the asset build reads from each Kod item class's `viUse_type` and pictures (`tools/assets/itemSlots.ts`; 154 pictures on our server). Used items with no slot stay in the bag with the sun.
   - Double click or drag to put on and take off; right click looks.
   - Drag its title to move it; the spot is kept (`characterWindowAt`) and its title always stays in view. Double click the title to put it back beside the map.
+- [x] **HUD Size** (the Bind Editor's Options, under Modern Interface): 75–150 %, the bars, quick slots, map, target, chat and character window together, each grown where it stands (CSS `zoom`).
 - Tested on our server with Shardbot: a helmet, a ring of acid resistance and a metal shield put on and taken off, the mace on Weapon, the layout at 1024 × 768 and 1600 × 900, the chat's fading and hover panel, the target frame, and switching to Classic and back while playing.
 
 ## What the slice must prove

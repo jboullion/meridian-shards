@@ -57,7 +57,6 @@ The Modern layout (`ui/ModernHud.tsx`, `ui/CharacterWindow.tsx`) has no counterp
 
 | What | What it needs |
 |---|---|
-| A HUD scale | The clusters have fixed sizes; a slider (CSS `zoom`) would suit large or small screens. |
 | Hiding the interface | A key to hide the HUD for screenshots. |
 | Minecraft's click to carry | Items move by drag and drop and double clicks, not by picking a stack up on the cursor and splitting it. |
 | A separate spell bar | The remaster has items on the hotbar and spells on their own bar; ours mixes both in ten slots. |

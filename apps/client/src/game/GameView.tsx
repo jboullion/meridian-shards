@@ -1153,7 +1153,9 @@ export function GameView({
     handle.setPointerCapture(e.pointerId);
     if (modern) {
       const left = (handle.parentElement ?? handle).getBoundingClientRect().left;
-      const widthAt = (x: number) => Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(game.clientWidth / 2, x - left)));
+      // The chat is zoomed by the HUD size: its width is in its own pixels, the pointer's in the page's
+      const zoom = settings.hudScale / 100;
+      const widthAt = (x: number) => Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(game.clientWidth / 2, x - left) / zoom));
       let w = widthAt(e.clientX);
       const move = (ev: PointerEvent) => {
         w = widthAt(ev.clientX);
@@ -1215,7 +1217,13 @@ export function GameView({
     <div
       className={`game${touch ? " touch-ui" : ""}${modern ? " modern-ui" : ""}${touch && chatOpen ? " chat-open" : ""}${touch && drawerOpen ? " drawer-open" : ""}`}
       ref={gameRef}
-      style={{ "--chat-height": `${dragHeight ?? settings.chatHeight}px`, "--chat-width": `${dragWidth ?? settings.chatWidth}px` } as CSSProperties}>
+      style={
+        {
+          "--chat-height": `${dragHeight ?? settings.chatHeight}px`,
+          "--chat-width": `${dragWidth ?? settings.chatWidth}px`,
+          "--hud-scale": settings.hudScale / 100,
+        } as CSSProperties
+      }>
       <TitleBar
         className="game-title"
         assets={assets}

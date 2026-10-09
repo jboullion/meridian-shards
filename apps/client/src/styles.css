@@ -1473,6 +1473,27 @@ button.link {
   text-align: right;
 }
 
+/* The Bind Editor's HUD Size, under Modern Interface (greyed while it's off) */
+.hud-scale {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 6px;
+  margin: 2px 0 4px;
+  color: var(--ui-text, #e7e7e7);
+  white-space: nowrap;
+}
+
+/* The name and the % on one line, the slider the box's width under them */
+.hud-scale .mk-track {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.hud-scale.disabled {
+  opacity: 0.5;
+}
+
 @media (max-width: 700px) {
   .bind-layout {
     grid-template-columns: 1fr;
@@ -2762,6 +2783,17 @@ canvas.server-wait {
   grid-row: 2;
 }
 
+/* HUD Size (settings.ts hudScale): each cluster zoomed where it stands. Standardized CSS zoom
+   multiplies their own lengths (offsets included), not percentages of the view. */
+.game.modern-ui .unit-frame,
+.game.modern-ui .target-frame,
+.game.modern-ui .map-cluster,
+.game.modern-ui .action-bar,
+.game.modern-ui .chat,
+.game.modern-ui .character-window-anchor {
+  zoom: var(--hud-scale, 1);
+}
+
 /* A box sunk into the stone: the bag's cells, the paper doll's, the quick slots */
 .game.modern-ui .equip-box,
 .game.modern-ui .cw-bag .inv-item,
@@ -3130,7 +3162,7 @@ canvas.server-wait {
 }
 
 .game.modern-ui .view .select-hint {
-  bottom: 120px;
+  bottom: calc(120px * var(--hud-scale, 1));
 }
 
 .game.modern-ui .view .fps {
