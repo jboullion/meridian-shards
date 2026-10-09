@@ -50,9 +50,12 @@ const wss = new WebSocketServer({
 http.on("upgrade", (req, socket, head) => {
   const fwd = String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim();
   const ip = (TRUST_PROXY && fwd) || req.socket.remoteAddress || "?";
-  const origin = req.headers.origin ?? "";
-  if (ORIGINS.length && !ORIGINS.includes(origin)) {
-    log(`reject ${ip}: origin ${origin || "(none)"}`);
+  // Unreal Meridian's WebSocket client (the engine's libwebsockets) sends its own Origin, the host,
+  // before the one the game sets, so a request may carry two. A browser always sends exactly one,
+  // so letting any allowed one through admits no page the list doesn't.
+  const origins = req.headersDistinct.origin ?? [];
+  if (ORIGINS.length && !origins.some((o) => ORIGINS.includes(o))) {
+    log(`reject ${ip}: origin ${origins.join(" + ") || "(none)"}`);
     socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
     return;
   }
