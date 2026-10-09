@@ -339,7 +339,22 @@ export interface Settings {
   /** The chat window: the tab shown, and its height in pixels (dragged by its top edge) */
   chatTab: ChatTab;
   chatHeight: number;
+  /**
+   * Ours: the desktop's layout. Classic is the original's (the view, the chat under it, the
+   * interface column); Modern puts the view in the whole window with the HUD over it (ui/ModernHud.tsx).
+   * The phone has its own (touchUi).
+   */
+  interfaceStyle: InterfaceStyle;
+  /** The Modern layout's chat: its width in pixels, dragged by its right edge */
+  chatWidth: number;
+  /**
+   * The Modern layout's character window: where its title was dragged to (left and top in the
+   * view's pixels), or null for its place beside the map
+   */
+  characterWindowAt: [number, number] | null;
 }
+
+export type InterfaceStyle = "modern" | "classic";
 
 /** The chat window's tabs: everything, or one channel (packages/world chatChannel.ts) */
 export type ChatTab = "all" | "chat" | "combat" | "server";
@@ -352,7 +367,7 @@ export function touchUi(s: Settings): boolean {
   return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 }
 
-const SETTINGS_VERSION = 5;
+const SETTINGS_VERSION = 6;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
@@ -410,6 +425,9 @@ export const DEFAULT_SETTINGS: Settings = {
   mapZoom: 1,
   chatTab: "all",
   chatHeight: 168,
+  interfaceStyle: "modern",
+  chatWidth: 340,
+  characterWindowAt: null,
 };
 
 const STORAGE_KEY = "shards.settings";
@@ -440,6 +458,8 @@ export function migrate(s: SavedSettings): Settings {
   }
   // Version 5: Touch Controls left the Bind Editor, so nothing could undo an On or Off saved before
   if (version < 5) out.touchControls = "auto";
+  // Version 6 (the Modern interface): new players get it, players who had settings keep the layout they knew
+  if (version < 6) out.interfaceStyle = "classic";
   delete (out as SavedSettings).mouseSpeed;
   delete (out as SavedSettings).rightClickLooks;
   if (!Array.isArray(out.hotkeyAliases) || out.hotkeyAliases.length !== 12) out.hotkeyAliases = DEFAULT_HOTKEY_ALIASES;

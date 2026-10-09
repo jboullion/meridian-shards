@@ -92,6 +92,12 @@ export class AssetStore {
     return JSON.parse(new TextDecoder().decode(await this.download("roomlinks.json"))) as Record<string, string[]>;
   }
 
+  /** Picture file -> where its item is worn (itemslots.json from the asset build); empty without one. */
+  async itemSlots(): Promise<Record<string, string>> {
+    if (!this.has("itemslots.json")) return {};
+    return JSON.parse(new TextDecoder().decode(await this.download("itemslots.json"))) as Record<string, string>;
+  }
+
   async palette(): Promise<Palette> {
     return parsePaletteBin(await this.fetchBytes("palette.bin"));
   }

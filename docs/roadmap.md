@@ -232,6 +232,23 @@ The goal: everything the original client and its modules do. The comparison (the
   - **The admin console** (`module/admin`, for admin characters, who get "admin.dll" on logon): Shift+4 opens it; the command line with its history, the server's answers (`BP_REQ_ADMIN`, `BP_ADMIN`), Go to room, Reset data, and the users logged on with Show, Go to and Rescue. With the console showing, looking at something shows the object there. The object box and its dialogs are left out. How to use it: [admin-console.md](admin-console.md).
   - Tested on our server: a game between Shardbot in the browser and a scripted Shardpal (moves both ways, red's castling flag, resigning, restarting), and Shardadmin's console (`show status`, `show object` from a right click, hiding and reopening).
 
+### 14. The Modern interface (2026-10-09)
+
+Ours, beside the original's layout: Minecraft- and Diablo-style HUD clusters over a view that fills the window, in the original's stone art, after the UE remaster's ADR 0009 UI. Desktop only; the phone keeps its touch layout. New installs start in Modern; players who already had settings keep Classic. It's switched on the ☰ menu (Modern interface) or the Bind Editor's Options.
+
+- [x] **The HUD** (`ui/ModernHud.tsx`):
+  - our face, name, Rest/Stand and mail, and our enchantments at the top left;
+  - the target's picture and name at the top centre (red if attackable);
+  - the minimap in a round frame at the top right (a click opens the full map, and a click on that closes it), with zoom buttons and the room's name and enchantments;
+  - health, mana, vigor, the quick slots and experience at the bottom centre.
+- [x] **The hands** stay in the view's corners. Beside the action bar the swing showed a straight cut: the weapon art (`pov*.bgf`) is cut along its outer edge, where the original runs it off the screen.
+- [x] **The chat** runs down the left side, its width dragged by the right edge. Idle, only lines from the last 10 s show over the view; hovering or typing shows the whole panel.
+- [x] **The character window** (`ui/CharacterWindow.tsx`; I): the five stat tabs; on Inventory, a paper doll with Head, Neck, Shirt, Body, Legs, Hands, two rings, Off hand and Weapon, what we wield, weight and bulk from the Stats group, and the bag as a grid of sunk boxes.
+  - Where a worn item goes comes from `itemslots.json`, which the asset build reads from each Kod item class's `viUse_type` and pictures (`tools/assets/itemSlots.ts`; 154 pictures on our server). Used items with no slot stay in the bag with the sun.
+  - Double click or drag to put on and take off; right click looks.
+  - Drag its title to move it; the spot is kept (`characterWindowAt`) and its title always stays in view. Double click the title to put it back beside the map.
+- Tested on our server with Shardbot: a helmet, a ring of acid resistance and a metal shield put on and taken off, the mace on Weapon, the layout at 1024 × 768 and 1600 × 900, the chat's fading and hover panel, the target frame, and switching to Classic and back while playing.
+
 ## What the slice must prove
 
 - [x] An unmodified Server 104 `blakserv` (plus config changes only) serves browser players through the gateway (the protocol side; proven with the headless client).

@@ -12,8 +12,7 @@
 // long press examines (gameScene.ts, onPointerDown...).
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import type { ObjectInfo } from "@shards/protocol";
-import type { ChatLine, GameSession, WorldState } from "@shards/world";
+import type { ChatLine, GameSession } from "@shards/world";
 import type { TouchMove } from "../gameScene.ts";
 import type { IconRenderer } from "../icons.ts";
 import type { Action, Settings } from "../settings.ts";
@@ -21,6 +20,7 @@ import { HudBars, HudEnchantments, ObjIcon } from "./Sidebar.tsx";
 import { useWorld } from "./hooks.ts";
 import { QuickWheel } from "./QuickSlots.tsx";
 import type { QuickSlots } from "../quickSlots.ts";
+import { wieldedWeapon } from "../equipment.ts";
 
 /** The joystick's knob travel, px; past DEAD of it the move starts, past RUN it runs */
 const RADIUS = 37;
@@ -142,17 +142,6 @@ function ActionButton({
       {children ?? label}
     </button>
   );
-}
-
-/**
- * The weapon we wield: the right hand's overlay carries its name (player.kod AddWindowOverlay:
- * PWO_RIGHT_HAND, @GetName); the bare hand's has none. The inventory item in use with that name.
- */
-function wieldedWeapon(world: WorldState): ObjectInfo | undefined {
-  const hand = world.playerOverlays[1];
-  if (!hand?.info.nameRes) return undefined;
-  for (const o of world.inventory.values()) if (o.nameRes === hand.info.nameRes && world.inUse.has(o.id)) return o;
-  return undefined;
 }
 
 /** The Attack button's face: the weapon we wield over the word, or just the word bare handed. */

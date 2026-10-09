@@ -27,7 +27,9 @@ import {
   type ActionWindow,
 } from "./ui/OptionsDialogs.tsx";
 import { Sidebar, type Tab } from "./ui/Sidebar.tsx";
-import { TouchControls } from "./ui/TouchControls.tsx";
+import { ActionBar, MapCluster, TargetFrame, UnitFrame } from "./ui/ModernHud.tsx";
+import { CharacterWindow } from "./ui/CharacterWindow.tsx";
+import { TouchControls, tickerColor } from "./ui/TouchControls.tsx";
 import { MessageBox, closeTopWindow } from "./ui/kit.tsx";
 import { isProfane } from "./profanity.ts";
 import { AnnotateDialog } from "./ui/AnnotateDialog.tsx";
@@ -50,6 +52,10 @@ const CHAT_TABS: { tab: ChatTab; label: string }[] = [
   { tab: "combat", label: "Combat" },
   { tab: "server", label: "Server" },
 ];
+/** The Modern interface's chat: lines show this long after they come, then fade (until hovered), ms */
+const CHAT_FRESH_MS = 10000;
+/** Its width, dragged by its right edge: at least this */
+const MIN_CHAT_WIDTH = 220;
 /** The chat window's height, dragged by its top edge: at least this, and leaving the view this much */
 const MIN_CHAT_HEIGHT = 60;
 const MIN_VIEW_HEIGHT = 160;
@@ -198,6 +204,31 @@ export function GameView({
   const [fullMap, setFullMap] = useState(false);
   /** The phone layout (Touch Controls): the chat and the interface slide out over the view */
   const touch = touchUi(settings);
+  /** The Modern interface (ours, desktop only): the view fills the window, the HUD over it (ui/ModernHud.tsx) */
+  const modern = !touch && settings.interfaceStyle === "modern";
+  /** The Modern interface's character window (ui/CharacterWindow.tsx), on the `tab` shown */
+  const [characterOpen, setCharacterOpen] = useState(false);
+  /** itemslots.json: where worn items go on its paper doll */
+  const [itemSlots, setItemSlots] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let live = true;
+    assets
+      .itemSlots()
+      .then((t) => live && setItemSlots(t))
+      .catch(() => {
+        // Without it, everything in use stays in the bag
+      });
+    return () => {
+      live = false;
+    };
+  }, [assets]);
+  /** A clock for the Modern chat's fading lines, ticking once a second while it's shown */
+  const [chatNow, setChatNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!modern) return;
+    const t = setInterval(() => setChatNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [modern]);
   const [chatOpen, setChatOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /** When the phone layout's chat was last open, for the mark on its button */
@@ -211,6 +242,8 @@ export function GameView({
   const [fps, setFps] = useState<number | null>(null);
   /** The chat window's height while its edge is being dragged (saved on letting go) */
   const [dragHeight, setDragHeight] = useState<number | null>(null);
+  /** The Modern chat's width while its edge is being dragged */
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
   const gameRef = useRef<HTMLDivElement>(null);
   /** When each chat tab was last looked at, for the new-lines mark on the others */
   const [seenAt, setSeenAt] = useState<Record<ChatTab, number>>(() => {
@@ -597,6 +630,8 @@ export function GameView({
     const toggle = (type: "preferences" | "configuration" | "actions") => setModal((m) => (m?.type === type ? null : { type }));
     switch (a) {
       case "inventory":
+        // The Modern interface: the key opens and closes the character window, on its bag
+        if (modern) setCharacterOpen((open) => !open || tab !== "inventory");
         return setTab("inventory");
       case "settings":
         return toggle("preferences");
@@ -653,6 +688,7 @@ export function GameView({
 
   /** mermain.c InterfaceTab: keyboard focus to the inventory (or the stat list showing) */
   const focusInterface = () => {
+    if (modern) setCharacterOpen(true);
     setTab("inventory");
     setTimeout(() => (document.querySelector<HTMLElement>(".inventory-grid .inv-item.selected, .inventory-grid .inv-item") ?? null)?.focus());
   };
@@ -1108,13 +1144,33 @@ export function GameView({
     atBottomRef.current = true;
     updateSettings({ chatTab: tab });
   };
-  /** Drag the chat window's top edge to make it taller or shorter */
+  /** Drag the chat window's top edge to make it taller or shorter (the Modern chat: its right edge, wider or narrower) */
   const resizeChat = (e: ReactPointerEvent<HTMLDivElement>) => {
     const game = gameRef.current;
     if (!game) return;
     e.preventDefault();
     const handle = e.currentTarget;
     handle.setPointerCapture(e.pointerId);
+    if (modern) {
+      const left = (handle.parentElement ?? handle).getBoundingClientRect().left;
+      const widthAt = (x: number) => Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(game.clientWidth / 2, x - left)));
+      let w = widthAt(e.clientX);
+      const move = (ev: PointerEvent) => {
+        w = widthAt(ev.clientX);
+        setDragWidth(w);
+      };
+      const up = () => {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        handle.removeEventListener("pointercancel", up);
+        setDragWidth(null);
+        updateSettings({ chatWidth: w });
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+      handle.addEventListener("pointercancel", up);
+      return;
+    }
     const bottom = game.getBoundingClientRect().bottom;
     const max = game.clientHeight - MIN_VIEW_HEIGHT;
     const heightAt = (y: number) => Math.round(Math.max(MIN_CHAT_HEIGHT, Math.min(max, bottom - y)));
@@ -1145,11 +1201,21 @@ export function GameView({
     return items.length ? [{ label: session.resource(nameRes) ?? `School ${school + 1}`, items }] : [];
   });
 
+  // Ours: of mermain.c default_buttons and mailnews.c mail_buttons, only Rest/Stand and the
+  // mailbox, beside the portrait instead of a toolbar over the view
+  const toolbarButtons =
+    settings.toolbar && !touch
+      ? [
+          { bitmap: "rest.bmp", name: "Rest/Stand", pressed: resting, onClick: () => runCommand(resting ? "stand" : "rest") },
+          { bitmap: "mailbox.bmp", name: "Read mail", onClick: () => runCommand("mail") },
+        ]
+      : undefined;
+
   return (
     <div
-      className={`game${touch ? " touch-ui" : ""}${touch && chatOpen ? " chat-open" : ""}${touch && drawerOpen ? " drawer-open" : ""}`}
+      className={`game${touch ? " touch-ui" : ""}${modern ? " modern-ui" : ""}${touch && chatOpen ? " chat-open" : ""}${touch && drawerOpen ? " drawer-open" : ""}`}
       ref={gameRef}
-      style={{ "--chat-height": `${dragHeight ?? settings.chatHeight}px` } as CSSProperties}>
+      style={{ "--chat-height": `${dragHeight ?? settings.chatHeight}px`, "--chat-width": `${dragWidth ?? settings.chatWidth}px` } as CSSProperties}>
       <TitleBar
         className="game-title"
         assets={assets}
@@ -1157,6 +1223,10 @@ export function GameView({
         menu={[
           { label: "Preferences…", onSelect: () => setModal({ type: "preferences" }) },
           { label: "Configuration…", onSelect: () => setModal({ type: "configuration" }) },
+          // Ours: the Modern interface or the original's (the phone has its own)
+          ...(touch
+            ? []
+            : [{ label: "Modern interface", checked: modern, onSelect: () => updateSettings({ interfaceStyle: modern ? "classic" : "modern" }) }]),
           // actions.c: each item runs its typed command
           { label: "Actions", items: ACTIONS_MENU.map((a) => (a ? { label: a[1], onSelect: () => runCommand(a[0]) } : { label: "", separator: true })) },
           ...(spellsMenu.length ? [{ label: "Spells", items: spellsMenu }] : []),
@@ -1200,7 +1270,7 @@ export function GameView({
         <div ref={labelsRef} className="labels" />
         <div className="crosshair" />
         {fullMap && (
-          <div className="full-map" title="Map (press the Map key again to close)">
+          <div className="full-map" title={modern ? "Map (click it, or press the Map key, to close)" : "Map (press the Map key again to close)"}>
             <MiniMap
               world={session.world}
               getRoom={() => sceneRef.current?.currentRoom ?? null}
@@ -1209,6 +1279,7 @@ export function GameView({
               annotations={settings.mapAnnotations ? annotations?.list : undefined}
               annotationIcon={assets.url("ui/annotate.bmp")}
               onAnnotate={annotateAt}
+              onClick={modern ? () => setFullMap(false) : undefined}
               tooltips={settings.tooltips}
             />
           </div>
@@ -1240,7 +1311,7 @@ export function GameView({
             onCancelSelect={() => sceneRef.current?.select(null)}
           />
         )}
-        {!touch && (
+        {!touch && !modern && (
           <Hotbar
             session={session}
             icons={icons}
@@ -1251,6 +1322,67 @@ export function GameView({
             onSet={setSlot}
             onSwap={swapSlots}
           />
+        )}
+        {modern && (
+          <>
+            <UnitFrame
+              session={session}
+              icons={icons}
+              assets={assets}
+              settings={settings}
+              buttons={toolbarButtons}
+              selecting={selecting}
+              onSelectSelf={() => selfInfo && selectObject(selfInfo.id)}
+              onLook={(id) => lookAt(id, DESC.NONE)}
+            />
+            <TargetFrame session={session} icons={icons} target={target} onLook={(id) => lookAt(id, DESC.NONE)} onClear={() => sceneRef.current?.press("targetClear")} />
+            <MapCluster
+              session={session}
+              icons={icons}
+              assets={assets}
+              settings={settings}
+              getRoom={() => sceneRef.current?.currentRoom ?? null}
+              roomName={roomName}
+              annotations={annotations?.list ?? []}
+              onAnnotate={annotateAt}
+              onLook={(id) => lookAt(id, DESC.NONE)}
+              onZoom={(dir) => handleAction(dir > 0 ? "mapZoomIn" : "mapZoomOut")}
+              onMap={() => setFullMap((v) => !v)}
+            />
+            <ActionBar
+              session={session}
+              icons={icons}
+              settings={settings}
+              slots={quick.slots}
+              selecting={selecting}
+              onSelectSelf={() => selfInfo && selectObject(selfInfo.id)}
+              onUse={activateSlot}
+              onEdit={(i) => setModal({ type: "quickSlot", index: i })}
+              onSet={setSlot}
+              onSwap={swapSlots}
+            />
+            {characterOpen && (
+              <CharacterWindow
+                session={session}
+                icons={icons}
+                assets={assets}
+                settings={settings}
+                itemSlots={itemSlots}
+                tab={tab}
+                onTab={setTab}
+                onClose={() => setCharacterOpen(false)}
+                onLookItem={lookInventoryItem}
+                onLook={(id) => lookAt(id, DESC.NONE)}
+                onDropItem={drop}
+                onApplyItem={(o) => sceneRef.current?.beginSelect((t) => session.apply(o.id, t))}
+                onPut={putAway}
+                onTabOut={(forward) => (forward ? inputRef.current?.focus() : focusView())}
+                selecting={selecting}
+                onSelectObject={selectObject}
+                onCast={castSpell}
+              />
+            )}
+          </>
         )}
         {selecting && !touch && <div className="select-hint">Choose a target, or your face or bars for yourself (Esc or right click cancels)</div>}
         {(phase === "entering" || status?.loading) && <div className="loading">Entering…</div>}
@@ -1462,7 +1594,8 @@ export function GameView({
           }}
         >
           {shown.map((l, i) => (
-            <div key={i} className="chat-line">
+            // The Modern chat fades its lines once they're CHAT_FRESH_MS old, until it's hovered
+            <div key={i} className={modern && chatNow - l.time < CHAT_FRESH_MS ? "chat-line fresh" : "chat-line"}>
               {/* Add chat timestamps (config.chat_time_stamps) */}
               {settings.chatTimestamps && <span className="chat-time">[{new Date(l.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}] </span>}
               {l.spans.map((s, j) => (
@@ -1472,7 +1605,8 @@ export function GameView({
                     // Show colored text off (config.colorcodes): plain text, no colour codes
                     settings.coloredText
                       ? {
-                          color: s.color,
+                          // Over the view (Modern), dark colours lifted as the phone's ticker does
+                          color: modern ? tickerColor(s.color) : s.color,
                           fontWeight: s.bold ? "bold" : undefined,
                           fontStyle: s.italic ? "italic" : undefined,
                           textDecoration: s.underline ? "underline" : undefined,
@@ -1518,37 +1652,30 @@ export function GameView({
           />
         </form>
       </div>
-      <Sidebar
-        session={session}
-        icons={icons}
-        assets={assets}
-        getRoom={() => sceneRef.current?.currentRoom ?? null}
-        tab={tab}
-        onTab={setTab}
-        settings={settings}
-        onLookItem={lookInventoryItem}
-        onLook={(id) => lookAt(id, DESC.NONE)}
-        onDropItem={drop}
-        onApplyItem={(o) => sceneRef.current?.beginSelect((target) => session.apply(o.id, target))}
-        onPut={putAway}
-        onTabOut={(forward) => (forward ? inputRef.current?.focus() : focusView())}
-        target={target}
-        selecting={selecting}
-        onSelectObject={selectObject}
-        onCast={castSpell}
-        // Ours: of mermain.c default_buttons and mailnews.c mail_buttons, only Rest/Stand and the
-        // mailbox, beside the portrait instead of a toolbar over the view
-        buttons={
-          settings.toolbar && !touch
-            ? [
-                { bitmap: "rest.bmp", name: "Rest/Stand", pressed: resting, onClick: () => runCommand(resting ? "stand" : "rest") },
-                { bitmap: "mailbox.bmp", name: "Read mail", onClick: () => runCommand("mail") },
-              ]
-            : undefined
-        }
-        annotations={annotations?.list ?? []}
-        onAnnotate={annotateAt}
-      />
+      {!modern && (
+        <Sidebar
+          session={session}
+          icons={icons}
+          assets={assets}
+          getRoom={() => sceneRef.current?.currentRoom ?? null}
+          tab={tab}
+          onTab={setTab}
+          settings={settings}
+          onLookItem={lookInventoryItem}
+          onLook={(id) => lookAt(id, DESC.NONE)}
+          onDropItem={drop}
+          onApplyItem={(o) => sceneRef.current?.beginSelect((target) => session.apply(o.id, target))}
+          onPut={putAway}
+          onTabOut={(forward) => (forward ? inputRef.current?.focus() : focusView())}
+          target={target}
+          selecting={selecting}
+          onSelectObject={selectObject}
+          onCast={castSpell}
+          buttons={toolbarButtons}
+          annotations={annotations?.list ?? []}
+          onAnnotate={annotateAt}
+        />
+      )}
       {touch && drawerOpen && <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} />}
       {alert && <MessageBox text={alert} onResult={() => setAlert(null)} />}
       {quitAsk && (

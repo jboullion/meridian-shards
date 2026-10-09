@@ -23,14 +23,14 @@ import { DRAG_SPELL } from "../quickSlots.ts";
 const OF_APPLYABLE = 0x1000;
 
 /** statmain.c: main stat numbers */
-const STAT_HP = 1,
+export const STAT_HP = 1,
   STAT_MP = 2,
   STAT_VIGOR = 3,
   STAT_XP = 4;
-const MIN_VIGOR = 10; // statmain.h: below this you can't run; the bar turns red
+export const MIN_VIGOR = 10; // statmain.h: below this you can't run; the bar turns red
 
 export type Tab = "inventory" | "stats" | "spells" | "skills" | "quests";
-const TABS: { tab: Tab; group: number; bitmap: string; label: string }[] = [
+export const TABS: { tab: Tab; group: number; bitmap: string; label: string }[] = [
   { tab: "inventory", group: STAT_GROUP.INVENTORY, bitmap: "statbtn_left_invent.bmp", label: "Inventory" },
   { tab: "stats", group: STAT_GROUP.STATS, bitmap: "statbtn_left_stats.bmp", label: "Statistics" },
   { tab: "spells", group: STAT_GROUP.SPELLS, bitmap: "statbtn_left_spell.bmp", label: "Spells" },
@@ -62,7 +62,7 @@ export function ObjIcon({
  * statbtn.c StatButtonDrawItem: the group's glyph on the left, the middle piece repeated up to
  * the right piece, each from the up or down half of its bitmap, drawn transparently.
  */
-function StatTab({
+export function StatTab({
   assets, bitmap, label, tooltip, active, onClick,
 }: {
   assets: AssetStore;
@@ -86,17 +86,25 @@ function StatTab({
   );
 }
 
-/** graphctl.c GraphCtlPaint: frame, value bar, limit bar, background, the number. */
-function StatBar({ stat, main = false, xpAsPercent = false }: { stat: Statistic; main?: boolean; xpAsPercent?: boolean }) {
+/**
+ * A bar's fill, as percentages: the value, and the limit bar up to the current maximum (none for
+ * XP). StatsMainChange: health and mana run to their current maximum. `low`: vigor too low to run.
+ */
+export function barValues(stat: Statistic, main: boolean): { value: number; limit: number; max: number; low: boolean; xp: boolean } {
   const n = stat.numeric!;
   const xp = main && stat.num === STAT_XP;
-  // StatsMainChange: health and mana run to their current maximum
   const max = main && (stat.num === STAT_HP || stat.num === STAT_MP) ? n.currentMax : n.max;
   const span = max - n.min;
   const pct = (v: number) => (span === 0 ? 100 : Math.max(0, Math.min(100, ((v - n.min) * 100) / span)));
   const value = pct(n.value);
   const limit = xp ? value : Math.max(value, pct(n.currentMax));
-  const low = main && stat.num === STAT_VIGOR && n.value < MIN_VIGOR;
+  return { value, limit, max, low: main && stat.num === STAT_VIGOR && n.value < MIN_VIGOR, xp };
+}
+
+/** graphctl.c GraphCtlPaint: frame, value bar, limit bar, background, the number. */
+export function StatBar({ stat, main = false, xpAsPercent = false }: { stat: Statistic; main?: boolean; xpAsPercent?: boolean }) {
+  const n = stat.numeric!;
+  const { value, limit, low, xp } = barValues(stat, main);
   // Display XP as percent (config.xp_display_percent)
   const text = xp ? (xpAsPercent ? `${Math.floor(value)}% XP` : `${n.value} XP / ${n.max} XP`) : String(n.value);
   return (
@@ -342,16 +350,23 @@ export function Sidebar({
   );
 }
 
-function PortraitIcon({ icons, object }: { icons: IconRenderer; object: ObjectInfo }) {
+export function PortraitIcon({ icons, object }: { icons: IconRenderer; object: ObjectInfo }) {
   const key = `portrait:${icons.key(object)}`;
   const url = useAsyncImage(key, () => icons.portrait(object));
   return url ? <img src={url} alt="" draggable={false} /> : null;
 }
 
 /** inventry.c: a grid of 40x40 boxes; in-use items sit on the yellow sun (inuse.bmp). */
-function Inventory({
+export function Inventory({
   session, icons, assets, onLookItem, onDropItem, onApplyItem, onPut, onTabOut, selecting, onSelectObject, showAmounts, tooltips,
+  hidden, minCells = 0, onDropOnGrid,
 }: {
+  /** Ours (the Modern interface's bag): items not shown here (those on the paper doll) */
+  hidden?: ReadonlySet<number>;
+  /** Ours: empty boxes after the items, up to this many cells in all */
+  minCells?: number;
+  /** Ours: an item dropped on the bag's empty space (taking it off the paper doll) */
+  onDropOnGrid?: (id: number) => void;
   /** Our item names on hover, with Show tooltips */
   tooltips: boolean;
   /** Show amounts for inventory items (config.inventory_num) */
@@ -370,7 +385,7 @@ function Inventory({
   const world = session.world;
   const [selected, setSelected] = useState<number | null>(null);
   const inUseImg = useKeyedImage(assets.url("ui/inuse.bmp"));
-  const items = [...world.inventory.values()];
+  const items = [...world.inventory.values()].filter((o) => !hidden?.has(o.id));
   const rs = (id: number) => session.resource(id) ?? "";
   const gridRef = useRef<HTMLDivElement>(null);
   // inventry.c A_TOGGLEUSE: an appliable item is used on something; others go in or out of use
@@ -392,7 +407,19 @@ function Inventory({
     Numpad8: [-1, 0], Numpad2: [1, 0], Numpad4: [0, -1], Numpad6: [0, 1], Numpad9: [-1, 1], Numpad7: [-1, -1], Numpad3: [1, 1], Numpad1: [1, -1],
   };
   return (
-    <div className="inventory-grid" ref={gridRef}>
+    <div
+      className="inventory-grid"
+      ref={gridRef}
+      onDragOver={(e) => onDropOnGrid && e.dataTransfer.types.includes("application/x-shards-item") && e.preventDefault()}
+      onDrop={(e) => {
+        if (!onDropOnGrid) return;
+        const id = Number(e.dataTransfer.getData("application/x-shards-item"));
+        if (!world.inventory.get(id)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onDropOnGrid(id);
+      }}
+    >
       {items.map((o) => (
         <div
           key={o.id}
@@ -414,7 +441,9 @@ function Inventory({
             if (!world.inventory.get(id)) return;
             e.preventDefault();
             e.stopPropagation();
-            if (world.moveInventoryItem(id, o.id)) session.inventoryMove(id, o.id);
+            // From the paper doll: taken off, not moved
+            if (hidden?.has(id)) onDropOnGrid?.(id);
+            else if (world.moveInventoryItem(id, o.id)) session.inventoryMove(id, o.id);
           }}
           // inventry.c: VK_RBUTTON is A_LOOKINVENTORY
           onContextMenu={(e: ReactMouseEvent) => {
@@ -443,12 +472,15 @@ function Inventory({
           {showAmounts && isNumberItem(o.id) && <span className="inv-num">{o.amount}</span>}
         </div>
       ))}
+      {Array.from({ length: Math.max(0, minCells - items.length) }, (_, i) => (
+        <div key={`empty-${i}`} className="inv-item empty" aria-hidden />
+      ))}
     </div>
   );
 }
 
 /** statnum.c: name on the left; a bar with the number, or a resource string, on the right. */
-function NumericStats({ stats, rs }: { stats: Statistic[]; rs: (id: number) => string }) {
+export function NumericStats({ stats, rs }: { stats: Statistic[]; rs: (id: number) => string }) {
   return (
     <div className="stat-rows">
       {[...stats]
@@ -468,7 +500,7 @@ function NumericStats({ stats, rs }: { stats: Statistic[]; rs: (id: number) => s
 }
 
 /** statlist.c: icon and "name NN%" (quests: name only; headers green). */
-function StatList({
+export function StatList({
   session, icons, group, onLook, onCast,
 }: {
   session: GameSession;

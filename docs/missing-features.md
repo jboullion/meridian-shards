@@ -51,6 +51,20 @@ Phase 5 is done: chess and the basic admin console. What's left:
 | The admin console's object box | `admindlg.c` (IDC_OBJECTLIST, `adminprs.c`), IDD_ADMINMOVE, IDD_ADMINVALUE | A shown object's properties in a list, each editable (`set object`), its owner, Move... and Send...; left out of the basic console. Typed commands do the same. |
 | The admin console's Refresh | `admindlg.c` IDC_REFRESH | Our user list follows who's on as it changes, so there's no button. |
 
+## The Modern interface (ours)
+
+The Modern layout (`ui/ModernHud.tsx`, `ui/CharacterWindow.tsx`) has no counterpart in the original; Classic is the original's. What it doesn't have yet:
+
+| What | What it needs |
+|---|---|
+| A HUD scale | The clusters have fixed sizes; a slider (CSS `zoom`) would suit large or small screens. |
+| Hiding the interface | A key to hide the HUD for screenshots. |
+| Minecraft's click to carry | Items move by drag and drop and double clicks, not by picking a stack up on the cursor and splitting it. |
+| A separate spell bar | The remaster has items on the hotbar and spells on their own bar; ours mixes both in ten slots. |
+| Searching the spell list | The remaster's spell and skill pages filter as you type. |
+| The phone | The touch layout is unchanged. |
+| The target's health and enchantment timers | The server sends neither. |
+
 ## Deliberately different or left out
 
 | What | Why |

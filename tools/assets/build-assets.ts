@@ -15,6 +15,8 @@
 // terms (ui/profane.dat), the login dialog's icon (ui/icon1.ico), the view's cursors
 // (ui/*.cur), the Heidelberg title font (ui/heidelb1.ttf, font.c FONT_TITLES) and the snow
 // texture (ui/weather_snow.png, d3dparticle.c).
+// And itemslots.json, where each worn item goes on the Modern interface's paper doll, from the
+// Kod item classes (itemSlots.ts).
 // And roomlinks.json, which rooms connect to which, from the Kod source (roomLinks.ts), so
 // the client can load the rooms next to yours ahead of time.
 //
@@ -27,6 +29,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSyn
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { buildItemSlots } from "./itemSlots.ts";
 import { buildRoomLinks } from "./roomLinks.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -177,6 +180,11 @@ if (existsSync(join(KOD, "object")) && existsSync(join(KOD, "include"))) {
   writeFileSync(join(OUT, "roomlinks.json"), json);
   files["roomlinks.json"] = { size: json.length, hash: createHash("sha1").update(json).digest("hex").slice(0, 16), mtime: 0 };
   console.log(`roomlinks.json: ${Object.keys(links).length} rooms`);
+  // Where worn items go on the Modern interface's paper doll, from the item classes' use types
+  const slots = Buffer.from(JSON.stringify(buildItemSlots(kodFiles, khd)));
+  writeFileSync(join(OUT, "itemslots.json"), slots);
+  files["itemslots.json"] = { size: slots.length, hash: createHash("sha1").update(slots).digest("hex").slice(0, 16), mtime: 0 };
+  console.log(`itemslots.json: ${Object.keys(JSON.parse(slots.toString()) as object).length} pictures`);
 } else {
   console.warn("!! no Kod source in server/src/kod; the client won't load neighbouring rooms ahead");
 }

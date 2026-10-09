@@ -45,8 +45,10 @@ const MIN_ARROW = 9;
 const OBJECT_RADIUS = FINENESS / 4;
 
 export function MiniMap({
-  world, getRoom, zoom, paper, annotations, annotationIcon, onAnnotate, tooltips = false,
+  world, getRoom, zoom, paper, annotations, annotationIcon, onAnnotate, onClick, tooltips = false,
 }: {
+  /** Ours (the Modern interface): a left click on the map, which opens or closes the full map */
+  onClick?: () => void;
   world: WorldState;
   getRoom: () => Room | null;
   zoom: number;
@@ -218,7 +220,8 @@ export function MiniMap({
   return (
     <canvas
       ref={canvasRef}
-      className="minimap"
+      className={onClick ? "minimap clickable" : "minimap"}
+      onClick={onClick}
       title={tooltips ? hoverText : undefined}
       onContextMenu={(e) => {
         if (!onAnnotate) return;

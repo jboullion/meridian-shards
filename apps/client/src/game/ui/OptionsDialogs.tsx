@@ -439,6 +439,13 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
               <Check label="Attack On Target" checked={d.attackOnTarget} onChange={(v) => set({ attackOnTarget: v })} />
               <Check label="Dynamic Lighting" checked={d.dynamicLighting} onChange={(v) => set({ dynamicLighting: v })} />
               <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
+              {/* Ours: the HUD over the whole view, or the original's interface column */}
+              <Check
+                label="Modern Interface"
+                title="The view fills the window with the bars, quick slots, map and chat over it; off, the original's layout"
+                checked={d.interfaceStyle === "modern"}
+                onChange={(v) => set({ interfaceStyle: v ? "modern" : "classic" })}
+              />
               <Check
                 label="Original Command Typing"
                 title="Every typed line is a command, as in the original: speech needs say, and the start of a command's name will do"

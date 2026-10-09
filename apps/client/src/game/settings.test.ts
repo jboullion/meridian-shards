@@ -17,7 +17,7 @@ describe("settings", () => {
 
   it("migrates version 2 settings: one mouse speed, right click looks", () => {
     const s = migrate({ version: 2, preset: "modern", mouseSpeed: 2, rightClickLooks: true, musicVolume: 40 } as never);
-    expect(s.version).toBe(5);
+    expect(s.version).toBe(6);
     expect(s.mouseXScale).toBe(30);
     expect(s.mouseYScale).toBe(30);
     expect(s.keys.examine).toEqual([{ code: "Mouse1" }]);
@@ -40,6 +40,13 @@ describe("settings", () => {
     expect(s.touchLookScale).toBe(15);
     expect(s.dynamicLighting).toBe(false);
     expect(migrate({ version: 5, touchControls: "on" }).touchControls).toBe("on");
+  });
+
+  it("gives new players the Modern interface, and keeps Classic for settings saved before it", () => {
+    expect(DEFAULT_SETTINGS.interfaceStyle).toBe("modern");
+    expect(migrate({ version: 5 }).interfaceStyle).toBe("classic");
+    expect(migrate({ version: 6, interfaceStyle: "modern" }).interfaceStyle).toBe("modern");
+    expect(migrate({ version: 6, interfaceStyle: "classic" }).interfaceStyle).toBe("classic");
   });
 
   it("matches modifiers exactly, with plain keys still working under an unbound modifier", () => {
