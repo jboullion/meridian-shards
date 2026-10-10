@@ -6,12 +6,18 @@
 //                                 from our Windows build, so the server's rsc0000.rsb matches the
 //                                 client's assets exactly
 //   deploy/.stage/client/         the production browser client, built for /play/
+//   deploy/.stage/site/           the website (landing page, downloads, wiki) from the
+//                                 meridian-shards-website repository next to this one
 //   deploy/.stage/assets/         the asset build (dist/assets)
 //   deploy/.stage/gateway/        the gateway script and its one dependency (ws)
 //
-//   node tools/deploy/stage.ts [--skip-client] [--skip-assets] [--client-only]
+//   node tools/deploy/stage.ts [--skip-client] [--skip-assets] [--skip-site] [--client-only] [--web-only]
 //
-// --client-only builds and stages the browser client and nothing else (push.ts --web-only).
+// --client-only builds and stages the browser client and nothing else. --web-only stages the
+// client and the website (push.ts --web-only). The website's repository is found at
+// ../meridian-shards-website, or SHARDS_SITE; SITE_URL (the domain's https:// origin) is passed
+// to its build for canonical URLs and the sitemap. Without the repository, the site is skipped
+// and Caddy sends every other path to /play/ as before.
 // Run `npm run assets` (and server\build.cmd) first. Then `docker compose -f deploy/docker-compose.yml build`.
 
 import { execSync } from "node:child_process";
@@ -30,6 +36,8 @@ const { values: opt } = parseArgs({
     "skip-client": { type: "boolean", default: false },
     "skip-assets": { type: "boolean", default: false },
     "client-only": { type: "boolean", default: false },
+    "web-only": { type: "boolean", default: false },
+    "skip-site": { type: "boolean", default: false },
   },
 });
 
@@ -53,9 +61,27 @@ function stageClient(): void {
   execSync(`npm run build -w @shards/client -- --base /play/ --outDir "${out}" --emptyOutDir`, { cwd: ROOT, stdio: "inherit" });
 }
 
-if (opt["client-only"]) {
+// The website is static files (meridian-shards-website, built with React Router's prerender).
+// Its build checks itself: every page, link and image, and that nothing lands in /play/ or
+// /assets/, which Caddy hands to the game.
+function stageSite(): void {
+  const site = resolve(process.env.SHARDS_SITE ?? join(ROOT, "..", "meridian-shards-website"));
+  if (!existsSync(join(site, "package.json"))) {
+    console.warn(`!! no website at ${site}: skipping it (set SHARDS_SITE to its folder)`);
+    return;
+  }
+  need(join(site, "node_modules"), `install the website's dependencies first: npm install in ${site}`);
+  console.log(`building the website in ${site} (npm run build)...`);
+  execSync("npm run build", { cwd: site, stdio: "inherit" });
+  const out = join(STAGE, "site");
+  rmSync(out, { recursive: true, force: true });
+  copy(join(site, "build", "client"), out);
+}
+
+if (opt["client-only"] || opt["web-only"]) {
   stageClient();
-  console.log(`staged the client in ${join(STAGE, "client")}`);
+  if (opt["web-only"] && !opt["skip-site"]) stageSite();
+  console.log(`staged in ${STAGE}`);
   process.exit(0);
 }
 
@@ -109,6 +135,7 @@ copy(join(ROOT, "tools", "gateway", "gateway.ts"), join(STAGE, "gateway", "gatew
 copy(join(ROOT, "node_modules", "ws"), join(STAGE, "gateway", "node_modules", "ws"));
 
 if (!opt["skip-client"]) stageClient();
+if (!opt["skip-site"]) stageSite();
 
 if (!opt["skip-assets"]) {
   // Mirror dist/assets (417 MB); skipped files that haven't changed keep it quick

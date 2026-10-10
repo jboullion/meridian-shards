@@ -7,9 +7,9 @@
 //
 //   node tools/deploy/push.ts --host <user>@<ip> [--key ~/.ssh/id_ed25519] [--skip-stage] [--skip-assets] [--web-only]
 //
-// --web-only ships just the browser client and Caddy's config (deploy/web, the compose file)
-// and recreates only the web container: blakserv and the gateway keep running, so nobody is
-// disconnected and the server's game data stays as it is.
+// --web-only ships just the browser client, the website and Caddy's config (deploy/web, the
+// compose file) and recreates only the web container: blakserv and the gateway keep running, so
+// nobody is disconnected and the server's game data stays as it is.
 //
 // Uses the OpenSSH client that ships with Windows 10+ (ssh, scp) and tar.
 
@@ -40,7 +40,7 @@ const run = (cmd: string, args: string[]) => execFileSync(cmd, args, { cwd: ROOT
 
 if (!opt["skip-stage"]) {
   const stageArgs = ["tools/deploy/stage.ts"];
-  if (webOnly) stageArgs.push("--client-only");
+  if (webOnly) stageArgs.push("--web-only");
   else if (opt["skip-assets"]) stageArgs.push("--skip-assets");
   run(process.execPath, stageArgs);
 }
@@ -51,7 +51,8 @@ rmSync(join(ROOT, tarball), { force: true });
 const excludes = ["--exclude=deploy/.env"];
 if (opt["skip-assets"]) excludes.push("--exclude=deploy/.stage/assets");
 console.log("packing deploy/ ...");
-const packed = webOnly ? ["deploy/docker-compose.yml", "deploy/web", "deploy/.stage/client"] : ["deploy"];
+const site = existsSync(join(ROOT, "deploy", ".stage", "site")) ? ["deploy/.stage/site"] : [];
+const packed = webOnly ? ["deploy/docker-compose.yml", "deploy/web", "deploy/.stage/client", ...site] : ["deploy"];
 run("tar", ["-czf", tarball, ...excludes, ...packed]);
 console.log(`${(statSync(join(ROOT, tarball)).size / 2 ** 20).toFixed(0)} MB; uploading to ${opt.host}`);
 
@@ -63,13 +64,14 @@ const remote = [
   "set -e",
   "mkdir -p ~/meridian-shards && cd ~/meridian-shards",
   webOnly || opt["skip-assets"] ? "" : "rm -rf deploy/.stage/assets",
-  webOnly ? "rm -rf deploy/.stage/client" : "rm -rf deploy/.stage/blakserv-src deploy/.stage/gamedata deploy/.stage/client deploy/.stage/gateway",
+  webOnly ? "rm -rf deploy/.stage/client deploy/.stage/site" : "rm -rf deploy/.stage/blakserv-src deploy/.stage/gamedata deploy/.stage/client deploy/.stage/site deploy/.stage/gateway",
   "tar -xzf ~/meridian-shards-deploy.tgz",
   "rm ~/meridian-shards-deploy.tgz",
   "test -f deploy/.env || { echo 'deploy/.env is missing on the server: copy deploy/.env.example and set SITE_ADDRESS'; exit 1; }",
   webOnly ? `${compose} up -d --no-deps web` : `${compose} up -d --build`,
-  // Caddy bind-mounts .stage/client and .stage/assets, which were just deleted and unpacked
-  // again; a running container keeps serving the old (now empty) directories until it restarts
+  // Caddy bind-mounts .stage/client, .stage/site and .stage/assets, which were just deleted and
+  // unpacked again; a running container keeps serving the old (now empty) directories until it
+  // restarts
   `${compose} restart web`,
   `${compose} ps`,
 ]

@@ -3,7 +3,7 @@
 
 ## Current TODOS
 
-- Instead of "capturing" the mouse we might want to just have right click / drag move the camera so that the mouse is always available when not moving the screen 
+- add a second row of quick cast items
 
 - Set up blue host VPS, Cloudflare DNS and domain.
   - Move server to that domain

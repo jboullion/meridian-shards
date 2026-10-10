@@ -50,6 +50,7 @@ services:
     volumes:
       - ./web/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./.stage/client:/srv/client:ro
+      - ./.stage/site:/srv/site:ro
       - ./.stage/assets:/srv/assets:ro
       - caddy-data:/data
       - caddy-config:/config

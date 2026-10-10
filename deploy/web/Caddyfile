@@ -1,10 +1,9 @@
-# Caddy: HTTPS for the browser client at /play/, the game assets and the WebSocket gateway at
-# /ws. The download page is on GitHub Pages (deploy/web/site/download/,
-# .github/workflows/pages.yml), where the old /download/ redirects; the apps themselves are
-# GitHub Releases. SITE_ADDRESS is the hostname (e.g. 34-123-45-67.sslip.io, or several,
-# comma-separated); Caddy gets its certificate from Let's Encrypt by itself. For a local test
-# without TLS, set SITE_ADDRESS=http://localhost. The planned layout on our own domain behind
-# Cloudflare is docs/adr/0004-own-domain.md.
+# Caddy: HTTPS for the website at / (with the downloads at /download/ and the wiki at /wiki/),
+# the browser client at /play/, the game assets and the WebSocket gateway at /ws. The apps
+# themselves are GitHub Releases. SITE_ADDRESS is the hostname (e.g. 34-123-45-67.sslip.io, or
+# several, comma-separated); Caddy gets its certificate from Let's Encrypt by itself. For a local
+# test without TLS, set SITE_ADDRESS=http://localhost. The planned layout on our own domain
+# behind Cloudflare is docs/adr/0004-own-domain.md.
 {
 	# Behind Cloudflare, every request comes from Cloudflare's addresses
 	# (https://www.cloudflare.com/ips/), and the player's is in CF-Connecting-IP. Only those
@@ -40,11 +39,6 @@
 		file_server
 	}
 
-	# The download page moved to GitHub Pages
-	handle /download* {
-		redir * https://jboullion.github.io/meridian-shards/
-	}
-
 	# The browser client (a single-page app, built with --base /play/ by tools/deploy/stage.ts).
 	# Hashed bundles cache forever; index.html never.
 	redir /play /play/
@@ -58,10 +52,32 @@
 		file_server
 	}
 
-	# The marketing site and the wiki will live here (docs/adr/0004-own-domain.md); until then,
-	# everything else goes to the game
-	handle {
+	# Everything else is the website (the landing page, /download/ and the wiki: the
+	# meridian-shards-website repository, staged by tools/deploy/stage.ts). It's static files,
+	# prerendered page by page. Its own bundles are under /_site/ with hashed names, so they
+	# cache for good; pages and their .data files are revalidated. Until a site is staged,
+	# everything else goes to the game as before.
+	@nosite not file {
+		root /srv/site
+		try_files /index.html
+	}
+	handle @nosite {
 		redir * /play/
+	}
+	handle {
+		root * /srv/site
+		@hashed path /_site/*
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		@pages not path /_site/* /images/* /textures/* /favicon.svg
+		header @pages Cache-Control "no-cache"
+		file_server
+	}
+
+	# A path that's nowhere gets the site's 404 page, with a real 404 status
+	handle_errors 404 {
+		root * /srv/site
+		rewrite * /404.html
+		file_server
 	}
 
 	log {
