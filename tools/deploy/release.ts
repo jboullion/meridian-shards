@@ -27,7 +27,7 @@ const PKG = join(ROOT, "apps", "desktop", "package.json");
 const LOCK = join(ROOT, "package-lock.json");
 const POLL_MS = 30_000;
 /** What a complete release holds (apps/desktop/electron-builder.yml artifactName, and the Android APK) */
-const EXPECTED = [/\.exe$/, /\.exe\.blockmap$/, /-mac\.dmg$/, /-mac\.zip$/, /\.AppImage$/, /\.deb$/, /^latest\.yml$/, /^latest-mac\.yml$/, /^latest-linux\.yml$/, /\.apk$/];
+const EXPECTED = [/\.exe$/, /\.exe\.blockmap$/, /-mac\.dmg$/, /-mac\.zip$/, /\.AppImage$/, /\.deb$/, /^latest\.yml$/, /^latest-mac\.yml$/, /^latest-linux\.yml$/, /\.apk$/, /-web-.*-shell\d+\.zip$/];
 
 const { values: opt, positionals } = parseArgs({
   allowPositionals: true,

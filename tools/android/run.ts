@@ -5,7 +5,7 @@
 //   3. adb: install it, `adb reverse tcp:5173 tcp:5173` (the app's "Local (dev)" server is the
 //      dev stack's Vite on this machine), and launch it
 //
-//   npm run android [-- --device <serial>] [--no-build] [--bundle] [--release]
+//   npm run android:run [-- --device <serial>] [--no-build] [--bundle] [--release]
 //
 // --bundle puts the game files (dist/assets, about 430 MB) in the debug APK, as release builds have them.
 // --release builds the signed release APK as players get it (app/build.gradle: the key in

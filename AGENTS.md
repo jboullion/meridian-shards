@@ -34,7 +34,7 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 | `apps/client/` | The browser client (Vite + React): login, character select and the game view (`/`); the room viewer is at `/?viewer` or `/?rid=301`. In `src/game/`: `gameScene.ts` (3D view and input), `audio.ts` (sound, after `audio.c`), `icons.ts` (item pictures), `settings.ts` (every option and key binding, the two key presets), and `ui/` (the interface column, minimap and dialogs, `ModernHud.tsx` and `CharacterWindow.tsx` for the Modern interface, `OptionsDialogs.tsx` for the ☰ menu's Preferences, Configuration and Actions windows, and `kit.tsx`, the dialog kit every menu is drawn with: stone frames, lists, buttons, stat bars, laid out in dialog units from the original `.rc` templates). |
 | `apps/desktop/` | The desktop app (Electron) around the browser client. `src/main.ts` serves the page as `app://shards/`: the client build, and the game files from the chosen server through a disk cache (`assetCache.ts`). Also the preload (`window.shardsDesktop`), the server list and window state (`settings.ts`), and `electron-builder.yml` (installers, the update feed). `apps/client/src/host.ts` is the client's side of it. |
 | `apps/android/` | The Android app (Capacitor) around the browser client ([ADR 0003](docs/adr/0003-android.md)). `capacitor.config.ts`, and the native project in `android/`, where `app/src/main/java/net/meridianshards/client/` holds our code: `ShardsPlugin` (sets the page up before it loads), `ShardsHost` (`window.shardsAndroid`: the server list and choice, the game file download) and `ShardsWebViewClient` (answers `/assets/*` through `AssetCache`, the port of the desktop's `assetCache.ts`). `apps/client/src/host.ts` turns `shardsAndroid` into the same bridge the desktop has. |
-| `tools/android/` | `run.ts`: builds the Android app and runs it on a phone or the emulator (`npm run android`). |
+| `tools/android/` | `run.ts`: builds the Android app and runs it on a phone or the emulator (`npm run android:run`). `web-bundle.ts`: the page by itself as a release's update zip (`npm run android:web-bundle`). |
 | `tools/icons/` | `make-icons.ts`: draws the app icon (a gold shard on stone, our own) as the desktop's `build/icon.png` and the Android launcher icons and splash. Rerun it after changing the drawing. |
 | `tools/assets/` | `build-assets.ts`: copies the original files into `dist/assets` (git-ignored) with a manifest, plus the client's interface bitmaps as `ui/*.bmp`, `roomlinks.json` (which rooms connect, from the Kod exits) and `itemslots.json` (where worn items go, from the Kod item classes: `itemSlots.ts`). `fetch-assets.ts`: copies a server's game files into `dist/assets`, for packaging without a server build. |
 | `tools/dev/` | `dev.ts`: the one-command dev stack. |
@@ -69,11 +69,12 @@ npm run desktop:build       # an unpacked build in apps/desktop/dist/win-unpacke
 npm run desktop:dist        # installers + latest*.yml for this OS, with dist/assets inside
 npm run desktop:release     # the same, uploaded to a draft GitHub release (CI does this on a v* tag)
 npm run release -- 0.2.0     # bump, commit, tag and push; CI builds all three OSes and publishes v0.2.0
-npm run android             # build the client and the debug APK, install it on the phone or emulator, adb reverse 5173, launch
-npm run android -- --no-build --device emulator-5554   # reinstall and relaunch only, on one of several devices
-npm run android -- --bundle   # with the game files in the APK (dist/assets, ~380 MB), as release builds have them
-npm run android -- --release  # the signed release APK as players get it (uninstalls a debug build first: another key)
+npm run android:run         # build the client and the debug APK, install it on the phone or emulator, adb reverse 5173, launch
+npm run android:run -- --no-build --device emulator-5554   # reinstall and relaunch only, on one of several devices
+npm run android:run -- --bundle   # with the game files in the APK (dist/assets, ~380 MB), as release builds have them
+npm run android:run -- --release  # the signed release APK as players get it (uninstalls a debug build first: another key)
 npm run android:sync        # build the client and copy it into apps/android/android (then build in Android Studio)
+npm run android:web-bundle  # the page by itself as a release's update zip, in dist/ (after android:sync)
 ```
 
 - **Android** needs Android Studio (the SDK; `apps/android/android/local.properties` says where, e.g. `sdk.dir=J\:/AndroidSDK`) and a JDK 21 for Gradle (`org.gradle.java.home` in `~/.gradle/gradle.properties`). Android Studio's own JDK 25 can't run the template's Gradle 8.14; in Android Studio, set Settings → Build Tools → Gradle → Gradle JDK to the JDK 21 too. Debug builds list "Local (dev)" (`http://localhost:5173` on the device, through `adb reverse`) next to the VM; pick it on the login screen.
@@ -209,7 +210,12 @@ npm run android:sync        # build the client and copy it into apps/android/and
   - **Releases:**
     - The APK is in every release, built by the `android` job in `.github/workflows/desktop.yml` and signed with the release key: `~/.meridian-shards/android-release.*` locally, the `ANDROID_KEYSTORE_*` secrets in CI. It's never in git. Losing it means players must uninstall to update. `deploy/README.md` section 7.
     - The version is the desktop's (`apps/desktop/package.json`).
-    - Release builds look for a newer release's APK on GitHub and offer it on the login screen (`host.ts newerApk`). Debug builds don't.
+    - **Updates** (ADR 0003 section 7):
+    - Release builds look for a newer release on GitHub (`host.ts androidBridge`, `updates.ts`).
+    - When the release's page bundle (`Meridian-Shards-web-<v>-shell<n>.zip`, `npm run android:web-bundle`) suits the app's shell, it's downloaded and the login screen offers a restart into it (`WebUpdates.java`, which rolls back a page that doesn't start). Otherwise the APK is downloaded and installed in the app (`ApkUpdates.java`).
+    - **Bump `apps/android/shell.json`** when the page starts needing something new from the native side (a `ShardsHost` call, a permission, a plugin), so older apps get the APK instead of a page they can't run.
+    - Debug builds don't check, unless `localStorage` `shards.updateFeed` names a feed to test with.
+    - `adb logcat -s ShardsWeb ShardsApk` says what happened.
   - Release builds aren't debuggable: no DevTools through `adb forward`. Use a debug build, or `adb logcat -s ShardsAssets`.
   - **The background:** Android freezes a background app within seconds, and blakserv drops a game connection silent for 30 seconds.
     - `ConnectionService` (a foreground service with a notification) keeps the app pinging for 5 minutes after the player leaves it in the game, then the page logs off (`host.ts onAndroidAway`).
@@ -217,7 +223,7 @@ npm run android:sync        # build the client and copy it into apps/android/and
   - `ShardsPlugin` is registered before `super.onCreate` and does its work in `load()`, which runs before the page loads. A JavaScript interface added later only appears after a reload.
   - Debug builds allow cleartext to localhost (`src/debug`) and mixed content (the dev stack's `ws://` from the `https://localhost` page). Release builds allow neither.
   - Vite listens on `127.0.0.1` because `adb reverse` connects to IPv4. With Vite on `::1` only, the app's proxy gets "unexpected end of stream".
-  - `cap run android` fails on Windows (it runs `./gradlew` through cmd.exe); `npm run android` replaces it.
+  - `cap run android` fails on Windows (it runs `./gradlew` through cmd.exe); `npm run android:run` replaces it.
   - The app's Origin is `https://localhost`, so the VM's `GATEWAY_ORIGINS` must list it before the app (debug or release) can log in there.
   - To drive the app from a script: `adb forward tcp:9223 localabstract:webview_devtools_remote_<pid>` (the pid from `adb shell cat /proc/net/unix`), then the Chrome DevTools Protocol on `localhost:9223`. Debug builds only.
 - On Windows, never `spawn` with `shell: true` when the command path has spaces (Node's own path does). Use the shell only for `.cmd` shims such as `npx`.

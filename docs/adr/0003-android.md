@@ -81,7 +81,7 @@ Android's System WebView is Chromium, the engine we test in. Most of the client 
    - `host.ts` grows from "desktop or browser" into a host with a `platform`. On Android a small plugin (or JavaScript shim) gives the same bridge:
      - `servers` / `server` / `selectServer`: kept in `localStorage`, with the desktop's defaults; choosing a server reloads the page.
      - `onAssets`: the native download's progress.
-     - `onUpdate` / `installUpdate`: GitHub's latest release against our version; it opens the APK's link, because a sideloaded app can't update itself silently.
+     - `onUpdate` / `installUpdate`: GitHub's latest release against our version; the page by itself when it can, else the APK (section 7).
      - `setPhase`: decides what the back button does.
      - No window controls, and `TitleBar` is hidden.
    - `gameSocketUrl()` and `devPagesEnabled` work as they are.
@@ -202,11 +202,30 @@ Android's System WebView is Chromium, the engine we test in. Most of the client 
      - uploads `Meridian-Shards-<version>.apk` to the draft;
      - `publish` and `npm run release` require the APK.
    - The version is the desktop's; versionCode = major × 10000 + minor × 100 + patch.
-   - The update notice: release builds ask GitHub for the latest release. If it's newer and has an APK, the login screen says "Version x is out. Download it", which opens the APK in the browser.
+   - The update notice: release builds ask GitHub for the latest release. If it's newer and has an APK, the login screen says "Version x is out. Download it", which opens the APK in the browser. (Until 0.6.1; since then the app updates itself, section 7.)
    - The download page has an Android card, picked first on Android, whose browsers also say Linux.
    - A local release build (`npm run android -- --release`): 379 MB, versionCode 200. On first launch all 4,785 files came from the APK and nothing from the VM.
    - The login dialog didn't fit 411 px with the big heading above it, so screens under 520 px tall drop the heading.
 5. **Later: the Play Store.**
+7. **Updates without a new APK, and an installer in the app.** *Built 2026-10-10.*
+   - Why:
+     - the page is about 1 MB of the APK, and almost every release changes only it;
+     - the browser download of the APK stopped at 100% in Chrome's in-app tab, waiting for a warning it never showed.
+   - **The page by itself.**
+     - Every release also carries `Meridian-Shards-web-<version>-shell<n>.zip` (`tools/android/web-bundle.ts`): Capacitor's `public` folder plus a `bundle.json` (`{version, shell}`), about 330 KB.
+     - `apps/android/shell.json` is the shell version, Gradle's `BuildConfig.SHELL`. Bump it when the page starts relying on something new on the native side (a `ShardsHost` call, a permission, a plugin). Bundles built with a newer shell than the app's aren't used; those apps get the APK.
+     - The page (`host.ts androidBridge`, `updates.ts`) finds a newer release; when its bundle's shell is the app's or older, `ShardsHost.downloadWebUpdate` fetches it in the background.
+     - `WebUpdates.java` checks the SHA-256 GitHub gives for it (the API's `digest`), then `bundle.json`, and unpacks it into `filesDir/web/<version>`. The login screen then says "Version x is ready. Restart to update".
+     - That reloads the page from the folder (`Bridge.setServerBasePath`), or the next start does (Capacitor's saved `serverBasePath`, set before `Bridge.loadWebView` reads it). Capacitor clears it when a new APK is installed.
+     - **Rollback:** the page confirms itself 3 s after it starts.
+       - A bundle that never confirms is given up at the next start, and the page before it comes back.
+       - That version isn't downloaded again; the APK is offered instead.
+   - **The APK, in the app.**
+     - `ApkUpdates.java` downloads it with Android's DownloadManager (a notification, no storage permission) into the app's own `Download` folder, reporting progress to the login screen.
+     - Then it opens Android's installer through the FileProvider.
+     - The first time, Android's "Install unknown apps" page for the app opens instead (`REQUEST_INSTALL_PACKAGES`); back in the app, the notice says to allow it and install again.
+   - Apps before shell 1 (0.6.1 and older) don't have these calls: they still open the APK in the browser, and need one APK install to get them.
+   - **Testing:** in a debug build, `localStorage` `shards.updateFeed` set to a URL that answers like GitHub's latest release (a JSON in `dist/`, served by Vite) turns the check on. Tested in the emulator: the download, the restart into it, a cold start, the rollback, and the APK as far as the permission page.
 
 To install, asking first as AGENTS.md says:
 - **Android Studio**, with its JDK and SDK: about 1 GB, plus 3–5 GB of SDK and emulator images.
@@ -242,4 +261,4 @@ To install, asking first as AGENTS.md says:
 
 - Still one client codebase. The touch layout also serves phones in a mobile browser.
 - One more native project (Kotlin and Gradle) to keep building, with Android Studio for development.
-- A sideloaded APK doesn't update itself. Players follow the update notice until the app is on the Play Store.
+- A sideloaded APK doesn't update itself silently. The page updates with a tap on the login screen (section 7); a new shell needs the APK, installed through Android's installer, until the app is on the Play Store.

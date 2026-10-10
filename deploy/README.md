@@ -113,7 +113,7 @@ npm run release -- 0.1.3
 `tools/deploy/release.ts` checks the tree, bumps `apps/desktop/package.json`, commits "Release v0.1.3", tags and pushes with git. Then it follows the **Desktop builds** workflow:
 - the `draft` job creates a draft release with generated notes;
 - the three `build` jobs build Windows, macOS and Linux and upload into the draft;
-- the `android` job builds the signed APK (`Meridian-Shards-<version>.apk`) and uploads it too;
+- the `android` job builds the signed APK (`Meridian-Shards-<version>.apk`) and the page by itself (`Meridian-Shards-web-<version>-shell<n>.zip`, for updates without a new APK) and uploads them too;
 - the `publish` job checks every platform's files are there and publishes the release as the latest.
 
 The script prints each job's progress and ends with the release link, or names the failed job and step. A failed build leaves the draft unpublished, so players never get half a release. `npm run release -- --watch 0.1.3` follows a run again; `--no-wait` pushes and leaves.
@@ -130,7 +130,10 @@ To build only Windows locally: `npm run desktop:dist` makes the installer in `ap
 
 ## 7. The Android app
 
-The Android app (`apps/android`, [ADR 0003](../docs/adr/0003-android.md)) ships in the same release as the desktop installers: one APK with the game files inside, about 380 MB. Players download it from the release or the download page and install it themselves. When a newer release has an APK, the app says so on its login screen and links to it.
+The Android app (`apps/android`, [ADR 0003](../docs/adr/0003-android.md)) ships in the same release as the desktop installers: one APK with the game files inside, about 380 MB. Players download it from the release or the download page and install it themselves the first time. After that the app updates itself from the releases ([ADR 0003](../docs/adr/0003-android.md) section 7):
+- **Most releases change only the page.** The app downloads the release's `-web-` zip in the background (about 330 KB), checks it, and offers "Restart to update" on its login screen. A page that doesn't start is rolled back at the next launch.
+- **When the native side changes**, bump `apps/android/shell.json` before releasing. Apps with an older shell then get the APK instead: the app downloads it and opens Android's installer (the first time, Android asks to allow the app to install apps).
+- Apps from 0.6.1 and before only link to the APK, which the phone's browser downloads; one install of a newer APK gives them the rest.
 
 **The release key.** Android installs an update only if it carries the same signature as the installed app, so every APK is signed with one key, kept for good:
 - `~/.meridian-shards/android-release.jks` and `android-release.properties` (its password) on the machine that made it. Back both up. If they're lost, players must uninstall to get a newer version.
@@ -139,7 +142,7 @@ The Android app (`apps/android`, [ADR 0003](../docs/adr/0003-android.md)) ships 
   - `ANDROID_KEYSTORE_PASSWORD`: `storePassword` from the properties file.
 - Without the secrets, the `android` job fails, and so does the release.
 
-To build a signed APK locally and run it on a phone or the emulator: `npm run android -- --release`. It uninstalls a debug build first, because that's signed with another key.
+To build a signed APK locally and run it on a phone or the emulator: `npm run android:run -- --release`. It uninstalls a debug build first, because that's signed with another key.
 
 ## Running it
 

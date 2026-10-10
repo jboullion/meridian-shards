@@ -6,6 +6,11 @@
 // socket goes straight to that server's /ws. Both apps give the page a DesktopBridge, so
 // `desktop` below means "an app with a server list", whichever platform it is.
 
+import { apkOf, parseRelease, webBundleOf, type Release } from "./updates.ts";
+
+// Vite's (vite.config.ts; env.d.ts), declared here too because the desktop app type-checks this file
+declare const __APP_VERSION__: string;
+
 export interface DesktopServer {
   name: string;
   /** e.g. https://35-206-75-121.sslip.io: the game socket is <origin>/ws, the files <origin>/assets/ */
@@ -15,6 +20,16 @@ export interface DesktopServer {
 export interface DesktopUpdate {
   /** The version that's downloaded and installs on restart */
   version: string;
+  /**
+   * The Android app (ours; updates.ts): `web`, the page by itself, downloaded and ready (restart);
+   * `apk`, a new app to download and install (state and progress as it goes).
+   */
+  android?: {
+    kind: "web" | "apk";
+    state: "ready" | "available" | "downloading" | "downloaded" | "permission" | "installing" | "error";
+    /** 0..1 while downloading, when the size is known */
+    progress?: number | null;
+  };
 }
 
 /** The desktop app downloading every game file into its cache (on first run, and after server updates). */
@@ -84,6 +99,35 @@ interface AndroidHost {
   assetProgress(): string;
   /** Lets the phone turn upright (before the game) or keeps it landscape */
   allowPortrait(allow: boolean): void;
+  // ---- updates (shell 1 and later; WebUpdates, ApkUpdates)
+  /** The app's shell version (apps/android/shell.json) */
+  shell?(): number;
+  /** Downloads a release's page bundle; the outcome comes to window.shardsAndroidWebUpdate */
+  downloadWebUpdate?(url: string, version: string, sha256: string): void;
+  /** Reloads the page from the downloaded bundle; false if there's none */
+  applyWebUpdate?(): boolean;
+  /** The page runs: an updated page is kept (else the next start goes back to the app's own) */
+  confirmWebBundle?(): void;
+  /** Downloads a release's APK, then opens the installer; progress comes to window.shardsAndroidApk */
+  downloadApk?(url: string, version: string): void;
+  /** Opens the installer on the downloaded APK again; false if there's none */
+  installApk?(version: string): boolean;
+}
+
+/** What the native side says about a page bundle download (WebUpdates.download) */
+interface WebUpdateReport {
+  state: "ready" | "error";
+  version: string;
+  message?: string;
+}
+
+/** What it says about an APK download (ApkUpdates) */
+interface ApkReport {
+  state: "downloading" | "downloaded" | "permission" | "installing" | "error";
+  version: string;
+  done: number;
+  total: number;
+  message?: string;
 }
 
 /** The releases the apps come from (apps/desktop/electron-builder.yml publish); the APK is one of each release's files */
@@ -97,35 +141,74 @@ export function newerVersion(a: string, b: string): boolean {
   return false;
 }
 
-/** The latest release's APK if it's newer than `current`; null otherwise, or when GitHub can't be asked. */
-async function newerApk(current: string): Promise<{ version: string; url: string } | null> {
+/** The latest release, or null when GitHub can't be asked. */
+async function latestRelease(feed: string): Promise<Release | null> {
   try {
-    const res = await fetch(LATEST_RELEASE, { cache: "no-store" });
-    if (!res.ok) return null;
-    const release = (await res.json()) as { tag_name?: string; assets?: { name: string; browser_download_url: string }[] };
-    const version = release.tag_name?.replace(/^v/, "") ?? "";
-    const apk = release.assets?.find((f) => f.name.endsWith(".apk"));
-    return apk && newerVersion(version, current) ? { version, url: apk.browser_download_url } : null;
+    const res = await fetch(feed, { cache: "no-store" });
+    return res.ok ? parseRelease(await res.json()) : null;
   } catch {
     return null;
   }
 }
 
 /**
- * The Android app's side of DesktopBridge: no window to control. A sideloaded app can't update
- * itself, so an update is a newer release's APK, opened in the phone's browser to install.
+ * A development build's update feed, for trying the updates out (localStorage
+ * `shards.updateFeed`: a URL answering like GitHub's latest release); none by default.
+ */
+function devUpdateFeed(): string | null {
+  try {
+    return localStorage.getItem("shards.updateFeed");
+  } catch {
+    return null;
+  }
+}
+
+/** How long the page has to run before an updated page counts as working (WebUpdates.confirm), ms */
+const CONFIRM_AFTER_MS = 3000;
+
+/**
+ * The Android app's side of DesktopBridge: no window to control. Updates (updates.ts): when the
+ * latest release's page bundle suits this app's shell, it's downloaded quietly and the login
+ * screen offers to restart into it; otherwise the release's APK is downloaded on request and
+ * Android's installer opens on it. An app without the update calls (before shell 1) has the
+ * phone's browser download the APK.
  */
 function androidBridge(a: AndroidHost): DesktopBridge {
   const config = JSON.parse(a.config()) as DesktopConfig;
-  let update: { version: string; url: string } | null = null;
+  // The page's own version: an updated page is newer than the APK it runs in
+  config.version = __APP_VERSION__;
+  let update: DesktopUpdate | null = null;
+  let apkUrl: string | null = null;
   const updateListeners = new Set<(u: DesktopUpdate) => void>();
-  // Not for development builds: their version is whatever the desktop's is
-  if (!config.dev)
-    void newerApk(config.version).then((found) => {
-      if (!found) return;
-      update = found;
-      for (const fn of updateListeners) fn({ version: found.version });
+  const announce = (u: DesktopUpdate) => {
+    update = u;
+    for (const fn of updateListeners) fn(u);
+  };
+  const offerApk = (version: string) => apkUrl && announce({ version, android: { kind: "apk", state: "available" } });
+  const g = globalThis as { shardsAndroidWebUpdate?: (r: WebUpdateReport) => void; shardsAndroidApk?: (r: ApkReport) => void };
+  g.shardsAndroidWebUpdate = (r) => {
+    if (r.state === "ready") announce({ version: r.version, android: { kind: "web", state: "ready" } });
+    else {
+      // The bundle didn't come through: the APK still will
+      console.warn("page update:", r.message);
+      offerApk(r.version);
+    }
+  };
+  g.shardsAndroidApk = (r) =>
+    announce({ version: r.version, android: { kind: "apk", state: r.state, progress: r.total > 0 ? Math.min(1, r.done / r.total) : null } });
+  // Not for development builds (their version is whatever the desktop's is), unless a feed is set to try it
+  const feed = config.dev ? devUpdateFeed() : LATEST_RELEASE;
+  if (feed)
+    void latestRelease(feed).then((release) => {
+      if (!release || !newerVersion(release.version, config.version)) return;
+      apkUrl = apkOf(release)?.browser_download_url ?? null;
+      const web = webBundleOf(release);
+      const shell = a.shell?.() ?? 0;
+      if (web && a.downloadWebUpdate && web.shell <= shell) a.downloadWebUpdate(web.url, release.version, web.sha256);
+      else offerApk(release.version);
     });
+  // An updated page that gets this far works: keep it
+  setTimeout(() => a.confirmWebBundle?.(), CONFIRM_AFTER_MS);
   const latest = a.assetProgress();
   let assets: DesktopAssetProgress | null = latest ? (JSON.parse(latest) as DesktopAssetProgress) : null;
   const assetListeners = new Set<(p: DesktopAssetProgress) => void>();
@@ -149,7 +232,7 @@ function androidBridge(a: AndroidHost): DesktopBridge {
     toggleFullscreen: () => {},
     onUpdate: (fn) => {
       updateListeners.add(fn);
-      if (update) fn({ version: update.version });
+      if (update) fn(update);
       return () => {
         updateListeners.delete(fn);
       };
@@ -161,9 +244,24 @@ function androidBridge(a: AndroidHost): DesktopBridge {
         assetListeners.delete(fn);
       };
     },
-    // Capacitor hands a link off its own origin to the system (the browser downloads the APK)
     installUpdate: () => {
-      if (update) location.assign(update.url);
+      const u = update?.android;
+      if (!update || !u) return;
+      if (u.kind === "web") {
+        if (!a.applyWebUpdate?.()) location.reload();
+        return;
+      }
+      if (u.state === "downloaded" || u.state === "permission" || u.state === "installing") {
+        a.installApk?.(update.version);
+        return;
+      }
+      if (u.state === "downloading" || !apkUrl) return;
+      if (a.downloadApk) {
+        announce({ version: update.version, android: { kind: "apk", state: "downloading", progress: 0 } });
+        a.downloadApk(apkUrl, update.version);
+      }
+      // Capacitor hands a link off its own origin to the system: the browser downloads the APK
+      else location.assign(apkUrl);
     },
     windowControl: () => {},
     onWindowState: (fn) => {

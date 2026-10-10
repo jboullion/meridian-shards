@@ -103,15 +103,7 @@ export function LoginScreen({
       <p className="mk-footnote">
         {devPagesEnabled && <a href="?viewer">Room viewer</a>}
         {desktop && !update && <span>Version {desktop.version}</span>}
-        {desktop && update && (
-          <span className="update">
-            {/* Android: a newer release's APK to download and install (host.ts androidBridge) */}
-            Version {update.version} is {isAndroid ? "out" : "ready"}.{" "}
-            <a href="#" onClick={(e) => (e.preventDefault(), desktop?.installUpdate())}>
-              {isAndroid ? "Download it" : "Restart to update"}
-            </a>
-          </span>
-        )}
+        {desktop && update && <UpdateNotice update={update} install={() => desktop?.installUpdate()} />}
       </p>
       {error && <MessageBox text={error} onResult={onClearError} />}
     </Backdrop>
@@ -142,4 +134,28 @@ export function ConnectingScreen() {
       </Window>
     </Backdrop>
   );
+}
+
+/**
+ * A newer version: the desktop's, downloaded and installed on restart; on Android, the page by
+ * itself (ready, restart) or a new APK, downloaded and handed to Android's installer as the player
+ * asks (host.ts androidBridge).
+ */
+function UpdateNotice({ update, install }: { update: DesktopUpdate; install: () => void }) {
+  const link = (text: string) => (
+    <a href="#" onClick={(e) => (e.preventDefault(), install())}>
+      {text}
+    </a>
+  );
+  const v = update.version;
+  const a = update.android;
+  let body;
+  if (!a || a.kind === "web") body = <>Version {v} is ready. {link("Restart to update")}</>;
+  else if (a.state === "downloading")
+    body = <>Downloading version {v}{a.progress != null ? ` (${Math.floor(a.progress * 100)}%)` : ""}...</>;
+  else if (a.state === "permission") body = <>Allow Meridian Shards to install apps, then {link("install it")}</>;
+  else if (a.state === "downloaded" || a.state === "installing") body = <>Version {v} is downloaded. {link("Install it")}</>;
+  else if (a.state === "error") body = <>Version {v} didn't download. {link("Try again")}</>;
+  else body = <>Version {v} is out. {link(isAndroid ? "Install it" : "Download it")}</>;
+  return <span className="update">{body}</span>;
 }

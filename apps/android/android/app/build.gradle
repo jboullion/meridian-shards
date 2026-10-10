@@ -4,6 +4,10 @@ apply plugin: 'com.android.application'
 // bumps; the client's About box uses it too); versionCode = major * 10000 + minor * 100 + patch (ADR 0003)
 def shardsVersion = new groovy.json.JsonSlurper().parse(file('../../../desktop/package.json')).version
 def shardsParts = shardsVersion.tokenize('.').collect { it.toInteger() }
+// The shell version (apps/android/shell.json): what this APK's native side offers the page. A page
+// bundle built with a newer one needs a new APK (WebUpdates; ADR 0003). Bump it when the page
+// starts relying on something new here (ShardsHost, a permission, a plugin).
+def shardsShell = new groovy.json.JsonSlurper().parse(file('../../shell.json')).shell
 
 // Release signing (ADR 0003): one key for good, since every update must carry the same signature.
 // CI passes it in SHARDS_KEYSTORE (the .jks path) and SHARDS_KEYSTORE_PASSWORD, SHARDS_KEY_ALIAS and
@@ -44,6 +48,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode shardsParts[0] * 10000 + shardsParts[1] * 100 + shardsParts[2]
         versionName shardsVersion
+        buildConfigField "int", "SHELL", "${shardsShell}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

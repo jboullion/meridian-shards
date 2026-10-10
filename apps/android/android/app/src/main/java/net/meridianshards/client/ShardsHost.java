@@ -6,6 +6,7 @@ import android.net.ConnectivityManager;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import com.getcapacitor.Bridge;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -28,6 +29,7 @@ public class ShardsHost {
     private final SharedPreferences prefs;
     private final ConnectivityManager connectivity;
     private final AssetCache assets;
+    private final Bridge bridge;
     /** The session phase the page last reported (apps/client/src/game/Game.tsx), per process like the page */
     private static volatile String phase = "offline";
     /**
@@ -39,12 +41,70 @@ public class ShardsHost {
     private static volatile String assetProgress = "";
     private static volatile WebView progressView;
 
-    ShardsHost(Context context, AssetCache assets, WebView webView) {
+    ShardsHost(Context context, AssetCache assets, WebView webView, Bridge bridge) {
         appContext = context.getApplicationContext();
         prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         connectivity = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
         this.assets = assets;
+        this.bridge = bridge;
         progressView = webView;
+    }
+
+    /** Calls window.<fn>(json) on the newest page */
+    private static void toPage(String fn, String json) {
+        WebView view = progressView;
+        if (view != null) view.post(() -> view.evaluateJavascript("window." + fn + "?.(" + json + ")", null));
+    }
+
+    // ---- updates (WebUpdates, ApkUpdates; the page's side is host.ts androidBridge)
+
+    /** This app's shell version (apps/android/shell.json): a page bundle built for a newer one needs a new APK. */
+    @JavascriptInterface
+    public int shell() {
+        return BuildConfig.SHELL;
+    }
+
+    /** Downloads a release's page bundle for the next start; the outcome goes to window.shardsAndroidWebUpdate. */
+    @JavascriptInterface
+    public void downloadWebUpdate(String url, String version, String sha256) {
+        WebUpdates.download(appContext, url, version, sha256, (json) -> toPage("shardsAndroidWebUpdate", json));
+    }
+
+    /** "Restart to update": the downloaded page now. False if there's none. */
+    @JavascriptInterface
+    public boolean applyWebUpdate() {
+        boolean[] done = { false };
+        // Capacitor's local server and the WebView want the main thread
+        android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        main.post(() -> {
+            done[0] = WebUpdates.applyNow(appContext, bridge);
+            latch.countDown();
+        });
+        try {
+            latch.await(5, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return done[0];
+    }
+
+    /** The page has run for a few seconds: a page from an update is kept (WebUpdates.confirm). */
+    @JavascriptInterface
+    public void confirmWebBundle() {
+        WebUpdates.confirm(appContext);
+    }
+
+    /** Downloads a release's APK (DownloadManager), then opens the installer; progress goes to window.shardsAndroidApk. */
+    @JavascriptInterface
+    public void downloadApk(String url, String version) {
+        ApkUpdates.download(appContext, url, version, (json) -> toPage("shardsAndroidApk", json));
+    }
+
+    /** Opens the installer on the downloaded APK again (after allowing installs). False if there's none. */
+    @JavascriptInterface
+    public boolean installApk(String version) {
+        return ApkUpdates.install(appContext, (json) -> toPage("shardsAndroidApk", json), version);
     }
 
     private static String[][] servers() {

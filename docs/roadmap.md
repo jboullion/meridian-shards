@@ -174,7 +174,8 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 - [x] Phase 1: the shell (`apps/android`, Capacitor 8.5) and the host seam. The app logs in to the local stack in the emulator and draws the game; `npm run android` builds, installs and launches it.
 - [x] Phase 2: the game files: bundled in release builds, cached and checked against their hashes, downloaded in full on Wi-Fi (`AssetCache.java`).
 - [x] Phase 3: Touch Controls and the phone layout, plus the back button and the soft keyboard (emulator; a real phone next).
-- [ ] Phase 4: the update notice, CI and the signed APK.
+- [x] Phase 4: the update notice, CI and the signed APK.
+- [x] Updates of the page without a new APK (a ~330 KB zip in each release, checked and rolled back if it doesn't start), and the APK downloaded and installed in the app when the native side changes (ADR 0003 section 7, 2026-10-10).
 
 ### 13. Feature parity (2026-10-08: phases 0-5 done; what is left is in missing-features.md)
 

@@ -176,6 +176,10 @@ jobs:
             echo "::error title=Build failed::$(tail -n 40 build.log | tr -d '\r' | sed 's/%/%25/g' | awk 'BEGIN { ORS = "%0A" } { print }')"
             exit 1
           fi
+      # The page by itself (Meridian-Shards-web-<version>-shell<n>.zip, tools/android/web-bundle.ts):
+      # apps whose shell is new enough update to it without a new APK
+      - name: The page bundle
+        run: node tools/android/web-bundle.ts --out .
       - name: Upload to the draft release
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
@@ -184,7 +188,7 @@ jobs:
         run: |
           apk="Meridian-Shards-${GITHUB_REF_NAME#v}.apk"
           cp apps/android/android/app/build/outputs/apk/release/app-release.apk "$apk"
-          gh release upload "$GITHUB_REF_NAME" "$apk" --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$GITHUB_REF_NAME" "$apk" Meridian-Shards-web-*.zip --repo "$GITHUB_REPOSITORY" --clobber
 
   # Publishes the draft once all three platforms and the APK built and uploaded. A failed build
   # leaves the draft unpublished, so players never get half a release.
@@ -200,7 +204,7 @@ jobs:
         run: |
           names=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
           echo "$names"
-          for pattern in '\.exe$' '\.exe\.blockmap$' '-mac\.dmg$' '-mac\.zip$' '\.AppImage$' '\.deb$' '^latest\.yml$' '^latest-mac\.yml$' '^latest-linux\.yml$' '\.apk$'; do
+          for pattern in '\.exe$' '\.exe\.blockmap$' '-mac\.dmg$' '-mac\.zip$' '\.AppImage$' '\.deb$' '^latest\.yml$' '^latest-mac\.yml$' '^latest-linux\.yml$' '\.apk$' '-web-.*-shell[0-9]+\.zip$'; do
             if ! grep -Eq -- "$pattern" <<< "$names"; then
               echo "::error::The release has no file matching $pattern"
               exit 1

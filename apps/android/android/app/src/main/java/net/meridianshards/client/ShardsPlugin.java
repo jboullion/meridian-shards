@@ -9,7 +9,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 /**
  * Sets the page up before it loads (plugins load in the Bridge's constructor, before
  * loadWebView): the host bridge (window.shardsAndroid), our WebView client for /assets/*,
- * and the WebView settings the desktop app gets from Electron (sound without a tap).
+ * and the WebView settings the desktop app gets from Electron (sound without a tap). And, before
+ * Capacitor picks the folder the page comes from, the page updates (WebUpdates.beforeLoad).
  */
 @CapacitorPlugin(name = "Shards")
 public class ShardsPlugin extends Plugin {
@@ -17,9 +18,11 @@ public class ShardsPlugin extends Plugin {
     @SuppressLint({ "JavascriptInterface", "AddJavascriptInterface" })
     @Override
     public void load() {
+        // Before Bridge.loadWebView reads Capacitor's saved server path
+        WebUpdates.beforeLoad(getContext());
         WebView webView = getBridge().getWebView();
         AssetCache assets = AssetCache.get(getContext());
-        ShardsHost host = new ShardsHost(getContext(), assets, webView);
+        ShardsHost host = new ShardsHost(getContext(), assets, webView, getBridge());
         WebSettings settings = webView.getSettings();
         // The desktop app's autoplayPolicy "no-user-gesture-required"
         settings.setMediaPlaybackRequiresUserGesture(false);
