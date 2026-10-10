@@ -43,7 +43,7 @@ import { languageName } from "./languages.ts";
 import { MAX_ANNOTATIONS, annotationAt, loadAnnotations, saveAnnotations, type MapAnnotation } from "./annotations.ts";
 import { useWorld } from "./ui/hooks.ts";
 import { TitleBar } from "./TitleBar.tsx";
-import { emptySlots, loadLastSlot, loadQuickSlots, saveLastSlot, saveQuickSlots, slotItem, slotSpell, type QuickSlot, type QuickSlots } from "./quickSlots.ts";
+import { QUICK_SLOTS, emptySlots, loadLastSlot, loadQuickSlots, saveLastSlot, saveQuickSlots, slotItem, slotSpell, type QuickSlot, type QuickSlots } from "./quickSlots.ts";
 import { Hotbar, QuickSlotPicker } from "./ui/QuickSlots.tsx";
 
 const MAX_LINES = 300;
@@ -703,7 +703,12 @@ export function GameView({
 
   /** Keys and typed commands that open panels and dialogs or talk to traders. */
   const handleAction = (a: string): void => {
-    if (a.startsWith("quickSlot")) return activateSlot(Number(a.slice("quickSlot".length)) - 1);
+    if (a.startsWith("quickSlot")) {
+      const i = Number(a.slice("quickSlot".length)) - 1;
+      // The second row (11-20) shows only in the Modern interface: elsewhere its keys do nothing
+      if (i >= QUICK_SLOTS && !modern) return;
+      return activateSlot(i);
+    }
     const toggle = (type: "preferences" | "configuration" | "actions") => setModal((m) => (m?.type === type ? null : { type }));
     switch (a) {
       case "hideInterface":

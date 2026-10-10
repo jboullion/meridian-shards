@@ -17,7 +17,7 @@ describe("settings", () => {
 
   it("migrates version 2 settings: one mouse speed, right click looks", () => {
     const s = migrate({ version: 2, preset: "modern", mouseSpeed: 2, rightClickLooks: true, musicVolume: 40 } as never);
-    expect(s.version).toBe(8);
+    expect(s.version).toBe(9);
     expect(s.mouseXScale).toBe(30);
     expect(s.mouseYScale).toBe(30);
     expect(s.keys.examine).toEqual([{ code: "Mouse1" }]);
@@ -60,10 +60,18 @@ describe("settings", () => {
   it("adds the numpad's digits to the quick slots in the modern preset, unless they're bound already", () => {
     const keys = { ...PRESETS.modern, quickSlot1: [{ code: "Digit1" }], quickSlot2: [{ code: "Digit2" }], lookUp: [{ code: "Numpad2" }] };
     const s = migrate({ version: 6, preset: "modern", keys });
-    expect(s.keys.quickSlot1.map((b) => b.code)).toEqual(["Digit1", "Numpad1"]);
-    expect(s.keys.quickSlot2.map((b) => b.code)).toEqual(["Digit2"]);
+    // Since version 9 the numpad's digits are the second row's (slots 11-20)
+    expect(s.keys.quickSlot1.map((b) => b.code)).toEqual(["Digit1"]);
+    expect(s.keys.quickSlot11.map((b) => b.code)).toEqual(["Numpad1"]);
     expect(migrate({ version: 6, preset: "original" }).keys.quickSlot1).toEqual([]);
-    expect(PRESETS.modern.quickSlot10.map((b) => b.code)).toEqual(["Digit0", "Numpad0"]);
+    expect(PRESETS.modern.quickSlot20.map((b) => b.code)).toEqual(["Numpad0"]);
+  });
+
+  it("moves the numpad's digits from slots 1-10 to the second row (version 9), keeping other keys", () => {
+    const keys = { ...PRESETS.modern, quickSlot3: [{ code: "Digit3" }, { code: "Numpad3" }, { code: "KeyQ" }] };
+    const s = migrate({ version: 8, preset: "modern", keys: keys as never });
+    expect(s.keys.quickSlot3.map((b) => b.code)).toEqual(["Digit3", "KeyQ"]);
+    expect(s.keys.quickSlot13.map((b) => b.code)).toEqual(["Numpad3"]);
   });
 
   it("drops the saved keys of actions taken out since (Mouselook Toggle)", () => {

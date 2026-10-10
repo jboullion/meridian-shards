@@ -1707,16 +1707,6 @@ export class GameScene {
       case "buy":
       case "deposit":
       case "withdraw":
-      case "quickSlot1":
-      case "quickSlot2":
-      case "quickSlot3":
-      case "quickSlot4":
-      case "quickSlot5":
-      case "quickSlot6":
-      case "quickSlot7":
-      case "quickSlot8":
-      case "quickSlot9":
-      case "quickSlot10":
       case "hideInterface":
         // Panels and dialogs: free the mouse for them
         if (this.locked && a !== "mapZoomIn" && a !== "mapZoomOut" && a !== "inventory" && a !== "map" && a !== "hideInterface" && !a.startsWith("quickSlot")) document.exitPointerLock();
@@ -1729,6 +1719,8 @@ export class GameScene {
         this.onAction?.(a);
         break;
       default:
+        // The quick slots (all twenty; GameView knows which rows show), the mouse left captured
+        if (a.startsWith("quickSlot")) this.onAction?.(a);
         break;
     }
   }

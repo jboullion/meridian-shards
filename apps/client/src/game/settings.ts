@@ -25,6 +25,9 @@ export const ACTION_TABS = {
     "inventory", "settings", "configuration", "actions", "cameraView", "hideInterface",
     "quickSlot1", "quickSlot2", "quickSlot3", "quickSlot4", "quickSlot5", "quickSlot6", "quickSlot7", "quickSlot8", "quickSlot9",
     "quickSlot10",
+    // The Modern interface's second row
+    "quickSlot11", "quickSlot12", "quickSlot13", "quickSlot14", "quickSlot15", "quickSlot16", "quickSlot17", "quickSlot18",
+    "quickSlot19", "quickSlot20",
   ],
 } as const;
 
@@ -87,6 +90,16 @@ export const ACTION_LABELS: Record<Action, string> = {
   quickSlot8: "Quick Slot 8",
   quickSlot9: "Quick Slot 9",
   quickSlot10: "Quick Slot 10",
+  quickSlot11: "Quick Slot 11",
+  quickSlot12: "Quick Slot 12",
+  quickSlot13: "Quick Slot 13",
+  quickSlot14: "Quick Slot 14",
+  quickSlot15: "Quick Slot 15",
+  quickSlot16: "Quick Slot 16",
+  quickSlot17: "Quick Slot 17",
+  quickSlot18: "Quick Slot 18",
+  quickSlot19: "Quick Slot 19",
+  quickSlot20: "Quick Slot 20",
 };
 
 /**
@@ -153,16 +166,27 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     cameraView: k("KeyV"),
     // Ours: the Modern interface's HUD away and back, for screenshots (GameView hudHidden)
     hideInterface: k("KeyH"),
-    quickSlot1: k("Digit1", "Numpad1"),
-    quickSlot2: k("Digit2", "Numpad2"),
-    quickSlot3: k("Digit3", "Numpad3"),
-    quickSlot4: k("Digit4", "Numpad4"),
-    quickSlot5: k("Digit5", "Numpad5"),
-    quickSlot6: k("Digit6", "Numpad6"),
-    quickSlot7: k("Digit7", "Numpad7"),
-    quickSlot8: k("Digit8", "Numpad8"),
-    quickSlot9: k("Digit9", "Numpad9"),
-    quickSlot10: k("Digit0", "Numpad0"),
+    quickSlot1: k("Digit1"),
+    quickSlot2: k("Digit2"),
+    quickSlot3: k("Digit3"),
+    quickSlot4: k("Digit4"),
+    quickSlot5: k("Digit5"),
+    quickSlot6: k("Digit6"),
+    quickSlot7: k("Digit7"),
+    quickSlot8: k("Digit8"),
+    quickSlot9: k("Digit9"),
+    quickSlot10: k("Digit0"),
+    // The Modern interface's second row: the numpad's digits (KeyboardEvent.code tells them from the row above the letters)
+    quickSlot11: k("Numpad1"),
+    quickSlot12: k("Numpad2"),
+    quickSlot13: k("Numpad3"),
+    quickSlot14: k("Numpad4"),
+    quickSlot15: k("Numpad5"),
+    quickSlot16: k("Numpad6"),
+    quickSlot17: k("Numpad7"),
+    quickSlot18: k("Numpad8"),
+    quickSlot19: k("Numpad9"),
+    quickSlot20: k("Numpad0"),
   },
   original: {
     forward: k("ArrowUp", "Numpad8"),
@@ -221,6 +245,16 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     quickSlot8: [],
     quickSlot9: [],
     quickSlot10: [],
+    quickSlot11: [],
+    quickSlot12: [],
+    quickSlot13: [],
+    quickSlot14: [],
+    quickSlot15: [],
+    quickSlot16: [],
+    quickSlot17: [],
+    quickSlot18: [],
+    quickSlot19: [],
+    quickSlot20: [],
   },
 };
 
@@ -384,7 +418,7 @@ export function touchUi(s: Settings): boolean {
   return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 }
 
-const SETTINGS_VERSION = 8;
+const SETTINGS_VERSION = 9;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
@@ -495,6 +529,14 @@ export function migrate(s: SavedSettings): Settings {
   }
   // Version 8 (0.4.0, Enhanced Lighting): everyone moves to the Modern interface once; Classic is still in the Bind Editor
   if (version < 8) out.interfaceStyle = "modern";
+  // Version 9 (the Modern interface's second row of quick slots): the numpad's digits, which also
+  // used slots 1-10 since version 7, now use slots 11-20 (the preset gives them); off slots 1-10
+  if (version < 9 && preset === "modern") {
+    for (let i = 1; i <= 10; i++) {
+      const slot = `quickSlot${i}` as Action;
+      keys[slot] = keys[slot].filter((b) => b.code !== `Numpad${i % 10}` || b.alt || b.ctrl);
+    }
+  }
   delete (out as SavedSettings).mouseSpeed;
   delete (out as SavedSettings).rightClickLooks;
   for (const k of OLD_GRAPHICS_KEYS) delete (out as unknown as Record<string, unknown>)[k];

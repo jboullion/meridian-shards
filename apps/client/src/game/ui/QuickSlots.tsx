@@ -90,8 +90,10 @@ const slotTitle = (view: SlotView | null, key: string) =>
   `${view ? view.slot.name + (view.available ? "" : view.slot.kind === "spell" ? " (not known)" : " (none carried)") : "Empty"}${key ? ` (${key})` : ""}`;
 
 export function Hotbar({
-  session, icons, slots, settings, onUse, onEdit, onSet, onSwap, cooldown,
+  session, icons, slots, settings, onUse, onEdit, onSet, onSwap, cooldown, row = 0,
 }: {
+  /** Which row of ten: 0 the first (keys 1-0), 1 the Modern interface's second (the numpad) */
+  row?: number;
   /** Ours: the spell cooldown to show on spell slots (the Modern interface's) */
   cooldown?: Cooldown | null;
   session: GameSession;
@@ -121,8 +123,9 @@ export function Hotbar({
     if (s) onSet(i, slotFor("spell", s.object, rs(s.object.nameRes)));
   };
   return (
-    <div className="hotbar" role="toolbar" aria-label="Quick slots">
-      {views.map((v, i) => {
+    <div className={row ? "hotbar second" : "hotbar"} role="toolbar" aria-label={row ? "Quick slots, second row" : "Quick slots"}>
+      {views.slice(row * QUICK_SLOTS, (row + 1) * QUICK_SLOTS).map((v, j) => {
+        const i = row * QUICK_SLOTS + j;
         const bound = settings.keys[`quickSlot${i + 1}` as Action][0];
         const key = bound ? bindingLabel(bound) : "";
         return (
@@ -283,7 +286,7 @@ export function QuickWheel({
             close();
           }}
         >
-          {views.map((v, i) => (
+          {views.slice(0, QUICK_SLOTS).map((v, i) => (
             <SlotButton
               key={i}
               className={`quick-wheel-slot${hot === i ? " hot" : ""}${v ? "" : " empty"}${v?.inUse ? " in-use" : ""}`}

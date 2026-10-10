@@ -1,6 +1,7 @@
-// Quick slots (ours; the original has none): ten spells or items to cast or use with one
-// key or tap. The desktop shows them as a hotbar along the bottom of the view (keys 1-9 and 0), the
-// phone layout as a wheel around its Cast button (ui/QuickSlots.tsx).
+// Quick slots (ours; the original has none): spells or items to cast or use with one key or tap,
+// in rows of ten. The desktop shows the first row as a hotbar along the bottom of the view (keys
+// 1-9 and 0), and the Modern interface a second above it (the numpad's 1-9 and 0); the phone layout
+// shows the first row as a wheel around its Cast button (ui/QuickSlots.tsx).
 //
 // A slot remembers a name, not an object id: every save renumbers objects, and a stack of
 // potions is a new object once one is drunk. It keeps the name resource (which survives a
@@ -10,7 +11,11 @@
 
 import type { ObjectInfo, Spell } from "@shards/protocol";
 
+/** Slots in a row (the hotbar's, the phone's wheel) */
 export const QUICK_SLOTS = 10;
+/** Rows kept per character: the second is the Modern interface's only */
+export const QUICK_SLOT_ROWS = 2;
+export const ALL_QUICK_SLOTS = QUICK_SLOTS * QUICK_SLOT_ROWS;
 
 /** Drag data: an inventory item's id, a spell's object id, a quick slot's index (ui/QuickSlots.tsx) */
 export const DRAG_ITEM = "application/x-shards-item";
@@ -35,7 +40,7 @@ export interface SlotStore {
 
 const storageKey = (server: string, character: string) => `shards.quickslots.${server}.${character.toLowerCase()}`;
 
-export const emptySlots = (): QuickSlots => Array.from({ length: QUICK_SLOTS }, () => null);
+export const emptySlots = (): QuickSlots => Array.from({ length: ALL_QUICK_SLOTS }, () => null);
 
 function isSlot(s: unknown): s is QuickSlot {
   const q = s as QuickSlot | null;
@@ -68,7 +73,7 @@ export function loadLastSlot(store: SlotStore, server: string, character: string
   try {
     const raw = store.getItem(lastKey(server, character));
     const n = raw === null ? NaN : Number(raw);
-    return Number.isInteger(n) && n >= 0 && n < QUICK_SLOTS ? n : null;
+    return Number.isInteger(n) && n >= 0 && n < ALL_QUICK_SLOTS ? n : null;
   } catch {
     return null;
   }

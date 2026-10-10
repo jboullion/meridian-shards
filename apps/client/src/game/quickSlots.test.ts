@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ObjectInfo, Spell } from "@shards/protocol";
-import { QUICK_SLOTS, loadLastSlot, loadQuickSlots, saveLastSlot, saveQuickSlots, slotFor, slotItem, slotSpell, type QuickSlot } from "./quickSlots.ts";
+import { ALL_QUICK_SLOTS, loadLastSlot, loadQuickSlots, saveLastSlot, saveQuickSlots, slotFor, slotItem, slotSpell, type QuickSlot } from "./quickSlots.ts";
 
 const obj = (id: number, nameRes: number, iconRes = 500 + nameRes): ObjectInfo =>
   ({ id, nameRes, iconRes, amount: 1, flags: 0, translation: 0, overlays: [], animation: { type: 0, group: 1 } }) as unknown as ObjectInfo;
@@ -22,7 +22,7 @@ describe("quick slots", () => {
   it("saves and loads ten slots per server and character", () => {
     const store = new MapStore();
     const slots = loadQuickSlots(store, "ws://a", "Bob");
-    expect(slots).toHaveLength(QUICK_SLOTS);
+    expect(slots).toHaveLength(ALL_QUICK_SLOTS);
     expect(slots.every((s) => s === null)).toBe(true);
     slots[2] = slotFor("spell", obj(10, 3), "Touch of Flame");
     saveQuickSlots(store, "ws://a", "Bob", slots);
@@ -37,9 +37,10 @@ describe("quick slots", () => {
     eight[7] = { kind: "item", nameRes: 1, name: "Healing potion", icon: 501 };
     store.setItem("shards.quickslots.ws://a.bob", JSON.stringify(eight));
     const slots = loadQuickSlots(store, "ws://a", "Bob");
-    expect(slots).toHaveLength(QUICK_SLOTS);
+    expect(slots).toHaveLength(ALL_QUICK_SLOTS);
     expect(slots[7]?.name).toBe("Healing potion");
-    expect(slots.slice(8)).toEqual([null, null]);
+    // The rest of the first row and the whole second row (saves from before it) come empty
+    expect(slots.slice(8)).toEqual(Array.from({ length: ALL_QUICK_SLOTS - 8 }, () => null));
   });
 
   it("keeps the last slot used per character", () => {
@@ -48,7 +49,10 @@ describe("quick slots", () => {
     saveLastSlot(store, "ws://a", "Bob", 9);
     expect(loadLastSlot(store, "ws://a", "bob")).toBe(9);
     expect(loadLastSlot(store, "ws://a", "Alice")).toBeNull();
+    // The second row's slots count (11-20); past them, nothing
     store.setItem("shards.quickslots.last.ws://a.bob", "12");
+    expect(loadLastSlot(store, "ws://a", "Bob")).toBe(12);
+    store.setItem("shards.quickslots.last.ws://a.bob", "20");
     expect(loadLastSlot(store, "ws://a", "Bob")).toBeNull();
   });
 
@@ -59,7 +63,7 @@ describe("quick slots", () => {
     expect(slots[0]).toBeNull();
     expect(slots[2]?.kind).toBe("item");
     store.setItem("shards.quickslots.ws://a.bob", "{not json");
-    expect(loadQuickSlots(store, "ws://a", "Bob")).toHaveLength(QUICK_SLOTS);
+    expect(loadQuickSlots(store, "ws://a", "Bob")).toHaveLength(ALL_QUICK_SLOTS);
   });
 
   it("finds a spell by name resource, then by name", () => {
