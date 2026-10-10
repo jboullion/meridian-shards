@@ -64,6 +64,7 @@ The Modern layout (`ui/ModernHud.tsx`, `ui/CharacterWindow.tsx`) has no counterp
 | The phone | The touch layout is unchanged, and stays in first person. |
 | Our own actions in the outside views | Our sprite walks while we move. Whether the attack, cast and emote poses the server sends with `BP_CHANGE` show on it isn't checked yet (the UE remaster plays them, ADR 0012 M4). |
 | The target's health and enchantment timers | The server sends neither. |
+| The attack timer on the quick slots | The server's one timer covers attacks too (a weapon's swing keeps spells back for a moment), but only spells start our cooldown. |
 
 ## Deliberately different or left out
 
@@ -83,6 +84,7 @@ The Modern layout (`ui/ModernHud.tsx`, `ui/CharacterWindow.tsx`) has no counterp
 | The intro's logo and splash | The original fades in `logo.bmp` (Near Death Studios' logo), then shows `splash.bgf`, which in the Server 104 files names that server. We skip the logo and show `xsplash.bgf`, the original Meridian 59 splash, with the same button and music. |
 | One desktop app at a time | The original ran as many clients as you liked. Ours share one profile (storage, the asset cache), so a second start brings the first forward (`requestSingleInstanceLock`). |
 | `/H` and `/P` | The original connects to that host and port; our desktop app takes the listed server with that host (and port), else `https://host:port` (http for localhost), or a whole origin, for this run only. |
+| Mouselook | The original captures the mouse on a click or with A_MOUSELOOK until Esc. Ours captures it only while the right button is held and dragged to turn the view, in both interfaces; a right click without dragging still examines. |
 | Chat tabs in the Classic interface | The original has one text window; ours has All, Chat, Combat and Server tabs, drawn as small stone buttons above its box. |
 | The hands' shape | The original stretches the hands with the window; ours keep the shape they have at 4:3 (`screenOverlays.ts`). |
 | The character screen's ad panels (`BP_AD_SELECTED`), Print Map, font and colour choices, the Graphics Options window (Enable MipMaps, Anti Aliasing) | Low value. Settings save themselves, so there's no Save Now. |

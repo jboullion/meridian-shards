@@ -16,6 +16,7 @@ import type { AssetStore } from "../../assets.ts";
 import type { MapAnnotation } from "../annotations.ts";
 import type { IconRenderer } from "../icons.ts";
 import type { QuickSlot, QuickSlots } from "../quickSlots.ts";
+import type { Cooldown } from "../cooldowns.ts";
 import type { Settings } from "../settings.ts";
 import { useWorld } from "./hooks.ts";
 import { MiniMap } from "./MiniMap.tsx";
@@ -214,8 +215,10 @@ function HudBar({ stat, kind, xpAsPercent = false }: { stat: Statistic; kind: st
 }
 
 export function ActionBar({
-  session, icons, settings, slots, selecting, onSelectSelf, onUse, onEdit, onSet, onSwap,
+  session, icons, settings, slots, selecting, onSelectSelf, onUse, onEdit, onSet, onSwap, cooldown,
 }: {
+  /** The spell cooldown, on the spell slots (cooldowns.ts) */
+  cooldown: Cooldown | null;
   session: GameSession;
   icons: IconRenderer;
   settings: Settings;
@@ -246,7 +249,7 @@ export function ActionBar({
         </div>
         {bar(STAT_VIGOR, "vigor")}
       </div>
-      <Hotbar session={session} icons={icons} slots={slots} settings={settings} onUse={onUse} onEdit={onEdit} onSet={onSet} onSwap={onSwap} />
+      <Hotbar session={session} icons={icons} slots={slots} settings={settings} onUse={onUse} onEdit={onEdit} onSet={onSet} onSwap={onSwap} cooldown={cooldown} />
       {bar(STAT_XP, "xp")}
     </div>
   );

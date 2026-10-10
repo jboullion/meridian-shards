@@ -222,19 +222,6 @@ button.link {
 }
 
 /* ---- milestone 4: chat, look, menus ---- */
-.crosshair {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  margin: -3px 0 0 -3px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 0 2px #000;
-  pointer-events: none;
-}
-
 .name-label.hovered {
   text-decoration: underline;
 }
@@ -246,7 +233,8 @@ button.link {
   top: 0;
   white-space: nowrap;
   color: rgb(255, 215, 64);
-  font: bold 20px Georgia, "Times New Roman", serif;
+  /* Half as big again as at first (2026-10-10), on every layout */
+  font: bold 30px Georgia, "Times New Roman", serif;
   text-shadow:
     -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 4px #000;
 }
@@ -2049,6 +2037,11 @@ canvas.server-wait {
 }
 
 /* cursor.c GameWindowSetCursor: the original's cursors over the view (kit.tsx installUiTheme) */
+/* The Modern interface's right drag turning the view (gameScene.ts rightDrag): no cursor meanwhile */
+.viewport[data-turning] {
+  cursor: none !important;
+}
+
 .viewport[data-cursor="target"] {
   cursor: var(--cursor-target, crosshair);
 }
@@ -2622,6 +2615,22 @@ canvas.server-wait {
 .qs-count {
   right: 3px;
   bottom: 1px;
+}
+
+/* The spell cooldown over a quick slot or the Cast button (QuickSlots.tsx CooldownMask): a shadow
+   that clears clockwise from the top, and the seconds left */
+.qs-cooldown {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: conic-gradient(transparent var(--cd-done, 0deg), rgba(0, 0, 0, 0.68) 0);
+  color: #fff;
+  font: bold 15px Arial, Helvetica, sans-serif;
+  text-shadow: 1px 1px 0 #000, 0 0 3px #000;
+  pointer-events: none;
 }
 
 /* Picking a spell target: our bars pick us (Sidebar.tsx) */

@@ -14,7 +14,8 @@
 
 /** Bind Editor actions, by tab, in its order (m59bind.exe; config.ini [keys]). */
 export const ACTION_TABS = {
-  Movement: ["forward", "backward", "turnLeft", "turnRight", "strafeLeft", "strafeRight", "run", "lookUp", "lookDown", "lookStraight", "flip", "mouselookToggle"],
+  // Ours: no Mouselook Toggle (the mouse is never captured but while the right button drags the view)
+  Movement: ["forward", "backward", "turnLeft", "turnRight", "strafeLeft", "strafeRight", "run", "lookUp", "lookDown", "lookStraight", "flip"],
   Communication: ["say", "chat", "tell", "yell", "broadcast", "who", "emote"],
   Interaction: ["go", "interact", "lookAt", "examine", "offer", "buy", "deposit", "withdraw", "attack"],
   Targeting: ["targetNext", "targetPrevious", "targetClear", "targetSelf", "tabForward", "tabBackward", "selectTarget"],
@@ -44,7 +45,6 @@ export const ACTION_LABELS: Record<Action, string> = {
   lookDown: "Look Down",
   lookStraight: "Look Straight",
   flip: "Flip",
-  mouselookToggle: "Mouselook Toggle",
   say: "Say",
   chat: "Chat",
   tell: "Tell",
@@ -117,7 +117,6 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     lookDown: k("PageDown"),
     lookStraight: k("Home"),
     flip: k("End"),
-    mouselookToggle: k("KeyC"),
     say: [],
     chat: k("Enter", "NumpadEnter"),
     tell: k("KeyT"),
@@ -177,7 +176,6 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     lookDown: k("PageDown", "Numpad3"),
     lookStraight: k("Home", "Numpad5"),
     flip: k("End", "Numpad1"),
-    mouselookToggle: [],
     say: [],
     chat: k("Quote"),
     tell: [],
@@ -463,6 +461,8 @@ export function migrate(s: SavedSettings): Settings {
   const preset: PresetName = s.preset === "original" ? "original" : "modern";
   // Keep any actions added since the settings were saved.
   const keys = { ...PRESETS[preset], ...(s.keys ?? {}) } as KeyMap;
+  // Actions since taken out (Mouselook Toggle) leave their saved keys behind: drop them
+  for (const a of Object.keys(keys)) if (!(ACTIONS as readonly string[]).includes(a)) delete (keys as Record<string, KeyBinding[]>)[a];
   const version = s.version ?? 1;
   // Version 2 (milestone 6): E attacks in the modern preset; it no longer opens doors
   if (version < 2 && preset === "modern") keys.go = keys.go.filter((b) => b.code !== "KeyE");

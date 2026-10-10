@@ -66,6 +66,12 @@ describe("settings", () => {
     expect(PRESETS.modern.quickSlot10.map((b) => b.code)).toEqual(["Digit0", "Numpad0"]);
   });
 
+  it("drops the saved keys of actions taken out since (Mouselook Toggle)", () => {
+    const s = migrate({ version: 8, preset: "modern", keys: { ...PRESETS.modern, mouselookToggle: [{ code: "KeyC" }] } as never });
+    expect("mouselookToggle" in s.keys).toBe(false);
+    expect(Object.keys(s.keys).sort()).toEqual([...ACTIONS].sort());
+  });
+
   it("gives new players the Modern interface, and everyone else too as of version 8", () => {
     expect(DEFAULT_SETTINGS.interfaceStyle).toBe("modern");
     expect(migrate({ version: 5 }).interfaceStyle).toBe("modern");

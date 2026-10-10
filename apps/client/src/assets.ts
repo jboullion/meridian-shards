@@ -98,6 +98,12 @@ export class AssetStore {
     return JSON.parse(new TextDecoder().decode(await this.download("itemslots.json"))) as Record<string, string>;
   }
 
+  /** Spell name (lower case) -> its post-cast delay and mana (spelltimes.json from the asset build); empty without one. */
+  async spellTimes(): Promise<Record<string, { postCast: number; mana: number }>> {
+    if (!this.has("spelltimes.json")) return {};
+    return JSON.parse(new TextDecoder().decode(await this.download("spelltimes.json"))) as Record<string, { postCast: number; mana: number }>;
+  }
+
   async palette(): Promise<Palette> {
     return parsePaletteBin(await this.fetchBytes("palette.bin"));
   }

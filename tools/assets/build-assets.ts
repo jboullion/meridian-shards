@@ -16,7 +16,8 @@
 // (ui/*.cur), the Heidelberg title font (ui/heidelb1.ttf, font.c FONT_TITLES) and the snow
 // texture (ui/weather_snow.png, d3dparticle.c).
 // And itemslots.json, where each worn item goes on the Modern interface's paper doll, from the
-// Kod item classes (itemSlots.ts).
+// Kod item classes (itemSlots.ts), and spelltimes.json, each spell's post-cast delay for the
+// quick slots' cooldowns (spellTimes.ts).
 // And roomlinks.json, which rooms connect to which, from the Kod source (roomLinks.ts), so
 // the client can load the rooms next to yours ahead of time.
 //
@@ -30,6 +31,7 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { buildItemSlots } from "./itemSlots.ts";
+import { buildSpellTimes } from "./spellTimes.ts";
 import { buildRoomLinks } from "./roomLinks.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -185,6 +187,11 @@ if (existsSync(join(KOD, "object")) && existsSync(join(KOD, "include"))) {
   writeFileSync(join(OUT, "itemslots.json"), slots);
   files["itemslots.json"] = { size: slots.length, hash: createHash("sha1").update(slots).digest("hex").slice(0, 16), mtime: 0 };
   console.log(`itemslots.json: ${Object.keys(JSON.parse(slots.toString()) as object).length} pictures`);
+  // How long each spell keeps us from casting again, for the quick slots' cooldowns
+  const times = Buffer.from(JSON.stringify(buildSpellTimes(kodFiles)));
+  writeFileSync(join(OUT, "spelltimes.json"), times);
+  files["spelltimes.json"] = { size: times.length, hash: createHash("sha1").update(times).digest("hex").slice(0, 16), mtime: 0 };
+  console.log(`spelltimes.json: ${Object.keys(JSON.parse(times.toString()) as object).length} spells`);
 } else {
   console.warn("!! no Kod source in server/src/kod; the client won't load neighbouring rooms ahead");
 }

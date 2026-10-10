@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { CF, SAY, UA, UC, objId, type ObjectInfo } from "@shards/protocol";
+import { CF, SAY, STAT_GROUP, UA, UC, objId, type ObjectInfo } from "@shards/protocol";
 import {
   PROFANITY_WARNING, isNumberItem, OBSERVER, WHITE, BLACK, decodeBoard, type GuildEvent, type MinigameEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
   type TradeList,
@@ -26,11 +26,12 @@ import {
   WhoDialog,
   type ActionWindow,
 } from "./ui/OptionsDialogs.tsx";
-import { EnchantmentRow, Sidebar, type Tab } from "./ui/Sidebar.tsx";
+import { EnchantmentRow, STAT_MP, Sidebar, type Tab } from "./ui/Sidebar.tsx";
 import { ClassicToolbar } from "./ui/Toolbar.tsx";
 import { ActionBar, MapCluster, TargetFrame, UnitFrame } from "./ui/ModernHud.tsx";
 import { CharacterWindow } from "./ui/CharacterWindow.tsx";
 import { sortByNameAndNumber } from "./inventoryOrder.ts";
+import { CastCooldown, type Cooldown } from "./cooldowns.ts";
 import { TouchControls, tickerColor } from "./ui/TouchControls.tsx";
 import { EdgeFrame, MessageBox, closeTopWindow } from "./ui/kit.tsx";
 import { isProfane } from "./profanity.ts";
@@ -224,6 +225,51 @@ export function GameView({
   if (hudHidden && !modern) setHudHidden(false);
   /** The Modern interface's character window (ui/CharacterWindow.tsx), on the `tab` shown */
   const [characterOpen, setCharacterOpen] = useState(false);
+  /**
+   * The spell cooldown (cooldowns.ts) on the Modern hotbar and the phone's Cast button: each cast
+   * we send starts it for the spell's post-cast delay (spelltimes.json), taken back if our mana
+   * doesn't drop (the server refused the cast)
+   */
+  const castCooldown = useRef(new CastCooldown());
+  const [cooldown, setCooldown] = useState<Cooldown | null>(null);
+  useEffect(() => {
+    let live = true;
+    let times: Record<string, { postCast: number; mana: number }> = {};
+    assets
+      .spellTimes()
+      .then((t) => {
+        if (live) times = t;
+      })
+      .catch(() => {
+        // Without it, no cooldowns
+      });
+    const world = session.world;
+    const manaNow = () => world.stats.get(STAT_GROUP.MAIN)?.find((s) => s.num === STAT_MP)?.numeric?.value ?? null;
+    const offCast = session.onCastSent((spell) => {
+      const sp = world.spells.find((s) => s.object.id === spell);
+      // By the English name, whatever language is shown
+      const t = sp ? times[(session.englishResource(sp.object.nameRes) ?? "").toLowerCase()] : undefined;
+      if (t && castCooldown.current.cast(t.postCast * 1000, t.mana, manaNow(), performance.now())) setCooldown(castCooldown.current.active);
+    });
+    const offWorld = world.on((e) => {
+      if (e.type !== "stats") return;
+      const mana = manaNow();
+      if (mana !== null) castCooldown.current.mana(mana);
+    });
+    return () => {
+      live = false;
+      offCast();
+      offWorld();
+    };
+  }, [session, assets]);
+  // Expire it (or take it back) as time goes
+  useEffect(() => {
+    if (!cooldown) return;
+    const t = setInterval(() => {
+      if (castCooldown.current.tick(performance.now())) setCooldown(castCooldown.current.active);
+    }, 100);
+    return () => clearInterval(t);
+  }, [cooldown]);
   /** itemslots.json: where worn items go on its paper doll */
   const [itemSlots, setItemSlots] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -1347,7 +1393,6 @@ export function GameView({
       >
         <canvas ref={canvasRef} className="viewport" />
         <div ref={labelsRef} className="labels" />
-        <div className="crosshair" />
         {fullMap && (
           <div className="full-map" title={modern ? "Map (click it, or press the Map key, to close)" : "Map (press the Map key again to close)"}>
             <MiniMap
@@ -1366,6 +1411,7 @@ export function GameView({
         {settings.showFps && fps !== null && <div className="fps">{fps} fps</div>}
         {touch && (
           <TouchControls
+            cooldown={cooldown}
             session={session}
             icons={icons}
             settings={settings}
@@ -1429,6 +1475,7 @@ export function GameView({
               onMap={() => setFullMap((v) => !v)}
             />
             <ActionBar
+              cooldown={cooldown}
               session={session}
               icons={icons}
               settings={settings}

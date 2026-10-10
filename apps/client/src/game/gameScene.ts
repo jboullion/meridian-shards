@@ -1,13 +1,12 @@
 // The in-game 3D view: the player's room with its objects, seen from the player's eyes,
 // with the original client's movement (move.c). Keys come from the settings (the modern
 // or the original preset, rebindable; see settings.ts). Modern defaults:
-//   click the view: capture the mouse (mouselook); Esc releases it
+//   right button held and dragged: turn the view (the mouse captured meanwhile); right click: examine
 //   WASD / arrows: move and strafe (arrows left/right turn); Shift runs
 //   Space or E: open a door / take the exit you stand on (BP_REQ_GO)
-//   left click: select the object under the cursor as your target (crosshair when captured)
+//   left click: select the object under the cursor as your target
 //   E: attack the target (or the closest thing you can attack); [ ] \ Esc: next, previous,
 //   yourself, no target;  R: look at the target;  F or double click: pick up / activate
-//   right click: actions menu (the original preset: look)
 //   PgUp/PgDn/Home: look up, down, straight; End: turn around;  Enter: chat
 
 import * as THREE from "three";
@@ -65,6 +64,8 @@ const HEAD_DROP = Math.tan((3.5 * Math.PI) / 180);
 /** The camera stops this far short of a wall behind it, and never nearer our eyes than the second (squares) */
 const CAMERA_WALL_GAP = 0.15;
 const CAMERA_NEAREST = 0.1;
+/** The right button: moved further than this (px) it's a drag that turns the view, not a click */
+const RIGHT_DRAG_SLOP = 4;
 /** Our sprite keeps walking this long after the last step (the mover's steps come in bursts), ms */
 const WALK_LINGER_MS = 150;
 /** Keyboard look up/down speed, radians per second (A_LOOKUP / A_LOOKDOWN held). */
@@ -206,6 +207,12 @@ export class GameScene {
   viewMode: ViewMode = "first";
   /** The camera view changed (for the HUD's note) */
   onViewMode?: (mode: ViewMode) => void;
+  /**
+   * The right button held on the view (the desktop): where it went down, how far the mouse has
+   * moved since (it's captured, so the cursor doesn't), and whether that makes it a drag (turning
+   * the view) rather than a click (Examine, on release)
+   */
+  private rightDrag: { x: number; y: number; travel: number; moved: boolean; mods: Mods } | null = null;
   /** The outside views' camera distance from our eyes (fine units) */
   private arm = ARM_START;
   /** The chase view's own heading, as our angle (0..4095) */
@@ -1012,12 +1019,12 @@ export class GameScene {
     return document.pointerLockElement === this.canvas;
   }
 
-  /** The object under the crosshair (mouse captured) or the mouse cursor. */
+  /** The object under the mouse cursor. */
   private updateHover(): void {
     if (!this.objects) return;
     let ndc: THREE.Vector2 | null = null;
-    if (this.locked) ndc = new THREE.Vector2(0, 0);
-    else if (this.mouse) {
+    // The cursor, where it was even while a right drag has the mouse captured
+    if (this.mouse) {
       const r = this.canvas.getBoundingClientRect();
       ndc = new THREE.Vector2(((this.mouse.x - r.left) / r.width) * 2 - 1, -((this.mouse.y - r.top) / r.height) * 2 + 1);
     }
@@ -1191,7 +1198,7 @@ export class GameScene {
   }
 
   /**
-   * client3d.c GetObjects3D at the mouse: the objects drawn under the cursor (the crosshair while
+   * client3d.c GetObjects3D at the mouse: the objects drawn under the cursor (where it was while
    * the mouse is captured), not hidden by a wall, that pass `test`, nearest first.
    */
   private objectsUnderCursor(test: (o: WorldObject) => boolean = () => true): number[] {
@@ -1226,11 +1233,11 @@ export class GameScene {
     return id;
   }
 
-  /** Aim this.raycaster from the eye through the cursor (the crosshair while captured); false if there's no cursor. */
+  /** Aim this.raycaster from the eye through the cursor (where it was, while a right drag has it captured); false if there's no cursor. */
   private cursorRay(): boolean {
     let ndc: THREE.Vector2 | null = null;
-    if (this.locked) ndc = new THREE.Vector2(0, 0);
-    else if (this.mouse) {
+    // The cursor, where it was even while a right drag has the mouse captured
+    if (this.mouse) {
       const r = this.canvas.getBoundingClientRect();
       ndc = new THREE.Vector2(((this.mouse.x - r.left) / r.width) * 2 - 1, -((this.mouse.y - r.top) / r.height) * 2 + 1);
     }
@@ -1257,6 +1264,17 @@ export class GameScene {
       if (e.button === 0 && this.hovered !== null) this.select(this.hovered);
       return;
     }
+    // Ours (the desktop, both interfaces): the right button turns the view while held and dragged,
+    // and acts as bound (Examine) only if let go without dragging. The mouse is captured while it's
+    // held (so a turn isn't stopped by the screen's edge) and freed again on letting go; the lock
+    // is asked for now, while the press still counts as the user's gesture. There's no other
+    // mouselook: the original's (a click, or A_MOUSELOOK) is gone.
+    if (e.button === 2 && !touchUi(this.settings) && !this.locked) {
+      this.rightDrag = { x: e.clientX, y: e.clientY, travel: 0, moved: false, mods: { alt: e.altKey, ctrl: e.ctrlKey } };
+      window.addEventListener("mouseup", this.onRightUp);
+      this.canvas.requestPointerLock().catch(() => {});
+      return;
+    }
     // Mouse buttons are bound like keys (config.ini mousetarget=mouse0, examine=mouse1)
     const actions = actionsFor(this.settings.keys, mouseCode(e.button), { alt: e.altKey, ctrl: e.ctrlKey });
     for (const a of actions) this.trigger(a);
@@ -1275,8 +1293,20 @@ export class GameScene {
       return;
     }
     if (near.length > 1) return this.choose("Get", near, (id) => this.getOrOpen(id));
-    // A left click on nothing (or nothing we can use) captures the mouse for mouselook
-    this.lockPointer();
+  };
+
+  /** The right button let go: a click does what it's bound to (Examine); a drag is done. */
+  private readonly onRightUp = (e: MouseEvent) => {
+    if (e.button !== 2) return;
+    window.removeEventListener("mouseup", this.onRightUp);
+    const d = this.rightDrag;
+    this.rightDrag = null;
+    this.canvas.removeAttribute("data-turning");
+    if (this.locked) document.exitPointerLock();
+    if (!d || d.moved) return;
+    // As if pressed where it went down
+    this.mouse = { x: d.x, y: d.y };
+    for (const a of actionsFor(this.settings.keys, mouseCode(2), d.mods)) this.trigger(a);
   };
 
   /** mermain.c A_ENDDRAG: a container that can't be picked up is looked inside instead. */
@@ -1310,15 +1340,6 @@ export class GameScene {
     });
   }
 
-  /**
-   * Capture the mouse for mouselook (gameuser.c UserMouselookToggle confines the cursor with
-   * ClipCursor). A plain pointer lock: the raw-input kind ({ unadjustedMovement: true }) let the
-   * cursor wander out of the window on Windows while looking around. Chromium refuses a re-lock
-   * for about a second after Esc, which is harmless here.
-   */
-  private lockPointer(): void {
-    this.canvas.requestPointerLock().catch(() => {});
-  }
 
   /**
    * Double click (merintr.c EventMouseClick: A_ACTIVATEMOUSE, gameuser.c UserActivateMouse):
@@ -1368,6 +1389,18 @@ export class GameScene {
   };
 
   private readonly onMouseMove = (e: MouseEvent) => {
+    const d = this.rightDrag;
+    if (d) {
+      // Captured, the cursor stays put: count the mouse's own movement
+      d.travel += Math.abs(e.movementX) + Math.abs(e.movementY);
+      if (!d.moved && d.travel > RIGHT_DRAG_SLOP) {
+        d.moved = true;
+        // No cursor while it turns the view (styles.css .viewport[data-turning])
+        this.canvas.setAttribute("data-turning", "");
+      }
+      if (d.moved) this.look(e.movementX, e.movementY);
+      return;
+    }
     if (this.locked) this.look(e.movementX, e.movementY);
   };
 
@@ -1653,12 +1686,6 @@ export class GameScene {
       case "selectTarget":
         this.selectHovered();
         break;
-      case "mouselookToggle":
-        // intrface.c A_MOUSELOOK: UserMouselookToggle. Only with the mouse over the view (the
-        // original's main window): not while it's on the chat, the interface or a dialog
-        if (this.locked) document.exitPointerLock();
-        else if (this.mouse) this.lockPointer();
-        break;
       case "say":
       case "tell":
       case "yell":
@@ -1714,6 +1741,12 @@ export class GameScene {
   };
 
   private readonly onBlur = () => {
+    if (this.rightDrag) {
+      window.removeEventListener("mouseup", this.onRightUp);
+      this.rightDrag = null;
+      this.canvas.removeAttribute("data-turning");
+      if (this.locked) document.exitPointerLock();
+    }
     this.keys.clear();
     this.altDown = false;
     this.ctrlDown = false;
@@ -1741,6 +1774,7 @@ export class GameScene {
     this.resizeObserver.disconnect();
     window.removeEventListener("mouseup", this.onDragEnd);
     this.canvas.removeEventListener("mousedown", this.onMouseDown);
+    window.removeEventListener("mouseup", this.onRightUp);
     this.canvas.removeEventListener("dblclick", this.onDoubleClick);
     this.canvas.removeEventListener("contextmenu", this.onContextMenu);
     this.canvas.removeEventListener("mousemove", this.onCanvasMouseMove);

@@ -17,6 +17,7 @@ import { bareIcon, type Drawable, type IconRenderer } from "../icons.ts";
 import { DRAG_ITEM, DRAG_SLOT, DRAG_SPELL, QUICK_SLOTS, slotFor, slotItem, slotSpell, type QuickSlot, type QuickSlots } from "../quickSlots.ts";
 import { bindingLabel, type Action, type Settings } from "../settings.ts";
 import { useWorld } from "./hooks.ts";
+import type { Cooldown } from "../cooldowns.ts";
 import { Button, Window } from "./kit.tsx";
 import { ObjIcon } from "./Sidebar.tsx";
 
@@ -48,13 +49,40 @@ function useSlotViews(session: GameSession, slots: QuickSlots): (SlotView | null
   });
 }
 
-function SlotFace({ icons, view }: { icons: IconRenderer; view: SlotView | null }) {
+function SlotFace({ icons, view, cooldown }: { icons: IconRenderer; view: SlotView | null; cooldown?: Cooldown | null }) {
   if (!view) return null;
   return (
     <>
       <ObjIcon icons={icons} object={view.object} className={view.available ? "qs-icon" : "qs-icon unavailable"} />
       {view.count > 1 && <span className="qs-count">{view.count}</span>}
+      {cooldown && view.slot.kind === "spell" && view.available && <CooldownMask cooldown={cooldown} />}
     </>
+  );
+}
+
+/**
+ * The cooldown over a spell's slot (ours, cooldowns.ts): a shadow that clears clockwise from the
+ * top as the time runs out, and the seconds left. Redrawn each frame while it lasts.
+ */
+export function CooldownMask({ cooldown }: { cooldown: Cooldown }) {
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const step = () => {
+      setNow(performance.now());
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  const total = cooldown.end - cooldown.start;
+  const left = now === 0 ? total : cooldown.end - now;
+  if (left <= 0 || total <= 0) return null;
+  const done = Math.max(0, Math.min(1, 1 - left / total)) * 360;
+  return (
+    <span className="qs-cooldown" style={{ "--cd-done": `${done}deg` } as CSSProperties} aria-hidden>
+      {Math.ceil(left / 1000)}
+    </span>
   );
 }
 
@@ -62,8 +90,10 @@ const slotTitle = (view: SlotView | null, key: string) =>
   `${view ? view.slot.name + (view.available ? "" : view.slot.kind === "spell" ? " (not known)" : " (none carried)") : "Empty"}${key ? ` (${key})` : ""}`;
 
 export function Hotbar({
-  session, icons, slots, settings, onUse, onEdit, onSet, onSwap,
+  session, icons, slots, settings, onUse, onEdit, onSet, onSwap, cooldown,
 }: {
+  /** Ours: the spell cooldown to show on spell slots (the Modern interface's) */
+  cooldown?: Cooldown | null;
   session: GameSession;
   icons: IconRenderer;
   slots: QuickSlots;
@@ -116,7 +146,7 @@ export function Hotbar({
               onEdit(i);
             }}
           >
-            <SlotFace icons={icons} view={v} />
+            <SlotFace icons={icons} view={v} cooldown={cooldown} />
             {key && <span className="qs-key">{key}</span>}
           </button>
         );
@@ -145,8 +175,10 @@ const ringPos = (i: number) => {
 };
 
 export function QuickWheel({
-  session, icons, slots, last, onUse, onEdit,
+  session, icons, slots, last, onUse, onEdit, cooldown,
 }: {
+  /** The spell cooldown, on the Cast button (when its last slot is a spell) and the ring's spell slots */
+  cooldown?: Cooldown | null;
   session: GameSession;
   icons: IconRenderer;
   slots: QuickSlots;
@@ -239,6 +271,7 @@ export function QuickWheel({
       >
         {/* The last slot used, which a tap uses again */}
         {lastView ? <ObjIcon icons={icons} object={lastView.object} className={lastView.available ? "qs-icon" : "qs-icon unavailable"} /> : "Cast"}
+        {cooldown && lastView?.slot.kind === "spell" && lastView.available && <CooldownMask cooldown={cooldown} />}
       </button>
       {open && (
         <div
@@ -266,7 +299,7 @@ export function QuickWheel({
                 onEdit(i);
               }}
             >
-              <SlotFace icons={icons} view={v} />
+              <SlotFace icons={icons} view={v} cooldown={cooldown} />
             </SlotButton>
           ))}
           <div className="quick-wheel-name">

@@ -20,6 +20,7 @@ import { HudBars, HudEnchantments, ObjIcon } from "./Sidebar.tsx";
 import { useWorld } from "./hooks.ts";
 import { QuickWheel } from "./QuickSlots.tsx";
 import type { QuickSlots } from "../quickSlots.ts";
+import type { Cooldown } from "../cooldowns.ts";
 import { wieldedWeapon } from "../equipment.ts";
 
 /** The joystick's knob travel, px; past DEAD of it the move starts, past RUN it runs */
@@ -220,8 +221,10 @@ function ChatTicker({ chat, colored }: { chat: ChatLine[]; colored: boolean }) {
 
 export function TouchControls({
   session, icons, settings, chat, chatUnread, onMove, onPress, onChat, onDrawer, onMap, mapOpen, onLook, resting, onRest,
-  quickSlots, lastSlot, onUseSlot, onEditSlot, selecting, onSelectSelf, onCancelSelect,
+  quickSlots, lastSlot, onUseSlot, onEditSlot, selecting, onSelectSelf, onCancelSelect, cooldown,
 }: {
+  /** The spell cooldown (cooldowns.ts), on the Cast button and its ring */
+  cooldown: Cooldown | null;
   quickSlots: QuickSlots;
   /** The quick slot used last: a tap on Cast uses it again */
   lastSlot: number | null;
@@ -280,7 +283,7 @@ export function TouchControls({
             {b.action === "attack" ? <AttackFace session={session} icons={icons} /> : undefined}
           </ActionButton>
         ))}
-        <QuickWheel session={session} icons={icons} slots={quickSlots} last={lastSlot} onUse={onUseSlot} onEdit={onEditSlot} />
+        <QuickWheel session={session} icons={icons} slots={quickSlots} last={lastSlot} onUse={onUseSlot} onEdit={onEditSlot} cooldown={cooldown} />
       </div>
       {selecting && (
         <div className="touch-select-hint">

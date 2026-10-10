@@ -440,6 +440,14 @@ export class GameSession {
   cast(spell: number, targets: ObjectRef[] = []): void {
     this.logonUntil = 0;
     this.send(buildReqCast(spell, targets));
+    for (const fn of this.castListeners) fn(spell);
+  }
+
+  /** Ours: each BP_REQ_CAST we send, by spell id (the quick slots' cooldowns, apps/client cooldowns.ts) */
+  private readonly castListeners = new Set<(spell: number) => void>();
+  onCastSent(fn: (spell: number) => void): () => void {
+    this.castListeners.add(fn);
+    return () => this.castListeners.delete(fn);
   }
 
   /** A line from the client itself in the chat window (system colour, like GameMessage). */
