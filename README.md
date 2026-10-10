@@ -1,19 +1,21 @@
 # Meridian Shards
 
-A faithful port of the classic Meridian 59 client to the desktop (Windows, macOS and Linux) and, in progress, Android: the original 2.5D look, sprites and textures, rendered with WebGL at modern resolutions, with modern controls beside the original ones. It connects to our own server, which runs the original Server 104 server code unchanged. Every server is a "shard" of one original universe.
+A faithful port of the classic Meridian 59 client to the desktop (Windows, macOS and Linux) and Android: the original 2.5D look, sprites and textures, rendered with WebGL at modern resolutions, with modern controls beside the original ones. It connects to our own server, which runs the original Server 104 server code unchanged. Every server is a "shard" of one original universe.
 
 ## Screenshots
 
-The Inn of Raza in the original Windows client (left) and in Meridian Shards on the desktop (right):
+The Inn of Raza in the original Windows client (left), and in Meridian Shards on the desktop with the original's interface (middle) and our Modern interface (right):
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/original-screen.png" alt="The Inn of Raza in the original Meridian 59 client"></td>
-    <td width="50%"><img src="docs/images/meridian-shards-raza.png" alt="The Inn of Raza in the Meridian Shards desktop app"></td>
+    <td width="33%"><img src="docs/images/original-screen.png" alt="The Inn of Raza in the original Meridian 59 client"></td>
+    <td width="33%"><img src="docs/images/meridian-shards-raza.png" alt="The Inn of Raza in the Meridian Shards desktop app, with the original's interface"></td>
+    <td width="33%"><img src="docs/images/meridian-shards-modern.png" alt="The Inn of Raza in the Meridian Shards desktop app, with the Modern interface"></td>
   </tr>
   <tr>
     <td align="center">The original client</td>
-    <td align="center">Meridian Shards (desktop)</td>
+    <td align="center">Meridian Shards, Classic interface</td>
+    <td align="center">Meridian Shards, Modern interface</td>
   </tr>
 </table>
 
@@ -22,6 +24,26 @@ On an Android phone, with the touch controls, the ☰ menu open, and a fight in 
 <img src="docs/images/mobile-raza-inn.png" alt="Meridian Shards on Android in the Inn of Raza, with the menu open" width="100%">
 
 <img src="docs/images/mobile-fighting.png" alt="Meridian Shards on Android, fighting a mummy in the Mausoleum" width="100%">
+
+## The Modern interface
+
+The desktop app starts in the Modern interface. The original's layout, with the interface column beside the view, is a checkbox away in Configuration.
+
+- **The view fills the window**, with the interface over it: your face top left, the round minimap top right, and along the bottom your health, mana, vigor and experience bars and ten quick slots (1 to 0) for spells and items. The chat runs down the left and fades when it's quiet.
+- **The character window** (I) shows what you wear and wield on a figure of your character, next to your weight, bulk and inventory, with a Sort button. Its tabs hold your stats, spells, skills and quests. Drag it anywhere on the screen.
+- **Camera views** (V or the mouse wheel): first person, a chase camera, over the shoulder, and from the front. H hides the interface for a clear view, and HUD Size in Configuration scales it.
+- **Enhanced Lighting**, on by default: soft highlights, flickering and glowing flames, light that stops at walls, shaded corners, shadows under figures and a vignette. Turn it off in Configuration for the original's look.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/modern-character-window.png" alt="The character window in the Modern interface, with the paper doll and inventory, in Raza"></td>
+    <td width="50%"><img src="docs/images/modern-third-person.png" alt="A third-person view of a character in Raza, in the Modern interface"></td>
+  </tr>
+  <tr>
+    <td align="center">The character window</td>
+    <td align="center">A third-person view</td>
+  </tr>
+</table>
 
 ## Status
 
@@ -34,11 +56,11 @@ The client does what the original client and its modules do. What's still missin
   - chat with tabs (All, Chat, Combat, Server), tells, groups, emotes and moods, and the original's typed commands and aliases;
   - mail, the news globes, guilds, stat reallocation, chess, and the original's full character creator.
 - **The interface:** the original's column (bars, face, enchantments, minimap with notes, the inventory, stats, spells, skills and quests tabs), toolbar, cursors, stone borders, and its Preferences, Configuration (key bindings) and Actions windows. The controls come in a modern (WASD, mouselook) preset and the original's keys. There's also a profanity filter, a logout timer, a language choice (English, German, Portuguese) and the splash screen.
-- **Ours on top:** damage numbers, chat tabs, a latency meter, and pixel-accurate clicking.
+- **Ours on top:** the Modern interface (above), Enhanced Lighting, damage numbers, chat tabs, a latency meter, and pixel-accurate clicking.
 - **For staff:** an in-game admin console for admin accounts ([docs/admin-console.md](docs/admin-console.md)).
-- **Where to play:** with the desktop app for Windows, macOS and Linux, released on [GitHub](https://github.com/jboullion/meridian-shards/releases) (it updates itself), on our hosted server. The client is built with web technology, so it also runs in a browser against a local server, for development; the hosted server doesn't offer browser play.
+- **Where to play:** with the desktop app for Windows, macOS and Linux or the Android app, both released on [GitHub](https://github.com/jboullion/meridian-shards/releases) (the desktop app updates itself), on our hosted server. The client is built with web technology, so it also runs in a browser against a local server, for development; the hosted server doesn't offer browser play.
 - **Mac and Linux players:** the original client has only ever been a Windows program, so playing on a Mac or on Linux has meant running it under Wine or a virtual machine. Meridian Shards runs natively there, with the macOS (universal) and Linux (AppImage, deb) builds of the desktop app. Those builds come out of CI with every release, but they haven't been tried on real Mac and Linux machines yet, so reports are welcome.
-- **Android (in progress):** an Android app is on the way. It already runs in the emulator against the local server; the phone layout, touch controls and a release build are next ([ADR 0003](docs/adr/0003-android.md)).
+- **Android:** the Android app comes with every release, as an APK on [GitHub](https://github.com/jboullion/meridian-shards/releases) (install it from there; it isn't on the Play Store yet). It plays in landscape with a phone layout: a joystick; buttons to attack, cast from your quick slots, open doors, get things and pick a target; the bars over the view, and a drawer with the inventory, spells and map; drag to look, tap to target, double tap to use, long press to look closer. The game files come inside the app, and it offers each new release on the login screen. Leaving the app keeps you in the game for five minutes before it logs you off ([ADR 0003](docs/adr/0003-android.md)).
 
 The milestones and their progress are in [docs/roadmap.md](docs/roadmap.md).
 
@@ -64,7 +86,7 @@ Other commands:
 npm run check             # typecheck, lint and tests
 npm run desktop           # the dev stack plus the desktop app
 npm run desktop:dist      # desktop installers for this OS
-npm run android           # build the Android app and run it on a phone or the emulator
+npm run android:run       # build the Android app and run it on a phone or the emulator
 npm run headless -- --user shardbot --pass shardbot --stay 10   # a scripted client
 ```
 
