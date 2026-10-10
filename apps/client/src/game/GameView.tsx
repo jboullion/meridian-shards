@@ -26,12 +26,13 @@ import {
   WhoDialog,
   type ActionWindow,
 } from "./ui/OptionsDialogs.tsx";
-import { Sidebar, type Tab } from "./ui/Sidebar.tsx";
+import { EnchantmentRow, Sidebar, type Tab } from "./ui/Sidebar.tsx";
+import { ClassicToolbar } from "./ui/Toolbar.tsx";
 import { ActionBar, MapCluster, TargetFrame, UnitFrame } from "./ui/ModernHud.tsx";
 import { CharacterWindow } from "./ui/CharacterWindow.tsx";
 import { sortByNameAndNumber } from "./inventoryOrder.ts";
 import { TouchControls, tickerColor } from "./ui/TouchControls.tsx";
-import { MessageBox, closeTopWindow } from "./ui/kit.tsx";
+import { EdgeFrame, MessageBox, closeTopWindow } from "./ui/kit.tsx";
 import { isProfane } from "./profanity.ts";
 import { AnnotateDialog } from "./ui/AnnotateDialog.tsx";
 import { AboutDialog } from "./ui/AboutDialog.tsx";
@@ -205,6 +206,16 @@ export function GameView({
   const touch = touchUi(settings);
   /** The Modern interface (ours, desktop only): the view fills the window, the HUD over it (ui/ModernHud.tsx) */
   const modern = !touch && settings.interfaceStyle === "modern";
+  /**
+   * The Classic interface: the original's layout (graphics.c, intrface.h). The window's stone edge,
+   * the toolbar row over the view, the view's border and corners, the chat box under it.
+   */
+  const classic = !touch && !modern;
+  /**
+   * The chat line has the keyboard: the original's main window doesn't (GetFocus() != hMain), so the
+   * view's border and corners lose their highlight (graphics.c DrawGridBorder, draw3d.c)
+   */
+  const [chatFocused, setChatFocused] = useState(false);
   /**
    * Hide Interface (ours, the Modern interface): the HUD, chat and character window put away, for
    * screenshots. The chat line still comes out to type in. Back with the same key.
@@ -1243,7 +1254,7 @@ export function GameView({
 
   return (
     <div
-      className={`game${touch ? " touch-ui" : ""}${modern ? " modern-ui" : ""}${hudHidden ? " hud-hidden" : ""}${touch && chatOpen ? " chat-open" : ""}${touch && drawerOpen ? " drawer-open" : ""}`}
+      className={`game${touch ? " touch-ui" : ""}${modern ? " modern-ui" : ""}${classic ? " classic-ui" : ""}${classic && chatFocused ? " chat-focused" : ""}${hudHidden ? " hud-hidden" : ""}${touch && chatOpen ? " chat-open" : ""}${touch && drawerOpen ? " drawer-open" : ""}`}
       ref={gameRef}
       style={
         {
@@ -1280,11 +1291,47 @@ export function GameView({
           { label: "About Meridian…", onSelect: () => setModal({ type: "about" }) },
           { label: "Log off", onSelect: onLogout },
         ]}
-        latency={settings.latencyMeter ? latency : undefined}
+        // The Classic interface has the meter after the toolbar, as the original's lag box
+        latency={settings.latencyMeter && !classic ? latency : undefined}
         tooltips={settings.tooltips}
       />
-      {/* Ours: the view fills its cell, without drawint.c's stone corners and the gap for them */}
+      {classic && (
+        <>
+          {/* drawint.c: the stone edge treatment round the client area */}
+          <div className="classic-edge" aria-hidden>
+            <EdgeFrame />
+          </div>
+          <ClassicToolbar
+            assets={assets}
+            tooltips={settings.tooltips}
+            latency={settings.latencyMeter ? latency : undefined}
+            buttons={
+              settings.toolbar
+                ? [
+                    // mermain.c default_buttons and mailnews.c mail_buttons: each runs its typed command
+                    { bitmap: "help.bmp", name: "Help", onClick: () => runCommand("help") },
+                    { bitmap: "drop.bmp", name: "Drop items", onClick: () => runCommand("drop") },
+                    { bitmap: "get.bmp", name: "Get items", onClick: () => runCommand("get") },
+                    { bitmap: "rest.bmp", name: "Rest/Stand", pressed: resting, onClick: () => runCommand(resting ? "stand" : "rest") },
+                    { bitmap: "mailbox.bmp", name: "Read mail", onClick: () => runCommand("mail") },
+                  ]
+                : undefined
+            }
+          >
+            <EnchantmentRow session={session} icons={icons} kind="room" tooltips={settings.tooltips} onLook={(id) => lookAt(id, DESC.NONE)} />
+          </ClassicToolbar>
+        </>
+      )}
+      {/* The Classic interface draws the view's border and corners round it (graphics.c, draw3d.c) */}
       <div className="view-frame">
+        {classic && (
+          <>
+            <i className="view-corner ul" aria-hidden />
+            <i className="view-corner ur" aria-hidden />
+            <i className="view-corner ll" aria-hidden />
+            <i className="view-corner lr" aria-hidden />
+          </>
+        )}
       <div
         className="view"
         onDragOver={(e) => e.dataTransfer.types.includes("application/x-shards-item") && e.preventDefault()}
@@ -1623,6 +1670,8 @@ export function GameView({
             );
           })}
         </div>
+        {/* The log and the chat line: the Classic interface frames them as the original's text area */}
+        <div className="chat-box">
         <div
           ref={logRef}
           className="chat-log"
@@ -1684,11 +1733,16 @@ export function GameView({
               }
             }}
             // The phone layout keeps the chat put away; typing (Enter, T, the hotkeys) brings it out
-            onFocus={() => touch && setChatOpen(true)}
+            onFocus={() => {
+              setChatFocused(true);
+              if (touch) setChatOpen(true);
+            }}
+            onBlur={() => setChatFocused(false)}
             placeholder="Enter to chat — say, emote, yell, broadcast"
             maxLength={500}
           />
         </form>
+        </div>
       </div>
       {!modern && (
         <Sidebar
@@ -1709,7 +1763,6 @@ export function GameView({
           selecting={selecting}
           onSelectObject={selectObject}
           onCast={castSpell}
-          buttons={toolbarButtons}
           annotations={annotations?.list ?? []}
           onAnnotate={annotateAt}
         />

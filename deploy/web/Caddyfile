@@ -1,16 +1,30 @@
-# Caddy: HTTPS for the game assets and the WebSocket gateway at /ws. The browser client isn't
-# hosted: players use the desktop or Android app, from the download page on GitHub Pages
-# (deploy/web/site/download/, .github/workflows/pages.yml), where every other path redirects.
-# The apps themselves are GitHub Releases. SITE_ADDRESS is the hostname (e.g.
-# 34-123-45-67.sslip.io); Caddy gets its certificate from Let's Encrypt by itself. For a local
-# test without TLS, set SITE_ADDRESS=http://localhost.
+# Caddy: HTTPS for the browser client at /play/, the game assets and the WebSocket gateway at
+# /ws. The download page is on GitHub Pages (deploy/web/site/download/,
+# .github/workflows/pages.yml), where the old /download/ redirects; the apps themselves are
+# GitHub Releases. SITE_ADDRESS is the hostname (e.g. 34-123-45-67.sslip.io, or several,
+# comma-separated); Caddy gets its certificate from Let's Encrypt by itself. For a local test
+# without TLS, set SITE_ADDRESS=http://localhost. The planned layout on our own domain behind
+# Cloudflare is docs/adr/0004-own-domain.md.
+{
+	# Behind Cloudflare, every request comes from Cloudflare's addresses
+	# (https://www.cloudflare.com/ips/), and the player's is in CF-Connecting-IP. Only those
+	# addresses are trusted with it, so nobody can claim another address by sending the header
+	# themselves; without Cloudflare, {client_ip} is the connection's own address.
+	servers {
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		client_ip_headers CF-Connecting-IP
+	}
+}
 
 {$SITE_ADDRESS} {
 	encode zstd gzip
 
-	# The game connection
+	# The game connection. The gateway limits connections per address and reads it from the
+	# first X-Forwarded-For entry (GATEWAY_TRUST_PROXY), so that entry is the player's alone.
 	handle /ws {
-		reverse_proxy gateway:8059
+		reverse_proxy gateway:8059 {
+			header_up X-Forwarded-For {client_ip}
+		}
 	}
 
 	# The original game files. Files are requested with ?v=<content hash>, so they can be
@@ -26,9 +40,28 @@
 		file_server
 	}
 
-	# Everything else, the front page and the old /download/ included, goes to the download page
-	handle {
+	# The download page moved to GitHub Pages
+	handle /download* {
 		redir * https://jboullion.github.io/meridian-shards/
+	}
+
+	# The browser client (a single-page app, built with --base /play/ by tools/deploy/stage.ts).
+	# Hashed bundles cache forever; index.html never.
+	redir /play /play/
+	handle_path /play/* {
+		root * /srv/client
+		@bundles path /assets-client/*
+		header @bundles Cache-Control "public, max-age=31536000, immutable"
+		@index path / /index.html
+		header @index Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+
+	# The marketing site and the wiki will live here (docs/adr/0004-own-domain.md); until then,
+	# everything else goes to the game
+	handle {
+		redir * /play/
 	}
 
 	log {

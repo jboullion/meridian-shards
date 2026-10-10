@@ -5,7 +5,11 @@
 //   3. scp it to the host, unpack into ~/meridian-shards/deploy (the remote .env stays)
 //   4. docker compose up -d --build on the host
 //
-//   node tools/deploy/push.ts --host <user>@<ip> [--key ~/.ssh/id_ed25519] [--skip-stage] [--skip-assets]
+//   node tools/deploy/push.ts --host <user>@<ip> [--key ~/.ssh/id_ed25519] [--skip-stage] [--skip-assets] [--web-only]
+//
+// --web-only ships just the browser client and Caddy's config (deploy/web, the compose file)
+// and recreates only the web container: blakserv and the gateway keep running, so nobody is
+// disconnected and the server's game data stays as it is.
 //
 // Uses the OpenSSH client that ships with Windows 10+ (ssh, scp) and tar.
 
@@ -22,10 +26,12 @@ const { values: opt } = parseArgs({
     key: { type: "string" },
     "skip-stage": { type: "boolean", default: false },
     "skip-assets": { type: "boolean", default: false },
+    "web-only": { type: "boolean", default: false },
   },
 });
+const webOnly = opt["web-only"];
 if (!opt.host) {
-  console.error("usage: node tools/deploy/push.ts --host <user>@<ip> [--key <ssh key>] [--skip-stage] [--skip-assets]");
+  console.error("usage: node tools/deploy/push.ts --host <user>@<ip> [--key <ssh key>] [--skip-stage] [--skip-assets] [--web-only]");
   process.exit(2);
 }
 
@@ -34,7 +40,8 @@ const run = (cmd: string, args: string[]) => execFileSync(cmd, args, { cwd: ROOT
 
 if (!opt["skip-stage"]) {
   const stageArgs = ["tools/deploy/stage.ts"];
-  if (opt["skip-assets"]) stageArgs.push("--skip-assets");
+  if (webOnly) stageArgs.push("--client-only");
+  else if (opt["skip-assets"]) stageArgs.push("--skip-assets");
   run(process.execPath, stageArgs);
 }
 
@@ -44,26 +51,27 @@ rmSync(join(ROOT, tarball), { force: true });
 const excludes = ["--exclude=deploy/.env"];
 if (opt["skip-assets"]) excludes.push("--exclude=deploy/.stage/assets");
 console.log("packing deploy/ ...");
-run("tar", ["-czf", tarball, ...excludes, "deploy"]);
+const packed = webOnly ? ["deploy/docker-compose.yml", "deploy/web", "deploy/.stage/client"] : ["deploy"];
+run("tar", ["-czf", tarball, ...excludes, ...packed]);
 console.log(`${(statSync(join(ROOT, tarball)).size / 2 ** 20).toFixed(0)} MB; uploading to ${opt.host}`);
 
 run("scp", [...sshArgs, tarball, `${opt.host}:meridian-shards-deploy.tgz`]);
 
 // Unpack over the old copy. Assets are replaced only when they were sent.
+const compose = "sudo docker compose -f deploy/docker-compose.yml";
 const remote = [
   "set -e",
   "mkdir -p ~/meridian-shards && cd ~/meridian-shards",
-  opt["skip-assets"] ? "" : "rm -rf deploy/.stage/assets",
-  "rm -rf deploy/.stage/blakserv-src deploy/.stage/gamedata deploy/.stage/client deploy/.stage/gateway",
+  webOnly || opt["skip-assets"] ? "" : "rm -rf deploy/.stage/assets",
+  webOnly ? "rm -rf deploy/.stage/client" : "rm -rf deploy/.stage/blakserv-src deploy/.stage/gamedata deploy/.stage/client deploy/.stage/gateway",
   "tar -xzf ~/meridian-shards-deploy.tgz",
   "rm ~/meridian-shards-deploy.tgz",
   "test -f deploy/.env || { echo 'deploy/.env is missing on the server: copy deploy/.env.example and set SITE_ADDRESS'; exit 1; }",
-  "sudo docker compose -f deploy/docker-compose.yml up -d --build",
-  // Caddy bind-mounts .stage/assets, which was just deleted and unpacked again; a running
-  // container keeps serving the old (now empty) directory until it restarts. (.stage/client
-  // is removed above too: older deploys hosted the browser client there.)
-  "sudo docker compose -f deploy/docker-compose.yml restart web",
-  "sudo docker compose -f deploy/docker-compose.yml ps",
+  webOnly ? `${compose} up -d --no-deps web` : `${compose} up -d --build`,
+  // Caddy bind-mounts .stage/client and .stage/assets, which were just deleted and unpacked
+  // again; a running container keeps serving the old (now empty) directories until it restarts
+  `${compose} restart web`,
+  `${compose} ps`,
 ]
   .filter(Boolean)
   .join(" && ");

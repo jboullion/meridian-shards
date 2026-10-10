@@ -69,6 +69,9 @@ const TREATMENT_PIECES = [
   "maptreat_ul", "maptreat_ur", "maptreat_ll", "maptreat_lr", "maptreat_urepeat", "maptreat_brepeat", "maptreat_lrepeat", "maptreat_rrepeat",
   "iultop", "iulleft", "iurtop", "iurright", "illbottom", "illleft", "ilrbottom", "ilrright", "itop", "ibottom", "ileft", "iright",
   "barleft", "barright", "bartop", "barbottom",
+  // clientd3d draw3d.c ViewElements: the view's corners, highlighted while the game has the keyboard
+  "viewtreat_ul", "viewtreat_ur", "viewtreat_ll", "viewtreat_lr",
+  "viewtreat_ul_hilight", "viewtreat_ur_hilight", "viewtreat_ll_hilight", "viewtreat_lr_hilight",
 ];
 /** merintr.rc IDB_B*: the edit box treatment (the top corners reuse the top repeat; the bottom is stripped off) */
 const EDIT_PIECES = ["ulleft", "urright", "llleft", "lrright", "urepeat", "lrepeat", "rrepeat"];

@@ -253,6 +253,7 @@ Ours, beside the original's layout: Minecraft- and Diablo-style HUD clusters ove
   - **Sort** puts the bag in the original's list order (amounts first, then by name) with the server's own inventory moves (`inventoryOrder.ts`), and an item dropped on the bag's empty space goes to the end; dragging onto another item still takes its place;
   - the numpad's digits use the quick slots too (modern preset; added to saved keys by settings version 7);
   - the graph bars' top and bottom strips no longer show past their rounded ends (Classic's too).
+- [x] **The Classic interface, closer to the original** (2026-10-10): the stone edge round the client area; the toolbar row over the view (Help, Drop, Get, Rest/Stand, mail at `TOOLBAR_X`, the latency meter after them, the room's enchantments right-aligned); the view's 2 px border and the D3D client's gold-ball corners, highlighted while the game has the keyboard; the chat's log and line in one grey box with the edit treatment and the original's scroll bar, its tabs as small stone buttons above. Menus and dialogs keep our stone windows.
 - [x] **Camera views** (Camera View, V; the wheel): first person, then chase, behind and front, as the UE remaster's.
   - The outside views draw our own sprite (walking while we move) and hide the first-person hands. They tilt at most 20° and start a little above. They turn about our head and zoom toward it. The camera sits a little higher than the line to the head, looking the same way, so we stand low in the view (the action bar may cover our legs) with the head at the same place at any distance.
   - Chase orbits with the mouse; the keys point the way as the camera sees it, and we turn to face that way and walk forward, so the server sees plain turns and steps. Behind and front are fixed to us; the mouse turns us.
@@ -305,3 +306,6 @@ Ours, beside the original's layout: Minecraft- and Diablo-style HUD clusters ove
   - Death and respawn need nothing special from the client: the server moves you to the Underworld and you walk out through its rip in space.
 - **2026-10-08:**
   - The hosted browser client is taken down: it was only for early testing. The VM keeps blakserv, the gateway, the game files and the download page, and its front page now goes to the download page. Players use the desktop app (and later the Android app); the browser stays for development.
+- **2026-10-09:**
+  - The hosted browser client is back at https://35-206-75-121.sslip.io, for players who want to try the game without a download. `push.ts --web-only` updates it (and Caddy) without restarting blakserv.
+  - The browser client moved to `/play/`, and Caddy takes player addresses from Cloudflare's header when Cloudflare is in front: the first steps towards our own domain on a Bluehost VPS behind Cloudflare ([ADR 0004](adr/0004-own-domain.md)).

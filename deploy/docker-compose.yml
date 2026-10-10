@@ -23,7 +23,7 @@ services:
       - channel:/srv/blakserv/channel
     ports:
       # The game port, for original Windows clients built with our SecretKey.
-      # Browser players come in through the gateway and don't need it.
+      # Browser and app players come in through the gateway and don't need it.
       - "${GAME_PORT:-5959}:5959"
     stop_grace_period: 60s
 
@@ -49,6 +49,7 @@ services:
       - "${HTTPS_PORT:-443}:443/udp"
     volumes:
       - ./web/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./.stage/client:/srv/client:ro
       - ./.stage/assets:/srv/assets:ro
       - caddy-data:/data
       - caddy-config:/config
