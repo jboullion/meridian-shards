@@ -15,7 +15,6 @@ import { useAsyncImage, useWorld } from "./hooks.ts";
 import { useKeyedHalves, useKeyedImage } from "./keyed.ts";
 import type { Settings } from "../settings.ts";
 import { MiniMap } from "./MiniMap.tsx";
-import { ToolbarButtonView, type ToolbarButton } from "./Toolbar.tsx";
 import type { MapAnnotation } from "../annotations.ts";
 import { DRAG_SPELL } from "../quickSlots.ts";
 
@@ -118,6 +117,42 @@ export function StatBar({ stat, main = false, xpAsPercent = false }: { stat: Sta
   );
 }
 
+/**
+ * Enchantments in a row (enchant.c): ours or the room's, each named on hover with Show tooltips, a
+ * right click looking at it (WM_RBUTTONDOWN). The Classic interface's room enchantments sit in the
+ * toolbar row (Toolbar.tsx ClassicToolbar); ours are under our face.
+ */
+export function EnchantmentRow({
+  session, icons, kind, tooltips, onLook, className,
+}: {
+  session: GameSession;
+  icons: IconRenderer;
+  kind: "player" | "room";
+  tooltips: boolean;
+  onLook: (id: number) => void;
+  className?: string;
+}) {
+  const world = session.world;
+  useWorld(world, ["enchantments"]);
+  return (
+    <div className={`enchantments ${kind} ${className ?? ""}`}>
+      {[...world.enchantments[kind].values()].map((e) => (
+        <ObjIcon
+          key={e.id}
+          icons={icons}
+          object={e}
+          className="enchant"
+          title={tooltips ? (session.resource(e.nameRes) ?? "") : undefined}
+          onContextMenu={(ev) => {
+            ev.preventDefault();
+            onLook(e.id);
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 /** Health, mana and vigor over the view, for the phone layout (ours; TouchControls.tsx): the interface's bars without XP. */
 export function HudBars({ session, icons, onSelectSelf }: { session: GameSession; icons: IconRenderer; onSelectSelf?: () => void }) {
   const world = session.world;
@@ -175,10 +210,8 @@ export function HudEnchantments({
 
 export function Sidebar({
   session, icons, assets, getRoom, tab, onTab, settings, onLookItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, target, selecting, onSelectObject, onCast,
-  annotations, onAnnotate, buttons,
+  annotations, onAnnotate,
 }: {
-  /** Ours: the toolbar buttons we keep (Rest/Stand, the mailbox), beside the portrait */
-  buttons?: ToolbarButton[];
   /** The room's map annotations (annotate.c), drawn with Map annotations on */
   annotations: readonly MapAnnotation[];
   /** A right click on the minimap, in room coordinates: add or edit an annotation */
@@ -229,13 +262,6 @@ export function Sidebar({
   return (
     <aside className="sidebar" style={{ backgroundImage: ui("bkgnd.bmp") }}>
       <div className="user-area">
-        {buttons && (
-          <div className="user-buttons" role="toolbar" aria-label="Toolbar">
-            {buttons.map((b) => (
-              <ToolbarButtonView key={b.bitmap} assets={assets} button={b} tooltips={settings.tooltips} />
-            ))}
-          </div>
-        )}
         <div
           className={selecting ? "portrait selecting" : "portrait"}
           title={self ? tip(rs(self.info.nameRes)) : undefined}
@@ -293,22 +319,6 @@ export function Sidebar({
         ) : (
           <div className="minimap off" style={{ backgroundImage: `url(${assets.url("ui/mapbkgnd.bmp")})` }} />
         )}
-        <div className="enchantments room">
-          {[...world.enchantments.room.values()].map((e) => (
-            <ObjIcon
-            key={e.id}
-            icons={icons}
-            object={e}
-            className="enchant"
-            title={tip(rs(e.nameRes))}
-            onContextMenu={(ev) => {
-              // enchant.c WM_RBUTTONDOWN: look at the enchantment
-              ev.preventDefault();
-              onLook(e.id);
-            }}
-          />
-          ))}
-        </div>
       </div>
       <div className="stat-tabs">
         {TABS.map((t) => (

@@ -6,7 +6,7 @@ The hosted stack is three containers on one small Linux VM:
 |---|---|
 | `blakserv` | The unmodified Server 104 server, built for Linux (32-bit), with the compiled Kod, resources and rooms from our build. Game state lives on the `savegame` volume. |
 | `gateway` | The WebSocket-to-TCP gateway (`tools/gateway/gateway.ts`). |
-| `web` | Caddy: HTTPS (Let's Encrypt), the game assets at `/assets/` and the gateway at `/ws`. Every other path, `/` and the old `/download/` included, redirects to the download page on GitHub Pages (`https://jboullion.github.io/meridian-shards/`). The browser client isn't hosted (since 2026-10-08), so players use the desktop or Android app. |
+| `web` | Caddy: HTTPS (Let's Encrypt), the browser client at `/play/` (every other path but `/assets/` and `/ws` redirects there), the game assets at `/assets/` and the gateway at `/ws`. The old `/download/` redirects to the download page on GitHub Pages (`https://jboullion.github.io/meridian-shards/`). The browser client was taken down on 2026-10-08 and is back since 2026-10-09; most players use the desktop or Android app. |
 
 Port 5959 is also open for original Windows clients built with our `SecretKey`. Our apps only need 443.
 
@@ -80,10 +80,10 @@ Put this in `.env`, using **your** static IP with dashes (34.123.45.67 becomes `
 
 ```
 SITE_ADDRESS=34-123-45-67.sslip.io
-GATEWAY_ORIGINS=app://shards,https://localhost,app://unreal-meridian
+GATEWAY_ORIGINS=https://34-123-45-67.sslip.io,app://shards,https://localhost,app://unreal-meridian
 ```
 
-`app://shards` is the desktop app's page origin; without it the gateway turns the desktop app away. `app://unreal-meridian` is the Unreal remaster (`meridian-unreal`, its ADR 0010), which plays on this server too. After changing `.env`, restart the gateway: `docker compose up -d gateway`.
+The first entry is the site itself, for the browser client; without it the gateway turns browser players away. `app://shards` is the desktop app's page origin; without it the gateway turns the desktop app away. `app://unreal-meridian` is the Unreal remaster (`meridian-unreal`, its ADR 0010), which plays on this server too. After changing `.env`, restart the gateway: `docker compose up -d gateway`.
 
 ## 5. Deploy (and redeploy)
 
@@ -93,7 +93,9 @@ From the repo root on your PC:
 node tools/deploy/push.ts --host shards@<EXTERNAL_IP> --key $HOME/.ssh/meridian_shards
 ```
 
-The first push uploads about 450 MB (mostly the game assets). For code-only updates add `--skip-assets`. The first start takes a minute: Docker builds blakserv, and Caddy fetches the certificate. Then open `https://<dashed-ip>.sslip.io`, which should redirect to the download page.
+The first push uploads about 450 MB (mostly the game assets). For code-only updates add `--skip-assets`. To update only the browser client and Caddy's config, add `--web-only`: it rebuilds the client, recreates only the `web` container and leaves blakserv and the gateway running, so nobody is disconnected. The first start takes a minute: Docker builds blakserv, and Caddy fetches the certificate. Then open `https://<dashed-ip>.sslip.io`, which should redirect to `/play/` and show the browser client's log on screen.
+
+The move to our own domain, with Cloudflare in front, is planned in [ADR 0004](../docs/adr/0004-own-domain.md). Caddy is ready for it: it takes player addresses from Cloudflare's `CF-Connecting-IP` header, but only from Cloudflare's published ranges.
 
 ## 6. The desktop app
 

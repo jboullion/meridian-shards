@@ -38,7 +38,8 @@ Phase 4 is done: the toolbar, tooltips, map annotations, the profanity filter, t
 
 | What | Original | What it needs |
 |---|---|---|
-| The window's edge treatment, the stats area's and the user area's | `drawint.c` (IDB_E*, IDB_S*, the personal enchantment treatment) | The view's corners, the map, the inventory and the graph bars have theirs; the stone edge round the whole window, the stats list's thin frame and the frame round the face and bars don't yet. |
+| The stats area's and the user area's treatments | `drawint.c` (IDB_S*, the personal enchantment treatment) | The window's stone edge, the view's border and corners, the map, the inventory and the graph bars have theirs; the stats list's thin frame and the frame round the face and bars don't yet. |
+| The lag box's picture | `lagbox.c` (resource 19995, translated per latency band) | Our server's resources don't define 19995, so the meter is a coloured square in the original's place after the toolbar. |
 | The drop cursor | `inventry.c`, `merintr.c EventSetCursor` (IDC_DROPCURSOR) | Dragging from the inventory uses the browser's drag and drop, whose cursor a page can't set. |
 | Map annotations on the desktop or phone | `mapfile.c` | Kept in the page's storage per server and room checksum, like the mailbox; the desktop app could keep them in a file. |
 
@@ -82,7 +83,7 @@ The Modern layout (`ui/ModernHud.tsx`, `ui/CharacterWindow.tsx`) has no counterp
 | The intro's logo and splash | The original fades in `logo.bmp` (Near Death Studios' logo), then shows `splash.bgf`, which in the Server 104 files names that server. We skip the logo and show `xsplash.bgf`, the original Meridian 59 splash, with the same button and music. |
 | One desktop app at a time | The original ran as many clients as you liked. Ours share one profile (storage, the asset cache), so a second start brings the first forward (`requestSingleInstanceLock`). |
 | `/H` and `/P` | The original connects to that host and port; our desktop app takes the listed server with that host (and port), else `https://host:port` (http for localhost), or a whole origin, for this run only. |
-| The toolbar and the view's border | The original has a button bar over the view (Help, Drop, Get, Rest/Stand, mail) and stone corners around it. We keep only Rest/Stand and the mail button, left of the portrait (Show toolbar still hides them), and the view fills its cell without the border. |
+| Chat tabs in the Classic interface | The original has one text window; ours has All, Chat, Combat and Server tabs, drawn as small stone buttons above its box. |
 | The hands' shape | The original stretches the hands with the window; ours keep the shape they have at 4:3 (`screenOverlays.ts`). |
 | The character screen's ad panels (`BP_AD_SELECTED`), Print Map, font and colour choices, the Graphics Options window (Enable MipMaps, Anti Aliasing) | Low value. Settings save themselves, so there's no Save Now. |
 | More than 32 light sources | The original lights a room with up to 150 (`MAX_NUM_DLIGHTS`); our shader takes the 32 nearest the viewer (`ObjectsView.lights`). |

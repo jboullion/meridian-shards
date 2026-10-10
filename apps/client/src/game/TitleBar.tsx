@@ -154,7 +154,8 @@ export function TitleBar({
   );
 }
 
-function LatencyMeter({ ms, tooltip }: { ms: number | null; tooltip: boolean }) {
+/** The latency meter (lagbox.c): in the title bar, or after the toolbar in the Classic interface. */
+export function LatencyMeter({ ms, tooltip }: { ms: number | null; tooltip: boolean }) {
   const text = ms === null ? "Measuring latency…" : latencyText(ms);
   return (
     <span className={`latency ${ms === null ? "waiting" : latencyLevel(ms)}`} aria-label={text} tabIndex={0}>

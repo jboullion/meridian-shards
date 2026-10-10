@@ -17,6 +17,7 @@ The name comes from the lore: every server or world is a "shard" of one original
    - Before going public, check that nothing in git is original art or rooms.
 3. **Our server only.** Browser players connect to our server running Server 104 code. We never connect to the live 104 server.
    - Changed 2026-10-08: the hosted browser client was only for early testing and has been taken down. Players use the desktop app (and later the Android app), which runs this same client; the browser is for development.
+   - Changed 2026-10-09: the hosted browser client is back, because players asked to try the game without a download. The apps stay the main way to play (their game files are local, so they cost the VM far less traffic).
 4. **Server: unmodified `blakserv`, config changes only.** The config is [server/config/blakserv.cfg](../../server/config/blakserv.cfg):
    - our own `SecretKey` (it ships in the JS, so it isn't security);
    - patching and downloads off (the default when the patch hosts are empty);

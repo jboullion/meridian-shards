@@ -5,13 +5,16 @@
 //   deploy/.stage/gamedata/       compiled Kod (memmap), resources (rsc), rooms and kodbase.txt
 //                                 from our Windows build, so the server's rsc0000.rsb matches the
 //                                 client's assets exactly
+//   deploy/.stage/client/         the production browser client, built for /play/
 //   deploy/.stage/assets/         the asset build (dist/assets)
 //   deploy/.stage/gateway/        the gateway script and its one dependency (ws)
 //
-//   node tools/deploy/stage.ts [--skip-assets]
+//   node tools/deploy/stage.ts [--skip-client] [--skip-assets] [--client-only]
 //
+// --client-only builds and stages the browser client and nothing else (push.ts --web-only).
 // Run `npm run assets` (and server\build.cmd) first. Then `docker compose -f deploy/docker-compose.yml build`.
 
+import { execSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,7 +26,11 @@ const STAGE = join(ROOT, "deploy", ".stage");
 const SRC = join(ROOT, "server", "src");
 const RUN = join(SRC, "run", "server");
 const { values: opt } = parseArgs({
-  options: { "skip-assets": { type: "boolean", default: false } },
+  options: {
+    "skip-client": { type: "boolean", default: false },
+    "skip-assets": { type: "boolean", default: false },
+    "client-only": { type: "boolean", default: false },
+  },
 });
 
 function need(path: string, hint: string): void {
@@ -38,6 +45,20 @@ function copy(from: string, to: string, filter?: (src: string) => boolean): void
   cpSync(from, to, { recursive: true, filter });
 }
 
+// The hosted client lives at /play/ (deploy/web/Caddyfile), so it's built with that base,
+// straight into the stage: apps/client/dist stays the apps' build, whose pages are at /
+function stageClient(): void {
+  console.log("building the client for /play/ (vite build)...");
+  const out = join(STAGE, "client");
+  execSync(`npm run build -w @shards/client -- --base /play/ --outDir "${out}" --emptyOutDir`, { cwd: ROOT, stdio: "inherit" });
+}
+
+if (opt["client-only"]) {
+  stageClient();
+  console.log(`staged the client in ${join(STAGE, "client")}`);
+  process.exit(0);
+}
+
 need(join(SRC, "blakserv", "makefile.linux"), "copy the Server 104 source to server/src first (see README)");
 need(join(RUN, "memmap"), "build the server and Kod first: server\\build.cmd");
 need(join(ROOT, "dist", "assets", "manifest.json"), "build the assets first: npm run assets");
@@ -45,8 +66,6 @@ need(join(ROOT, "dist", "assets", "manifest.json"), "build the assets first: npm
 rmSync(join(STAGE, "blakserv-src"), { recursive: true, force: true });
 rmSync(join(STAGE, "gamedata"), { recursive: true, force: true });
 rmSync(join(STAGE, "gateway"), { recursive: true, force: true });
-// older stages held the browser client, which is no longer hosted
-rmSync(join(STAGE, "client"), { recursive: true, force: true });
 
 // Sources for the Linux build (no Windows build output)
 const noObjects = (p: string) => !/[\\/](debug|release)([\\/]|$)/i.test(p) && !/\.(obj|pdb|exe|ilk|lib)$/i.test(p);
@@ -88,6 +107,8 @@ copy(join(ROOT, "deploy", "blakserv", "maint.sh"), join(STAGE, "maint.sh"));
 // Gateway: the script plus ws (pure JS, no dependencies of its own)
 copy(join(ROOT, "tools", "gateway", "gateway.ts"), join(STAGE, "gateway", "gateway.ts"));
 copy(join(ROOT, "node_modules", "ws"), join(STAGE, "gateway", "node_modules", "ws"));
+
+if (!opt["skip-client"]) stageClient();
 
 if (!opt["skip-assets"]) {
   // Mirror dist/assets (417 MB); skipped files that haven't changed keep it quick

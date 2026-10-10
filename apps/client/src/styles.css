@@ -392,14 +392,6 @@ button.link {
   align-items: center;
 }
 
-/* Rest/Stand and the mailbox (GameView.tsx), stacked left of the portrait */
-.user-buttons {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
 /* Ours: a face (30 x 45; there's no bigger picture) at 1.5 times, as tall as the four bars beside it */
 .portrait {
   flex: none;
@@ -1970,7 +1962,7 @@ canvas.server-wait {
   image-rendering: pixelated;
 }
 
-/* The toolbar's buttons (toolbar.c): 24 x 20, beside the portrait (.user-buttons) */
+/* The toolbar's buttons (toolbar.c): 24 x 20 (the Classic toolbar row, the Modern unit frame) */
 .toolbar-button {
   width: 24px;
   height: 20px;
@@ -3472,4 +3464,209 @@ canvas.server-wait {
   height: 340px;
   font: 14px Georgia, "Times New Roman", serif;
   color: rgb(231, 231, 231);
+}
+
+/* ---- The Classic interface (GameView classic): the original's layout, as graphics.c and
+   intrface.h place it, with our own windows and dialogs. The client area is the stone window
+   background inside the 16 px edge treatment (EDGETREAT_WIDTH); the toolbar row starts 18 px down
+   (TOOLBAR_Y) at x 26 (TOOLBAR_X); the view at x 26 under a 2 px border (LEFT_BORDER 8,
+   HIGHLIGHT_THICKNESS 2), 46 px down (TOOLBAR_Y + 20 + MIN_TOP_TOOLBAR + 2); the text area under
+   the view, as wide. ---- */
+.game.classic-ui {
+  position: relative;
+  background: #000 var(--ui-bkgnd) repeat;
+}
+
+/* The chat's log and line, boxed only in the Classic interface (as if the box weren't there elsewhere) */
+.chat-box {
+  display: contents;
+}
+
+.classic-edge {
+  position: relative;
+  grid-column: 1 / -1;
+  grid-row: 2 / -1;
+  z-index: 4;
+  pointer-events: none;
+}
+
+/* The toolbar row: TOOLBAR_X 26, TOOLBAR_Y 18, buttons 20 high, then MIN_TOP_TOOLBAR 6 and our
+   own 6 more, so the buttons and the room's enchantments stand clear of the view's border */
+.classic-toolbar {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 50px;
+  padding: 18px 8px 12px 26px;
+  box-sizing: border-box;
+}
+
+.classic-toolbar .toolbar-buttons {
+  display: flex;
+}
+
+.classic-toolbar .latency {
+  margin-right: 0;
+}
+
+/* enchant.c: the room's enchantments right-aligned to the view's right edge */
+.classic-room-enchantments {
+  display: flex;
+  margin-left: auto;
+}
+
+.classic-room-enchantments .enchantments.room {
+  position: static;
+  flex-direction: row-reverse;
+}
+
+/* The view: the 2 px border (graphics.c DrawGridBorder: HIGHLIGHT_INDEX 195 while the game has the
+   keyboard, BORDER_INDEX 79 while the chat line has it) */
+.game.classic-ui .view-frame {
+  position: relative;
+  margin: 0 4px 0 24px;
+  border: 2px solid rgb(240, 208, 25);
+}
+
+.game.classic-ui.chat-focused .view-frame {
+  border-color: rgb(27, 15, 10);
+}
+
+/* draw3d.c ViewElements: the four corners over the view's corners and its border, highlighted
+   while the game has the keyboard (the *_hilight set) */
+.view-corner {
+  position: absolute;
+  z-index: 3;
+  width: 52px;
+  height: 52px;
+  background: no-repeat;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.view-corner.ul { left: -8px; top: -8px; background-image: var(--ui-t-viewtreat_ul_hilight); }
+.view-corner.ur { right: -8px; top: -8px; background-image: var(--ui-t-viewtreat_ur_hilight); }
+.view-corner.ll { left: -8px; bottom: -8px; background-image: var(--ui-t-viewtreat_ll_hilight); }
+.view-corner.lr { right: -8px; bottom: -8px; background-image: var(--ui-t-viewtreat_lr_hilight); }
+.game.classic-ui.chat-focused .view-corner.ul { background-image: var(--ui-t-viewtreat_ul); }
+.game.classic-ui.chat-focused .view-corner.ur { background-image: var(--ui-t-viewtreat_ur); }
+.game.classic-ui.chat-focused .view-corner.ll { background-image: var(--ui-t-viewtreat_ll); }
+.game.classic-ui.chat-focused .view-corner.lr { background-image: var(--ui-t-viewtreat_lr); }
+
+/* The text area under the view, as wide (editbox.c EditBoxResize, textin.c TextInputResize): our
+   tabs on the stone, then the log and the chat line in one box with the edit treatment (IDB_B*) */
+.game.classic-ui .chat {
+  /* Clear of the view's lower corners, which hang 8 px below its border (EDITAREA_TOP_GAP 15) */
+  margin: 12px 4px 18px 24px;
+  background: transparent;
+  border-top: none;
+}
+
+.game.classic-ui .chat-tabs {
+  gap: 3px;
+  padding: 0 0 3px;
+  background: transparent;
+  border-bottom: none;
+}
+
+.game.classic-ui .chat-tabs button {
+  padding: 1px 10px 2px;
+  border: 2px solid;
+  border-color: #a8a8a8 #1c1c1c #1c1c1c #a8a8a8;
+  background: #4a4a4a var(--ui-bkgnd) repeat;
+  color: rgb(231, 231, 231);
+  font: 12px Georgia, "Times New Roman", serif;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.game.classic-ui .chat-tabs button:hover {
+  color: rgb(240, 208, 25);
+}
+
+.game.classic-ui .chat-tabs button.active {
+  margin-bottom: 0;
+  padding-bottom: 2px;
+  border-color: #1c1c1c #a8a8a8 #a8a8a8 #1c1c1c;
+  color: rgb(240, 208, 25);
+}
+
+.game.classic-ui .chat-box {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 2px;
+  background:
+    var(--ui-b-ulleft) left top / 2px 12px no-repeat,
+    var(--ui-b-llleft) left bottom / 2px 12px no-repeat,
+    var(--ui-b-urright) right top / 2px 12px no-repeat,
+    var(--ui-b-lrright) right bottom / 2px 12px no-repeat,
+    var(--ui-b-urepeat) left top / 4px 2px repeat-x,
+    linear-gradient(rgb(213, 213, 213), #fff) left bottom / 100% 2px no-repeat,
+    var(--ui-b-lrepeat) left top / 2px 4px repeat-y,
+    var(--ui-b-rrepeat) right top / 2px 4px repeat-y,
+    #000;
+  image-rendering: pixelated;
+}
+
+/* color.c COLOR_MAINEDITBGD: the log's grey, and the chat line's below a thin rule */
+.game.classic-ui .chat-log {
+  background: rgb(120, 120, 120);
+}
+
+.game.classic-ui .chat-input input {
+  padding: 4px 8px;
+  border: none;
+  border-top: 1px solid rgb(80, 80, 80);
+  background: rgb(120, 120, 120);
+  color: #fff;
+}
+
+.game.classic-ui .chat-input input::placeholder {
+  color: rgb(200, 200, 200);
+}
+
+/* The original's scroll bar: Windows' grey, raised thumb and arrow buttons, on a dithered track */
+.game.classic-ui .chat-log::-webkit-scrollbar {
+  width: 16px;
+}
+
+.game.classic-ui .chat-log::-webkit-scrollbar-track {
+  background: repeating-conic-gradient(#fff 0 25%, rgb(212, 208, 200) 0 50%) 0 0 / 2px 2px;
+}
+
+.game.classic-ui .chat-log::-webkit-scrollbar-thumb,
+.game.classic-ui .chat-log::-webkit-scrollbar-button {
+  background-color: rgb(212, 208, 200);
+  border: 1px solid;
+  border-color: #fff #404040 #404040 #fff;
+  box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf;
+}
+
+.game.classic-ui .chat-log::-webkit-scrollbar-button:single-button {
+  display: block;
+  height: 16px;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.game.classic-ui .chat-log::-webkit-scrollbar-button:single-button:vertical:decrement {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M3.5 0 7 4H0z'/%3E%3C/svg%3E");
+}
+
+.game.classic-ui .chat-log::-webkit-scrollbar-button:single-button:vertical:increment {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M0 0h7L3.5 4z'/%3E%3C/svg%3E");
+}
+
+.game.classic-ui .chat-log::-webkit-scrollbar-button:active {
+  border-color: #404040 #fff #fff #404040;
+}
+
+/* The interface column inside the edge: TOP_BORDER + EDGETREAT_HEIGHT above, RIGHT_BORDER + EDGETREAT_WIDTH beside */
+.game.classic-ui .sidebar {
+  padding: 21px 21px 18px 8px;
+  border-left: none;
+  background: transparent !important;
 }

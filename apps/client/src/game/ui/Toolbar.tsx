@@ -1,13 +1,16 @@
-// The toolbar's buttons (clientd3d/toolbar.c). Ours: no bar over the view; of the buttons
-// merintr adds (mermain.c default_buttons: Help, Drop, Get, Rest/Stand) and mailnews's mailbox
-// (mailnews.c mail_buttons), GameView keeps Rest/Stand and the mailbox, and the Sidebar draws
-// them beside the portrait. Each bitmap holds the button out (left half) and in
-// (right half), drawn transparently over the window background. Rest/Stand is a toggle:
-// it stays in while resting (command.c CommandRest / CommandStand ToolbarSetButtonState).
+// The toolbar's buttons (clientd3d/toolbar.c): merintr's (mermain.c default_buttons: Help, Drop,
+// Get, Rest/Stand) and mailnews's mailbox (mailnews.c mail_buttons). Each bitmap holds the button
+// out (left half) and in (right half), drawn transparently over the window background. Rest/Stand
+// is a toggle: it stays in while resting (command.c CommandRest / CommandStand ToolbarSetButtonState).
+//   - ClassicToolbar: the Classic interface's row over the view, as the original lays it out: the
+//     buttons from TOOLBAR_X, the latency meter after them (lagbox.c), and the room's enchantments
+//     right-aligned to the view's edge (enchant.c EnchantmentsResize room_enchant_x)
+//   - the Modern interface's UnitFrame shows Rest/Stand and the mailbox beside our face
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { AssetStore } from "../../assets.ts";
 import { useKeyedHalves } from "./keyed.ts";
+import { LatencyMeter } from "../TitleBar.tsx";
 
 /** One button: the bitmap, its tooltip (merintr.rc IDS_TB*, mailnews.rc IDS_READMAIL), and what it does */
 export interface ToolbarButton {
@@ -42,5 +45,33 @@ export function ToolbarButtonView({ assets, button, tooltips }: { assets: AssetS
     >
       {!halves && button.name}
     </button>
+  );
+}
+
+/** The Classic interface's toolbar row over the view (graphics.c: the view starts MIN_TOP_TOOLBAR below it). */
+export function ClassicToolbar({
+  assets, buttons, tooltips, latency, children,
+}: {
+  assets: AssetStore;
+  /** None with Show toolbar off (config.toolbar) */
+  buttons?: ToolbarButton[];
+  tooltips: boolean;
+  /** The latency meter's round trip (null while measuring); undefined with Show latency meter off */
+  latency?: number | null;
+  /** The room's enchantments, right-aligned */
+  children?: ReactNode;
+}) {
+  return (
+    <div className="classic-toolbar">
+      {buttons && (
+        <div className="toolbar-buttons" role="toolbar" aria-label="Toolbar">
+          {buttons.map((b) => (
+            <ToolbarButtonView key={b.bitmap} assets={assets} button={b} tooltips={tooltips} />
+          ))}
+        </div>
+      )}
+      {latency !== undefined && <LatencyMeter ms={latency} tooltip={tooltips} />}
+      <div className="classic-room-enchantments">{children}</div>
+    </div>
   );
 }
