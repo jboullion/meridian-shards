@@ -56,4 +56,5 @@ It would do for the static sites, not for the game files or the installers.
   3. Set `SITE_ADDRESS` and `GATEWAY_ORIGINS` on the VPS, push, check `https://<domain>/play/`, then turn the proxy on and add the cache rule.
   4. Add the domain to the apps' server lists and release.
   5. Move the savegame from the Google Cloud VM if it should carry over (the `savegame` volume), then retire the VM.
-  6. Later: R2, the update feeds and the marketing site and wiki.
+  6. Later: R2 and the update feeds.
+- The marketing site and the wiki are the `meridian-shards-website` repository: static files that `tools/deploy/stage.ts` builds into `deploy/.stage/site` and Caddy serves from `/srv/site`. The site's own bundles are under `/_site/`, so they never collide with `/assets/`; its build fails if anything lands in `/play`, `/assets` or `/ws`.

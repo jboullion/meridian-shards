@@ -6,7 +6,7 @@ The hosted stack is three containers on one small Linux VM:
 |---|---|
 | `blakserv` | The unmodified Server 104 server, built for Linux (32-bit), with the compiled Kod, resources and rooms from our build. Game state lives on the `savegame` volume. |
 | `gateway` | The WebSocket-to-TCP gateway (`tools/gateway/gateway.ts`). |
-| `web` | Caddy: HTTPS (Let's Encrypt), the browser client at `/play/` (every other path but `/assets/` and `/ws` redirects there), the game assets at `/assets/` and the gateway at `/ws`. The old `/download/` redirects to the download page on GitHub Pages (`https://jboullion.github.io/meridian-shards/`). The browser client was taken down on 2026-10-08 and is back since 2026-10-09; most players use the desktop or Android app. |
+| `web` | Caddy: HTTPS (Let's Encrypt), the website at `/` (the landing page, `/download/` and the wiki: the `meridian-shards-website` repository next to this one), the browser client at `/play/`, the game assets at `/assets/` and the gateway at `/ws`. Without a staged website every other path redirects to `/play/`, as before. The browser client was taken down on 2026-10-08 and is back since 2026-10-09; most players use the desktop or Android app. |
 
 Port 5959 is also open for original Windows clients built with our `SecretKey`. Our apps only need 443.
 
@@ -93,7 +93,9 @@ From the repo root on your PC:
 node tools/deploy/push.ts --host shards@<EXTERNAL_IP> --key $HOME/.ssh/meridian_shards
 ```
 
-The first push uploads about 450 MB (mostly the game assets). For code-only updates add `--skip-assets`. To update only the browser client and Caddy's config, add `--web-only`: it rebuilds the client, recreates only the `web` container and leaves blakserv and the gateway running, so nobody is disconnected. The first start takes a minute: Docker builds blakserv, and Caddy fetches the certificate. Then open `https://<dashed-ip>.sslip.io`, which should redirect to `/play/` and show the browser client's log on screen.
+The first push uploads about 450 MB (mostly the game assets). For code-only updates add `--skip-assets`. To update only the browser client, the website and Caddy's config, add `--web-only`: it rebuilds the client and the website, recreates only the `web` container and leaves blakserv and the gateway running, so nobody is disconnected. The first start takes a minute: Docker builds blakserv, and Caddy fetches the certificate. Then open `https://<dashed-ip>.sslip.io`, which should show the website, and `/play/`, which should show the browser client's log on screen.
+
+`stage.ts` builds the website from `../meridian-shards-website` (or the folder in `SHARDS_SITE`; run `npm install` there once). Set `SITE_URL` to the site's `https://` origin when it's on its final address: that turns on canonical URLs, the sitemap and indexing. `--skip-site` leaves it out.
 
 The move to our own domain, with Cloudflare in front, is planned in [ADR 0004](../docs/adr/0004-own-domain.md). Caddy is ready for it: it takes player addresses from Cloudflare's `CF-Connecting-IP` header, but only from Cloudflare's published ranges.
 
@@ -120,8 +122,7 @@ Don't create releases by hand. A release that already exists for the tag makes t
 
 Installed apps find the new release at their next launch, download the changed blocks in the background, and offer "Restart to update" on the login screen. Unsigned macOS builds can't update themselves. The download page always lists the latest published release.
 
-**The download page** (`deploy/web/site/download/`) is on GitHub Pages at `https://jboullion.github.io/meridian-shards/`, and the VM's `/` redirects there:
-- It reads the latest release from GitHub's API when it's opened, so releases never need it republished.
+**The download page** is the website's `/download/` (`meridian-shards-website`, `app/routes/download.tsx`). It reads the latest release from GitHub's API when it's opened, so releases never need the site rebuilt. The old copy on GitHub Pages (`deploy/web/site/download/`) stays up until the website is live on the server:
 - `.github/workflows/pages.yml` publishes it when that folder changes on `main`, or from the Actions tab.
 - The repository's Pages source must be **GitHub Actions** (Settings → Pages).
 
