@@ -17,7 +17,7 @@ describe("settings", () => {
 
   it("migrates version 2 settings: one mouse speed, right click looks", () => {
     const s = migrate({ version: 2, preset: "modern", mouseSpeed: 2, rightClickLooks: true, musicVolume: 40 } as never);
-    expect(s.version).toBe(7);
+    expect(s.version).toBe(8);
     expect(s.mouseXScale).toBe(30);
     expect(s.mouseYScale).toBe(30);
     expect(s.keys.examine).toEqual([{ code: "Mouse1" }]);
@@ -25,6 +25,21 @@ describe("settings", () => {
     expect(s.haloColor).toBe("red");
     expect("mouseSpeed" in s).toBe(false);
     expect("rightClickLooks" in s).toBe(false);
+  });
+
+  it("Enhanced Lighting on by default; the test builds' graphics options are dropped", () => {
+    const s = migrate({ version: 7, preset: "modern", graphics: "classic", surfaceRelief: false, mipMaps: true } as never);
+    expect("mipMaps" in s).toBe(false);
+    expect("smoothTextures" in s).toBe(false);
+    expect(s.enhanced).toBe(true);
+    expect("graphics" in s).toBe(false);
+    expect("surfaceRelief" in s).toBe(false);
+    expect(migrate({ version: 7, preset: "modern", enhanced: false }).enhanced).toBe(false);
+  });
+
+  it("migrates version 7 settings: everyone on the Modern interface once, and a later Classic kept", () => {
+    expect(migrate({ version: 7, preset: "modern", interfaceStyle: "classic" }).interfaceStyle).toBe("modern");
+    expect(migrate({ version: 8, preset: "modern", interfaceStyle: "classic" }).interfaceStyle).toBe("classic");
   });
 
   it("migrates version 3 settings: the right button examines, unless it does something else", () => {
@@ -51,11 +66,11 @@ describe("settings", () => {
     expect(PRESETS.modern.quickSlot10.map((b) => b.code)).toEqual(["Digit0", "Numpad0"]);
   });
 
-  it("gives new players the Modern interface, and keeps Classic for settings saved before it", () => {
+  it("gives new players the Modern interface, and everyone else too as of version 8", () => {
     expect(DEFAULT_SETTINGS.interfaceStyle).toBe("modern");
-    expect(migrate({ version: 5 }).interfaceStyle).toBe("classic");
-    expect(migrate({ version: 6, interfaceStyle: "modern" }).interfaceStyle).toBe("modern");
-    expect(migrate({ version: 6, interfaceStyle: "classic" }).interfaceStyle).toBe("classic");
+    expect(migrate({ version: 5 }).interfaceStyle).toBe("modern");
+    expect(migrate({ version: 6, interfaceStyle: "classic" }).interfaceStyle).toBe("modern");
+    expect(migrate({ version: 8, interfaceStyle: "classic" }).interfaceStyle).toBe("classic");
   });
 
   it("matches modifiers exactly, with plain keys still working under an unbound modifier", () => {

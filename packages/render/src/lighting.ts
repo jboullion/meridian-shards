@@ -17,11 +17,29 @@
 // in client fine units of view depth.
 //
 // Pixels: 8-bit palette indices (R8 texture) looked up in the 256-entry palette;
-// index 254 is transparent.
+// index 254 is transparent. With smooth textures (the original's filtering:
+// colorTexture.ts), an RGBA copy is sampled instead, transparent where alpha is low.
+//
+// Ours, Enhanced lighting (off, everything is as above):
+//   - soft highlights: a colour that would clip rolls off towards white instead, keeping
+//     its hue (scaled by its largest channel), so lit stone keeps its texture and the
+//     light's colour; nothing changes below SOFT_KNEE, nor anything a light doesn't add to;
+//   - lights stop at walls: a per-surface mask (lightOcclusion.ts) says which lights see it;
+//   - shaded corners: the sector light is darkened where floors and ceilings meet walls
+//     (roomAo.ts), and along walls near their floor and ceiling.
+// The glow pass (postFx.ts) draws the room black, to hide what's behind it.
+
+/** Shared by every room and sprite material: 1 while postFx.ts draws the glow pass */
+export const glowPass = { value: 0 };
 
 export const lightingUniforms = () => ({
   uPalette: { value: null as unknown },
   uMap: { value: null as unknown },
+  /** The RGBA copy of uMap (colorTexture.ts), sampled when uColorMode is 1 */
+  uColorMap: { value: null as unknown },
+  uColorMode: { value: 0 },
+  /** Ours: Enhanced lighting's soft highlights (1) or the original's clamp (0) */
+  uSoftLight: { value: 0 },
   /** Player light (BP_PLAYER / BP_LIGHT_PLAYER), 0..255 */
   uViewerLight: { value: 0 },
   /** Room ambient light (BP_PLAYER / BP_LIGHT_AMBIENT), 0..255 */
@@ -34,17 +52,32 @@ export const lightingUniforms = () => ({
   uFinePerUnit: { value: 1024 },
   /** texture scroll offset (s, t) for scrolling walls/floors */
   uScroll: { value: [0, 0] as [number, number] },
-  /** Light sources (light maps): xyz in client fine units, w = reach (DLIGHT_SCALE / 2) */
+  /**
+   * Light sources (light maps): xyz in client fine units, w = reach (DLIGHT_SCALE / 2),
+   * negative for a highlight light (no falloff on floors)
+   */
   uLightPos: { value: new Float32Array(32 * 4) },
   /** Light colours 0..1 */
   uLightColor: { value: new Float32Array(32 * 3) },
   uLightCount: { value: 0 },
+  uGlowPass: glowPass,
+  /** Shaded corners: on (1), the corner map (roomAo.ts) and where it lies (x0, y0, 1/width, 1/height in fine units) */
+  uAo: { value: 0 },
+  uAoMap: { value: null as unknown },
+  uAoRect: { value: [0, 0, 1, 1] as [number, number, number, number] },
 });
 
 export const roomVertexShader = /* glsl */ `
 in float aLight;
 in vec3 aShade;
+in float aMask0;
+in float aMask1;
+// Ours: x = 0 wall, 1 floor, 2 ceiling; y, z = the floor and ceiling heights in front (roomAo.ts surfaceInfo)
+in vec3 aSurface;
+out vec3 vSurface;
 out vec2 vUv;
+flat out int vMask0;
+flat out int vMask1;
 out float vLight;
 out float vScale;
 out float vDepth;
@@ -71,6 +104,9 @@ void main() {
   vec4 world = modelMatrix * vec4(position, 1.0);
   vClient = vec3(world.x, world.z, world.y) * uFinePerUnit; // scene (x, z up, y) -> client (x, y, z)
   vNormal2 = aShade.xy;
+  vMask0 = int(aMask0);
+  vMask1 = int(aMask1);
+  vSurface = aSurface;
   gl_Position = projectionMatrix * mv;
 }
 `;
@@ -83,11 +119,21 @@ in float vScale;
 in float vDepth;
 in vec3 vClient;
 in vec2 vNormal2;
+flat in int vMask0;
+flat in int vMask1;
+in vec3 vSurface;
 out vec4 fragColor;
+uniform float uGlowPass;
+uniform float uAo;
+uniform sampler2D uAoMap;
+uniform vec4 uAoRect;
 uniform vec4 uLightPos[32];
 uniform vec3 uLightColor[32];
 uniform int uLightCount;
 uniform sampler2D uMap;
+uniform sampler2D uColorMap;
+uniform float uColorMode;
+uniform float uSoftLight;
 uniform sampler2D uPalette;
 uniform float uViewerLight;
 uniform float uAmbient;
@@ -105,12 +151,49 @@ float lightIndex(float light, float scale) {
   return clamp(idx, 0.0, 63.0);
 }
 
+// Shaded corners: how much of the sector light reaches here (1 = all)
+const float AO_STRENGTH = 0.5;
+const float AO_WALL_REACH = 320.0;
+float cornerLight() {
+  if (vSurface.x > 0.5) {
+    vec2 m = texture(uAoMap, (vClient.xy - uAoRect.xy) * uAoRect.zw).rg;
+    return 1.0 - AO_STRENGTH * (vSurface.x > 1.5 ? m.g : m.r);
+  }
+  // Walls: darker towards the floor and ceiling in front of them
+  float nearFloor = 1.0 - smoothstep(0.0, AO_WALL_REACH, vClient.z - vSurface.y);
+  float nearCeiling = 1.0 - smoothstep(0.0, AO_WALL_REACH, vSurface.z - vClient.z);
+  return 1.0 - AO_STRENGTH * 0.8 * max(nearFloor * nearFloor, nearCeiling * nearCeiling);
+}
+
+// Soft highlights: past the knee (SOFT_KNEE, or the unlit colour's brightest channel if
+// that's more), the colour's brightest channel rolls off towards 1 and the others follow
+const float SOFT_KNEE = 0.8;
+vec3 softHighlight(vec3 base, vec3 c) {
+  float m = max(c.r, max(c.g, c.b));
+  float knee = max(SOFT_KNEE, max(base.r, max(base.g, base.b)));
+  if (m <= knee) return c;
+  float room = max(1.0 - knee, 1e-3);
+  return c * ((knee + room * (1.0 - exp(-(m - knee) / room))) / m);
+}
+
 void main() {
-  float index = floor(texture(uMap, vUv).r * 255.0 + 0.5);
-  if (index == 254.0) discard;
-  vec3 rgb = texelFetch(uPalette, ivec2(int(index), 0), 0).rgb;
+  vec3 rgb;
+  if (uColorMode > 0.5) {
+    vec4 c = texture(uColorMap, vUv);
+    if (c.a < 0.5) discard;
+    rgb = c.rgb;
+  } else {
+    float index = floor(texture(uMap, vUv).r * 255.0 + 0.5);
+    if (index == 254.0) discard;
+    rgb = texelFetch(uPalette, ivec2(int(index), 0), 0).rgb;
+  }
+  if (uGlowPass > 0.5) {
+    fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
   float light = floor(vLight + 0.5);
   float grey = floor(lightIndex(light, vScale) * 239.0 / 64.0) / 255.0;
+  if (uAo > 0.5) grey *= cornerLight();
   float fogEnd = light <= 127.0
     ? 16384.0 + light * 1024.0 + uViewerLight * 64.0
     : 32768.0 + max(0.0, light - 192.0) * 1024.0 + uViewerLight * 64.0 + uAmbient * 1024.0;
@@ -122,15 +205,25 @@ void main() {
   bool xMajor = abs(vNormal2.x) > abs(vNormal2.y);
   for (int i = 0; i < 32; i++) {
     if (i >= uLightCount) break;
+    // Lights that can't see this surface (lightOcclusion.ts; all bits set without it)
+    int mask = i < 16 ? vMask0 : vMask1;
+    if (((mask >> (i & 15)) & 1) == 0) continue;
     vec3 d = vClient - uLightPos[i].xyz;
-    float reach = uLightPos[i].w;
+    float reach = abs(uLightPos[i].w);
+    bool highlight = uLightPos[i].w < 0.0;
     float off, radial;
     if (!wall) { off = abs(d.z); radial = length(d.xy); }
     else if (xMajor) { off = abs(d.x); radial = length(d.yz); }
     else { off = abs(d.y); radial = length(d.xz); }
-    float k = max(0.0, 1.0 - radial / reach) * max(0.0, 1.0 - off / reach);
+    // D3DRenderLMapPostFloorAdd: a highlight light (on the floor) has no falloff on floors, not ceilings
+    float falloff = highlight && !wall && d.z < 64.0 ? 1.0 : max(0.0, 1.0 - off / reach);
+    float k = max(0.0, 1.0 - radial / reach) * falloff;
     added += k * uLightColor[i];
   }
-  fragColor = vec4(min(vec3(1.0), rgb * grey + rgb * added) * fog, 1.0);
+  if (uSoftLight > 0.5) {
+    fragColor = vec4(softHighlight(rgb * grey, rgb * grey + rgb * added) * fog, 1.0);
+  } else {
+    fragColor = vec4(min(vec3(1.0), rgb * grey + rgb * added) * fog, 1.0);
+  }
 }
 `;

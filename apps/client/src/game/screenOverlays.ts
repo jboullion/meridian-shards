@@ -54,6 +54,8 @@ export class ScreenOverlays {
   private readonly rgb: Uint8Array;
   private readonly xlats: XlatTable;
   private readonly getBgf: (resource: number) => Bgf | null | undefined;
+  /** The hands filtered, as the D3D client draws them (GameScene sets it); off, crisp pixels */
+  smooth = false;
 
   constructor(parent: HTMLElement, rgb: Uint8Array, xlats: XlatTable, getBgf: (resource: number) => Bgf | null | undefined) {
     this.rgb = rgb;
@@ -80,7 +82,7 @@ export class ScreenOverlays {
     const ctx = this.ctx;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = this.smooth;
 
     if (fx.blind) {
       // d3drender.c: blind draws no sky, world or objects

@@ -9,3 +9,7 @@ export * from "./objectsView.ts";
 export * from "./skyOverlays.ts";
 export * from "./trailBlur.ts";
 export * from "./particles.ts";
+export * from "./colorTexture.ts";
+export * from "./lightOcclusion.ts";
+export * from "./roomAo.ts";
+export * from "./postFx.ts";

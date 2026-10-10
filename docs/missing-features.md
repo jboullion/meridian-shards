@@ -84,4 +84,5 @@ The Modern layout (`ui/ModernHud.tsx`, `ui/CharacterWindow.tsx`) has no counterp
 | `/H` and `/P` | The original connects to that host and port; our desktop app takes the listed server with that host (and port), else `https://host:port` (http for localhost), or a whole origin, for this run only. |
 | The toolbar and the view's border | The original has a button bar over the view (Help, Drop, Get, Rest/Stand, mail) and stone corners around it. We keep only Rest/Stand and the mail button, left of the portrait (Show toolbar still hides them), and the view fills its cell without the border. |
 | The hands' shape | The original stretches the hands with the window; ours keep the shape they have at 4:3 (`screenOverlays.ts`). |
-| The character screen's ad panels (`BP_AD_SELECTED`), Print Map, font and colour choices, mipmaps and anti-aliasing | Low value. Settings save themselves, so there's no Save Now. |
+| The character screen's ad panels (`BP_AD_SELECTED`), Print Map, font and colour choices, the Graphics Options window (Enable MipMaps, Anti Aliasing) | Low value. Settings save themselves, so there's no Save Now. |
+| More than 32 light sources | The original lights a room with up to 150 (`MAX_NUM_DLIGHTS`); our shader takes the 32 nearest the viewer (`ObjectsView.lights`). |

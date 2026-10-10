@@ -294,6 +294,10 @@ export function LogoutTimerDialog({ settings, iconUrl, onApply, onClose }: { set
 
 // ---------------------------------------------------------------------------- Configuration
 
+/** What Enhanced Lighting (ours, settings.enhanced) does, for its tooltip */
+const ENHANCED_TITLE =
+  "Soft highlights, flickering and glowing flames, light that stops at walls, shaded corners, shadows and a vignette; off, the original's look";
+
 const CONFIG_TABS = [...(Object.keys(ACTION_TABS) as ActionTab[]), "Mouse"] as const;
 type ConfigTab = (typeof CONFIG_TABS)[number];
 
@@ -446,6 +450,8 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
                 checked={d.interfaceStyle === "modern"}
                 onChange={(v) => set({ interfaceStyle: v ? "modern" : "classic" })}
               />
+              {/* Ours: Enhanced Lighting, or the original's look */}
+              <Check label="Enhanced Lighting" title={ENHANCED_TITLE} checked={d.enhanced} onChange={(v) => set({ enhanced: v })} />
               {/* Ours: the Modern HUD's size (CSS zoom on its clusters) */}
               <label className={d.interfaceStyle === "modern" ? "hud-scale" : "hud-scale disabled"} title="The size of the Modern interface's bars, quick slots, map, chat and character window">
                 <span>HUD Size</span>
@@ -836,6 +842,7 @@ export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Se
           <span className="bind-scale-value">{d.touchLookScale}</span>
         </label>
         <Check label="Dynamic Lighting" checked={d.dynamicLighting} onChange={(v) => set({ dynamicLighting: v })} />
+        <Check label="Enhanced Lighting" title={ENHANCED_TITLE} checked={d.enhanced} onChange={(v) => set({ enhanced: v })} />
         <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
         <Check label="Attack On Target" checked={d.attackOnTarget} onChange={(v) => set({ attackOnTarget: v })} />
         <div className="touch-config-buttons">
@@ -846,6 +853,7 @@ export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Se
               onApply({
                 touchLookScale: d.touchLookScale,
                 dynamicLighting: d.dynamicLighting,
+                enhanced: d.enhanced,
                 damageNumbers: d.damageNumbers,
                 attackOnTarget: d.attackOnTarget,
               });

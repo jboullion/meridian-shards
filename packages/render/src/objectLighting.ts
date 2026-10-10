@@ -40,6 +40,15 @@ export interface LightSource {
   r: number;
   g: number;
   b: number;
+  /** The object it comes from (flicker seeds by it) */
+  id?: number;
+  /**
+   * LIGHT_FLAG_HIGHLIGHT (signs, the targeting light): a tenth of the size (D3DLightingXYCalc)
+   * and no falloff on floors (D3DRenderLMapPostFloorAdd)
+   */
+  highlight?: boolean;
+  /** Ours: it moves (projectiles, the targeting light, objects in motion), so it isn't kept from shining through walls */
+  moving?: boolean;
 }
 
 /** trig.h SIN: maketrig.c's table, 16 fractional bits, 4096 angle units */
@@ -64,6 +73,19 @@ export function flashStep(time: number, dt: number): [number, number] {
 
 /** d3dlighting.h DLIGHT_SCALE */
 export const dlightScale = (intensity: number): number => (intensity * 14000) / 255 + 4000;
+
+/** include/proto.h LIGHT_FLAG_*: an object's light flags (BP_* light information) */
+export const LIGHT_FLAG = { ON: 0x1, DYNAMIC: 0x2, WAVERING: 0x4, HIGHLIGHT: 0x8 } as const;
+
+/**
+ * Whether an object's light is a highlight light (signs: sign.kod). D3DLMapsStaticGet keeps
+ * the flags only for dynamic lights: for a static one it writes them into the other cache
+ * (gDLightCacheDynamic), so its own are never set and it's drawn full size.
+ */
+export const isHighlightLight = (flags: number): boolean => (flags & LIGHT_FLAG.HIGHLIGHT) !== 0 && (flags & LIGHT_FLAG.DYNAMIC) !== 0;
+
+/** d3dlighting.c D3DLightingXYCalc: a highlight light's scale (LIGHT_FLAG_HIGHLIGHT) */
+export const highlightScale = (intensity: number): number => dlightScale(intensity) * 0.1;
 
 /** 15-bit 5:5:5 colour (D3DLightingColorCalc). */
 export function lightColor(c: number): { r: number; g: number; b: number } {
@@ -103,4 +125,23 @@ export function objectBrightness(
   }
   const ch = (c: number) => Math.min(COLOR_AMBIENT, Math.min(COLOR_AMBIENT, grey) + (add * c) / COLOR_AMBIENT) / 255;
   return [ch(nearest.r), ch(nearest.g), ch(nearest.b)];
+}
+
+/**
+ * Ours (Enhanced lighting): whether a light's colour is a flame's, warm with red over green
+ * over blue (LIGHT_FIRE is 255, 197, 49). Magic lights and white lamps burn steady.
+ */
+export const isFireColor = (r: number, g: number, b: number): boolean => r >= g && g >= b && r > 0 && r >= 1.5 * b + 40;
+
+/**
+ * Ours (Enhanced lighting): how bright a flame is at `tMs`, 0.85..1. A few sines at
+ * unrelated rates (about 5 to 11 a second), shifted by the object's id so torches don't
+ * flicker together. The same id and time always give the same value.
+ */
+export function flicker(id: number, tMs: number): number {
+  const t = tMs / 1000;
+  const seed = ((id * 2654435761) >>> 0) / 4294967296; // 0..1
+  const p = seed * 2 * Math.PI;
+  const v = Math.sin(t * 31.4 + p) * 0.5 + Math.sin(t * 47.1 + p * 3.1) * 0.3 + Math.sin(t * 69.7 + p * 5.3) * 0.2; // -1..1
+  return 0.925 + 0.075 * v;
 }

@@ -13,6 +13,7 @@
 import * as THREE from "three";
 import { TRANSPARENT_INDEX, type Bgf } from "@shards/formats";
 import { frameFor } from "./sprites.ts";
+import { paletteToRgba } from "./colorTexture.ts";
 
 /** drawdefs.h VIEWER_DISTANCE: pixels from the eye to the screen */
 const VIEWER_DISTANCE = 512;
@@ -42,12 +43,23 @@ interface Entry {
 export class SkyOverlaysView {
   readonly group = new THREE.Group();
   private readonly entries = new Map<number, Entry>();
-  private readonly rgb: Uint8Array;
+  /** The palette as RGBA, 256 x 4 bytes (paletteToRgba) */
+  private readonly rgba: Uint8Array;
+  private smooth = false;
 
   /** `rgb`: the palette, 256 x 3 bytes */
   constructor(rgb: Uint8Array) {
-    this.rgb = rgb;
+    this.rgba = new Uint8Array(256 * 4);
+    for (let i = 0; i < 256; i++) this.rgba.set([rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2], 255], i * 4);
     this.group.name = "sky overlays";
+  }
+
+  /** Smooth textures (Graphics Options): filtered, as everything else; off, crisp pixels. */
+  setSmooth(smooth: boolean): void {
+    if (smooth === this.smooth) return;
+    this.smooth = smooth;
+    // Made again, filtered the new way, on the next update
+    for (const id of [...this.entries.keys()]) this.remove(id);
   }
 
   /** Place them for this frame, around the camera; `visible` false (blind) hides them all. */
@@ -101,21 +113,13 @@ export class SkyOverlaysView {
   }
 
   private create(width: number, height: number, pixels: Uint8Array, key: string): Entry {
-    // RGBA, bottom row first (a DataTexture's first row is v = 0)
-    const data = new Uint8Array(width * height * 4);
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const v = pixels[y * width + x];
-        const i = ((height - 1 - y) * width + x) * 4;
-        if (v === TRANSPARENT_INDEX) continue;
-        data[i] = this.rgb[v * 3];
-        data[i + 1] = this.rgb[v * 3 + 1];
-        data[i + 2] = this.rgb[v * 3 + 2];
-        data[i + 3] = 255;
-      }
-    }
+    // RGBA, bottom row first (a DataTexture's first row is v = 0); transparent texels take
+    // their neighbours' colour, so filtering leaves no dark fringe
+    const flipped = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) flipped.set(pixels.subarray(y * width, (y + 1) * width), (height - 1 - y) * width);
+    const data = paletteToRgba(flipped, width, height, this.rgba);
     const tex = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
-    tex.magFilter = tex.minFilter = THREE.NearestFilter;
+    tex.magFilter = tex.minFilter = this.smooth ? THREE.LinearFilter : THREE.NearestFilter;
     tex.colorSpace = THREE.NoColorSpace;
     tex.needsUpdate = true;
     // Opaque with an alpha test, so it's drawn in the opaque pass right after the skybox and

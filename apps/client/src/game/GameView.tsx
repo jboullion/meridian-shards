@@ -1259,10 +1259,6 @@ export function GameView({
         menu={[
           { label: "Preferences…", onSelect: () => setModal({ type: "preferences" }) },
           { label: "Configuration…", onSelect: () => setModal({ type: "configuration" }) },
-          // Ours: the Modern interface or the original's (the phone has its own)
-          ...(touch
-            ? []
-            : [{ label: "Modern interface", checked: modern, onSelect: () => updateSettings({ interfaceStyle: modern ? "classic" : "modern" }) }]),
           // actions.c: each item runs its typed command
           { label: "Actions", items: ACTIONS_MENU.map((a) => (a ? { label: a[1], onSelect: () => runCommand(a[0]) } : { label: "", separator: true })) },
           ...(spellsMenu.length ? [{ label: "Spells", items: spellsMenu }] : []),

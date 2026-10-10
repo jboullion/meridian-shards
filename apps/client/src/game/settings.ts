@@ -362,6 +362,15 @@ export interface Settings {
   characterWindowAt: [number, number] | null;
   /** The Modern layout's HUD size, % (75..150): the bars, slots, map, chat and character window */
   hudScale: number;
+
+  /**
+   * Ours, Enhanced Lighting (the Bind Editor's Options, the phone's Configuration; on by
+   * default): soft highlights (lighting.ts softHighlight),
+   * flickering flames (objectLighting.ts flicker), light that stops at walls
+   * (lightOcclusion.ts), glowing flames and a vignette (postFx.ts), shaded corners
+   * (roomAo.ts) and shadows under figures (ObjectsView). Off, the original's look.
+   */
+  enhanced: boolean;
 }
 
 export type InterfaceStyle = "modern" | "classic";
@@ -377,7 +386,7 @@ export function touchUi(s: Settings): boolean {
   return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 }
 
-const SETTINGS_VERSION = 7;
+const SETTINGS_VERSION = 8;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
@@ -439,12 +448,16 @@ export const DEFAULT_SETTINGS: Settings = {
   chatWidth: 340,
   characterWindowAt: null,
   hudScale: 100,
+  enhanced: true,
 };
 
 const STORAGE_KEY = "shards.settings";
 
 /** Saved settings from older versions, with the fields they had then. */
 type SavedSettings = Partial<Settings> & { mouseSpeed?: number; rightClickLooks?: boolean };
+
+/** Graphics options we tried and dropped with their window (test builds only) */
+const OLD_GRAPHICS_KEYS = ["antiAliasing", "mipMaps", "smoothTextures", "graphics", "softLights", "flickerLights", "lightsStopAtWalls", "glowingFlames", "shadedCorners", "surfaceRelief", "shadows", "vignette"];
 
 export function migrate(s: SavedSettings): Settings {
   const preset: PresetName = s.preset === "original" ? "original" : "modern";
@@ -469,7 +482,7 @@ export function migrate(s: SavedSettings): Settings {
   }
   // Version 5: Touch Controls left the Bind Editor, so nothing could undo an On or Off saved before
   if (version < 5) out.touchControls = "auto";
-  // Version 6 (the Modern interface): new players get it, players who had settings keep the layout they knew
+  // Version 6 (the Modern interface): new players get it, players who had settings keep the layout they knew (until version 8)
   if (version < 6) out.interfaceStyle = "classic";
   // Version 7: the numpad's digits use the quick slots too (modern preset), unless already bound to something
   if (version < 7 && preset === "modern") {
@@ -480,8 +493,11 @@ export function migrate(s: SavedSettings): Settings {
       if (!used.has(code)) keys[slot] = [...keys[slot], { code }];
     }
   }
+  // Version 8 (0.4.0, Enhanced Lighting): everyone moves to the Modern interface once; Classic is still in the Bind Editor
+  if (version < 8) out.interfaceStyle = "modern";
   delete (out as SavedSettings).mouseSpeed;
   delete (out as SavedSettings).rightClickLooks;
+  for (const k of OLD_GRAPHICS_KEYS) delete (out as unknown as Record<string, unknown>)[k];
   if (!Array.isArray(out.hotkeyAliases) || out.hotkeyAliases.length !== 12) out.hotkeyAliases = DEFAULT_HOTKEY_ALIASES;
   return out;
 }

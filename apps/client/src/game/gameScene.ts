@@ -13,7 +13,8 @@
 import * as THREE from "three";
 import { FINENESS, ceilingHeightAt, floorHeightAt, gridTextureName, leafAt, skyboxForBackground, type Bgf, type Room } from "@shards/formats";
 import {
-  DRAWFX, OF, ObjectsView, PARTICLE_STEPS_PER_SECOND, RoomView, SkyOverlaysView, TrailBlur, WeatherParticles, XlatTable, type ParticleRoom, disposeSkybox, objectBrightness, paletteTexture, type LightSource,
+  DRAWFX, OF, ObjectsView, PARTICLE_STEPS_PER_SECOND, PostFx, RoomView, SkyOverlaysView, TrailBlur, WeatherParticles, XlatTable, type ParticleRoom, disposeSkybox, objectBrightness, paletteTexture, postFxActive, type LightSource,
+  type PostFxOptions,
   type NameLabel, type ViewObject,
 } from "@shards/render";
 import { LiveRoom, PlayerMover, REMOTE_VIEW, animStep, type DamageDealt, type RemoteView, type GameSession, type WorldObject } from "@shards/world";
@@ -44,6 +45,9 @@ export type ViewMode = "first" | "chase" | "behind" | "front";
 const VIEW_ORDER: readonly ViewMode[] = ["first", "chase", "behind", "front"];
 /** The outside views' camera, from our eyes: its distance to start with, the nearest and farthest (fine units) */
 const ARM_START = 3 * FINENESS;
+/** Ours, Enhanced: how strongly flames glow, and how dark the vignette makes the corners (postFx.ts) */
+const GLOW_STRENGTH = 1.4;
+const VIGNETTE = 0.28;
 const ARM_MIN = 0.8 * FINENESS;
 const ARM_MAX = 5 * FINENESS;
 /** A wheel notch moves the camera this much nearer or farther (fine units) */
@@ -177,6 +181,8 @@ export class GameScene {
   private particleTime = 0;
   /** Blurred and wavering vision (EFFECT_BLUR, EFFECT_WAVER), made when first needed */
   private blur: TrailBlur | null = null;
+  /** Ours: Anti Aliasing, glowing flames and the vignette (postFx.ts), made when first needed */
+  private postFx: PostFx | null = null;
   /** Grid textures a change asked for that are loading */
   private textureLoads = new Set<number>();
   /** This room and the ones next to it, loaded ahead */
@@ -393,6 +399,10 @@ export class GameScene {
     this.scene.add(this.skyOverlays.group);
     this.applyViewSettings();
     this.overlays = new ScreenOverlays(this.labelsEl.parentElement!, pal.rgb, this.xlats, (id) => this.bgf(id));
+    // Textures filtered, as the D3D client draws them (colorTexture.ts): the hands, the sun and moon too
+    this.overlays.smooth = true;
+    this.skyOverlays.setSmooth(true);
+    this.objects.setSmoothTextures(true);
     this.weather = new WeatherParticles(await this.snowTexture());
     this.weather.onFireworkSound = (x, y) => this.audio.playAt("firework.ogg", x, y);
     this.scene.add(this.weather.group);
@@ -675,6 +685,8 @@ export class GameScene {
 
     this.animate(world.objects.values(), dt);
     const lighting = world.lighting;
+    // Enhanced Lighting (the Bind Editor's Options), or the original's
+    const enhanced = this.settings.enhanced;
     const ctx = {
       room,
       roomFlags: world.player?.roomFlags ?? 0,
@@ -685,13 +697,19 @@ export class GameScene {
       yaw: viewYaw,
       fog: this.fog,
       dt,
+      flicker: enhanced,
+      timeMs: now,
     };
     const drawn = [...world.objects.values(), ...this.projectileViews()];
     // Dynamic Lighting off: no light maps from torches and lamps, nor the targeting light
     this.lights = this.settings.dynamicLighting ? this.objects.lights(drawn, ctx) : [];
     const targeted = this.target !== null && this.target !== self.id ? world.objects.get(this.target) : undefined;
+    // The targeting light first, so it's never past the 32 the shader takes
     if (targeted && this.settings.dynamicLighting && this.settings.targetLight && targeted.info.drawingType !== DRAWFX.INVISIBLE)
-      this.lights.push(this.objects.targetLight(targeted, ctx));
+      this.lights.unshift(this.objects.targetLight(targeted, ctx));
+    this.roomView.setSmoothTextures(true);
+    this.roomView.setEnhanced({ softLights: enhanced, lightsStopAtWalls: enhanced, shadedCorners: enhanced });
+    this.objects.shadowsOn = enhanced;
     this.roomView.setLights(this.lights);
     this.roomView.setLighting({
       viewerLight: lighting.playerLight,
@@ -716,7 +734,11 @@ export class GameScene {
     this.updateHover();
     this.objects.setTarget(this.target);
     this.updateWeather(dt, room);
-    this.renderer.render(this.scene, this.camera);
+    // Enhanced's glow and vignette draw through PostFx; without them, straight to the screen
+    const post: PostFxOptions = { bloom: enhanced ? GLOW_STRENGTH : 0, vignette: enhanced ? VIGNETTE : 0 };
+    if (postFxActive(post))
+      (this.postFx ??= new PostFx()).render(this.renderer, this.scene, this.camera, post, [this.sky, this.skyOverlays?.group, this.weather?.group, this.objects.shadows]);
+    else this.renderer.render(this.scene, this.camera);
     if (world.effects.blur > 0 || world.effects.waver > 0) (this.blur ??= new TrailBlur()).apply(this.renderer);
     this.drawLabels(labels);
     this.drawDamage();
@@ -1740,6 +1762,7 @@ export class GameScene {
     this.rooms?.dispose();
     this.ownView?.dispose();
     this.blur?.dispose();
+    this.postFx?.dispose();
     this.weather?.dispose();
     if (this.sky) disposeSkybox(this.sky);
     this.renderer.dispose();
