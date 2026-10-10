@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { RsbBundle } from "@shards/formats";
 import { AssetStore } from "./assets.ts";
 import { Game } from "./game/Game.tsx";
 import { Framed } from "./game/TitleBar.tsx";
 import { desktop, devPagesEnabled, serverName, type DesktopBridge } from "./host.ts";
 import { installUiTheme } from "./game/ui/kit.tsx";
-import { RoomViewer } from "./viewer/RoomViewer.tsx";
+
+/** The room viewer (a developer page): loaded only in development, so production builds don't carry it */
+const RoomViewer = import.meta.env.DEV ? lazy(() => import("./viewer/RoomViewer.tsx").then((m) => ({ default: m.RoomViewer }))) : null;
 
 const isViewer = () =>
   devPagesEnabled && (new URLSearchParams(location.search).has("viewer") || new URLSearchParams(location.search).has("rid"));
@@ -44,7 +46,12 @@ export function App() {
         <div className="splash">Loading…</div>
       </Framed>
     );
-  if (isViewer()) return <RoomViewer assets={assets} />;
+  if (RoomViewer && isViewer())
+    return (
+      <Suspense fallback={<div className="splash">Loading…</div>}>
+        <RoomViewer assets={assets} />
+      </Suspense>
+    );
   return <Game assets={assets} rsb={rsb} />;
 }
 

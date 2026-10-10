@@ -1018,6 +1018,28 @@ button.link {
   outline: none;
 }
 
+/* Full screen, in a browser (TitleBar.tsx FullscreenButton): beside the latency meter, like the menu button */
+.fullscreen-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 24px;
+  margin-right: 6px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  color: var(--title-text);
+  cursor: pointer;
+}
+
+.fullscreen-button:hover,
+.fullscreen-button:focus-visible {
+  border-color: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.25);
+  outline: none;
+}
+
 .title-menu {
   position: absolute;
   top: 100%;

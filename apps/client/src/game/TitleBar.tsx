@@ -148,9 +148,47 @@ export function TitleBar({
       <span className="title-text">{title}</span>
       <span className="title-spacer" />
       {latency !== undefined && <LatencyMeter ms={latency} tooltip={tooltips} />}
+      {/* Ours: in a browser, full screen hides the address bar and tabs (the apps have their own windows) */}
+      {!desktop && !isAndroid && typeof document !== "undefined" && document.fullscreenEnabled && <FullscreenButton tooltip={tooltips} />}
       {ownButtons && <WindowButtons />}
       {open && menu && <MenuList items={menu} onDone={() => setOpen(false)} className="title-menu" />}
     </header>
+  );
+}
+
+/**
+ * Full screen in a browser (ours): the whole page, without the address bar and tabs. A page may
+ * only ask for it in answer to a click; Esc, or the button again, leaves it.
+ */
+function FullscreenButton({ tooltip }: { tooltip: boolean }) {
+  const [on, setOn] = useState(() => !!document.fullscreenElement);
+  useEffect(() => {
+    const changed = () => setOn(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", changed);
+    return () => document.removeEventListener("fullscreenchange", changed);
+  }, []);
+  const label = on ? "Leave full screen (Esc)" : "Full screen";
+  return (
+    <button
+      type="button"
+      className="fullscreen-button"
+      aria-label={label}
+      title={tooltip ? label : undefined}
+      onClick={(e) => {
+        // Don't leave the keyboard focus on the button: the game's keys go on working
+        e.currentTarget.blur();
+        if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+        else void document.documentElement.requestFullscreen().catch(() => {});
+      }}
+    >
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>
+        {on ? (
+          <path d="M6 1v5H1M10 1v5h5M6 15v-5H1M10 15v-5h5" fill="none" stroke="currentColor" strokeWidth="2" />
+        ) : (
+          <path d="M1 6V1h5M15 6V1h-5M1 10v5h5M15 10v5h-5" fill="none" stroke="currentColor" strokeWidth="2" />
+        )}
+      </svg>
+    </button>
   );
 }
 

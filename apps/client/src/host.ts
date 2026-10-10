@@ -238,8 +238,13 @@ export function allowPortrait(allow: boolean): void {
   }
 }
 
-/** Developer pages (the room viewer): always in the browser, only in development on the desktop. */
-export const devPagesEnabled = !desktop || desktop.dev;
+/**
+ * Developer pages (the room viewer, ?viewer and ?rid=): only in development (Vite's dev server:
+ * npm run dev, npm run desktop). No build players get (the hosted browser client, the installers,
+ * the APK) has them or links to them.
+ */
+// (Vite's import.meta.env, read through a cast: this file is also type-checked without Vite's types)
+export const devPagesEnabled = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true && (!desktop || !!desktop.dev);
 
 /** The selected server's display name on the desktop. */
 export function serverName(): string {

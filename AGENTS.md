@@ -81,7 +81,7 @@ npm run android:sync        # build the client and copy it into apps/android/and
 - Our build of the original Windows client (for parity tests): `server\build.cmd Bclient Bmodules`, then `server\setup-client.cmd`, then run `server\src\run\localclient\meridian.exe /U:<user> /W:<pass> /H:localhost /P:5959`. Never use the installed 104 client's `rsc0000.rsb` or rooms with our server.
 - blakserv takes about 35 s to load a fresh game. It's ready when ports 5959 and 9998 listen.
 - `npm test` runs Vitest. The format tests read the real files in `dist/assets` and are skipped if you haven't built the assets.
-- The room viewer is at `http://localhost:5173/?rid=<RID>`. In dev, `window.shards.roomScene.lookFrom(row, col, eyeHeight, compassYaw)` places the camera, which is handy for comparing against original-client screenshots.
+- The room viewer is at `http://localhost:5173/?rid=<RID>`, in development only (`host.ts devPagesEnabled`: Vite's dev server); no build players get has it or the login screen's link to it. In dev, `window.shards.roomScene.lookFrom(row, col, eyeHeight, compassYaw)` places the camera, which is handy for comparing against original-client screenshots.
 
 ## Code conventions
 
@@ -146,7 +146,7 @@ npm run android:sync        # build the client and copy it into apps/android/and
   - Releases are GitHub releases of this repo (`electron-builder.yml` publish). The workflow gets the game files from the VM, so deploy the server before tagging a release.
   - Switching servers reloads the page, because the manifest, `rsc0000.rsb` and rooms come from the server.
   - The gateway sees `Origin: app://shards`, so the VM's `GATEWAY_ORIGINS` must list it next to the site.
-  - `npm run desktop` loads Vite, so there's one server (the dev stack) and `window.shards` exists; packaged builds hide the room viewer.
+  - `npm run desktop` loads Vite, so there's one server (the dev stack) and `window.shards` exists; production builds (packaged, the hosted browser client, the APK) have no room viewer.
   - Electron is pinned to an exact version (electron-builder needs it), and the builds are unsigned (SmartScreen and Gatekeeper warnings).
   - Timers keep full speed while minimized (`backgroundThrottling: false`); `requestAnimationFrame` still slows down, because Windows stops drawing a minimized window.
   - To drive it from a script, start it with `--remote-debugging-port=9222` and use the Chrome DevTools Protocol.
