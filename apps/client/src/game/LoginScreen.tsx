@@ -137,7 +137,6 @@ function ServerField({ desktop, label, field }: { desktop: DesktopBridge; label:
 export function ConnectingScreen() {
   return (
     <Backdrop>
-      <h1 className="mk-shard-title">Meridian Shards</h1>
       <Window title="Meridian Shards" className="mk-message">
         <p className="mk-status">Connecting…</p>
       </Window>

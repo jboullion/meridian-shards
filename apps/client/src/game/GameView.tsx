@@ -1277,7 +1277,7 @@ export function GameView({
           { label: "Mail…", onSelect: openMail },
           { label: "Change password…", onSelect: () => setModal({ type: "password" }) },
           { label: "Logout timer…", onSelect: () => setModal({ type: "logoutTimer" }) },
-          { label: "About Meridian Shards…", onSelect: () => setModal({ type: "about" }) },
+          { label: "About Meridian…", onSelect: () => setModal({ type: "about" }) },
           { label: "Log off", onSelect: onLogout },
         ]}
         latency={settings.latencyMeter ? latency : undefined}

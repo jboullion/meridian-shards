@@ -169,13 +169,14 @@ export function EdgeFrame() {
  * how much wider than that the body is: up to WIDE for a `wide` window on a phone, as far as the
  * screen allows (so not when it's upright).
  */
-function useDluScale(dlu: readonly [number, number] | undefined, titled: boolean, wide: boolean): [number, number] {
+function useDluScale(dlu: readonly [number, number] | undefined, titled: boolean, wide: boolean | number): [number, number] {
   const fit = (): [number, number] => {
     // Windows laid out by the page (not a template) get text the size of the in-game panels
     if (!dlu) return [FLOW_SCALE, 1];
     const roomX = innerWidth - CHROME_X, roomY = innerHeight - CHROME_Y + (titled ? 0 : TITLE_Y);
     const s = Math.max(MIN_SCALE, Math.floor(Math.min(roomX / (dlu[0] * DLU_X), roomY / (dlu[1] * DLU_Y), MAX_SCALE) * 20) / 20);
-    const w = wide && touchUi(getSettings()) ? Math.min(WIDE, Math.max(1, Math.floor((roomX / (dlu[0] * DLU_X * s)) * 20) / 20)) : 1;
+    const most = typeof wide === "number" ? wide : WIDE;
+    const w = wide && touchUi(getSettings()) ? Math.min(most, Math.max(1, Math.floor((roomX / (dlu[0] * DLU_X * s)) * 20) / 20)) : 1;
     return [s, w];
   };
   const [s, setS] = useState(fit);
@@ -203,8 +204,11 @@ export function Window({
   closeButton?: boolean;
   /** false: no title strip */
   showTitle?: boolean;
-  /** On a phone, up to 50% wider (with `dlu`; anything there drawn square must say so in CSS) */
-  wide?: boolean;
+  /**
+   * On a phone, up to 50% wider (with `dlu`; anything there drawn square must say so in CSS), or
+   * up to this many times as wide
+   */
+  wide?: boolean | number;
   dlu?: readonly [number, number];
   className?: string;
   style?: CSSProperties;

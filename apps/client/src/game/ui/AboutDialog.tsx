@@ -126,7 +126,7 @@ export function AboutDialog({
 }) {
   return (
     <div className="mk-modal">
-      <Window title="About Meridian Shards" dlu={[189, 281]} onClose={onClose} className="about-dialog">
+      <Window title="About Meridian" dlu={[189, 281]} onClose={onClose} className="about-dialog">
         <div className="about-text" style={at([0, 4, 189, 34])}>
           <p>Meridian Shards client (version {__APP_VERSION__})</p>
           <p>Based on Meridian 59, Copyright © 1994-2012 Andrew Kirmse and Chris Kirmse</p>

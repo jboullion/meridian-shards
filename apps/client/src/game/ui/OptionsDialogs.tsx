@@ -28,10 +28,19 @@ function Modal({ children }: { children: ReactNode }) {
 }
 
 /** A dialog laid out in dialog units, scaled to fit the window. */
-function DluDialog({ title, size, onClose, children }: { title: string; size: readonly [number, number]; onClose: () => void; children: ReactNode }) {
+function DluDialog({
+  title, size, wide, onClose, children,
+}: {
+  title: string;
+  size: readonly [number, number];
+  /** Wider on a phone (kit.tsx Window wide), whose wider font crowds the template */
+  wide?: boolean | number;
+  onClose: () => void;
+  children: ReactNode;
+}) {
   return (
     <Modal>
-      <Window title={title} dlu={size} onClose={onClose} className="options-dialog">
+      <Window title={title} dlu={size} wide={wide} onClose={onClose} className="options-dialog">
         {children}
       </Window>
     </Modal>
@@ -103,7 +112,8 @@ export function PreferencesDialog({
   };
   return (
     <>
-      <DluDialog title="Preferences" size={[375, 288]} onClose={onClose}>
+      {/* On a phone, 30% wider: its font crowded the template's labels into each other */}
+      <DluDialog title="Preferences" size={[375, 288]} wide={1.3} onClose={onClose}>
         <form onSubmit={ok}>
           <GroupBox at={[6, 3, 91, 67]} label="Targeting" />
           <Check
