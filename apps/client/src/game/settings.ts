@@ -322,8 +322,8 @@ export interface Settings {
   profanityIgnore: boolean;
   /** Logout timer (logoff.c, config.timeoutenabled): log off after this long idle */
   logoutTimer: boolean;
-  /** config.language: the resource language strings are shown in (languages.ts; 0 English) */
-  language: number;
+  /** config.aggressive ("Can attack innocent players"): safety off. Sent as UC_SAFETY on entering. */
+  aggressive: boolean;
   /** config.timeout: minutes idle before logging off */
   logoutMinutes: number;
   /** config.extraprofane: Extra search for suspected embedded profanity */
@@ -452,7 +452,7 @@ export const DEFAULT_SETTINGS: Settings = {
   profanityFilter: true,
   profanityIgnore: false,
   logoutTimer: false,
-  language: 0,
+  aggressive: false,
   logoutMinutes: 1440,
   profanityExtra: false,
   xpAsPercent: false,

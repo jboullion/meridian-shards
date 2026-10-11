@@ -2,10 +2,10 @@
 // (clientd3d/server.c handlers -> game.c / object.c / moveobj.c). Renderer-agnostic.
 
 import {
-  BP, ByteReader, CLIENT_TAG_NUMBER, EFFECT, ENCHANT, objId, objTag, readEffect, readPlayerOverlay, readRadiusShoot, readShoot, type Shot, readAddEnchantment, readChange, readMove, readObject,
+  BP, ByteReader, CLIENT_TAG_NUMBER, EFFECT, ENCHANT, normalizeFlags, objId, objTag, readEffect, readPlayerOverlay, readShoot, type Shot, readAddEnchantment, readChange, readMove, readObject,
   readObjectList, readPlayer, readRemoveEnchantment, readRoomContents, readRoomObject, readSpells, readStat,
   readStatGroup, readStatGroups, readTurn, readRoomChange, type RoomChange, readUseList, readSpell, readBgOverlay, type Animation, type BgOverlay, type ObjectInfo, type Overlay,
-  type PlayerInfo, type RoomObject, type Spell, type Statistic,
+  type InventoryMove, type PlayerInfo, type RoomObject, type Spell, type Statistic,
 } from "@shards/protocol";
 import { animStateFrom, type AnimState } from "./animation.ts";
 
@@ -309,17 +309,21 @@ export class WorldState {
    * inventry.c InventoryMoveCurrentItem (list_move_to_nth): `id` takes `target`'s place in
    * the inventory's order. The server is told with BP_REQ_INVENTORY_MOVE.
    */
-  moveInventoryItem(id: number, target: number): boolean {
+  /**
+   * Moves an item to the target's place (inventry.c InventoryMoveCurrentItem: list_move_item
+   * gives the same order). Returns the positions before the move, for BP_REQ_INVENTORY_MOVE.
+   */
+  moveInventoryItem(id: number, target: number): InventoryMove | null {
     const entries = [...this.inventory.entries()];
     const from = entries.findIndex(([k]) => k === objId(id));
     const to = entries.findIndex(([k]) => k === objId(target));
-    if (from < 0 || to < 0 || from === to) return false;
+    if (from < 0 || to < 0 || from === to) return null;
     const [moved] = entries.splice(from, 1);
     entries.splice(to, 0, moved);
     this.inventory.clear();
     for (const [k, v] of entries) this.inventory.set(k, v);
     this.emit({ type: "inventory" });
-    return true;
+    return { from, to, length: entries.length };
   }
 
   setSpellSchools(schools: number[]): void {
@@ -518,7 +522,6 @@ export class WorldState {
       case BP.SECTOR_MOVE:
       case BP.WALL_ANIMATE:
       case BP.SECTOR_ANIMATE:
-      case BP.SECTOR_CHANGE:
       case BP.CHANGE_TEXTURE:
       case BP.SECTOR_LIGHT: {
         const change = readRoomChange(type, r)!;
@@ -617,18 +620,6 @@ export class WorldState {
         const src = this.objects.get(shot.source),
           dst = this.objects.get(shot.dest);
         if (src && dst && src !== dst) this.addProjectile(shot, src.x, src.y, dst.x, dst.y);
-        return true;
-      }
-      case BP.RADIUS_SHOOT: {
-        // project.c RadiusProjectileAdd: a ring of shots out to range * 1000 fine units
-        const shot = readRadiusShoot(r);
-        const src = this.objects.get(shot.source);
-        if (src) {
-          for (let i = 0; i < shot.number; i++) {
-            const a = (((360 / shot.number) * i) * Math.PI) / 180;
-            this.addProjectile(shot, src.x, src.y, src.x + shot.range * 1000 * Math.cos(a), src.y + shot.range * 1000 * Math.sin(a));
-          }
-        }
         return true;
       }
       case BP.PLAYER_OVERLAY: {
@@ -753,16 +744,12 @@ export class WorldState {
     this.emit({ type: "objectMoved", id });
   }
 
+  /** server.c HandlePlayers / HandleAddPlayer: id, name resource, name, flags (unpacked like objects') */
   private addPlayer(r: ByteReader): void {
     const id = r.u32(),
       nameRes = r.u32(),
       name = r.string(),
-      flags = r.u32();
-    r.u8(); // drawing type
-    r.u32(); // minimap flags
-    r.u32(); // name colour
-    r.u8(); // object type
-    r.u8(); // moveon type
+      { flags } = normalizeFlags(r.u32());
     this.dynamicResources.set(nameRes, name);
     this.players.set(id, { id, nameRes, name, flags });
   }

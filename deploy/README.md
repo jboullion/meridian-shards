@@ -95,6 +95,22 @@ node tools/deploy/push.ts --host shards@<EXTERNAL_IP> --key $HOME/.ssh/meridian_
 
 The first push uploads about 450 MB (mostly the game assets). For code-only updates add `--skip-assets`. To update only the browser client, the website and Caddy's config, add `--web-only`: it rebuilds the client and the website, recreates only the `web` container and leaves blakserv and the gateway running, so nobody is disconnected. The first start takes a minute: Docker builds blakserv, and Caddy fetches the certificate. Then open `https://<dashed-ip>.sslip.io`, which should show the website, and `/play/`, which should show the browser client's log on screen.
 
+**To update only the website** (the landing page, downloads and wiki), use `--site-only`, or its npm script. It builds and ships just the website and Caddy's config and restarts only the `web` container; the browser client on the server stays as it is, whatever state this checkout's client is in:
+
+```bash
+npm run deploy:website -- --host shards@<EXTERNAL_IP> --key $HOME/.ssh/meridian_shards
+```
+
+The host and key can also come from `SHARDS_DEPLOY_HOST` and `SHARDS_DEPLOY_KEY`. Set them once and the scripts need no arguments:
+
+| Script | Ships |
+|---|---|
+| `npm run deploy:website` | the website (`--site-only`) |
+| `npm run deploy:web` | the browser client and the website (`--web-only`) |
+| `npm run deploy:push` | everything |
+
+On Windows, set the variables for your account with `setx SHARDS_DEPLOY_HOST shards@<EXTERNAL_IP>` and `setx SHARDS_DEPLOY_KEY %USERPROFILE%\.ssh\meridian_shards`, then open a new terminal.
+
 `stage.ts` builds the website from `../meridian-shards-website` (or the folder in `SHARDS_SITE`; run `npm install` there once). Set `SITE_URL` to the site's `https://` origin when it's on its final address: that turns on canonical URLs, the sitemap and indexing. `--skip-site` leaves it out.
 
 The move to our own domain, with Cloudflare in front, is planned in [ADR 0004](../docs/adr/0004-own-domain.md). Caddy is ready for it: it takes player addresses from Cloudflare's `CF-Connecting-IP` header, but only from Cloudflare's published ranges.

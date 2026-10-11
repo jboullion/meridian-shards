@@ -30,7 +30,7 @@ describe("animation (animate.c AnimateSingle)", () => {
 
 /** A minimal room object as the server writes it (no amount, no light, no overlays). */
 function roomObject(w: ByteWriter, id: number, row: number, col: number, angle: number) {
-  w.u32(id).u32(100).u32(200).u32(1).u8(0).u32(0).u32(0).u8(0).u8(0);
+  w.u32(id).u32(100).u32(200).u32(1).u32(0); // upstream: flags, rarity
   w.u16(0); // light flags
   w.u8(ANIMATE.NONE).u16(1); // animation: group 1
   w.u8(0); // overlays
@@ -79,7 +79,7 @@ describe("interface state (milestone 5)", () => {
   const obj = (w: ByteWriter, id: number, amount?: number) => {
     w.u32(id);
     if (amount !== undefined) w.u32(amount);
-    return w.u32(100).u32(200).u32(0).u8(0).u32(0).u32(0).u8(0).u8(0).u16(0).u8(1).u16(1).u8(0);
+    return w.u32(100).u32(200).u32(0).u32(0).u16(0).u8(1).u16(1).u8(0);
   };
   const feed = (world: WorldState, type: number, w: ByteWriter) => world.handle(type, new ByteReader(w.finish()));
 
@@ -116,7 +116,7 @@ describe("interface state (milestone 5)", () => {
 describe("combat state (milestone 6)", () => {
   /** server.c ExtractNewRoomObject: plain object at (row, col) in Kod fine units */
   const roomObj = (w: ByteWriter, id: number, row: number, col: number) =>
-    w.u32(id).u32(100).u32(200).u32(8).u8(0).u32(0).u32(0).u8(0).u8(0).u16(0).u8(1).u16(1).u8(0)
+    w.u32(id).u32(100).u32(200).u32(8).u32(0).u16(0).u8(1).u16(1).u8(0)
       .u16(row).u16(col).u16(0).u8(1).u16(1).u8(0);
   const feed = (world: WorldState, type: number, w: ByteWriter) => world.handle(type, new ByteReader(w.finish()));
 
@@ -158,7 +158,7 @@ describe("combat state (milestone 6)", () => {
   test("player overlays fill their slot (overlay.c SetPlayerOverlay)", () => {
     const world = new WorldState();
     // hotspot SE (5), object id 2 = slot 2, no lighting
-    feed(world, BP.PLAYER_OVERLAY, new ByteWriter().u8(5).u32(2).u32(300).u32(0).u32(0).u8(0).u32(0).u32(0).u8(0).u8(0).u8(1).u16(5).u8(0));
+    feed(world, BP.PLAYER_OVERLAY, new ByteWriter().u8(5).u32(2).u32(300).u32(0).u32(0).u32(0).u8(1).u16(5).u8(0));
     expect(world.playerOverlays[1]?.hotspot).toBe(5);
     expect(world.playerOverlays[1]?.look.anim.group).toBe(4);
   });

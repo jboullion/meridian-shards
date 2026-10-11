@@ -4,17 +4,20 @@
 import { describe, expect, test } from "vitest";
 import {
   BP, ByteReader, ByteWriter, STATS, STAT_TAG, UC, buildReqBuyItems, buildReqCast, buildReqCounteroffer, buildReqLook, readRoomChange, buildReqOffer,
-  buildSayGroup, buildUserCommand, CF, buildChangeDescription, buildChangeUrl, buildReqApply, buildReqGetFromContainer, buildReqObjectContents, buildReqPut, readBgOverlay, ANIMATE, readBuyList, readPlayWave, readSpells, readStat, readStatGroup,
+  buildSayGroup, buildUserCommand, buildSafety, buildChangeDescription, buildChangeUrl, buildReqApply, buildReqGetFromContainer, buildReqObjectContents, buildReqPut, readBgOverlay, ANIMATE, readBuyList, readPlayWave, readSpells, readStat, readStatGroup,
 } from "../src/index.ts";
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 const NUMBER = 0x10000000; // CLIENT_TAG_NUMBER in the top bits
 
-/** server.c ExtractObject for a plain object with no light, animation NONE group 1, no overlays. */
+/**
+ * server.c ExtractObject (upstream) for a plain object: flags 0, rarity 0, no light,
+ * animation NONE group 1, no overlays.
+ */
 function object(w: ByteWriter, id: number, nameRes: number, amount?: number): ByteWriter {
   w.u32(id);
   if (amount !== undefined) w.u32(amount);
-  return w.u32(100).u32(nameRes).u32(0).u8(0).u32(0).u32(0).u8(0).u8(0).u16(0).u8(1).u16(1).u8(0);
+  return w.u32(100).u32(nameRes).u32(0).u32(0).u16(0).u8(1).u16(1).u8(0);
 }
 
 describe("stats (merintr.c ExtractStatistic)", () => {
@@ -80,8 +83,9 @@ describe("trade", () => {
   test("user commands: type, command, int parameters", () => {
     expect(hex(buildUserCommand(UC.DEPOSIT, 100))).toBe(hex(new ByteWriter().u8(BP.USERCOMMAND).u8(35).i32(100).finish()));
     expect(hex(buildUserCommand(UC.BALANCE))).toBe(hex(Uint8Array.of(BP.USERCOMMAND, 37)));
-    // UC_SEND_PREFERENCES with the CF_* flags (merintr.h SendPreferences)
-    expect(hex(buildUserCommand(UC.SEND_PREFERENCES, CF.AUTOLOOT | CF.TEMPSAFE))).toBe(hex(new ByteWriter().u8(BP.USERCOMMAND).u8(9).i32(0x0a).finish()));
+    // UC_SAFETY with a byte, 1 = safety on (merintr.c user_msg_table PARAM_BYTE)
+    expect(hex(buildSafety(true))).toBe(hex(Uint8Array.of(BP.USERCOMMAND, 7, 1)));
+    expect(hex(buildSafety(false))).toBe(hex(Uint8Array.of(BP.USERCOMMAND, 7, 0)));
   });
 });
 
@@ -140,7 +144,6 @@ describe("room changes (server.c HandleSectorMove and the rest)", () => {
     expect(rc(BP.WALL_ANIMATE, new ByteWriter().u16(1).u8(ANIMATE.NONE).u16(7).u8(0))).toEqual({
       type: "wallAnimate", wall: 1, animation: { type: ANIMATE.NONE, group: 7 }, action: 0,
     });
-    expect(rc(BP.SECTOR_CHANGE, new ByteWriter().u16(9).u8(0).u8(4))).toEqual({ type: "sectorChange", sector: 9, depth: 0, scroll: 4 });
     expect(rc(BP.CHANGE_TEXTURE, new ByteWriter().u16(15).u16(61016).u8(8))).toEqual({ type: "changeTexture", id: 15, texture: 61016, flags: 8 });
     expect(rc(BP.SECTOR_LIGHT, new ByteWriter().u16(2).u8(1))).toEqual({ type: "sectorLight", sector: 2, light: 1 });
     expect(rc(BP.SAID, new ByteWriter())).toBeNull();

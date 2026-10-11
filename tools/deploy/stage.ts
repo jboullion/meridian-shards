@@ -11,10 +11,11 @@
 //   deploy/.stage/assets/         the asset build (dist/assets)
 //   deploy/.stage/gateway/        the gateway script and its one dependency (ws)
 //
-//   node tools/deploy/stage.ts [--skip-client] [--skip-assets] [--skip-site] [--client-only] [--web-only]
+//   node tools/deploy/stage.ts [--skip-client] [--skip-assets] [--skip-site] [--client-only] [--web-only] [--site-only]
 //
 // --client-only builds and stages the browser client and nothing else. --web-only stages the
-// client and the website (push.ts --web-only). The website's repository is found at
+// client and the website (push.ts --web-only). --site-only stages the website and nothing else
+// (push.ts --site-only, npm run deploy:website). The website's repository is found at
 // ../meridian-shards-website, or SHARDS_SITE; SITE_URL (the domain's https:// origin) is passed
 // to its build for canonical URLs and the sitemap. Without the repository, the site is skipped
 // and Caddy sends every other path to /play/ as before.
@@ -38,6 +39,7 @@ const { values: opt } = parseArgs({
     "client-only": { type: "boolean", default: false },
     "web-only": { type: "boolean", default: false },
     "skip-site": { type: "boolean", default: false },
+    "site-only": { type: "boolean", default: false },
   },
 });
 
@@ -64,9 +66,10 @@ function stageClient(): void {
 // The website is static files (meridian-shards-website, built with React Router's prerender).
 // Its build checks itself: every page, link and image, and that nothing lands in /play/ or
 // /assets/, which Caddy hands to the game.
-function stageSite(): void {
+function stageSite(required = false): void {
   const site = resolve(process.env.SHARDS_SITE ?? join(ROOT, "..", "meridian-shards-website"));
   if (!existsSync(join(site, "package.json"))) {
+    if (required) need(join(site, "package.json"), "clone meridian-shards-website next to this repository, or set SHARDS_SITE to its folder");
     console.warn(`!! no website at ${site}: skipping it (set SHARDS_SITE to its folder)`);
     return;
   }
@@ -76,6 +79,12 @@ function stageSite(): void {
   const out = join(STAGE, "site");
   rmSync(out, { recursive: true, force: true });
   copy(join(site, "build", "client"), out);
+}
+
+if (opt["site-only"]) {
+  stageSite(true);
+  console.log(`staged the website in ${join(STAGE, "site")}`);
+  process.exit(0);
 }
 
 if (opt["client-only"] || opt["web-only"]) {
@@ -115,12 +124,10 @@ copy(join(ROOT, "server", "config", "motd.txt"), join(STAGE, "gamedata", "motd.t
   const onDisk = new Map(readdirSync(join(STAGE, "gamedata", "rooms")).map((f) => [f.toLowerCase(), f]));
   const rsb = parseRsb(readFileSync(join(RUN, "rsc", "rsc0000.rsb")));
   const aliases = new Set<string>();
-  for (const langs of rsb.entries.values()) {
-    for (const name of langs.values()) {
-      if (!/^[\w.-]+\.roo$/i.test(name)) continue;
-      const actual = onDisk.get(name.toLowerCase());
-      if (actual && actual !== name) aliases.add(`${actual} ${name}`);
-    }
+  for (const name of rsb.entries.values()) {
+    if (!/^[\w.-]+\.roo$/i.test(name)) continue;
+    const actual = onDisk.get(name.toLowerCase());
+    if (actual && actual !== name) aliases.add(`${actual} ${name}`);
   }
   writeFileSync(join(STAGE, "gamedata", "room-aliases.txt"), [...aliases].sort().join("\n") + "\n");
   console.log(`rooms: ${aliases.size} other spellings`);

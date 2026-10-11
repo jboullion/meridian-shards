@@ -96,10 +96,11 @@ describe("light flicker and the targeting light", () => {
 });
 
 const ASSETS = join(import.meta.dirname, "../../../dist/assets");
-const haveMuseum = existsSync(join(ASSETS, "razamuseum.roo"));
+// The Raza Inn (upstream guest1.roo, kod room/guest1/newb1.kod)
+const haveInn = existsSync(join(ASSETS, "guest1.roo"));
 
-describe.skipIf(!haveMuseum)("shaded corners (roomAo.ts, the Museum)", () => {
-  const room = parseRoo(new Uint8Array(readFileSync(join(ASSETS, "razamuseum.roo"))));
+describe.skipIf(!haveInn)("shaded corners (roomAo.ts, the Raza Inn)", () => {
+  const room = parseRoo(new Uint8Array(readFileSync(join(ASSETS, "guest1.roo"))));
   test("floors darken by the walls, not in the open, and it bakes quickly", () => {
     const t0 = performance.now();
     const ao = bakeAo(room);

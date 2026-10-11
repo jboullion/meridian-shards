@@ -227,17 +227,6 @@ export function ReadNewsDialog({
           <Button onClick={() => session.requestArticles(group.newsgroup)} disabled={!canRead}>
             Rescan
           </Button>
-          <Button
-            onClick={() => {
-              if (!current) return;
-              session.deleteArticle(group.newsgroup, current.num);
-              setSelected(null);
-              session.requestArticles(group.newsgroup);
-            }}
-            disabled={!canPost || !current}
-          >
-            Delete
-          </Button>
           <Button onClick={onClose}>Close</Button>
         </div>
         <TextArea value={current && article?.num === current.num ? article.text : ""} readOnly />

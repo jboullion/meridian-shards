@@ -22,7 +22,7 @@ describe("parse.c ParseCommand", () => {
 
   test("two-word names (the arguments start after the first word)", () => {
     expect(parseCommand("safety off")).toEqual({ id: "safetyOff", args: "off" });
-    expect(parseCommand("autoloot on")?.id).toBe("autolootOn");
+    expect(parseCommand("safetyoff")?.id).toBe("safetyOff"); // upstream's one-word spelling
     expect(parseCommand("safety")?.id).toBe("safetyOn"); // the first "safety ..." in the table
   });
 });

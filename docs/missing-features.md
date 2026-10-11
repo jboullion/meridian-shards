@@ -6,6 +6,21 @@ Remove an entry when it lands, and add one whenever we skip something. Options f
 
 Our own additions (the modern key preset, chat tabs, damage numbers, pixel-accurate picking, the latency meter in the title bar) stay; parity means the original's features are available beside them.
 
+## The move to the Shards server (ADR 0005)
+
+What changed or went when the client moved from Server 104 to the Meridian: Shards server and the original protocol. Server 104's own features go unless the Shards server adds them back, its way.
+
+| What | Original | Status |
+|---|---|---|
+| Item rarity (normal, uncommon, rare, legendary, unidentified, cursed) | `DisplayDescription(..., obj.rarity)`, name colours in lists | Decoded (`ObjectInfo.rarity`), not shown yet. |
+| Per-wall translucency (`WF_TRANSLUCENCY_MASK`), `WF_NO_HTILE`, the `*_HAS_ANIMATED` markers | upstream `clientd3d/bsp.h`, `d3drender_world.c` | Not drawn yet: the room reader keeps the flags. |
+| Server 104's game options: temporary angel, building groups, autoloot, autocombine, reagent bags, spell power | 104's `UC_SEND_PREFERENCES` | Gone with the server options; only safety remains (ours to keep, sent as `UC_SAFETY`). |
+| Stat reallocation (the elder's sheet, `BP_REQ_STAT_CHANGE`) | 104's `module/stats` | Gone. |
+| The Language menu (per-language strings) | 104's `language.c`, RSC v5 | Gone: the original's strings are in one language. |
+| Deleting news articles, `time`, the German command names | 104 additions | Delete and `time` gone; the German names stay as aliases. |
+| Radius projectiles, sector depth/scroll changes, stopping a sound | 104's `BP_RADIUS_SHOOT`, `BP_SECTOR_CHANGE`, `BP_STOP_WAVE` | Gone (the original server never sends them). |
+| Tests tied to Server 104's Raza town (the crypt door, walking in Raza) | | Skipped: point them at upstream rooms with the same features. |
+
 ## World (phase 1)
 
 Phase 1 is done: rooms that change, sloped textures, blur and waver, the xlat override, weather and fireworks, flashing and bouncing objects, projectiles' heights, the remote view and resync. What's left:

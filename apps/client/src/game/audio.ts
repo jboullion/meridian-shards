@@ -103,10 +103,6 @@ export class GameAudio {
       case "stopLoops":
         this.stopWhere((v) => (v.flags & SF.LOOP) !== 0);
         break;
-      case "stop":
-        // audio.c SoundStopFile stops every voice playing that file
-        this.stopWhere((v) => v.file === e.file.toLowerCase());
-        break;
       case "play": {
         const w = e.wave;
         let pos: Voice["pos"] = null;

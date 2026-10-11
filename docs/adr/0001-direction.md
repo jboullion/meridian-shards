@@ -26,6 +26,8 @@ The name comes from the lore: every server or world is a "shard" of one original
    Kod changes are allowed later but kept minimal, because Kod defines message formats.
    - We build from **a copy** of the source in `server/src` (git-ignored). `meridian-unreal\Server-104` stays an untouched reference.
    - Windows build for development, Linux build (Docker or WSL) for hosting.
+
+   *Changed 2026-10-11 by [ADR 0005](0005-shards-server.md):* the server is now our own [Meridian: Shards server](https://github.com/jboullion/meridian-shards-server), a fork of the original upstream game. The client speaks the original protocol plus Shards additions. The 104 client stays on the `server-104` branch.
 5. **Gateway:** a small Node/TS WebSocket-to-TCP bridge (`tools/gateway`). It passes bytes through unchanged, enforces per-IP limits and logs real IPs. Caddy in front provides WSS/TLS, which matters because the login uses unsalted MD5.
 6. **Client stack:**
    - Vite + TypeScript, with a framework-free game core split into packages: `protocol`, `formats`, `world`, `render`, `audio`, `input`.

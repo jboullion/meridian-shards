@@ -28,7 +28,7 @@
     "gateway": "node tools/gateway/gateway.ts",
     "headless": "node tools/headless/client.ts",
     "smoke": "node tools/headless/client.ts --user shardbot --pass shardbot --stay 10",
-    "soak": "node tools/headless/client.ts --user shardbot --pass shardbot --walk \"8.5,7.5 9.05,6.5\" --loop --stay 300",
+    "soak": "node tools/headless/client.ts --user shardbot --pass shardbot --walk \"7.5,4.5 7.5,6.5 5.5,6.5\" --loop --stay 300",
     "icons": "node tools/icons/make-icons.ts",
     "maint": "node tools/maint/maint.ts",
     "build": "npm run build -w @shards/client",
@@ -38,7 +38,9 @@
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run lint && npm test",
     "deploy:stage": "node tools/deploy/stage.ts",
-    "deploy:push": "node tools/deploy/push.ts"
+    "deploy:push": "node tools/deploy/push.ts",
+    "deploy:web": "node tools/deploy/push.ts --web-only",
+    "deploy:website": "node tools/deploy/push.ts --site-only"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

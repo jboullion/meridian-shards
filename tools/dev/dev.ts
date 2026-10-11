@@ -1,6 +1,8 @@
 // One command for the local dev stack:
-//   1. blakserv: started (detached) if nothing listens on 5959 yet; left running on exit,
-//      because killing it skips the save. Stop it from its own window.
+//   1. blakserv, the Meridian: Shards server's Windows build (tools/shardsServer.ts):
+//      started (detached) if nothing listens on 5960 yet; left running on exit, because
+//      killing it skips the save. Stop it from its own window (or "terminate save" on the
+//      maintenance port). Then the test accounts are created if missing.
 //   2. dist/assets: built if missing (npm run assets).
 //   3. the gateway (ws://localhost:8059) and Vite (http://localhost:5173), with prefixed output.
 //   4. with --desktop (npm run desktop): the Electron app (apps/desktop) on the Vite server;
@@ -14,9 +16,10 @@ import { createRequire } from "node:module";
 import { connect } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { maintCommands } from "../maint/client.ts";
+import { GAME_PORT, SERVER_EXE, SERVER_RUN, SHARDS_SERVER_DIR, TEST_ACCOUNTS } from "../shardsServer.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const RUN = join(ROOT, "server", "src", "run", "server");
 const noServer = process.argv.includes("--no-server");
 const desktop = process.argv.includes("--desktop");
 const VITE_URL = "http://localhost:5173";
@@ -30,27 +33,43 @@ const isListening = (port: number, host = "127.0.0.1") =>
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function ensureServer(): Promise<void> {
-  if (await isListening(5959)) {
-    console.log("[dev] blakserv already running on 5959");
+  if (await isListening(GAME_PORT)) {
+    console.log(`[dev] blakserv already running on ${GAME_PORT}`);
     return;
   }
-  const exe = join(RUN, "blakserv.exe");
-  if (!existsSync(exe)) {
-    console.error("[dev] blakserv.exe not found; run server\\build.cmd (see README)");
+  if (!existsSync(SERVER_EXE)) {
+    console.error(`[dev] ${SERVER_EXE} not found; build the Shards server: ${join(SHARDS_SERVER_DIR, "tools", "build.cmd")}`);
     process.exit(1);
   }
-  if (!existsSync(join(RUN, "blakserv.cfg"))) spawnSync("cmd", ["/c", join(ROOT, "server", "setup-run.cmd")], { stdio: "inherit" });
+  if (!existsSync(join(SERVER_RUN, "blakserv.cfg")))
+    spawnSync("cmd", ["/c", join(SHARDS_SERVER_DIR, "tools", "setup-run.cmd")], { stdio: "inherit" });
   console.log("[dev] starting blakserv (its own window; it keeps running after dev exits)");
-  spawn(exe, [], { cwd: RUN, detached: true, stdio: "ignore" }).unref();
+  spawn(SERVER_EXE, [], { cwd: SERVER_RUN, detached: true, stdio: "ignore" }).unref();
   for (let i = 0; i < 120; i++) {
-    if (await isListening(5959)) {
+    if (await isListening(GAME_PORT)) {
       console.log("[dev] blakserv is up");
       return;
     }
     await sleep(1000);
   }
-  console.error("[dev] blakserv didn't open port 5959 within 2 minutes; check server/src/run/server/channel/error.txt");
+  console.error(`[dev] blakserv didn't open port ${GAME_PORT} within 2 minutes; check ${join(SERVER_RUN, "channel")}`);
   process.exit(1);
+}
+
+/**
+ * The upstream server doesn't create accounts on first login, so make the test accounts
+ * (password = name, one character slot) over the maintenance port when they're missing.
+ */
+async function ensureTestAccounts(): Promise<void> {
+  try {
+    const shown = await maintCommands(TEST_ACCOUNTS.map((n) => `show account ${n}`));
+    const missing = TEST_ACCOUNTS.filter((_, i) => /Cannot find account/i.test(shown[i]));
+    if (!missing.length) return;
+    await maintCommands([...missing.map((n) => `create automated ${n} ${n}`), "save game"]);
+    console.log(`[dev] created test accounts: ${missing.join(", ")}`);
+  } catch (e) {
+    console.warn(`[dev] couldn't check the test accounts: ${(e as Error).message}`);
+  }
 }
 
 const children: ChildProcess[] = [];
@@ -70,7 +89,10 @@ function run(name: string, cmd: string, args: string[], cwd = ROOT, viaShell = f
   return child;
 }
 
-if (!noServer) await ensureServer();
+if (!noServer) {
+  await ensureServer();
+  await ensureTestAccounts();
+}
 if (!existsSync(join(ROOT, "dist", "assets", "manifest.json"))) {
   console.log("[dev] building dist/assets (first run)");
   spawnSync(process.execPath, [join(ROOT, "tools", "assets", "build-assets.ts")], { stdio: "inherit" });

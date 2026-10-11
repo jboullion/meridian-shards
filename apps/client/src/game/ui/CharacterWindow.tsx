@@ -234,7 +234,8 @@ export function CharacterWindow({
     const items = [...world.inventory.values()];
     const wanted = sortByNameAndNumber(items, rs).map((o) => o.id);
     for (const [what, where] of sortMoves(items.map((o) => o.id), wanted)) {
-      if (world.moveInventoryItem(what, where)) session.inventoryMove(what, where);
+      const move = world.moveInventoryItem(what, where);
+      if (move) session.inventoryMove(move);
     }
   };
 

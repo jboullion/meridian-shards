@@ -53,11 +53,10 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 
 ```bash
 npm install                 # workspaces + dependencies
-server\build.cmd            # first time, or after Kod/C changes (VS 2026 x86 toolset)
-server\setup-run.cmd        # creates run folders, installs server/config/blakserv.cfg
-npm run assets              # dist/assets from our server build + the installed 104 client
-npm run dev                 # blakserv (if not running) + gateway (ws://localhost:8059) + Vite (http://localhost:5173)
-npm run headless -- --user shardbot --pass shardbot --walk "8.5,7.5 9.05,6.5" --go --stay 10
+J:\meridian-shard-server\tools\build.cmd   # the Shards server: first time, or after Kod/C changes (its README)
+npm run assets              # dist/assets: strings and rooms from the Shards server build, art from the Steam install
+npm run dev                 # Shards blakserv (if not running) + test accounts + gateway (ws://localhost:8059) + Vite (http://localhost:5173)
+npm run headless -- --user shardbot --pass shardbot --walk "7.5,4.5 7.5,6.5" --stay 10
 npm run smoke               # headless shardbot: log in, enter, stay 10 s, quit (is the stack up?)
 npm run soak                # headless shardbot walking back and forth for 5 min (LCG and token soak)
 npm run check               # typecheck + lint + tests
@@ -79,8 +78,12 @@ npm run android:web-bundle  # the page by itself as a release's update zip, in d
 
 - **Android** needs Android Studio (the SDK; `apps/android/android/local.properties` says where, e.g. `sdk.dir=J\:/AndroidSDK`) and a JDK 21 for Gradle (`org.gradle.java.home` in `~/.gradle/gradle.properties`). Android Studio's own JDK 25 can't run the template's Gradle 8.14; in Android Studio, set Settings → Build Tools → Gradle → Gradle JDK to the JDK 21 too. Debug builds list "Local (dev)" (`http://localhost:5173` on the device, through `adb reverse`) next to the VM; pick it on the login screen.
 
-- Our build of the original Windows client (for parity tests): `server\build.cmd Bclient Bmodules`, then `server\setup-client.cmd`, then run `server\src\run\localclient\meridian.exe /U:<user> /W:<pass> /H:localhost /P:5959`. Never use the installed 104 client's `rsc0000.rsb` or rooms with our server.
-- blakserv takes about 35 s to load a fresh game. It's ready when ports 5959 and 9998 listen.
+- **The server is the Meridian: Shards server** ([ADR 0005](docs/adr/0005-shards-server.md)), its Windows build in `J:\meridian-shard-server` (`SHARDS_SERVER_DIR`; all paths and ports in `tools/shardsServer.ts`): game port **5960**, maintenance **9999**, run folder `run\shards`. It speaks the **original protocol** plus Shards additions, announced in `AP_SHARDS_INFO` (`session.shardsProtocol`). The server repo's `docs/protocol-dialect.md` is the wire reference.
+- **Art** comes from an installed original client, the Steam one by default (`MERIDIAN_ART_DIR`). Strings (`rsc0000.rsb`, merged from the server's `.rsc` files) and rooms always come from the Shards server build. `npm run assets` removes files left from an older build.
+- **Test accounts:** the original server doesn't create accounts on first login. `npm run dev` makes `shardbot` and `shardpal` (password = name, one character slot) over the maintenance port when they're missing (`create automated`). Admin accounts need the server's Windows admin window.
+- **The original Windows client** (for parity tests) is built in the server repo: `tools\build.cmd Bclient Bmodules`, `tools\setup-client.ps1 -ArtFolder <Steam resource folder>`, then `run\localclient\meridian.exe /H:localhost /P:5960`.
+- The Server 104 tooling (`server/build.cmd`, `server/setup-*.cmd`, `server/config`, the git-ignored `server/src` with its savegames) stays until the deploy moves to the Shards server (the migration plan, Step 4). `tools/deploy` still uses it; the dev tools don't.
+- blakserv loads a fresh game in a few seconds. It's ready when ports 5960 and 9999 listen.
 - `npm test` runs Vitest. The format tests read the real files in `dist/assets` and are skipped if you haven't built the assets.
 - The room viewer is at `http://localhost:5173/?rid=<RID>`, in development only (`host.ts devPagesEnabled`: Vite's dev server); no build players get has it or the login screen's link to it. In dev, `window.shards.roomScene.lookFrom(row, col, eyeHeight, compassYaw)` places the camera, which is handy for comparing against original-client screenshots.
 
@@ -96,6 +99,9 @@ npm run android:web-bundle  # the page by itself as a release's update zip, in d
 - Every game message steps the LCG. Never drop or reorder outgoing game messages after they've been encoded.
 - Fresh connections start in login mode (`AP_GETLOGIN` arrives first). The beacon handshake is only for resyncs.
 - `BP_CHARACTERS` flag `1` means "needs creation", whatever `blakserv/game.c` says in its comment.
+- **Object flags arrive packed** (upstream `include/proto.h`): moveon type, player type, drawing effect and minimap relations share one word. `packages/protocol/src/objectFlags.ts` unpacks them into the fields the rest of the client reads (`drawingType`, `nameColor`, `minimapFlags`, `objectType`, `moveOnType`, `flags` in our layout); `sentFlags` keeps them as sent. Never read upstream bits from `flags`.
+- **Safety is ours to keep** (upstream `config.aggressive`): the Preferences checkbox and the `safety on`/`off` commands set `aggressive` in our settings and send `UC_SAFETY`; the session sends it again on entering the game.
+- **Room files are versions 12/13**: ints before 13, floats from 13, and the checksum adds the raw bytes of node planes, leaf points and wall ends (`roo.ts` `val`). The room's grid (`rows`, `cols`) bounds movement (move.h `IsInRoom`).
 - The maintenance port ends commands with CR (`\r`), not LF.
 - The server snaps you back with `BP_MOVE` when a move lands outside the room. Exits need `BP_REQ_GO` while standing on the exit square.
 - **Rendering: trust the C code over the Python tools.**

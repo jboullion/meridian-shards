@@ -431,7 +431,8 @@ export function Inventory({
         if (hidden?.has(id)) return onDropOnGrid?.(id);
         const all = [...world.inventory.values()];
         const last = all[all.length - 1];
-        if (last && world.moveInventoryItem(id, last.id)) session.inventoryMove(id, last.id);
+        const move = last && world.moveInventoryItem(id, last.id);
+        if (move) session.inventoryMove(move);
       }}
     >
       {items.map((o) => (
@@ -457,7 +458,10 @@ export function Inventory({
             e.stopPropagation();
             // From the paper doll: taken off, not moved
             if (hidden?.has(id)) onDropOnGrid?.(id);
-            else if (world.moveInventoryItem(id, o.id)) session.inventoryMove(id, o.id);
+            else {
+              const move = world.moveInventoryItem(id, o.id);
+              if (move) session.inventoryMove(move);
+            }
           }}
           // inventry.c: VK_RBUTTON is A_LOOKINVENTORY
           onContextMenu={(e: ReactMouseEvent) => {

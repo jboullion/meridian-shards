@@ -5,11 +5,16 @@
 //   3. scp it to the host, unpack into ~/meridian-shards/deploy (the remote .env stays)
 //   4. docker compose up -d --build on the host
 //
-//   node tools/deploy/push.ts --host <user>@<ip> [--key ~/.ssh/id_ed25519] [--skip-stage] [--skip-assets] [--web-only]
+//   node tools/deploy/push.ts --host <user>@<ip> [--key ~/.ssh/id_ed25519] [--skip-stage] [--skip-assets] [--web-only] [--site-only]
+//
+// The host and key can also come from SHARDS_DEPLOY_HOST and SHARDS_DEPLOY_KEY, so the npm scripts
+// (deploy:push, deploy:web, deploy:website) need no arguments once those are set.
 //
 // --web-only ships just the browser client, the website and Caddy's config (deploy/web, the
 // compose file) and recreates only the web container: blakserv and the gateway keep running, so
-// nobody is disconnected and the server's game data stays as it is.
+// nobody is disconnected and the server's game data stays as it is. --site-only does the same
+// with just the website (meridian-shards-website) and Caddy's config: the browser client on the
+// server stays as it is, whatever state this checkout's client is in.
 //
 // Uses the OpenSSH client that ships with Windows 10+ (ssh, scp) and tar.
 
@@ -27,20 +32,27 @@ const { values: opt } = parseArgs({
     "skip-stage": { type: "boolean", default: false },
     "skip-assets": { type: "boolean", default: false },
     "web-only": { type: "boolean", default: false },
+    "site-only": { type: "boolean", default: false },
   },
 });
-const webOnly = opt["web-only"];
-if (!opt.host) {
-  console.error("usage: node tools/deploy/push.ts --host <user>@<ip> [--key <ssh key>] [--skip-stage] [--skip-assets] [--web-only]");
+const siteOnly = opt["site-only"];
+// Either way only the web container is recreated
+const webOnly = opt["web-only"] || siteOnly;
+const host = opt.host ?? process.env.SHARDS_DEPLOY_HOST;
+const key = opt.key ?? process.env.SHARDS_DEPLOY_KEY;
+if (!host) {
+  console.error("usage: node tools/deploy/push.ts --host <user>@<ip> [--key <ssh key>] [--skip-stage] [--skip-assets] [--web-only] [--site-only]");
+  console.error("   (or set SHARDS_DEPLOY_HOST, and SHARDS_DEPLOY_KEY for the key)");
   process.exit(2);
 }
 
-const sshArgs = opt.key ? ["-i", opt.key] : [];
+const sshArgs = key ? ["-i", key] : [];
 const run = (cmd: string, args: string[]) => execFileSync(cmd, args, { cwd: ROOT, stdio: "inherit" });
 
 if (!opt["skip-stage"]) {
   const stageArgs = ["tools/deploy/stage.ts"];
-  if (webOnly) stageArgs.push("--web-only");
+  if (siteOnly) stageArgs.push("--site-only");
+  else if (webOnly) stageArgs.push("--web-only");
   else if (opt["skip-assets"]) stageArgs.push("--skip-assets");
   run(process.execPath, stageArgs);
 }
@@ -52,11 +64,16 @@ const excludes = ["--exclude=deploy/.env"];
 if (opt["skip-assets"]) excludes.push("--exclude=deploy/.stage/assets");
 console.log("packing deploy/ ...");
 const site = existsSync(join(ROOT, "deploy", ".stage", "site")) ? ["deploy/.stage/site"] : [];
-const packed = webOnly ? ["deploy/docker-compose.yml", "deploy/web", "deploy/.stage/client", ...site] : ["deploy"];
+if (siteOnly && !site.length) {
+  console.error("!! no staged website in deploy/.stage/site (drop --skip-stage)");
+  process.exit(1);
+}
+const web = ["deploy/docker-compose.yml", "deploy/web"];
+const packed = siteOnly ? [...web, ...site] : webOnly ? [...web, "deploy/.stage/client", ...site] : ["deploy"];
 run("tar", ["-czf", tarball, ...excludes, ...packed]);
-console.log(`${(statSync(join(ROOT, tarball)).size / 2 ** 20).toFixed(0)} MB; uploading to ${opt.host}`);
+console.log(`${(statSync(join(ROOT, tarball)).size / 2 ** 20).toFixed(0)} MB; uploading to ${host}`);
 
-run("scp", [...sshArgs, tarball, `${opt.host}:meridian-shards-deploy.tgz`]);
+run("scp", [...sshArgs, tarball, `${host}:meridian-shards-deploy.tgz`]);
 
 // Unpack over the old copy. Assets are replaced only when they were sent.
 const compose = "sudo docker compose -f deploy/docker-compose.yml";
@@ -64,7 +81,7 @@ const remote = [
   "set -e",
   "mkdir -p ~/meridian-shards && cd ~/meridian-shards",
   webOnly || opt["skip-assets"] ? "" : "rm -rf deploy/.stage/assets",
-  webOnly ? "rm -rf deploy/.stage/client deploy/.stage/site" : "rm -rf deploy/.stage/blakserv-src deploy/.stage/gamedata deploy/.stage/client deploy/.stage/site deploy/.stage/gateway",
+  siteOnly ? "rm -rf deploy/.stage/site" : webOnly ? "rm -rf deploy/.stage/client deploy/.stage/site" : "rm -rf deploy/.stage/blakserv-src deploy/.stage/gamedata deploy/.stage/client deploy/.stage/site deploy/.stage/gateway",
   "tar -xzf ~/meridian-shards-deploy.tgz",
   "rm ~/meridian-shards-deploy.tgz",
   "test -f deploy/.env || { echo 'deploy/.env is missing on the server: copy deploy/.env.example and set SITE_ADDRESS'; exit 1; }",
@@ -77,7 +94,7 @@ const remote = [
 ]
   .filter(Boolean)
   .join(" && ");
-run("ssh", [...sshArgs, opt.host, remote]);
+run("ssh", [...sshArgs, host, remote]);
 rmSync(join(ROOT, tarball), { force: true });
 console.log("deployed");
 

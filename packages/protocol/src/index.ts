@@ -6,3 +6,4 @@ export * from "./security.ts";
 export * from "./framing.ts";
 export * from "./messages.ts";
 export * from "./connection.ts";
+export { normalizeFlags, type UnpackedFlags } from "./objectFlags.ts";

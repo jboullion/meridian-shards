@@ -45,7 +45,6 @@ interface Live {
   contents: Relay<ContainerContents>;
   damage: Relay<DamageDealt>;
   mailNews: Relay<MailNewsEvent>;
-  statChange: Relay<{ stats: number[]; levels: number[] }>;
   guild: Relay<GuildEvent>;
   minigame: Relay<MinigameEvent>;
   /** BP_LOAD_MODULE / BP_UNLOAD_MODULE: the mini-games and the admin console */
@@ -89,8 +88,6 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   const [chat, setChat] = useState<ChatLine[]>([]);
   /** The creator is open for this empty slot once BP_CHARINFO arrives */
   const [creating, setCreating] = useState<{ slotId: number; info: CharInfo | null } | null>(null);
-  /** The game options the server keeps for us (UC_RECEIVE_PREFERENCES) */
-  const [serverPrefs, setServerPrefs] = useState<number | null>(null);
   /** The last ping's round trip (lagbox.c) */
   const [latency, setLatency] = useState<number | null>(null);
   /** The desktop app's /U, /W and /Q (config.c ConfigOverride), this start only */
@@ -157,13 +154,12 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     const contents = new Relay<ContainerContents>();
     const damage = new Relay<DamageDealt>();
     const mailNews = new Relay<MailNewsEvent>();
-    const statChange = new Relay<{ stats: number[]; levels: number[] }>();
     const guild = new Relay<GuildEvent>();
     const minigame = new Relay<MinigameEvent>();
     const modules = new Relay<{ name: string; loaded: boolean }>();
     const admin = new Relay<string>();
     const s = new GameSession(
-      { url: gameSocketUrl(), username, password, secretKey: __SECRET_KEY__, lookupResource: (id, lang) => rsb.get(id, lang), pingIntervalMs: 0 },
+      { url: gameSocketUrl(), username, password, lookupResource: (id) => rsb.get(id), pingIntervalMs: 0 },
       {
         phase: (p) => {
           setPhase(p);
@@ -201,11 +197,9 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
           // ...and a ding for tells
           if (tell) audio.playLocal("imp.ogg");
         },
-        preferences: setServerPrefs,
         latency: setLatency,
         look: looks.emit,
         mailNews: mailNews.emit,
-        statChange: (stats, levels) => statChange.emit({ stats, levels }),
         guild: guild.emit,
         minigame: minigame.emit,
         module: (name, loaded) => modules.emit({ name, loaded }),
@@ -219,10 +213,11 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     );
     // srvrstr.c: the profanity filter on every line shown
     s.textFilter = filterIncoming;
-    s.setLanguage(getSettings().language);
+    // "Can attack innocent players" is ours to keep (config.aggressive); the session sends it on entering
+    s.safety = !getSettings().aggressive;
     void loadProfanity(assets);
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => s.resource(id)), trades, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => s.resource(id)), trades, offers, looks, contents, damage, mailNews, guild, minigame, modules, admin });
   };
 
   const logout = () => {
@@ -333,14 +328,11 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       contents={live.contents.on}
       damage={live.damage.on}
       mailNews={live.mailNews.on}
-      statChange={live.statChange.on}
-      languages={rsb.languages()}
       guild={live.guild.on}
       minigame={live.minigame.on}
       modules={live.modules.on}
       admin={live.admin.on}
       onLogout={logout}
-      serverPrefs={serverPrefs}
       latency={latency}
     />
   );

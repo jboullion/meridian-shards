@@ -312,9 +312,12 @@ export class PlayerMover {
     }
   }
 
+  /** move.h IsInRoom: on one of the room's grid squares (move.c works out row and col first) */
   private isInRoom(x: number, y: number): boolean {
-    const b = this.room!.thingsBox;
-    return !(x <= 0 || x >= b.maxX || y <= 0 || y >= b.maxY);
+    const room = this.room!;
+    const row = y < 0 ? -1 : Math.trunc(y / FINENESS);
+    const col = x < 0 ? -1 : Math.trunc(x / FINENESS);
+    return row >= 0 && row < room.rows && col >= 0 && col < room.cols;
   }
 
   /** move.c FindIntersection: the first wall (depth-first) blocking a step. */

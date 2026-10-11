@@ -14,11 +14,14 @@ export type CommandId =
   | "delgroup" | "newgroup" | "buy" | "drop" | "look" | "offer" | "cast" | "map" | "wave" | "point" | "dance"
   | "alias" | "cmdalias" | "rest" | "yell" | "stand" | "suicid" | "suicide" | "neutral" | "happy" | "sad" | "wry"
   | "guild" | "password" | "withdraw" | "deposit" | "balance" | "group" | "appeal" | "tellguild"
-  | "safetyOn" | "safetyOff" | "tempsafeOn" | "tempsafeOff" | "groupingOn" | "groupingOff" | "autolootOn"
-  | "autolootOff" | "autocombineOn" | "autocombineOff" | "reagentbagOn" | "reagentbagOff" | "spellpowerOn"
-  | "spellpowerOff" | "time" | "mail";
+  | "safetyOn" | "safetyOff" | "mail";
 
-/** merintr.c `commands`, in its order (ties go to the first), with the German names. */
+/**
+ * merintr.c `commands`, in its order (ties go to the first), with the German names (Server
+ * 104's; kept as aliases). Upstream's own spellings "safetyon", "safetyoff" and "reroll" are
+ * in too; 104's tempsafe, grouping, autoloot, autocombine, reagentbag, spellpower and time
+ * commands are gone with the server options they set (ADR 0005).
+ */
 export const COMMAND_TABLE: readonly (readonly [string, CommandId])[] = [
   ["say", "say"], ["sagen", "say"], ["broadcast", "broadcast"], ["mitteilen", "broadcast"], ["emote", "emote"], ["ego", "emote"],
   ["who", "who"], ["wer", "who"], ["quit", "quit"], ["beenden", "quit"], ["tell", "tell"], ["telepathie", "tell"],
@@ -37,15 +40,7 @@ export const COMMAND_TABLE: readonly (readonly [string, CommandId])[] = [
   ["kontostand", "balance"], ["group", "group"], ["gruppen", "group"], ["appeal", "appeal"], ["aufrufen", "appeal"],
   ["tellguild", "tellguild"], ["telgilde", "tellguild"], ["tguild", "tellguild"], ["tgilde", "tellguild"],
   ["safety on", "safetyOn"], ["sicherheit an", "safetyOn"], ["safety off", "safetyOff"], ["sicherheit aus", "safetyOff"],
-  ["tempsafe on", "tempsafeOn"], ["tempsicherheit an", "tempsafeOn"], ["tempsafe off", "tempsafeOff"],
-  ["tempsicherheit aus", "tempsafeOff"], ["grouping on", "groupingOn"], ["gruppenbildung an", "groupingOn"],
-  ["grouping off", "groupingOff"], ["gruppenbildung aus", "groupingOff"], ["autoloot on", "autolootOn"],
-  ["autoloot an", "autolootOn"], ["autoloot off", "autolootOff"], ["autoloot aus", "autolootOff"],
-  ["autocombine on", "autocombineOn"], ["autocombine an", "autocombineOn"], ["autocombine off", "autocombineOff"],
-  ["autocombine aus", "autocombineOff"], ["reagentbag on", "reagentbagOn"], ["reagentbag an", "reagentbagOn"],
-  ["reagentbag off", "reagentbagOff"], ["reagentbag aus", "reagentbagOff"], ["spellpower on", "spellpowerOn"],
-  ["spellpower an", "spellpowerOn"], ["spellpower off", "spellpowerOff"], ["spellpower aus", "spellpowerOff"],
-  ["time", "time"], ["Zeit", "time"],
+  ["safetyon", "safetyOn"], ["safetyoff", "safetyOff"], ["reroll", "suicide"],
   // module/mailnews adds its own command (mailnews.c)
   ["mail", "mail"],
 ];

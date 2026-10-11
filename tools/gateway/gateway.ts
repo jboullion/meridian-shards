@@ -3,7 +3,7 @@
 // gateway's address, so the gateway logs the real client IP and enforces a
 // per-IP connection limit. TLS (wss://) is terminated in front of it (Caddy).
 //
-//   node tools/gateway/gateway.ts [--port 8059] [--server 127.0.0.1:5959] [--max-per-ip 4]
+//   node tools/gateway/gateway.ts [--port 8059] [--server 127.0.0.1:5960] [--max-per-ip 4]
 //
 // Env equivalents: GATEWAY_PORT, BLAKSERV_ADDR, GATEWAY_MAX_PER_IP,
 // GATEWAY_ORIGINS (comma-separated allowed Origin headers; empty = allow all),
@@ -23,7 +23,7 @@ const { values: args } = parseArgs({
 });
 
 const PORT = Number(args.port ?? process.env.GATEWAY_PORT ?? 8059);
-const [SERVER_HOST, SERVER_PORT] = (args.server ?? process.env.BLAKSERV_ADDR ?? "127.0.0.1:5959").split(":");
+const [SERVER_HOST, SERVER_PORT] = (args.server ?? process.env.BLAKSERV_ADDR ?? "127.0.0.1:5960").split(":");
 const MAX_PER_IP = Number(args["max-per-ip"] ?? process.env.GATEWAY_MAX_PER_IP ?? 4);
 const ORIGINS = (process.env.GATEWAY_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 const TRUST_PROXY = process.env.GATEWAY_TRUST_PROXY === "1";

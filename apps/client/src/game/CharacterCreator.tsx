@@ -57,10 +57,12 @@ const SHEET: readonly [number, number] = [320, 278];
 const PAGE: Rect = [2, 22, 316, 236];
 /** Where each page's template goes in PAGE */
 const INNER: Rect = [0, 2, 316, 232];
-/** char.h School / char.rc school names */
+/**
+ * The spell schools (upstream kod blakston.khd SS_*). Skills arrive without a school in the
+ * original protocol (char.c HandleCharInfo), so only spells are labelled with one.
+ */
 const SCHOOLS: Record<number, string> = {
-  1: "Shal'ille", 2: "Qor", 3: "Kraanan", 4: "Faren", 5: "Riija", 6: "Jala", 7: "Crafting", 8: "DMSchool",
-  10: "Weaponcraft", 11: "Brawling", 12: "Thievery",
+  1: "Shal'ille", 2: "Qor", 3: "Kraanan", 4: "Faren", 5: "Riija", 6: "Jala", 7: "DM",
 };
 const SS_SHALILLE = 1,
   SS_QOR = 2;
@@ -394,8 +396,8 @@ function ChoiceLists({
   /** Prev and Next, beside the points */
   children: ReactNode;
 }) {
-  // char.c: the list string is the school, the level and the name
-  const label = (c: CreatorChoice) => `${SCHOOLS[c.school] ?? "?"} ${c.cost < 25 ? 1 : 2}: ${rs(c.nameRes)}`;
+  // charspel.c / charskil.c list names; ours puts a spell's school and level first, which the protocol sends for spells
+  const label = (c: CreatorChoice) => (c.school ? `${SCHOOLS[c.school] ?? "?"} ${c.cost < 25 ? 1 : 2}: ${rs(c.nameRes)}` : rs(c.nameRes));
   const byLabel = (a: CreatorChoice, b: CreatorChoice) => label(a).localeCompare(label(b), undefined, { sensitivity: "base" });
   const available = list.filter((c) => !chosen.includes(c.id)).sort(byLabel);
   const mine = list.filter((c) => chosen.includes(c.id)).sort(byLabel);

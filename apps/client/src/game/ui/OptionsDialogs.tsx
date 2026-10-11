@@ -9,7 +9,6 @@
 // keeps what was there.
 
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { CF } from "@shards/protocol";
 import type { GameSession } from "@shards/world";
 import {
   ACTION_LABELS, ACTION_TABS, DEFAULT_SETTINGS, PRESETS, bindingLabel, mouseCode, presetSettings,
@@ -60,29 +59,19 @@ function usePlayers(session: GameSession): { id: number; name: string }[] {
 
 // ---------------------------------------------------------------------------- Preferences
 
-/** The game options the server keeps (IDD_SETTINGS Game Options and "Can attack innocent players"). */
-const SERVER_OPTIONS = [
-  ["Receive temporary angel on death", CF.TEMPSAFE, [15, 116, 123, 9]],
-  ["Join building groups", CF.GROUPING, [192, 116, 75, 9]],
-  ["Autoloot stackable items from kills", CF.AUTOLOOT, [15, 128, 123, 9]],
-  ["Autocombine spell items", CF.AUTOCOMBINE, [192, 128, 90, 9]],
-  ["Stash things into the appropriate bag automatically", CF.BAGS, [15, 140, 170, 9]],
-  ["Display spellpower for spells cast", CF.SPELLPOWER, [192, 140, 119, 9]],
-] as const;
-
 /** Options the client keeps but doesn't do anything with yet (docs/missing-features.md). */
 const NOT_YET = "Not in Meridian Shards yet; the setting is kept for when it is";
 
 /**
  * client.rc IDD_SETTINGS (375 x 316 DLU) without the Web Browser group, so 288 tall.
- * `serverFlags` is the server's CF_* preferences (null until UC_RECEIVE_PREFERENCES).
+ * "Can attack innocent players" is ours to keep (upstream config.aggressive); Server 104's
+ * Game Options group of server-side options is gone (ADR 0005).
  */
 export function PreferencesDialog({
-  settings, serverFlags, onApply, onPreview, onClose,
+  settings, onApply, onPreview, onClose,
 }: {
   settings: Settings;
-  serverFlags: number | null;
-  onApply: (patch: Patch, serverFlags: number | null) => void;
+  onApply: (patch: Patch) => void;
   /** Hear the Audio Effects choices while the window is open; null when it closes */
   onPreview?: (audio: AudioPreview | null) => void;
   onClose: () => void;
@@ -94,11 +83,8 @@ export function PreferencesDialog({
     onPreview?.({ music, musicVolume, sound, soundVolume, loopSounds, randomSounds });
   }, [onPreview, music, musicVolume, sound, soundVolume, loopSounds, randomSounds]);
   useEffect(() => () => onPreview?.(null), [onPreview]);
-  const [flags, setFlags] = useState(serverFlags ?? 0);
   const [profanityOpen, setProfanityOpen] = useState(false);
   const set = (patch: Patch) => setD((s) => ({ ...s, ...patch }));
-  const flag = (f: number, on: boolean) => setFlags((v) => (on ? v | f : v & ~f));
-  const known = serverFlags !== null;
   const check = (label: string, r: Rect, key: keyof Settings, notYet = false) => (
     <Check at={r} label={label} title={notYet ? NOT_YET : undefined} className={notYet ? "not-yet" : undefined} checked={d[key] as boolean} onChange={(v) => set({ [key]: v } as Patch)} />
   );
@@ -107,7 +93,7 @@ export function PreferencesDialog({
   );
   const ok = (e: FormEvent) => {
     e.preventDefault();
-    onApply(d, known && flags !== serverFlags ? flags : null);
+    onApply(d);
     onClose();
   };
   return (
@@ -120,10 +106,8 @@ export function PreferencesDialog({
             at={[16, 14, 73, 17]}
             className="wrap"
             label="Can attack innocent players"
-            title={known ? "Kept on the server" : "Waiting for the server"}
-            disabled={!known}
-            checked={(flags & CF.SAFETY_OFF) !== 0}
-            onChange={(v) => flag(CF.SAFETY_OFF, v)}
+            checked={d.aggressive}
+            onChange={(v) => set({ aggressive: v })}
           />
           {halo("Red Highlight", "red", [16, 34, 70, 10])}
           {halo("Blue Highlight", "blue", [16, 45, 70, 10])}
@@ -142,19 +126,6 @@ export function PreferencesDialog({
           {check("Show weather effects", [18, 84, 91, 9], "weather")}
           <Text at={[121, 84, 56, 10]}>Particle density %</Text>
           <Trackbar at={[181, 78, 179, 18]} min={25} max={150} step={5} value={d.particleDensity} onChange={(v) => set({ particleDensity: v })} label="Particle density" />
-
-          <GroupBox at={[6, 103, 364, 55]} label="Game Options" />
-          {SERVER_OPTIONS.map(([label, f, r]) => (
-            <Check
-              key={f}
-              at={r}
-              label={label}
-              title={known ? "Kept on the server" : "Waiting for the server"}
-              disabled={!known}
-              checked={(flags & f) !== 0}
-              onChange={(v) => flag(f, v)}
-            />
-          ))}
 
           <GroupBox at={[6, 160, 364, 45]} label="Audio Effects" />
           {check("Music", [17, 173, 35, 9], "music")}

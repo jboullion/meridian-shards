@@ -4,7 +4,7 @@
 // stays connected for a while (to soak-test the LCG + redbook handling).
 //
 //   node tools/headless/client.ts --user shardbot --pass secret [--char Shardbot]
-//        [--url ws://localhost:8059] [--key <SecretKey>] [--rsb <path to rsc0000.rsb>]
+//        [--url ws://localhost:8059] [--rsb <path to rsc0000.rsb>]
 //        [--walk "row,col row,col ..."] [--go] [--loop] [--stay 300] [--say "hello"] [--verbose]
 //
 // --walk takes 1-based grid squares (Kod coordinates / 64): "8,7" is the centre of
@@ -20,7 +20,7 @@ import { parseRsb, type RsbBundle } from "../../packages/formats/src/rsb.ts";
 import {
   AP, BP, ByteReader, Connection, GENDER, KOD_FINENESS, SPEED_WALK, apName, bpName,
   buildLogin, buildNewCharInfo, buildReqGame, buildReqMove, buildSay, buildSimple, buildUseCharacter,
-  passwordDigest, readCharacters, readMove, readPlayer, readRoomContents, readRoomObject,
+  passwordDigest, readCharacters, readShardsInfo, readMove, readPlayer, readRoomContents, readRoomObject,
   type PlayerInfo, type RoomObject,
 } from "../../packages/protocol/src/index.ts";
 
@@ -30,8 +30,8 @@ const { values: opt } = parseArgs({
     user: { type: "string", default: "shardbot" },
     pass: { type: "string", default: "shardbot" },
     char: { type: "string" },
-    key: { type: "string" },
-    rsb: { type: "string", default: "server/src/run/server/rsc/rsc0000.rsb" },
+    // the asset build's, which npm run assets merges from the Shards server's Kod build
+    rsb: { type: "string", default: "dist/assets/rsc0000.rsb" },
     walk: { type: "string" },
     go: { type: "boolean", default: false },
     loop: { type: "boolean", default: false },
@@ -41,7 +41,6 @@ const { values: opt } = parseArgs({
   },
 });
 
-const SECRET_KEY = opt.key ?? readSecretKey();
 const rsb: RsbBundle = parseRsb(readFileSync(opt.rsb!));
 /** Dynamic resources (player names etc.) arrive in BP_CHANGE_RESOURCE. */
 const dynamicRsc = new Map<number, string>();
@@ -49,12 +48,6 @@ const rs = (id: number) => (id ? (dynamicRsc.get(id) ?? rsb.get(id) ?? `#${id}`)
 const t0 = Date.now();
 const log = (...a: unknown[]) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1).padStart(6)}s]`, ...a);
 
-function readSecretKey(): string {
-  const cfg = readFileSync(new URL("../../server/config/blakserv.cfg", import.meta.url), "utf8");
-  const m = /^SecretKey\s+(\S+)/m.exec(cfg);
-  if (!m) throw new Error("no SecretKey in server/config/blakserv.cfg; pass --key");
-  return m[1];
-}
 
 // ------------------------------------------------------------------ world state
 
@@ -109,11 +102,16 @@ function onLogin(type: number, r: ByteReader): void {
   switch (type) {
     case AP.GETLOGIN:
       log(`login as ${opt.user}`);
-      conn.sendLogin(buildLogin({ username: opt.user!, passwordDigest: passwordDigest(opt.pass!), secretKey: SECRET_KEY }));
+      conn.sendLogin(buildLogin({ username: opt.user!, passwordDigest: passwordDigest(opt.pass!) }));
       break;
     case AP.LOGINOK:
       log(`login ok (account type ${r.u8()})`);
       break;
+    case AP.SHARDS_INFO: {
+      const info = readShardsInfo(r);
+      log(`Shards server "${info.serverName}", protocol ${info.version}`);
+      break;
+    }
     case AP.LOGINFAILED:
       log("login failed: wrong password?");
       exit(1);

@@ -8,11 +8,11 @@ import {
   buildReqCounteroffer, buildReqOffer, buildReqTurn, buildReqWithdrawal, buildReqWithdrawalItems, buildSay, buildSayGroup, buildSendEnchantments,
   buildSendSkills, buildSendSpells, buildChangeDescription, buildChangeUrl, buildReqApply,
   buildReqGetFromContainer, buildReqObjectContents, buildReqPut, buildSendStatGroups, buildSendStats, buildSimple, buildUseCharacter, buildUserCommand,
-  buildSendCharInfo, buildDeleteMail, buildDeleteNews, buildPostArticle, buildReqArticle, buildReqArticles, buildReqGetMail,
-  buildReqLookupNames, buildSendMail, buildChangedStats, readStatChange, readGuildInfo, readGuildList, readGuildShield, readGuildShields,
+  buildSendCharInfo, buildDeleteMail, buildPostArticle, buildReqArticle, buildReqArticles, buildReqGetMail,
+  buildReqLookupNames, buildSendMail, readGuildInfo, readGuildList, readGuildShield, readGuildShields,
   readGuildHalls, type GuildInfo, readArticles, readLookNewsgroup, readLookupNames, readMailHeader, type NewsArticle, buildAction, buildAppeal, buildChangePassword, buildReqInventoryMove, buildSayBlocked, UC, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
-  type BuyItem, type CharInfo, type CharacterSlot, type NewCharInfo, type ObjectInfo, type ObjectRef, type PlayWave,
-  buildReqAdmin,
+  type BuyItem, type CharInfo, type CharacterSlot, type InventoryMove, type NewCharInfo, type ObjectInfo, type ObjectRef, type PlayWave,
+  buildReqAdmin, buildReqDrop, buildSafety, readShardsInfo,
 } from "@shards/protocol";
 import { WorldState, fineToKod } from "./state.ts";
 import { formatServerMessage, parseMarkup, type TextSpan } from "./text.ts";
@@ -124,10 +124,9 @@ export type MinigameEvent =
   /** UC_MINIGAME_PLAYER: who plays as player `player` */
   | { type: "player"; player: number; name: string };
 
-/** Sound and music from the server (server.c HandlePlayWave / HandleStopWave / HandlePlayMusic). */
+/** Sound and music from the server (server.c HandlePlayWave / HandlePlayMusic). */
 export type SoundEvent =
   | { type: "play"; wave: PlayWave; file: string }
-  | { type: "stop"; file: string; object: number }
   | { type: "music"; file: string }
   /** Entering a room stops looping sounds (game.c EnterNewRoom SoundStopAll(SF_LOOP)). */
   | { type: "stopLoops" };
@@ -144,9 +143,8 @@ export interface SessionOptions {
   url: string;
   username: string;
   password: string;
-  secretKey: string;
   /** Resolves a resource id to its string (rsc0000.rsb); needed for the redbook token. */
-  lookupResource: (id: number, language?: number) => string | undefined;
+  lookupResource: (id: number) => string | undefined;
   /** Set when pings are driven externally (Web Worker); see Connection.pingIntervalMs. */
   pingIntervalMs?: number;
   /** Factory for the socket; defaults to the global WebSocket. */
@@ -161,8 +159,8 @@ export interface SessionEvents {
   error?: (message: string) => void;
   chat?: (line: ChatLine) => void;
   look?: (look: LookResult) => void;
-  /** BP_REQ_STAT_CHANGE (module/stats): an elder offers to rearrange our stats and school levels */
-  statChange?: (stats: number[], levels: number[]) => void;
+  /** AP_SHARDS_INFO: the Shards server's protocol version and name (none from other servers) */
+  shardsInfo?: (info: { version: number; serverName: string }) => void;
   /** Guilds (merintr.c guild*.c) */
   guild?: (e: GuildEvent) => void;
   /** Mini-game messages (chess) */
@@ -180,8 +178,6 @@ export interface SessionEvents {
   damageDealt?: (hit: DamageDealt) => void;
   /** A ping's round trip in ms, every 5 s in the game (lagbox.c) */
   latency?: (ms: number) => void;
-  /** The game options the server keeps for us (UC_RECEIVE_PREFERENCES: CF_* flags) */
-  preferences?: (flags: number) => void;
   /**
    * BP_LOAD_MODULE / BP_UNLOAD_MODULE: the server loads or unloads one of the client's
    * modules by file name (modules.c), e.g. "chess.dll" for a chess game or "stats.dll".
@@ -194,8 +190,18 @@ export interface SessionEvents {
 
 export class GameSession {
   phase: SessionPhase = "connecting";
-  /** The server's game options for us (CF_* flags), once UC_RECEIVE_PREFERENCES arrives */
-  preferences: number | null = null;
+  /**
+   * The Shards protocol version the server announced (AP_SHARDS_INFO), 0 for the original
+   * protocol. Shards additions to the protocol are used only from the version that added them.
+   */
+  shardsProtocol = 0;
+  /** The server's name (AP_SHARDS_INFO), "" when it doesn't say */
+  serverName = "";
+  /**
+   * Safety on: we can't attack innocent players (the original's config.aggressive, inverted).
+   * Kept by the client and sent on entering the game, as mermain.c SendConfiguredSafety does.
+   */
+  safety = true;
   readonly world = new WorldState();
   characters: CharacterSlot[] = [];
   private readonly conn: Connection;
@@ -243,7 +249,7 @@ export class GameSession {
   /**
    * game.c ResetUserData (BP_INVALIDATE_DATA, and after a resync): every id we hold is
    * stale, so ask again for the player, the room, who's on and the inventory (and, as the
-   * interface module does, stat groups, spells, skills, enchantments, preferences).
+   * interface module does, stat groups, spells, skills, enchantments, and our safety).
    */
   private refetchGameData(): void {
     this.world.resetData();
@@ -251,16 +257,6 @@ export class GameSession {
     this.send(buildSimple(BP.SEND_ROOM_CONTENTS));
     this.send(buildSimple(BP.SEND_PLAYERS));
     this.requestGameData();
-  }
-
-  /**
-   * language.c MenuLanguageChosen: strings in another language from now on, then
-   * ResetUserData (game.c), asking for everything again so names already shown change too.
-   */
-  setLanguage(language: number): void {
-    if (language === this.language) return;
-    this.language = language;
-    if (this.phase === "game") this.refetchGameData();
   }
 
   /** Send BP_PING (call every 5 s if pings are driven externally). */
@@ -323,11 +319,9 @@ export class GameSession {
     this.send(new ByteWriter().u8(BP.REQ_GET).u32(objId(id)).finish());
   }
 
-  /** BP_REQ_DROP takes an object: id, plus the amount for number items (protocol.c PARAM_OBJECT). */
+  /** BP_REQ_DROP: an object list (inventry.c drops one item as a list of one), the amount for number items. */
   drop(id: number, amount?: number): void {
-    const w = new ByteWriter().u8(BP.REQ_DROP).u32(id);
-    if (amount !== undefined) w.u32(amount);
-    this.send(w.finish());
+    this.send(buildReqDrop([{ id, amount }]));
   }
 
   /** Use (wield/wear) an inventory item. */
@@ -383,10 +377,10 @@ export class GameSession {
     if (ids.length) this.send(buildSayGroup(ids, text));
   }
 
-  /** UC_SEND_PREFERENCES: the game options the server keeps for us (CF_* flags). */
-  sendPreferences(flags: number): void {
-    this.preferences = flags;
-    this.userCommand(UC.SEND_PREFERENCES, flags);
+  /** UC_SAFETY (command.c CommandSafetyOn/Off, maindlg.c on OK): whether we may attack innocent players. */
+  setSafety(on: boolean): void {
+    this.safety = on;
+    this.send(buildSafety(on));
   }
 
   /** BP_SEND_STATS: ask for a stat group (the stats panel asks when its tab opens). */
@@ -486,19 +480,14 @@ export class GameSession {
     this.send(buildSayBlocked(id));
   }
 
-  /** BP_REQ_INVENTORY_MOVE (inventry.c): put an item where another one is in the inventory. */
-  inventoryMove(id: number, before: number): void {
-    this.send(buildReqInventoryMove(id, before));
+  /** BP_REQ_INVENTORY_MOVE (inventry.c): tell the server about a move WorldState.moveInventoryItem made. */
+  inventoryMove(move: InventoryMove): void {
+    this.send(buildReqInventoryMove(move));
   }
 
   /** mailnews.c ReceiveArticles: the index parts so far, and the last part number */
   private articleParts: NewsArticle[] = [];
   private lastArticlePart = 0;
-
-  /** BP_CHANGED_STATS (statsmake.c VerifySettings) */
-  changeStats(stats: readonly number[], levels: readonly number[]): void {
-    this.send(buildChangedStats(stats, levels));
-  }
 
   /** BP_REQ_GET_MAIL: send us our new mail (each comes as BP_MAIL) */
   requestMail(): void {
@@ -530,10 +519,6 @@ export class GameSession {
 
   postArticle(newsgroup: number, title: string, text: string): void {
     this.send(buildPostArticle(newsgroup, title, text));
-  }
-
-  deleteArticle(newsgroup: number, num: number): void {
-    this.send(buildDeleteNews(newsgroup, num));
   }
 
   /** Whether this is the account's password (command.c SuicideVerifyDialogProc checks the typed one). */
@@ -570,20 +555,16 @@ export class GameSession {
 
   /** Resource string: dynamic (player names) first, then the .rsb. */
   resource(id: number): string | undefined {
-    return this.world.dynamicResources.get(id) ?? this.opts.lookupResource(id, this.language);
+    return this.world.dynamicResources.get(id) ?? this.opts.lookupResource(id);
   }
 
   /** Until then, server messages are the logon's, for the Server tab (LOGON_SERVER_TAB_MS) */
   private logonUntil = 0;
 
   /**
-   * The resource language strings are shown in (config.language, the Language menu; English
-   * is 0). The redbook token and our format-string matching (chat tabs, damage numbers)
-   * stay on English.
+   * A string as the Kod wrote it, for matching format strings and names (chat tabs, damage
+   * numbers). The same as resource(): the original game's strings are in one language.
    */
-  language = 0;
-
-  /** A string in English, for matching format strings and names written in it */
   englishResource(id: number): string | undefined {
     return this.world.dynamicResources.get(id) ?? this.opts.lookupResource(id);
   }
@@ -599,8 +580,8 @@ export class GameSession {
     this.send(buildSendSkills());
     this.send(buildSendSpells());
     this.send(buildSendEnchantments(ENCHANT.PLAYER));
-    // mermain.c InterfaceUserChanged: RequestPreferences
-    this.userCommand(UC.REQ_PREFERENCES);
+    // mermain.c InterfaceUserChanged -> SendConfiguredSafety
+    this.send(buildSafety(this.safety));
   }
 
   /**
@@ -634,7 +615,6 @@ export class GameSession {
           buildLogin({
             username: this.opts.username,
             passwordDigest: passwordDigest(this.opts.password),
-            secretKey: this.opts.secretKey,
             screenWidth: globalThis.screen?.width,
             screenHeight: globalThis.screen?.height,
           }),
@@ -653,9 +633,16 @@ export class GameSession {
         this.fail(r.string());
         break;
       case AP.GETCLIENT:
-      case AP.CLIENT_PATCH:
-        this.fail("The server rejected this client (wrong secret key or version).");
+        // synched.c VerifyLogin: our client version is below the server's [Login] MinVersion
+        this.fail("The server wants a newer client than this one.");
         break;
+      case AP.SHARDS_INFO: {
+        const info = readShardsInfo(r);
+        this.shardsProtocol = info.version;
+        this.serverName = info.serverName;
+        this.events.shardsInfo?.(info);
+        break;
+      }
       case AP.TIMEOUT:
         // server.c HandleTimeout -> LoginTimeout: IDS_TIMEOUT
         this.fail("Login timed out.");
@@ -768,10 +755,7 @@ export class GameSession {
         case BP.USERCOMMAND: {
           // merintr.c HandleUserCommand
           const uc = r.u8();
-          if (uc === UC.RECEIVE_PREFERENCES) {
-            this.preferences = r.i32();
-            this.events.preferences?.(this.preferences);
-          } else if (uc === UC.SPELL_SCHOOLS) {
+          if (uc === UC.SPELL_SCHOOLS) {
             // merintr.c HandleSpellSchools: the schools' names, for the Spells menu
             const n = r.u8();
             const schools: number[] = [];
@@ -803,12 +787,12 @@ export class GameSession {
             // merintr.c HandleSendQuit: the server wants us out (after a suicide, a rescue)
             this.send(buildSimple(BP.REQ_QUIT));
           } else if (uc === UC.LOOK_PLAYER) {
-            // HandleLookPlayer: the player, flags, their own words, the fixed string, the URL
+            // HandleLookPlayer: the player, flags, their own words (a server message), the fixed
+            // text (a plain string in the original protocol), the URL
             const object = readObject(r);
             const flags = r.u8();
-            const lookup = (id: number) => this.resource(id);
-            const words = formatServerMessage(r.u32(), r, lookup) ?? "";
-            const fixed = formatServerMessage(r.u32(), r, lookup) ?? "";
+            const words = formatServerMessage(r.u32(), r, (id) => this.resource(id)) ?? "";
+            const fixed = r.string();
             const url = r.string();
             this.events.look?.({ object, name: this.resource(object.nameRes) ?? "", description: fixed, inscription: words, flags, url, player: true });
           }
@@ -872,21 +856,10 @@ export class GameSession {
           if (file) this.events.sound?.({ type: "play", wave, file });
           break;
         }
-        case BP.STOP_WAVE: {
-          const file = this.resource(r.u32());
-          const object = r.u32();
-          if (file) this.events.sound?.({ type: "stop", file, object });
-          break;
-        }
         case BP.PLAY_MUSIC:
         case BP.PLAY_MIDI: {
           const file = this.resource(r.u32());
           if (file) this.events.sound?.({ type: "music", file });
-          break;
-        }
-        case BP.REQ_STAT_CHANGE: {
-          const { stats, levels } = readStatChange(r);
-          this.events.statChange?.(stats, levels);
           break;
         }
         case BP.ADMIN:

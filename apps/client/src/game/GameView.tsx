@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { CF, SAY, STAT_GROUP, UA, UC, objId, type ObjectInfo } from "@shards/protocol";
+import { SAY, STAT_GROUP, UA, UC, objId, type ObjectInfo } from "@shards/protocol";
 import {
   PROFANITY_WARNING, isNumberItem, OBSERVER, WHITE, BLACK, decodeBoard, type GuildEvent, type MinigameEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
   type TradeList,
@@ -14,7 +14,6 @@ import {
 } from "./commands.ts";
 import { exitApp, gameSocketUrl, onBackButton } from "../host.ts";
 import { loadMailbox, newMailMessage, nextMailNumber, replyRecipients, replySubject, saveMailbox, type MailMessage } from "./mailbox.ts";
-import { StatChangeDialog } from "./ui/StatChangeDialog.tsx";
 import { GuildCreateDialog, GuildHallsDialog, GuildWindow, legalShield, type GuildState } from "./ui/GuildDialogs.tsx";
 import { ReadMailDialog, ReadNewsDialog, SendMailDialog, type MailDraft, type Newsgroup } from "./ui/MailNewsDialogs.tsx";
 import type { NewsArticle } from "@shards/protocol";
@@ -39,7 +38,6 @@ import { AnnotateDialog } from "./ui/AnnotateDialog.tsx";
 import { AboutDialog } from "./ui/AboutDialog.tsx";
 import { ChessWindow, type ChessState } from "./ui/ChessWindow.tsx";
 import { AdminConsole, appendAdminText } from "./ui/AdminConsole.tsx";
-import { languageName } from "./languages.ts";
 import { MAX_ANNOTATIONS, annotationAt, loadAnnotations, saveAnnotations, type MapAnnotation } from "./annotations.ts";
 import { useWorld } from "./ui/hooks.ts";
 import { TitleBar } from "./TitleBar.tsx";
@@ -100,13 +98,6 @@ const USER_ACTIONS: Partial<Record<CommandId, number>> = {
   wave: UA.WAVE, point: UA.POINT, dance: UA.DANCE, happy: UA.HAPPY, sad: UA.SAD, neutral: UA.NORMAL, wry: UA.WRY,
 };
 
-/** command.c: the game options typed commands turn on and off (SendPreferences) */
-const OPTION_COMMANDS: Partial<Record<CommandId, [flag: number, on: boolean]>> = {
-  safetyOn: [CF.SAFETY_OFF, false], safetyOff: [CF.SAFETY_OFF, true], tempsafeOn: [CF.TEMPSAFE, true], tempsafeOff: [CF.TEMPSAFE, false],
-  groupingOn: [CF.GROUPING, true], groupingOff: [CF.GROUPING, false], autolootOn: [CF.AUTOLOOT, true], autolootOff: [CF.AUTOLOOT, false],
-  autocombineOn: [CF.AUTOCOMBINE, true], autocombineOff: [CF.AUTOCOMBINE, false], reagentbagOn: [CF.BAGS, true], reagentbagOff: [CF.BAGS, false],
-  spellpowerOn: [CF.SPELLPOWER, true], spellpowerOff: [CF.SPELLPOWER, false],
-};
 
 /** actions.c `actions`: the Actions menu, null for a separator */
 const ACTIONS_MENU: ([command: string, label: string] | null)[] = [
@@ -144,12 +135,10 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, guild, minigame, modules, admin, onLogout, trades, offers, latency,
 }: {
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
-  /** The game options the server keeps for us (CF_* flags), null until it has said */
-  serverPrefs: number | null;
   session: GameSession;
   assets: AssetStore;
   audio: GameAudio;
@@ -158,10 +147,6 @@ export function GameView({
   chat: ChatLine[];
   /** Subscribe to descriptions from the session (BP_LOOK, UC_LOOK_PLAYER) */
   looks: (fn: (l: LookResult) => void) => () => void;
-  /** BP_REQ_STAT_CHANGE (module/stats): an elder offers to rearrange our stats */
-  statChange: (fn: (e: { stats: number[]; levels: number[] }) => void) => () => void;
-  /** The languages the .rsb has (language.c GetAvailableLanguages) */
-  languages: number[];
   /** Mini-game messages (chess) */
   minigame: (fn: (e: MinigameEvent) => void) => () => void;
   /** The server loading and unloading client modules (chess.dll, admin.dll) */
@@ -337,8 +322,6 @@ export function GameView({
   /** The newsgroup a globe opened, its index and the chosen article's text */
   const [news, setNews] = useState<{ group: Newsgroup; articles: NewsArticle[] | null; article: { num: number; text: string } | null } | null>(null);
   const requestedArticle = useRef(-1);
-  /** The stat change sheet (module/stats), with what the server says we have */
-  const [statChangeAt, setStatChangeAt] = useState<{ stats: number[]; levels: number[] } | null>(null);
   /** The guild window (guild.c), Create New Guild (UC_GUILD_ASK) and Rent Guild Hall (UC_GUILD_HALLS) */
   const [guildState, setGuildState] = useState<GuildState | null>(null);
   const [guildAsk, setGuildAsk] = useState<{ cost: number; secretCost: number } | null>(null);
@@ -531,7 +514,6 @@ export function GameView({
   );
   useEffect(() => offers((e) => setOffer((prev) => reduceOffer(prev, e))), [offers]);
   useEffect(() => damage((d) => sceneRef.current?.showDamage(d)), [damage]);
-  useEffect(() => statChange(setStatChangeAt), [statChange]);
   // modules.c: BP_LOAD_MODULE "chess.dll" opens the chess window; BP_UNLOAD_MODULE closes it
   useEffect(
     () =>
@@ -944,10 +926,10 @@ export function GameView({
     setAnnotating(null);
   };
 
-  /** language.c MenuLanguageChosen: strings in the new language from now on, the spells' names too */
-  const chooseLanguage = (id: number) => {
-    updateSettings({ language: id });
-    session.setLanguage(id);
+  /** command.c CommandSafetyOn/Off, maindlg.c IDOK: "Can attack innocent players" is ours (config.aggressive) */
+  const setAggressive = (aggressive: boolean) => {
+    updateSettings({ aggressive });
+    session.setSafety(!aggressive);
   };
 
   /** command.c Command*: one command, with the words after its name */
@@ -959,14 +941,7 @@ export function GameView({
     if (window && !((id === "alias" || id === "cmdalias") && args)) return openWindow(window);
     const ua = USER_ACTIONS[id];
     if (ua !== undefined) return session.action(ua);
-    const option = OPTION_COMMANDS[id];
-    if (option) {
-      const [flag, on] = option;
-      const base = serverPrefs ?? 0;
-      session.sendPreferences(on ? base | flag : base & ~flag);
-      // and read them back, so Preferences shows them
-      return session.userCommand(UC.REQ_PREFERENCES);
-    }
+    if (id === "safetyOn" || id === "safetyOff") return setAggressive(id === "safetyOff");
     switch (id) {
       case "say":
         return args ? say(args, SAY.NORMAL) : undefined;
@@ -1011,8 +986,6 @@ export function GameView({
         return setModal({ type: "suicide" });
       case "password":
         return setModal({ type: "password" });
-      case "time":
-        return session.userCommand(UC.REQ_TIME);
       case "map":
         return setFullMap((v) => !v);
       case "get":
@@ -1324,17 +1297,6 @@ export function GameView({
           // actions.c: each item runs its typed command
           { label: "Actions", items: ACTIONS_MENU.map((a) => (a ? { label: a[1], onSelect: () => runCommand(a[0]) } : { label: "", separator: true })) },
           ...(spellsMenu.length ? [{ label: "Spells", items: spellsMenu }] : []),
-          // language.c: the Language menu, sorted by name, the chosen one checked
-          ...(languages.length > 1
-            ? [
-                {
-                  label: "Language",
-                  items: [...languages]
-                    .sort((a, b) => languageName(a).localeCompare(languageName(b)))
-                    .map((id) => ({ label: languageName(id), checked: settings.language === id, onSelect: () => chooseLanguage(id) })),
-                },
-              ]
-            : []),
           // mailnews.c's toolbar button, until the toolbar
           { label: "Mail…", onSelect: openMail },
           { label: "Change password…", onSelect: () => setModal({ type: "password" }) },
@@ -1606,9 +1568,6 @@ export function GameView({
             onClose={() => setNews(null)}
           />
         )}
-        {statChangeAt && (
-          <StatChangeDialog session={session} stats={statChangeAt.stats} levels={statChangeAt.levels} onClose={() => setStatChangeAt(null)} />
-        )}
         {modal?.type === "suicide" && <SuicideDialog session={session} onClose={() => setModal(null)} />}
         {modal?.type === "quickSlot" && (
           <QuickSlotPicker
@@ -1624,11 +1583,10 @@ export function GameView({
         {modal?.type === "preferences" && (
           <PreferencesDialog
             settings={settings}
-            serverFlags={serverPrefs}
-            onApply={(patch, flags) => {
+            onApply={(patch) => {
+              // maindlg.c IDOK -> InterfaceConfigChanged -> SendConfiguredSafety
+              if (patch.aggressive !== undefined && patch.aggressive !== settings.aggressive) setAggressive(patch.aggressive);
               updateSettings(patch);
-              // maindlg.c IDOK -> InterfaceConfigChanged: SendPreferences
-              if (flags !== null) session.sendPreferences(flags);
             }}
             onPreview={previewAudio}
             onClose={() => setModal(null)}
