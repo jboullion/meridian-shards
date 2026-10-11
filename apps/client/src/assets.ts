@@ -105,6 +105,12 @@ export class AssetStore {
     return JSON.parse(new TextDecoder().decode(await this.download("roomterrain.json"))) as Record<string, string[]>;
   }
 
+  /** Every room by number, with its name and file (rooms.json from the asset build), for the admin console; empty without one */
+  async roomList(): Promise<{ rid: number; name: string; roo: string }[]> {
+    if (!this.has("rooms.json")) return [];
+    return JSON.parse(new TextDecoder().decode(await this.download("rooms.json"))) as { rid: number; name: string; roo: string }[];
+  }
+
   /** Floor textures that are water even on a dry floor (watertextures.json from the asset build); empty without one */
   async waterTextures(): Promise<Set<number>> {
     if (!this.has("watertextures.json")) return new Set();

@@ -54,8 +54,7 @@ export interface ViewObject {
   /** The look to draw now (normal, or the motion look while moving). */
   look: {
     anim: { group: number };
-    /** `raised` (ours): drawn upside down, hanging up from where it attaches (ambient townsfolk cheering, arms up) */
-    overlays: { iconRes: number; hotspot: number; translation: number; anim: { group: number }; raised?: boolean }[];
+    overlays: { iconRes: number; hotspot: number; translation: number; anim: { group: number } }[];
     translation: number;
   };
 }
@@ -345,7 +344,7 @@ export class ObjectsView {
       for (const ov of look.overlays) {
         const b = this.getBgf(ov.iconRes);
         if (b === undefined) ready = false;
-        else if (b) overlays.push({ bgf: b, group: ov.anim.group, translation: ov.translation, hotspot: ov.hotspot, raised: ov.raised });
+        else if (b) overlays.push({ bgf: b, group: ov.anim.group, translation: ov.translation, hotspot: ov.hotspot });
       }
       if (!ready) continue;
       const frameNum = (bgf: Bgf, group: number) => {
@@ -356,7 +355,7 @@ export class ObjectsView {
       };
       const key = [
         o.version, o.info.iconRes, look.anim.group, frameNum(base, look.anim.group), look.translation, o.info.drawingType,
-        ...overlays.map((p) => `${p.bgf.name}:${p.group}:${p.translation}:${frameNum(p.bgf, p.group)}${p.raised ? "^" : ""}`),
+        ...overlays.map((p) => `${p.bgf.name}:${p.group}:${p.translation}:${frameNum(p.bgf, p.group)}`),
       ].join("|");
 
       let e = this.entries.get(o.id);

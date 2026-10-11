@@ -14,7 +14,8 @@
 
 ## Future Ideas
 
-- Toggle for "seasons" I thought the game had some mechanism for this. If not we can just assume the northern hemisphere seasons in game divided by 12. That is to say, we should go through an entire year of seasons in one real world month.
+- Set up a season guess. I believ eseasons should be game year % 4. However the server doesn't send the season so we have to calculate it client side.
+  - When done let's set up seasonal ambient effects
 
 
 ## Releases

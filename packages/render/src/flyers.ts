@@ -476,27 +476,6 @@ export class Flyers {
   }
 
   /** How many are about now (dev tools, tests) */
-  /** The nearest flock of birds (client units), or null */
-  nearestFlock(v: { x: number; y: number; z: number }): { x: number; y: number; z: number; distance: number } | null {
-    let best: { x: number; y: number; z: number; distance: number } | null = null;
-    for (const f of this.flocks) {
-      if (!f.birds.length) continue;
-      const d = Math.hypot(f.x - v.x, f.y - v.y, f.z - v.z);
-      if (!best || d < best.distance) best = { x: f.x, y: f.y, z: f.z, distance: d };
-    }
-    return best;
-  }
-
-  /** The nearest bat (client units), or null */
-  nearestBat(v: { x: number; y: number; z: number }): { x: number; y: number; distance: number } | null {
-    let best: { x: number; y: number; distance: number } | null = null;
-    for (const b of this.bats) {
-      const d = Math.hypot(b.flyer.x - v.x, b.flyer.y - v.y, b.flyer.z - v.z);
-      if (!best || d < best.distance) best = { x: b.flyer.x, y: b.flyer.y, distance: d };
-    }
-    return best;
-  }
-
   get count(): { birds: number; bats: number } {
     return { birds: this.flocks.reduce((s, f) => s + f.birds.length, 0), bats: this.bats.length };
   }

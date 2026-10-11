@@ -22,8 +22,10 @@ export interface AmbientRoomSpec {
   faction?: Faction;
   /** The arena: mock bouts and spell duels on its floor */
   bouts?: boolean;
-  /** The arena: people in the stands, always there (besides `count`) */
+  /** The arena: people in the stands, always there while it's open (besides `count`) */
   spectators?: number;
+  /** The arena's floor: how many fight there, picked anew each visit (instead of `count`) */
+  countRange?: [number, number];
 }
 
 const town = (count: number, place: Place, guards: number, livery: number): AmbientRoomSpec => ({ kind: "town", count, place, guards, livery });
@@ -40,7 +42,7 @@ export const AMBIENT_ROOMS: Record<string, AmbientRoomSpec> = {
   "tosinn.roo": inn(5, "tos"),
   "tostavern.roo": inn(4, "tos"),
   // The Arena of Kraanan and its foyer
-  "tosarena.roo": { kind: "arena", count: 8, place: "arena", bouts: true, spectators: 14 },
+  "tosarena.roo": { kind: "arena", count: 6, countRange: [4, 8], place: "arena", bouts: true, spectators: 14 },
   "tosaren2.roo": { kind: "arena", count: 6, place: "arena" },
   // Barloque
   "barln.roo": town(14, "barloque", 2, C.PURPLE),
@@ -95,13 +97,20 @@ export type AmbientLevel = keyof typeof AMBIENT_SCALE;
  */
 const TOWN_BY_HOUR = [0.3, 0.3, 0.3, 0.3, 0.3, 0.4, 0.55, 0.75, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0.9, 0.75, 0.55, 0.4, 0.3, 0.25];
 const INN_BY_HOUR = [0.8, 0.6, 0.4, 0.4, 0.4, 0.4, 0.5, 0.5, 0.5, 0.7, 0.7, 0.7, 0.8, 0.7, 0.7, 0.7, 0.7, 0.9, 1.2, 1.2, 1.2, 1.2, 1.2, 1];
-/** Castles and the arena keep their people by day, fewer at night */
+/** Castles keep their people by day, fewer at night */
 const COURT_BY_HOUR = [0.5, 0.4, 0.4, 0.4, 0.4, 0.5, 0.7, 0.9, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0.9, 0.8, 0.7, 0.6, 0.5];
+/** The arena is shut from 22 to 6: nobody on the floor, in the stands or the foyer */
+const ARENA_BY_HOUR = [0, 0, 0, 0, 0, 0, 0.8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0.8, 0, 0];
+
+/** Whether the arena is shut at a game hour */
+export function arenaClosed(hour: number | null): boolean {
+  return hour !== null && ARENA_BY_HOUR[((Math.floor(hour) % 24) + 24) % 24] === 0;
+}
 
 /** The population scale for a kind of room at a game hour (null: not known, as by day) */
 export function busyAt(kind: AmbientKind, hour: number | null): number {
   if (hour === null) return 1;
-  const table = kind === "town" ? TOWN_BY_HOUR : kind === "inn" ? INN_BY_HOUR : COURT_BY_HOUR;
+  const table = kind === "town" ? TOWN_BY_HOUR : kind === "inn" ? INN_BY_HOUR : kind === "arena" ? ARENA_BY_HOUR : COURT_BY_HOUR;
   return table[((Math.floor(hour) % 24) + 24) % 24];
 }
 

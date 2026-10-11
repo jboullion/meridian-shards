@@ -24,7 +24,7 @@ node tools/maint/maint.ts "create admin <account number>"
 
 Log in once with that account to name the character, either in the client or with `npm run headless -- --user <name> --pass <password>`.
 
-The local test admin is `shardadmin` (password `shardadmin`), described in [AGENTS.md](../AGENTS.md).
+The local test admins are `shardadmin` and `shardadmin2` (password = name), described in [AGENTS.md](../AGENTS.md).
 
 On the hosted server, run the same two commands through the container on the VM (see [deploy/README.md](../deploy/README.md)):
 
@@ -38,7 +38,7 @@ Choose a strong password there: an admin account can do anything to the world.
 
 | To | Do this |
 |---|---|
-| Open it | Press **Shift+4** (the `$` key) in the game, when you're not typing in the chat line or a dialog. |
+| Open it | Press **Shift+4** (the `$` key) in the game, when you're not typing in the chat line or a dialog, or choose **Admin console…** in the ☰ menu. |
 | Hide it | **Esc**, or the **×** in its corner. Its text and command history are kept; Shift+4 brings it back. |
 | Clear and close it | Type `quit` as a command. |
 
@@ -48,14 +48,23 @@ The window doesn't block the game: you can keep moving, chatting and fighting wi
 
 | Part | What it does |
 |---|---|
-| **Command** | Type a command and press **Enter**. **Up** and **Down** step through the commands you've sent, newest first. Commands sent by the buttons and by looking at things land here too, so you can edit and send them again. |
-| **Text** | The server's answers. Each command is echoed first as `> command`. It keeps the last 30,000 characters. |
-| **Go to room** | Asks for a room number, then teleports you there (`send object <you> teleportto rid int <number>`). |
-| **Reset data** | Makes the server send your client everything again (`send object <you> invalidatedata`), as after a save. |
-| **Users** | Everyone logged on. Pick one and the **Object** label shows their object number. |
-| **Show** | `show object` for the chosen user: every property of their character. |
-| **Go to** | Teleports you to the chosen user (`admingotoobject`). |
-| **Rescue** | Sends the chosen user somewhere safe (`admingotosafety`), for players stuck in a wall or a broken room. |
+| **Command** | Type a command and press **Enter**. **Up** and **Down** step through the commands you've sent, newest first. Commands sent by the buttons and by looking at things land here too, so you can edit and send them again. `dm` and a DM command sends that (see [DM commands](#dm-commands)); `clear` empties the text. |
+| **Text** | The server's answers. Each command is echoed first as `> command`, DM commands as `> dm ...` with the game's messages that answered them. It keeps the last 30,000 characters. **Clear** empties it. |
+
+Under the text are four tabs, after the remaster's console (`meridian-unreal`):
+
+| Tab | What it has |
+|---|---|
+| **Travel** | **Cities**: one click teleports you to Tos, Barloque, Marion, Cor Noth, Raza, Jasper, Ko'catan, Castle Victoria, Brax or the Underworld. Below, every room by number, name and file (`rooms.json` from `npm run assets`); type in **Find** to narrow it (a name, a file or a number), then double-click a room, or pick one and press **Go there** or Enter. A number the list doesn't have still works. **Where am I?** prints the room's name, file and number and your square. **Reset data** makes the server send your client everything again (`send object <you> invalidatedata`), as after a save. |
+| **Players** | Everyone logged on. Pick one and the **Object** label shows their object number. **Show** (every property of their character), **Go to** (teleport to them), **Bring here** (teleport them to you), **Rescue** (somewhere safe, for a player stuck in a wall or a broken room) and **Tell** (starts a tell on the chat line). |
+| **Self** | Immortal or mortal, boost stats, get every spell or skill, clear abilities; hidden, invisible, plain (back to normal), stealth, anonymous; karma and appeals; get an item by name or a class of items (money, weapons, armor, reagents, potions, scrolls); clear inventory (press it twice); disguise as a monster. |
+| **World** | The time of day for everyone (until **Real time**), make or call a monster, rumble, place scenery or a light (**Lights?** and **Scenery?** list the names), an event sign, a message to everyone or to this room, and the server's who, status, clock, save game and help. |
+
+The Self and World buttons are DM commands. Their text fields send with their button or Enter.
+
+### DM commands
+
+Admin characters also get the original's DM commands, said with `SAY_DM` (`dm.kod` and `admin.kod` `UserSay`). Type `dm` and the command on the command line, such as `dm item long sword`, `dm monster orc`, `dm night` or `dm place brazier`. `dm help` lists them; `dm help lights`, `dm help scenery` and `dm help messages` list more. Their answers are game messages: they show in the chat's Server tab and, for a few seconds after a DM command, in the console too.
 
 ### Looking at things
 

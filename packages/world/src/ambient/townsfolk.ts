@@ -219,7 +219,7 @@ export function randomAppearance(rand: () => number): Appearance {
 
 /**
  * The arms' and legs' animations: standing, walking, and the emotes: waving the right hand,
- * pointing, dancing, casting a spell, swinging a weapon, and our cheer (arms up)
+ * pointing, dancing, casting a spell, swinging a weapon, and our cheer (a dance's frame, held)
  */
 export type Pose = "stand" | "walk" | "wave" | "point" | "dance" | "cast" | "attack" | "cheer";
 
@@ -229,9 +229,10 @@ const once = (period: number, low: number, high: number, final: number): Animati
  * player.kod SendOverlays (standing, and PANM_WAVE, PANM_POINT, PANM_DANCE, PANM_CAST and
  * PANM_WEAPON_ATTACK), SendMoveOverlays (walking) and SendAnimation (the body bends into a
  * swing, and dances), with a lit torch in the left hand or not. The emotes that play once must
- * be built again to play again. A cheer is ours: the hanging arms turned up.
+ * be built again to play again. A cheer is ours: one frame of the dance (`cheerFrame`, 0-16), held, the
+ * body, arms and legs all at the same point in it.
  */
-export function lookFor(a: Appearance, pose: Pose, torch = false): Look {
+export function lookFor(a: Appearance, pose: Pose, torch = false, cheerFrame = 0): Look {
   const walk = pose === "walk";
   const gear = a.gear ?? {};
   const armed = !!gear.weapon;
@@ -242,7 +243,6 @@ export function lookFor(a: Appearance, pose: Pose, torch = false): Look {
   // The arms: bent to hold what they hold, else swinging as they walk
   const rightGroup = armed ? 17 : 1;
   const leftGroup = leftHeld ? 7 : 1;
-  const cheer = pose === "cheer" && !armed && !leftHeld;
   let right: Animation, left: Animation;
   switch (pose) {
     case "attack":
@@ -265,15 +265,18 @@ export function lookFor(a: Appearance, pose: Pose, torch = false): Look {
       right = cycle(150, 18, 34);
       left = cycle(150, 10, 26);
       break;
+    case "cheer":
+      right = none(18 + cheerFrame);
+      left = none(10 + cheerFrame);
+      break;
     default:
       right = armed ? none(17) : walk ? cycle(200, 2, 3) : none(1);
       left = leftHeld ? none(7) : walk ? cycle(200, 2, 3) : none(1);
   }
-  const legs = attack ? once(900, 6, 6, 1) : pose === "dance" ? cycle(150, 8, 24) : walk ? cycle(100, 2, 5) : none(1);
-  const arm = (file: string, hs: number, anim: Animation) => ({ ...overlay(file, hs, a.armsXlat, anim), raised: cheer || undefined });
+  const legs = attack ? once(900, 6, 6, 1) : pose === "dance" ? cycle(150, 8, 24) : pose === "cheer" ? none(8 + cheerFrame) : walk ? cycle(100, 2, 5) : none(1);
   const overlays = [
-    arm(a.arms[0], HS.LEFT_HAND, left),
-    arm(a.arms[1], HS.RIGHT_HAND, right),
+    overlay(a.arms[0], HS.LEFT_HAND, a.armsXlat, left),
+    overlay(a.arms[1], HS.RIGHT_HAND, a.armsXlat, right),
     overlay(a.legs, HS.LEGS, a.legsXlat, legs),
     overlay(a.head, HS.HEAD, a.skinXlat, none(1)),
     overlay(a.mouth, HS.MOUTH, a.skinXlat, none(1)),
@@ -290,7 +293,7 @@ export function lookFor(a: Appearance, pose: Pose, torch = false): Look {
   }
   if (torch) overlays.push(overlay(TORCH_OVERLAY, HS.LEFT_WEAPON, 0, cycle(60, 1, 6)));
   // The body bends into a swing and sways in a dance (player.kod SendAnimation)
-  const body = attack ? once(300, 2, 4, 1) : pose === "dance" ? cycle(150, 6, 22) : none(1);
+  const body = attack ? once(300, 2, 4, 1) : pose === "dance" ? cycle(150, 6, 22) : pose === "cheer" ? none(6 + cheerFrame) : none(1);
   return { anim: animStateFrom(body), overlays, translation: a.bodyXlat };
 }
 

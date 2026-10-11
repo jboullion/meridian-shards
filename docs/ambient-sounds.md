@@ -2,29 +2,32 @@
 
 The sounds of ambient life and the weather, none of them the server's: `apps/client/src/game/ambientSounds.ts`, played through `GameAudio.playAmbient` on a bus of their own (the **Ambient Sounds** option and its volume, under the Sound Volume; they never take the server's 24 voices). Positional sounds fall off to nothing at their range and pan toward where they are.
 
+They play only where people live: the rooms in `ambientRooms.ts` (towns, inns, castles, the arena) and rooms whose terrain is a city, castle, guild hall, home, temple or shop (`SETTLED`). In the wilds (forests, fields, caves and the rest) nothing of ours plays, critters, fish and puddle steps included: the original's own sounds are enough there. Thunder is the exception: it goes with the lightning everywhere.
+
 To hear one cue by itself in dev: `window.shards.gameScene.ambientSoundBoard.audition("thunder")` (it returns the list of cue names). `window.shards.audio.log` lists what played.
 
 ## Cues
 
 | Cue (audition name) | When | File(s) | Volume | Notes |
 |---|---|---|---|---|
-| Town chatter (`town`) | Townsfolk within 14 squares (towns, castle courtyards) | `amb_town_talk.ogg` | 0.30 (0.22 in castles), less with fewer people | Loops from a random point; muffled and quieter in the rain outdoors |
-| Inn chatter (`inn`) | Patrons about | `amb_inn_talk.ogg` | 0.40 | |
-| Hall and arena crowd (`hall`) | Courtiers under a roof; the arena | `amb_hall_talk.ogg` | 0.22 castles, 0.42 arena | |
-| Weapon swing (`swing`) | A mock bout's swing | `swswish1`-`5.ogg` | 0.45 | |
+| Town chatter (`town`) | Townsfolk within 14 squares (towns, castle courtyards) | `amb_town_talk.ogg` | 0.18 (0.15 in castles), less with fewer people | Loops from a random point; muffled and quieter in the rain outdoors |
+| Inn chatter (`inn`) | Patrons about | `amb_inn_talk.ogg` | 0.28 | |
+| Hall and arena crowd (`hall`) | Courtiers under a roof; the arena | `amb_hall_talk.ogg` | 0.15 castles, 0.29 arena | |
+| Weapon swing (`swing`) | An arena fighter's swing | `swswish1`-`5.ogg` | 0.45 | |
 | Weapon hit (`hit`) | Half the swings land | metal: `mhit1b`-`3b`, `swrdmtl1`-`3`; leather: `lhit1b`-`3b`; flesh: `fhit1b`-`3b` | 0.55 | By the struck fighter's armour; a pain cry (`ouchm`/`ouchf`) one time in five |
-| Spell cast (`cast-fire`, `cast-lightning`) | An arena mage casts | `ffirebal.ogg`, `fbolt.ogg` | 0.5 | The spells' own cast sounds |
+| Spell cast (`cast-fire`, `cast-lightning`) | An arena mage casts (every 6-14 s in a fight) | fireball `ffirebal.ogg`, lightning bolt `fbolt.ogg`, fire wall and web `farenwala822m.ogg`, bramble wall `faren.ogg`, poison fog `qor.ogg`, ring of flames `frngfir.ogg` | 0.5 | The spells' own cast sounds |
 | Lightning lands (`zap`) | A lightning bolt arrives | `zaphit1`-`3.ogg` | 0.35 | Fireballs land silently for now |
-| Cheer (`cheer`) | Someone in the stands cheers (arms up) | `huzzah.ogg`, `arena.ogg`, `amb_cheer1`/`2.ogg` | 0.32-0.5 | At most one every 1.2-3 s |
-| Applause (`applause`) | A bout ends | `amb_applause.ogg` (3-5 s of it), `huzzah.ogg` | 0.32 | |
+| Cheer (`cheer`) | Someone in the stands cheers (arms up) | `huzzah.ogg`, `arena.ogg`, `amb_cheer1`/`2.ogg` | 0.32-0.5 | At most one every 2.4-6 s |
+| Applause (`applause`) | A round won: the last one standing in the arena | `amb_applause.ogg` (3-5 s of it), `huzzah.ogg` | 0.32 | |
+| Death cry (`death`) | An arena fighter is beaten | `pdeath.ogg`, `pdeathf.ogg` (player.kod's) | 0.5 | |
 | Running from a spell (`ouch`) | Townsfolk scatter | `ouchm1`-`4`, `ouchf1`-`4.ogg` | 0.35 | Pitched up a little |
 | Dice, drink (`dice`, `drink`) | An inn patron, now and then | `dice.ogg`, `drink.ogg` | 0.45, 0.35 | |
 | Thunder (`thunder`) | After each lightning strike | `thunderclap.ogg`, `amb_thunder1`-`4.ogg` | 0.45-0.95 | 1.5-2.7 s after the flash, quieter and duller the further off, panned toward it |
-| Birds (`birds`) | A flock within 16 squares, every 4-10 s, not in the rain | `birdchirping.ogg` | 0.3 | Pitch varies |
-| Bats (`bats`) | A bat within 6 squares | `awings.ogg`, looping, pitched up | 0.35 | Follows the nearest bat |
 | Critters (`critter`) | A critter within 8 squares, every 5-14 s | its Kod "aware" sound (`rat_awr`, `bsp_awr`, `cnt_awr`, `ant_awr`, `scp_awr`, `bunny_awr`) | 0.28 | Pitched up, as they're small |
 | Fish (`splash`) | A fish leaps and lands | `splash.ogg` | 0.25 / 0.45 | |
 | Puddle steps (`step`) | Walking or running through a puddle | `weatstp1.ogg` (Raza's wading sound) | 0.3 | Every 430 ms walking, 300 ms running |
+
+Birds, bats, butterflies, fireflies and leaves make no sound anywhere.
 
 The rain itself is the server's (`room.kod room_rain_sound`, `rain.ogg`), as are the terrain loops (forest, beach, cave, sewer) and the room's music.
 

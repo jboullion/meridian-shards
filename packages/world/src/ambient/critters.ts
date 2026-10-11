@@ -75,7 +75,13 @@ const has = (t: readonly string[], ...names: string[]) => names.some((n) => t.in
  * The room's critters from its terrain (TERRAIN_* names), or null for none. Rooms that don't say
  * (most town buildings): a town street (ambientRooms.ts) has rats, a town's other rooms the odd one.
  */
+/** The vaults (each town's vault keeper's room: barvault.kod, bergvault.kod, jasvault.kod, razavault.kod, kocbank.kod) */
+const VAULTS = new Set(["barvault.roo", "bergvault.roo", "jasvault.roo", "razavault.roo", "kocbank.roo"]);
+
 export function habitatOf(roomFile: string, terrain: readonly string[] | undefined): Habitat | null {
+  // The vaults' cellars have rats; the arena has none (its crowd is enough)
+  if (VAULTS.has(roomFile)) return { name: "vault", count: 4, mix: [["rat", 1]] };
+  if (AMBIENT_ROOMS[roomFile]?.kind === "arena") return null;
   const t = terrain ?? [];
   if (!t.length) {
     const spec = AMBIENT_ROOMS[roomFile];

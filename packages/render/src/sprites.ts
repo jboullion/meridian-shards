@@ -22,8 +22,6 @@ export interface SpritePart {
   translation: number;
   /** hotspot number this part hangs from (0 for the base) */
   hotspot: number;
-  /** Ours: drawn upside down, rising from the top edge where it hung (an arm raised) */
-  raised?: boolean;
 }
 
 export interface SpriteInput {
@@ -86,7 +84,6 @@ interface Placed {
   scale: number;
   layer: number;
   xlat: Uint8Array;
-  flip?: boolean;
 }
 
 export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite | null {
@@ -109,12 +106,9 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
     if (!hs) continue;
     // overlay offsets are scaled by the base's shrink in the C code
     const x = hs.x + ob.xOffset;
-    let y = hs.y + ob.yOffset;
+    const y = hs.y + ob.yOffset;
     const layer = hs.helm ? LAYER.HELM : hs.over ? LAYER.OVER : LAYER.UNDER;
-    const scale = s / part.bgf.shrink;
-    // Raised: turned over about its top edge (the shoulder, for an arm)
-    if (part.raised) y -= ob.height * scale;
-    placed.push({ bmp: ob, x, y, scale, layer, xlat: xlatFor(part.translation), flip: part.raised });
+    placed.push({ bmp: ob, x, y, scale: s / part.bgf.shrink, layer, xlat: xlatFor(part.translation) });
     firstLevel.push({ part, bmp: ob, x: hs.x, y: hs.y, over: hs.over });
   }
   for (const part of input.overlays) {
@@ -161,8 +155,7 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
     const ox = Math.round(p.x) - minX,
       oy = Math.round(p.y) - minY;
     for (let y = 0; y < h; y++) {
-      const row = Math.min(p.bmp.height - 1, Math.floor(y / p.scale));
-      const sy = p.flip ? p.bmp.height - 1 - row : row;
+      const sy = Math.min(p.bmp.height - 1, Math.floor(y / p.scale));
       const dy = oy + y;
       if (dy < 0 || dy >= height) continue;
       for (let x = 0; x < w; x++) {

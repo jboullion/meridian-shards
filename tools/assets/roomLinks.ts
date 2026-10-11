@@ -154,6 +154,45 @@ export function buildRoomExits(kodFiles: KodFile[], khd: string): Record<string,
   return Object.fromEntries([...out.entries()].sort(([a], [b]) => a.localeCompare(b)));
 }
 
+/** One room to go to (rooms.json): its number, its name (vrName) and its file */
+export interface RoomListing {
+  rid: number;
+  name: string;
+  roo: string;
+}
+
+/**
+ * Every room with a number, by number (rooms.json), for the admin console's Travel list (ours,
+ * after the remaster's data/net/rooms.json). The name is the room class's vrName string
+ * (`room_name_raza = "Raza"`); a class without one takes its parent's, else the file's name.
+ */
+export function buildRoomList(kodFiles: KodFile[], khd: string): RoomListing[] {
+  const rids = parseRids(khd);
+  const className = (src: string) => /^\s*(\w+)\s+is\s+(\w+)/m.exec(src);
+  const strings = (src: string) => new Map([...src.matchAll(/^[ \t]*(\w+)[ \t]*=[ \t]*"([^"\n]*)"/gm)].map((m) => [m[1], m[2]]));
+  const classes = new Map<string, { parent: string; name?: string }>();
+  for (const f of kodFiles) {
+    const src = stripComments(f.text);
+    const head = className(src);
+    if (!head) continue;
+    const vr = /\bvrName\s*=\s*(\w+)/.exec(src)?.[1];
+    classes.set(head[1].toLowerCase(), { parent: head[2].toLowerCase(), name: vr ? strings(src).get(vr) : undefined });
+  }
+  const nameOf = (cls: string): string | undefined => {
+    for (let c = classes.get(cls), n = 0; c && n < 20; c = classes.get(c.parent), n++) if (c.name) return c.name;
+    return undefined;
+  };
+  const out = new Map<number, RoomListing>();
+  for (const f of byOriginal(kodFiles)) {
+    const r = parseRoom(f, rids);
+    if (!r || out.has(r.rid)) continue;
+    const cls = className(stripComments(f.text))?.[1].toLowerCase();
+    const name = (cls && nameOf(cls))?.replace(/\s+/g, " ").trim();
+    out.set(r.rid, { rid: r.rid, name: name || r.roo.replace(/\.roo$/, ""), roo: r.roo });
+  }
+  return [...out.values()].sort((a, b) => a.rid - b.rid);
+}
+
 /**
  * Room file -> its terrain (viTerrain_type, the TERRAIN_* names without the prefix; a class
  * without one takes its parent's), for the ambient critters (ours): what scurries about where.

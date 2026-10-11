@@ -2282,6 +2282,18 @@ canvas.server-wait {
   overflow: visible;
 }
 
+.admin-status {
+  color: #ff8c73;
+}
+
+.admin-window .mk-tabs button {
+  padding: 0 10px;
+}
+
+.admin-rooms .mk-list {
+  font-family: Consolas, "Courier New", monospace;
+}
+
 .admin-text {
   box-sizing: border-box;
   resize: none;

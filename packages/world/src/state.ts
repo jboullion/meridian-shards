@@ -11,8 +11,6 @@ import { animStateFrom, type AnimState } from "./animation.ts";
 
 export interface OverlayState extends Overlay {
   anim: AnimState;
-  /** Ours: drawn upside down from where it attaches (ambient townsfolk raising their arms) */
-  raised?: boolean;
 }
 
 /** An appearance: animation, overlays and palette translation. */

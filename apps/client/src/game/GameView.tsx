@@ -38,7 +38,7 @@ import { isProfane } from "./profanity.ts";
 import { AnnotateDialog } from "./ui/AnnotateDialog.tsx";
 import { AboutDialog } from "./ui/AboutDialog.tsx";
 import { ChessWindow, type ChessState } from "./ui/ChessWindow.tsx";
-import { AdminConsole, appendAdminText } from "./ui/AdminConsole.tsx";
+import { AdminConsole, appendAdminText, type AdminRoom } from "./ui/AdminConsole.tsx";
 import { languageName } from "./languages.ts";
 import { MAX_ANNOTATIONS, annotationAt, loadAnnotations, saveAnnotations, type MapAnnotation } from "./annotations.ts";
 import { useWorld } from "./ui/hooks.ts";
@@ -61,6 +61,8 @@ const VIEW_NOTE_MS = 1500;
 
 /** The Modern interface's chat: lines show this long after they come, then fade (until hovered), ms */
 const CHAT_FRESH_MS = 10000;
+/** The admin console: the server's messages this long after a DM command are its answers, ms */
+const DM_ANSWER_MS = 3000;
 /** Its width, dragged by its right edge: at least this */
 const MIN_CHAT_WIDTH = 220;
 /** The chat window's height, dragged by its top edge: at least this, and leaving the view this much */
@@ -555,13 +557,50 @@ export function GameView({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [adminLoaded]);
+  /** Ours: every room (rooms.json), for the console's Travel tab, loaded when the module is */
+  const [adminRooms, setAdminRooms] = useState<AdminRoom[]>([]);
+  useEffect(() => {
+    if (!adminLoaded) return;
+    let live = true;
+    assets
+      .roomList()
+      .then((r) => live && setAdminRooms(r))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [adminLoaded, assets]);
   /** BK_SENDCMD: to the server, and to the top of the history unless it's there already */
-  const adminCommand = (command: string) => {
-    session.adminCommand(command);
+  const rememberAdmin = (command: string) =>
     setAdminConsole((a) =>
       a ? { ...a, command, history: a.history[0]?.toLowerCase() === command.toLowerCase() ? a.history : [command, ...a.history] } : a,
     );
+  const adminCommand = (command: string) => {
+    session.adminCommand(command);
+    rememberAdmin(command);
   };
+  /**
+   * Ours (the remaster's console): a DM command (SAY_DM, module/dm's "dm"), echoed in the
+   * console; the server's messages in the next few seconds are its answers, copied there too
+   */
+  const dmAnswersUntil = useRef(0);
+  const dmSeen = useRef(new WeakSet<ChatLine>());
+  const adminDm = (text: string) => {
+    if (!text) return;
+    session.say(text, SAY.DM);
+    dmAnswersUntil.current = Date.now() + DM_ANSWER_MS;
+    rememberAdmin(`dm ${text}`);
+    setAdminConsole((a) => (a ? { ...a, text: appendAdminText(a.text, `> dm ${text}\n`) } : a));
+  };
+  useEffect(() => {
+    const until = dmAnswersUntil.current;
+    if (Date.now() > until) return;
+    const answers = chat
+      .slice(-20)
+      .filter((l) => l.kind === "system" && l.time >= until - DM_ANSWER_MS && !dmSeen.current.has(l))
+      .map((l) => (dmSeen.current.add(l), l.spans.map((s) => s.text).join("")));
+    if (answers.length) setAdminConsole((a) => (a ? { ...a, text: appendAdminText(a.text, answers.join("\n") + "\n") } : a));
+  }, [chat]);
   useEffect(
     () =>
       minigame((e) => {
@@ -705,8 +744,8 @@ export function GameView({
   const handleAction = (a: string): void => {
     if (a.startsWith("quickSlot")) {
       const i = Number(a.slice("quickSlot".length)) - 1;
-      // The second row (11-20) shows only in the Modern interface: elsewhere its keys do nothing
-      if (i >= QUICK_SLOTS && !modern) return;
+      // The second row (11-20) shows only in the Modern interface with Second Hotbar on: elsewhere its keys do nothing
+      if (i >= QUICK_SLOTS && !(modern && settings.secondHotbar)) return;
       return activateSlot(i);
     }
     const toggle = (type: "preferences" | "configuration" | "actions") => setModal((m) => (m?.type === type ? null : { type }));
@@ -1321,6 +1360,8 @@ export function GameView({
         menu={[
           { label: "Preferences…", onSelect: () => setModal({ type: "preferences" }) },
           { label: "Configuration…", onSelect: () => setModal({ type: "configuration" }) },
+          // Ours: the admin console (Shift+4) for admin characters, easier to find here
+          ...(adminLoaded ? [{ label: "Admin console…", onSelect: () => setAdminConsole((a) => (a ? { ...a, open: true } : a)) }] : []),
           // actions.c: each item runs its typed command
           { label: "Actions", items: ACTIONS_MENU.map((a) => (a ? { label: a[1], onSelect: () => runCommand(a[0]) } : { label: "", separator: true })) },
           ...(spellsMenu.length ? [{ label: "Spells", items: spellsMenu }] : []),
@@ -1663,13 +1704,21 @@ export function GameView({
         {adminConsole?.open && (
           <AdminConsole
             session={session}
+            rooms={adminRooms}
             text={adminConsole.text}
             command={adminConsole.command}
             onCommandChange={(command) => setAdminConsole((a) => (a ? { ...a, command } : a))}
             history={adminConsole.history}
             onCommand={adminCommand}
+            onDm={adminDm}
+            onTell={(name) => {
+              setAdminConsole((a) => (a ? { ...a, open: false } : a));
+              setText(`tell "${name}" `);
+              inputRef.current?.focus();
+            }}
             onHide={() => setAdminConsole((a) => (a ? { ...a, open: false } : a))}
             onQuit={() => setAdminConsole((a) => (a ? { ...a, open: false, text: "" } : a))}
+            onClear={() => setAdminConsole((a) => (a ? { ...a, text: "" } : a))}
           />
         )}
         {chess && (

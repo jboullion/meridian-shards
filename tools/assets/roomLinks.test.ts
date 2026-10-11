@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRoomExits, buildRoomLinks, buildRoomTerrain, parseRids } from "./roomLinks.ts";
+import { buildRoomExits, buildRoomLinks, buildRoomList, buildRoomTerrain, parseRids } from "./roomLinks.ts";
 
 const KHD = `
    RID_RAZA = 300
@@ -113,5 +113,25 @@ describe("room links", () => {
       KHD,
     );
     expect(terrain).toEqual({ "raza.roo": ["CITY", "ROAD"], "razaforest.roo": ["FOREST", "HILLS"] });
+  });
+
+  it("lists every room by number with its name, a parent's, or its file's", () => {
+    const named = (cls: string, parent: string, body: string) => `${cls} is ${parent}\n${body}`;
+    const razaNamed = RAZA.replace("classvars:", `   room_name_raza = "The  Town of Raza "\nclassvars:\n   vrName = room_name_raza`);
+    const innBase = `resources:\n   inn_name = "Raza Inn"\nclassvars:\n   vrName = inn_name`;
+    const rooms = buildRoomList(
+      [
+        { path: "raza.kod", text: named("Raza", "Room", razaNamed) },
+        { path: "razainnbase.kod", text: named("RazaInnBase", "Room", innBase) },
+        { path: "razainn.kod", text: named("RazaInn", "RazaInnBase", INN) },
+        { path: "razaforest.kod", text: named("RazaForest", "Room", FOREST) },
+      ],
+      KHD,
+    );
+    expect(rooms).toEqual([
+      { rid: 300, name: "The Town of Raza", roo: "raza.roo" },
+      { rid: 301, name: "Raza Inn", roo: "razainn.roo" },
+      { rid: 330, name: "razaforest", roo: "razaforest.roo" },
+    ]);
   });
 });

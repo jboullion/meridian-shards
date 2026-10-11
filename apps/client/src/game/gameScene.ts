@@ -32,10 +32,13 @@ import { HALO_COLOR, actionsFor, getSettings, isHeld, mouseCode, onSettings, tou
 /** Ours: a click kills a critter this far off, and an attack one this close (and ahead), fine units */
 const SQUISH_RANGE = 10 * FINENESS;
 const CRITTER_REACH = 1.6 * FINENESS;
-const CRITTER_DEATH_VOLUME = 0.7;
+const CRITTER_DEATH_VOLUME = 0.35;
 /** Ours: puddles spread over this long in the rain, and dry up over this long after */
 const WET_UP_MS = 45000;
 const WET_DOWN_MS = 150000;
+/** Ours: Limit to 60 FPS, a frame's time, and how early one may come (the screen's timing jitters) */
+const FRAME_MS = 1000 / 60;
+const FRAME_SLACK_MS = 2;
 /** Ours: terrain where people live, kept clear of rocks (Ground Detail) */
 const SETTLED = new Set(["CITY", "CASTLE", "GUILDHALL", "RESIDENCE", "TEMPLE", "SHOP"]);
 /** Ours: townsfolk this near make the chatter, and critters this near squeak */
@@ -519,10 +522,16 @@ export class GameScene {
     this.labelsEl.parentElement?.insertBefore(this.flashEl, this.labelsEl);
     void this.loadRocks(pal.rgb);
     await this.syncRoom();
+    // Ours (Limit to 60 FPS): a faster screen skips frames, keeping to 60 a second on average
+    let due = 0;
     const loop = (t: number) => {
+      this.raf = requestAnimationFrame(loop);
+      if (this.settings.frameLimit) {
+        if (t < due - FRAME_SLACK_MS) return;
+        due = (t - due > FRAME_MS ? t : due) + FRAME_MS;
+      }
       this.frame(Math.min(250, t - this.last), t);
       this.last = t;
-      this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
   }
@@ -817,7 +826,8 @@ export class GameScene {
       flicker: enhanced,
       timeMs: now,
     };
-    const drawn = [...world.objects.values(), ...ambient, ...this.projectileViews()];
+    // The arena's spell walls animate themselves (AmbientLife.burnFields)
+    const drawn = [...world.objects.values(), ...ambient, ...(this.ambient?.fields() ?? []), ...this.projectileViews()];
     // Dynamic Lighting off: no light maps from torches and lamps, nor the targeting light
     this.lights = this.settings.dynamicLighting ? this.objects.lights(drawn, ctx) : [];
     const targeted = this.target !== null && this.target !== self.id ? world.objects.get(this.target) : undefined;
@@ -1239,13 +1249,12 @@ export class GameScene {
       room: this.roomFile,
       kind: life ? (AMBIENT_ROOMS[this.roomFile]?.kind ?? null) : null,
       indoors: this.underRoof(me.x, me.y),
+      populated: AMBIENT_ROOMS[this.roomFile] !== undefined || (this.roomTerrain?.[this.roomFile] ?? []).some((n) => SETTLED.has(n)),
       people,
       raining: this.session.world.effects.raining,
       events,
       strike,
       splashes,
-      flock: this.flyers?.nearestFlock(me) ?? null,
-      bat: this.flyers?.nearestBat(me) ?? null,
       critterVoice: () => this.critters?.voice(me, CRITTER_VOICE_RANGE) ?? null,
       wetUnderfoot: this.puddles?.wetAt(me.x, me.y) ?? false,
       speed: dt > 0 && moved < FINENESS ? moved / dt : 0,

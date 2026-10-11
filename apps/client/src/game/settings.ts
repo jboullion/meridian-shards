@@ -428,6 +428,10 @@ export interface Settings {
    */
   ambientSounds: boolean;
   ambientVolume: number;
+  /** Ours, Second Hotbar (the Modern interface): quick slots 11-20 in a row above the first, on the numpad's keys; off by default */
+  secondHotbar: boolean;
+  /** Ours, Limit to 60 FPS: a faster screen draws at most 60 frames a second (cooler, kinder to batteries) */
+  frameLimit: boolean;
 }
 
 export type InterfaceStyle = "modern" | "classic";
@@ -443,7 +447,7 @@ export function touchUi(s: Settings): boolean {
   return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 }
 
-const SETTINGS_VERSION = 9;
+const SETTINGS_VERSION = 10;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
@@ -473,7 +477,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dynamicMap: true,
   coloredText: true,
   mapAnnotations: true,
-  showFps: false,
+  showFps: true,
   profanityFilter: true,
   profanityIgnore: false,
   logoutTimer: false,
@@ -513,6 +517,8 @@ export const DEFAULT_SETTINGS: Settings = {
   groundDetail: true,
   ambientSounds: true,
   ambientVolume: 70,
+  frameLimit: true,
+  secondHotbar: false,
 };
 
 const STORAGE_KEY = "shards.settings";
@@ -570,6 +576,8 @@ export function migrate(s: SavedSettings): Settings {
       keys[slot] = keys[slot].filter((b) => b.code !== `Numpad${i % 10}` || b.alt || b.ctrl);
     }
   }
+  // Version 10: Show FPS is on by default (beside the latency meter); on once for everyone
+  if (version < 10) out.showFps = true;
   delete (out as SavedSettings).mouseSpeed;
   delete (out as SavedSettings).rightClickLooks;
   for (const k of OLD_GRAPHICS_KEYS) delete (out as unknown as Record<string, unknown>)[k];

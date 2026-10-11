@@ -19,6 +19,10 @@ export interface ChatterContext {
   greeting?: boolean;
   /** The player's armour caught their eye */
   impressed?: boolean;
+  /** The last one standing in the arena */
+  won?: boolean;
+  /** Beaten in the arena, and watching from the stands */
+  lost?: boolean;
 }
 
 const ANY = [
@@ -44,6 +48,8 @@ const RAIN = ["Soaked through!", "This rain won't let up.", "Good for the crops,
 const SNOW = ["Cold enough for you?", "My fingers are numb.", "Snow again!", "Mind the ice.", "I can't feel my toes."];
 const GREET = ["Good day to you.", "Well met.", "Safe travels.", "Afternoon.", "Mind how you go.", "Hello there."];
 const GREET_NIGHT = ["Evening.", "Late to be about.", "Good evening to you."];
+const WON = ["Victory!", "Is there no one else?", "Kraanan smiles on me!", "Who's next?", "Too easy!", "Ha! Undefeated!"];
+const LOST = ["Next time.", "I'll be back.", "Well fought.", "Ow.", "I slipped!", "Lucky blow."];
 const IMPRESSED = ["Fine armour, that.", "Must weigh a ton.", "Look at that gear!", "You've seen a fight or two.", "Wish I could afford that."];
 const SCATTER = ["Run!", "Magic! Get back!", "Mind the fire!", "Not again!", "Help!", "Watch it!"];
 
@@ -76,6 +82,8 @@ const BY_ROLE: Partial<Record<Role, string[]>> = {
 export function chatterLine(rand: () => number, ctx: ChatterContext): string {
   const pick = (l: string[]) => l[Math.floor(rand() * l.length) % l.length];
   const night = ctx.hour !== null && (ctx.hour >= 21 || ctx.hour < 5);
+  if (ctx.won) return pick(WON);
+  if (ctx.lost) return pick(LOST);
   if (ctx.impressed) return pick(IMPRESSED);
   if (ctx.greeting) return pick(night ? GREET_NIGHT : GREET);
   const pools: [string[], number][] = [];

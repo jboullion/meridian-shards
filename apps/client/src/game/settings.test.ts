@@ -17,7 +17,7 @@ describe("settings", () => {
 
   it("migrates version 2 settings: one mouse speed, right click looks", () => {
     const s = migrate({ version: 2, preset: "modern", mouseSpeed: 2, rightClickLooks: true, musicVolume: 40 } as never);
-    expect(s.version).toBe(9);
+    expect(s.version).toBe(10);
     expect(s.mouseXScale).toBe(30);
     expect(s.mouseYScale).toBe(30);
     expect(s.keys.examine).toEqual([{ code: "Mouse1" }]);
@@ -25,6 +25,13 @@ describe("settings", () => {
     expect(s.haloColor).toBe("red");
     expect("mouseSpeed" in s).toBe(false);
     expect("rightClickLooks" in s).toBe(false);
+  });
+
+  it("Show FPS on once for everyone (version 10), and kept off after; frames limited to 60 by default", () => {
+    expect(migrate({ version: 9, preset: "modern", showFps: false } as never).showFps).toBe(true);
+    expect(migrate({ version: 10, preset: "modern", showFps: false } as never).showFps).toBe(false);
+    expect(DEFAULT_SETTINGS.showFps).toBe(true);
+    expect(DEFAULT_SETTINGS.frameLimit).toBe(true);
   });
 
   it("Enhanced Lighting on by default; the test builds' graphics options are dropped", () => {

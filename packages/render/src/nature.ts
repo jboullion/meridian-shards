@@ -310,6 +310,7 @@ export class Nature {
     this.splashes = [];
     return s;
   }
+
   private drops: Drop[] = [];
   /** Open water in the room: x, y, surface a spot, found a few rows a frame */
   private water: number[] = [];

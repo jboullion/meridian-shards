@@ -321,6 +321,7 @@ const AMBIENT_OPTIONS = [
 ] as const;
 
 /** Ours: how many townsfolk and inn patrons (Ambient Life) */
+const FRAME_LIMIT_TITLE = "Draw at most 60 frames a second on a faster screen: cooler, quieter and kinder to batteries";
 const AMBIENT_SOUNDS_TITLE = "The townsfolk's chatter, the arena's crowd, distant thunder, birds and critters: sounds of our own, under the Sound Volume";
 
 /** Ours: Ambient Sounds, and how loud */
@@ -455,6 +456,7 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
                   {/* Ours: Enhanced Lighting, or the original's look */}
                   <Check label="Enhanced Lighting" title={ENHANCED_TITLE} checked={d.enhanced} onChange={(v) => set({ enhanced: v })} />
                   <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
+                  <Check label="Limit to 60 FPS" title={FRAME_LIMIT_TITLE} checked={d.frameLimit} onChange={(v) => set({ frameLimit: v })} />
                   <AmbientLifeSelect value={d.ambientLife} onChange={(v) => set({ ambientLife: v })} />
                   <Check label="Critters" title={CRITTERS_TITLE} checked={d.critters} onChange={(v) => set({ critters: v })} />
                   <Check label="Birds and Bats" title={FLYERS_TITLE} checked={d.flyers} onChange={(v) => set({ flyers: v })} />
@@ -468,6 +470,13 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
                     title="The view fills the window with the bars, quick slots, map and chat over it; off, the original's layout"
                     checked={d.interfaceStyle === "modern"}
                     onChange={(v) => set({ interfaceStyle: v ? "modern" : "classic" })}
+                  />
+                  <Check
+                    label="Second Hotbar"
+                    title="A second row of quick slots (11-20) above the first, on the numpad's keys (Modern interface)"
+                    checked={d.secondHotbar}
+                    disabled={d.interfaceStyle !== "modern"}
+                    onChange={(v) => set({ secondHotbar: v })}
                   />
                   {/* Ours: the Modern HUD's size (CSS zoom on its clusters) */}
                   <label className={d.interfaceStyle === "modern" ? "hud-scale" : "hud-scale disabled"} title="The size of the Modern interface's bars, quick slots, map, chat and character window">
@@ -904,6 +913,7 @@ export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Se
         <Check label="Dynamic Lighting" checked={d.dynamicLighting} onChange={(v) => set({ dynamicLighting: v })} />
         <Check label="Enhanced Lighting" title={ENHANCED_TITLE} checked={d.enhanced} onChange={(v) => set({ enhanced: v })} />
         <Check label="Ground Detail" title={GROUND_TITLE} checked={d.groundDetail} onChange={(v) => set({ groundDetail: v })} />
+        <Check label="Limit to 60 FPS" title={FRAME_LIMIT_TITLE} checked={d.frameLimit} onChange={(v) => set({ frameLimit: v })} />
         <AmbientLifeSelect value={d.ambientLife} onChange={(v) => set({ ambientLife: v })} />
         <Check label="Critters" title={CRITTERS_TITLE} checked={d.critters} onChange={(v) => set({ critters: v })} />
         <Check label="Birds and Bats" title={FLYERS_TITLE} checked={d.flyers} onChange={(v) => set({ flyers: v })} />
@@ -922,6 +932,7 @@ export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Se
                 enhanced: d.enhanced,
                 ambientLife: d.ambientLife,
                 ambientSounds: d.ambientSounds,
+                frameLimit: d.frameLimit,
                 ambientVolume: d.ambientVolume,
                 critters: d.critters,
                 flyers: d.flyers,

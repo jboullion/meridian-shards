@@ -249,8 +249,10 @@ export function ActionBar({
         </div>
         {bar(STAT_VIGOR, "vigor")}
       </div>
-      {/* The second row above the first (the numpad's keys), then the first (1-0) */}
-      <Hotbar session={session} icons={icons} slots={slots} settings={settings} onUse={onUse} onEdit={onEdit} onSet={onSet} onSwap={onSwap} cooldown={cooldown} row={1} />
+      {/* The second row above the first (the numpad's keys; Second Hotbar, off by default), then the first (1-0) */}
+      {settings.secondHotbar && (
+        <Hotbar session={session} icons={icons} slots={slots} settings={settings} onUse={onUse} onEdit={onEdit} onSet={onSet} onSwap={onSwap} cooldown={cooldown} row={1} />
+      )}
       <Hotbar session={session} icons={icons} slots={slots} settings={settings} onUse={onUse} onEdit={onEdit} onSet={onSet} onSwap={onSwap} cooldown={cooldown} />
       {bar(STAT_XP, "xp")}
     </div>

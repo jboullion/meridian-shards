@@ -9,8 +9,9 @@
 // - In inns, patrons stand about, wander, gather to chat, and now and then leave by the door
 //   while others come in.
 // - In the castles, knights pace the halls and courtiers stand about as patrons do.
-// - At the arena, fighters spar in pairs on its floor while spectators watch from the sides,
-//   unless real players are there.
+// - At the arena, fighters and mages fight in rounds on its floor while spectators watch from the
+//   sides (unless real players are there): the beaten are sent to the stands, as players are,
+//   until one is left, who wins, and after a few seconds the next lot comes in.
 // They step aside for the player, look twice at fine armour, run from spells, and say a word now
 // and then (over their heads, never in the chat). Rain and snow thin the streets and hurry
 // whoever is out. Nothing here is sent to the server.
@@ -64,10 +65,12 @@ export interface AmbientSpeech {
 /**
  * Something the crowd did that makes a sound (the client's ambientSounds.ts plays it): a weapon
  * swung (and whether it struck, and what armour), a spell cast or landing, a cheer in the stands,
- * a bout over, people running from a spell, a patron's dice or drink
+ * a fighter beaten, a round won, people running from a spell, a patron's dice or drink
  */
 export interface AmbientEvent {
-  type: "swing" | "cast" | "impact" | "cheer" | "boutEnd" | "flee" | "dice" | "drink";
+  type: "swing" | "cast" | "impact" | "cheer" | "death" | "victory" | "flee" | "dice" | "drink";
+  /** A cast: which spell */
+  spell?: ArenaSpell;
   x: number;
   y: number;
   /** A swing: what it struck, if anything */
@@ -107,9 +110,9 @@ const BOLTS: { file: string; animation: Animation; speed: number; color: number 
   { file: "lightnin.bgf", animation: { type: ANIMATE.CYCLE, period: 40, groupLow: 2, groupHigh: 3 }, speed: 12, color: 0x3dff },
 ];
 
-/** The art the arena's spells need, to load ahead of time */
+/** The art the arena's spells need (the bolts and the wall spells' elements), to load ahead of time */
 export function boltArt(): string[] {
-  return BOLTS.map((b) => b.file);
+  return [...BOLTS.map((b) => b.file), ...Object.values(FIELDS).map((f) => f.file)];
 }
 
 const SQ = FINENESS;
@@ -147,11 +150,48 @@ const NEAR_PLAYER = 18 * SQ;
 /** Guards' beats, from one end to the other */
 const BEAT_MIN = 5 * SQ,
   BEAT_MAX = 10 * SQ;
-/** The arena: fighters stand this far either side of the bout's middle */
-const BOUT_SPACING = 0.6 * SQ;
-/** Mages duel from further off */
-const DUEL_SPACING = 2.4 * SQ;
-const MAX_BOUTS = 3;
+/** The arena: a fighter swings from this close; a mage keeps further than KEEP_AWAY, within CAST_RANGE */
+const REACH = 1.25 * SQ;
+const KEEP_AWAY = 4 * SQ;
+/** A mage stands this long (and up to 2.5 s more) after each step back before the next */
+const MAGE_STAND_MS = 3000;
+const CAST_RANGE = 8 * SQ;
+const MAX_BOUTS = 4;
+/** The arena's rounds: health, and what a blow, a bolt and a ring of flames take */
+const FIGHTER_HP = 100,
+  MAGE_HP = 70;
+const SWING_DAMAGE = [7, 15],
+  BOLT_DAMAGE = [20, 30];
+const RING_DAMAGE = 10;
+/** A bolt that lands this close to its target (it may have moved) hits */
+const BOLT_REACH = 1.2 * SQ;
+/** A wall spell's element hurts whoever stands this close (FIELDS' hurt: a second) */
+const FIELD_REACH = 0.6 * SQ;
+/** The winner's moment (and up to 2 s more) */
+const VICTORY_MS = 5000;
+/** The beaten watch from the stands this long (and up to a minute more), then go */
+const BEATEN_WATCH_MS = 60000;
+/** Fighters close in a little faster than they walk */
+const CHASE_PACE = 1.2;
+/** The spells the arena's mages cast, and how often each */
+const SPELLS = [
+  ["fireball", 3], ["lightning", 3], ["firewall", 1.2], ["bramble", 1], ["poisonfog", 1], ["ring", 1], ["web", 1.2],
+] as const;
+export type ArenaSpell = (typeof SPELLS)[number][0];
+/**
+ * The wall spells' elements (wallelem/*.kod): art, animation (SendAnimation), DRAWFX_* and light
+ * (wallfire.kod SendLightingInformation: LIGHT_RED, brighter here so the walls light the floor)
+ */
+const FIELDS = {
+  fire: { file: "woflame.bgf", cycle: 100, drawFx: 2, hurt: 10, light: { flags: 0x3, intensity: 30, color: 0x5000 } },
+  bramble: { file: "wothorns.bgf", grow: 250, drawFx: 0, hurt: 5 },
+  fog: { file: "poisoncl.bgf", cycle: 240, drawFx: 2, hurt: 7 },
+  web: { file: "webspell.bgf", drawFx: 0, hurt: 0 },
+} as const;
+/** How long a wall spell lasts here (the server's last 20 s and more), its last moment fading, and at most how many elements */
+const FIELD_MS = 7000;
+const FIELD_FADE_MS = 700;
+const MAX_FIELDS = 40;
 /** Cells this close to a blocking object are closed */
 const OBSTACLE_RADIUS = 0.55 * SQ;
 const OBSTACLE_REFRESH_MS = 1500;
@@ -165,17 +205,21 @@ const FOREVER = 1e9;
 type Mode = "walk" | "idle";
 
 interface Bout {
-  /** Weapons up close, or spells from across the floor */
-  magic: boolean;
   a: Walker;
   b: Walker;
+  /** Between them (where the stands cheer) */
   centre: NavPoint;
-  /** The line between them, radians */
-  axis: number;
   ms: number;
-  swingMs: number;
-  circleMs: number;
   ended: boolean;
+}
+
+/** A wall spell's element on the floor */
+interface Field {
+  obj: WorldObject;
+  ms: number;
+  drawFx: number;
+  /** Health a second it takes from whoever stands in it */
+  hurt: number;
 }
 
 interface Walker {
@@ -219,6 +263,16 @@ interface Walker {
   /** An emote playing (a dance, a cheer) for this long, and when to think of the next */
   emoteMs: number;
   nextEmoteMs: number;
+  /** Which frame of the dance their cheer holds (lookFor's cheerFrame) */
+  cheerFrame: number;
+  /** In a fight: ms to the next swing or spell, to the next move, and still held by a web */
+  actMs: number;
+  stepMs: number;
+  webbedMs: number;
+  /** The arena: health left; at 0 they're beaten */
+  hp: number;
+  /** Beaten in the arena and sent to the stands (not counted as one of them) */
+  beaten: boolean;
 }
 
 interface ExitPoint {
@@ -265,6 +319,19 @@ export class AmbientLife {
   /** The arena: the middle of its floor, which the stands watch */
   private pitCentre: NavPoint | null = null;
   private shotList: AmbientShot[] = [];
+  /** Who each bolt in flight is meant for */
+  private shotTargets = new Map<number, Walker>();
+  private fieldList: Field[] = [];
+  /** How many were beaten this round */
+  private beatenThisRound = 0;
+  /** The arena's floor: how many fight in this round (`spec.countRange`) */
+  private floorCount: number;
+  /** The arena's round: fighting; won (the winner's moment); or between rounds, the next lot due */
+  private phase: "fight" | "won" | "rest" = "rest";
+  private phaseMs = 0;
+  private winner: Walker | null = null;
+  /** The population scale this frame: the setting, the hour and the weather */
+  private busy = 1;
   private eventList: AmbientEvent[] = [];
   private walkers: Walker[] = [];
   private bouts: Bout[] = [];
@@ -295,6 +362,7 @@ export class AmbientLife {
     this.spec = spec;
     this.exits = exits;
     this.rand = seededRandom(seed);
+    this.floorCount = this.pickCount();
     if (grid) {
       grid.closed.fill(0);
       this.grid = grid;
@@ -324,6 +392,11 @@ export class AmbientLife {
     if (this.eventList.length < 40) this.eventList.push(e);
   }
 
+  /** The wall spells' elements on the floor (the arena's mages): drawn like objects */
+  fields(): WorldObject[] {
+    return this.fieldList.map((f) => f.obj);
+  }
+
   /** Spells in flight (the arena's mages) */
   shots(): AmbientShot[] {
     return this.shotList;
@@ -349,6 +422,12 @@ export class AmbientLife {
     this.walkers = [];
     this.bouts = [];
     this.shotList = [];
+    this.shotTargets.clear();
+    this.fieldList = [];
+    this.beatenThisRound = 0;
+    this.phase = "rest";
+    this.phaseMs = 0;
+    this.winner = null;
   }
 
   /** A big spell went off at `at`: those within `radius` run (guards, knights and fighters stand and look) */
@@ -407,7 +486,8 @@ export class AmbientLife {
     const kind = this.spec.kind;
     this.hour = frame.hour ?? null;
     this.weather = frame.weather ?? null;
-    const target = Math.round(this.spec.count * frame.scale * busyAt(kind, this.hour) * weatherScale(kind, this.weather));
+    this.busy = frame.scale * busyAt(kind, this.hour) * weatherScale(kind, this.weather);
+    const target = Math.round(this.floorCount * this.busy);
     // Guards are on duty whatever the hour; Few halves them, Many doesn't add any
     const guards = frame.scale > 0 ? Math.round((this.spec.guards ?? 0) * Math.min(1, frame.scale)) : 0;
     if (target === 0 && guards === 0) {
@@ -421,8 +501,10 @@ export class AmbientLife {
     for (let k = 0; k < 2 && this.toPlace > 0; k++, this.toPlace--) this.placeOnTheWay();
     this.keepGuards(guards);
     if (this.spec.spectators) this.keepSpectators(frame.scale > 0 ? Math.max(4, Math.round(this.spec.spectators * Math.min(1.5, frame.scale))) : 0);
-    this.keepPopulation(target, dt);
-    if (this.spec.bouts) this.runBouts(dt, frame.others ?? 0);
+    this.burnFields(dt);
+    // The arena's floor goes by rounds
+    if (this.spec.bouts) this.runRound(dt, target, frame.others ?? 0);
+    else this.keepPopulation(target, dt);
     this.flyShots(dt);
     const dark = kind === "town" && torchHours(this.hour);
     for (const w of this.walkers) {
@@ -627,7 +709,8 @@ export class AmbientLife {
         return r < 0.4 ? "knight" : r < 0.75 ? "lady" : "noble";
       case "arena":
         // The arena's floor: fighters and mages (the stands are kept apart); its foyer, all sorts
-        if (this.spec.bouts) return r < 0.7 ? "fighter" : "mage";
+        // At least two mages, so there's magic to see
+        if (this.spec.bouts) return this.walkers.filter((w) => w.role === "mage" && this.contestant(w)).length < 2 || r >= 0.7 ? "mage" : "fighter";
         return r < 0.4 ? "fighter" : r < 0.55 ? "mage" : "spectator";
     }
   }
@@ -665,8 +748,7 @@ export class AmbientLife {
     return this.spec.kind !== "town";
   }
 
-  private spawn(at: NavPoint, angle: number, fadeIn: boolean, role: Role, area: number): Walker {
-    const look = this.dress(role);
+  private spawn(at: NavPoint, angle: number, fadeIn: boolean, role: Role, area: number, look = this.dress(role)): Walker {
     const obj = makePerson(look, Math.round(at.x), Math.round(at.y), angle);
     const slow = role === "guard" || role === "knight" || role === "lady";
     const pace = (PACE_MIN + this.rand() * (PACE_MAX - PACE_MIN)) * (slow ? 0.75 : 1);
@@ -674,7 +756,8 @@ export class AmbientLife {
       obj, look, role, pose: "stand", mode: "idle", path: [], pace, idleMs: 0, faceAngle: -1, leaving: false, fade: fadeIn ? 0 : 1,
       fadeDir: fadeIn ? 1 : 0, waitedMs: 0, greetCooldown: 0, sidestepMs: 0, glanceMs: 0, stayMs: 60000 + this.rand() * 180000, faceId: -1,
       torchBearer: role === "guard" || (role === "folk" && this.rand() < TORCH_BEARERS), torch: false, area, errand: null, fleeing: false,
-      say: null, beat: null, beatEnd: 0, bout: null, emoteMs: 0, nextEmoteMs: 2000 + this.rand() * 8000,
+      say: null, beat: null, beatEnd: 0, bout: null, emoteMs: 0, nextEmoteMs: 2000 + this.rand() * 8000, cheerFrame: 0, actMs: 0, stepMs: 0, webbedMs: 0,
+      hp: role === "mage" ? MAGE_HP : FIGHTER_HP, beaten: false,
     };
     this.applyFade(w);
     this.walkers.push(w);
@@ -684,6 +767,8 @@ export class AmbientLife {
   /** The crowd already out when you arrive */
   private populate(target: number): void {
     const g = this.grid!;
+    // The arena's floor fills by rounds (runRound), its stands by keepSpectators
+    if (this.spec.bouts) return;
     if (this.stays) {
       for (let k = 0; k < target; k++) {
         const role = this.newRole();
@@ -876,56 +961,235 @@ export class AmbientLife {
 
   // ---- the arena ----
 
-  /** Mock bouts on the arena's floor while no real players are about */
+  /** How many fight in a round (`spec.countRange`) */
+  private pickCount(): number {
+    const range = this.spec.countRange;
+    return range ? range[0] + Math.floor(this.rand() * (range[1] - range[0] + 1)) : this.spec.count;
+  }
+
+  /** Still in the round: a fighter or mage on the floor, standing */
+  private contestant(w: Walker): boolean {
+    return (w.role === "fighter" || w.role === "mage") && w.fadeDir >= 0 && !w.leaving && w.hp > 0;
+  }
+
+  /**
+   * The arena's rounds: everyone on the floor fights (in pairs, `runBouts`) until one is left
+   * standing. The stands cheer the winner, who goes after a few seconds; the fallen are carried
+   * off, and the next lot comes in.
+   */
+  private runRound(dt: number, target: number, others: number): void {
+    const floor = this.walkers.filter((w) => this.contestant(w));
+    if (this.phase === "fight") {
+      this.runBouts(dt, others);
+      const left = floor.filter((w) => w.hp > 0);
+      if (left.length > 1) return;
+      if (left.length === 1 && this.beatenThisRound) {
+        this.victory(left[0]);
+        this.phase = "won";
+        this.phaseMs = VICTORY_MS + this.rand() * 2000;
+      } else {
+        this.phase = "rest";
+        this.phaseMs = 1500;
+      }
+      return;
+    }
+    if ((this.phaseMs -= dt) > 0) return;
+    if (this.phase === "won") {
+      // The winner goes
+      const w = this.winner;
+      this.winner = null;
+      if (w && this.walkers.includes(w)) {
+        w.emoteMs = 0;
+        this.setPose(w, "stand");
+        this.leave(w);
+      }
+      this.phase = "rest";
+      this.phaseMs = 2000 + this.rand() * 2000;
+      return;
+    }
+    if (target <= 0) return;
+    // The next lot: fade in about the floor (those already out when we arrive just stand there)
+    const first = this.ageMs < 1000;
+    if (!first) this.floorCount = this.pickCount();
+    const n = Math.max(2, Math.round(this.floorCount * this.busy));
+    this.beatenThisRound = 0;
+    const g = this.grid!;
+    for (let k = floor.length; k < n; k++) {
+      const role = this.newRole();
+      const cell = this.openCellAwayFrom(this.mainArea, true);
+      if (cell < 0) break;
+      const w = this.spawn(cellCentre(g, cell), Math.floor(this.rand() * 4096), !first, role, this.mainArea);
+      w.stayMs = FOREVER;
+      w.idleMs = 1000 + this.rand() * 2000;
+      const c = this.pitCentre;
+      if (c) w.obj.angle = angleTo(c.x - w.obj.x, c.y - w.obj.y);
+    }
+    this.boutMs = first ? 300 : FADE_MS + 600;
+    this.phase = "fight";
+  }
+
+  /** The last one standing: a cheer of their own, and the stands roar */
+  private victory(w: Walker): void {
+    this.winner = w;
+    if (w.mode === "walk") this.stand(w, FOREVER);
+    w.idleMs = FOREVER;
+    w.faceAngle = -1;
+    this.emote(w, "cheer", FOREVER);
+    this.say(w, chatterLine(this.rand, this.context(w, { won: true })));
+    this.event({ type: "victory", x: w.obj.x, y: w.obj.y });
+    for (const f of this.walkers)
+      if (f.role === "spectator" && f.fadeDir >= 0 && f.mode === "idle" && this.rand() < 0.6) this.emote(f, this.rand() < 0.75 ? "cheer" : "wave", 2000 + this.rand() * 2500);
+  }
+
+  /** A blow, a bolt or a burning wall lands: health off, and at none they're beaten */
+  private hurt(w: Walker, amount: number): void {
+    if (w.hp <= 0 || w.fadeDir < 0 || !w.bout) return;
+    w.hp -= amount;
+    if (w.hp <= 0) this.beat(w);
+  }
+
+  /**
+   * One is beaten: a cry, gone from the floor, and the stands cheer. Players beaten in the arena
+   * leave no body: they're sent to the stands, and so are these, to watch the rest.
+   */
+  private beat(w: Walker): void {
+    w.hp = 0;
+    this.beatenThisRound++;
+    if (w.bout) this.endBout(w.bout);
+    const o = w.obj;
+    this.event({ type: "death", x: o.x, y: o.y, female: w.look.female });
+    w.say = null;
+    w.fade = 0;
+    w.fadeDir = -1;
+    for (const [id, t] of this.shotTargets) if (t === w) this.shotTargets.delete(id);
+    this.cheer({ x: o.x, y: o.y });
+    if (!this.galleries.length) return;
+    const area = this.galleryArea();
+    const cell = this.openCellAwayFrom(area);
+    if (cell < 0) return;
+    const fan = this.spawn(cellCentre(this.grid!, cell), 0, true, "spectator", area, w.look);
+    fan.beaten = true;
+    fan.stayMs = BEATEN_WATCH_MS + this.rand() * 60000;
+    fan.idleMs = FOREVER;
+    this.faceThePit(fan);
+    fan.obj.angle = fan.faceAngle;
+    if (this.rand() < 0.5) this.say(fan, chatterLine(this.rand, this.context(fan, { lost: true })));
+  }
+
+  /**
+   * The fights in a round, while no real players are about: any two fighters or mages square off.
+   * Fighters close in and swing once in reach; mages back away to keep their distance and cast
+   * when they've stood still. One falling ends their fight, and the other finds another.
+   */
   private runBouts(dt: number, others: number): void {
     for (const b of this.bouts) {
+      if (b.ended) continue;
       const gone = [b.a, b.b].some((w) => w.fadeDir < 0 || !this.walkers.includes(w));
       if (others > 0 || gone || (b.ms -= dt) <= 0) {
-        this.endBout(b, others === 0 && !gone);
+        this.endBout(b);
         continue;
       }
-      if (b.a.mode !== "idle" || b.b.mode !== "idle") continue;
-      this.face(b.a, b.b);
-      if ((b.swingMs -= dt) <= 0) {
-        b.swingMs = b.magic ? 1600 + this.rand() * 1800 : 650 + this.rand() * 900;
-        const who = this.rand() < 0.5 ? b.a : b.b;
-        const other = who === b.a ? b.b : b.a;
-        if (b.magic) {
-          this.setPose(who, "cast", true);
-          this.castAt(who, other);
-        } else {
-          this.setPose(who, "attack", true);
-          // About half the swings land; the sound is the armour's
-          const body = other.look.body;
-          const hit = this.rand() < 0.5 ? null : /^bt[eiklmn]\.bgf$/.test(body) ? "metal" : /^bt[gh]\.bgf$/.test(body) ? "leather" : "flesh";
-          this.event({ type: "swing", x: who.obj.x, y: who.obj.y, hit, female: other.look.female });
-        }
-        const speaking = this.walkers.filter((w) => w.say).length;
-        if (speaking <= MAX_SPEAKING && !who.say && this.rand() < 0.1) this.say(who, chatterLine(this.rand, this.context(who)));
-        else if (speaking <= MAX_SPEAKING && this.rand() < 0.12) this.cheer(b.centre);
-      }
-      if ((b.circleMs -= dt) <= 0) {
-        b.circleMs = 3000 + this.rand() * 4000;
-        this.circle(b);
-      }
+      b.centre = { x: (b.a.obj.x + b.b.obj.x) / 2, y: (b.a.obj.y + b.b.obj.y) / 2 };
+      this.fight(b.a, b.b, dt);
+      if (!b.ended) this.fight(b.b, b.a, dt);
     }
     this.bouts = this.bouts.filter((b) => !b.ended);
     if (others > 0 || this.bouts.length >= MAX_BOUTS || (this.boutMs -= dt) > 0) return;
-    this.boutMs = 4000 + this.rand() * 6000;
-    const free = this.walkers.filter((w) => (w.role === "fighter" || w.role === "mage") && !w.bout && w.mode === "idle" && w.fadeDir >= 0 && !w.leaving && !w.fleeing);
-    // Mages duel mages, fighters fight fighters
-    const kinds = (["mage", "fighter"] as const).filter((r) => free.filter((w) => w.role === r).length >= 2);
-    if (!kinds.length) return;
-    const role = kinds.includes("mage") && (kinds.length === 1 || this.rand() < 0.45) ? "mage" : "fighter";
-    const pool = free.filter((w) => w.role === role);
-    const a = this.pick(pool);
-    const b = pool.filter((w) => w !== a).sort((x, y) => dist(x.obj, a.obj) - dist(y.obj, a.obj))[0];
-    this.startBout(a, b, role === "mage");
+    this.boutMs = 400 + this.rand() * 800;
+    const free = this.walkers.filter((w) => this.contestant(w) && !w.bout && w.mode === "idle" && !w.fleeing);
+    if (free.length < 2) return;
+    const a = this.pick(free);
+    const b = free.filter((w) => w !== a).sort((x, y) => dist(x.obj, a.obj) - dist(y.obj, a.obj))[0];
+    const bout: Bout = { a, b, centre: { x: (a.obj.x + b.obj.x) / 2, y: (a.obj.y + b.obj.y) / 2 }, ms: 20000 + this.rand() * 25000, ended: false };
+    a.bout = b.bout = bout;
+    for (const w of [a, b]) {
+      w.actMs = 600 + this.rand() * (w.role === "mage" ? 2500 : 800);
+      w.stepMs = 0;
+      w.webbedMs = 0;
+    }
+    this.bouts.push(bout);
   }
 
-  private boutSpot(c: NavPoint, axis: number, side: number, magic = false): NavPoint {
-    const d = (magic ? DUEL_SPACING : BOUT_SPACING) * side;
-    return { x: c.x + Math.cos(axis) * d, y: c.y + Math.sin(axis) * d };
+  /** One fighter's or mage's turn in a fight against `o` */
+  private fight(w: Walker, o: Walker, dt: number): void {
+    const g = this.grid!;
+    const d = dist(w.obj, o.obj);
+    w.stepMs -= dt;
+    w.actMs -= dt;
+    // Held in a web: nothing but struggle
+    if (w.webbedMs > 0) {
+      w.webbedMs -= dt;
+      if (w.mode === "walk") this.stand(w, FOREVER);
+      w.faceAngle = angleTo(o.obj.x - w.obj.x, o.obj.y - w.obj.y);
+      return;
+    }
+    if (w.role === "fighter") {
+      if (d > REACH) {
+        // Close in: to just short of them, again and again as they move
+        if (w.stepMs > 0) return;
+        w.stepMs = 350;
+        const to = { x: o.obj.x + ((w.obj.x - o.obj.x) / (d || 1)) * 0.9 * SQ, y: o.obj.y + ((w.obj.y - o.obj.y) / (d || 1)) * 0.9 * SQ };
+        const path = walkable(g, w.obj.x, w.obj.y, to.x, to.y) ? [to] : findPath(g, w.obj, to);
+        if (path?.length) this.walk(w, path, false);
+        return;
+      }
+      if (w.mode === "walk") this.stand(w, FOREVER);
+      w.faceAngle = angleTo(o.obj.x - w.obj.x, o.obj.y - w.obj.y);
+      if (w.actMs > 0) return;
+      w.actMs = 650 + this.rand() * 900;
+      this.setPose(w, "attack", true);
+      // About half the swings land; the sound is the armour's
+      const body = o.look.body;
+      const hit = this.rand() < 0.5 ? null : /^bt[eiklmn]\.bgf$/.test(body) ? "metal" : /^bt[gh]\.bgf$/.test(body) ? "leather" : "flesh";
+      this.event({ type: "swing", x: w.obj.x, y: w.obj.y, hit, female: o.look.female });
+      this.boutTalk(w);
+      if (hit) this.hurt(o, this.between(SWING_DAMAGE));
+      return;
+    }
+    // A mage: a short step back from whoever comes close (or in, when too far to cast), then a
+    // stand of a few seconds to cast, which lets a fighter catch up
+    if (w.mode === "walk") return;
+    if (w.stepMs <= 0 && (d < KEEP_AWAY || d > CAST_RANGE)) {
+      const to = d < KEEP_AWAY ? this.awayFrom(w, o) : this.towards(w, o, (KEEP_AWAY + CAST_RANGE) / 2);
+      w.stepMs = to ? MAGE_STAND_MS + this.rand() * 2500 : 1000;
+      if (to) {
+        this.walk(w, [to], false);
+        return;
+      }
+    }
+    w.faceAngle = angleTo(o.obj.x - w.obj.x, o.obj.y - w.obj.y);
+    if (w.actMs > 0) return;
+    // A spell every 6-14 s
+    w.actMs = 6400 + this.rand() * 7200;
+    this.setPose(w, "cast", true);
+    this.castAt(w, o);
+    this.boutTalk(w);
+  }
+
+  /** Now and then a fighter shouts, or the stands cheer the blow */
+  private boutTalk(w: Walker): void {
+    const speaking = this.walkers.filter((v) => v.say).length;
+    if (speaking <= MAX_SPEAKING && !w.say && this.rand() < 0.1) this.say(w, chatterLine(this.rand, this.context(w)));
+    else if (speaking <= MAX_SPEAKING && this.rand() < 0.12 && w.bout) this.cheer(w.bout.centre);
+  }
+
+  /** An open spot on the floor a few squares further from `o`, reachable in a straight line */
+  private awayFrom(w: Walker, o: Walker): NavPoint | null {
+    const base = Math.atan2(w.obj.y - o.obj.y, w.obj.x - o.obj.x);
+    for (const turn of [0, 0.5, -0.5, 1, -1, 1.5, -1.5]) {
+      const a = base + turn + (this.rand() - 0.5) * 0.3;
+      const len = (1.5 + this.rand()) * SQ;
+      const p = { x: w.obj.x + Math.cos(a) * len, y: w.obj.y + Math.sin(a) * len };
+      if (this.spotOpen(p) && walkable(this.grid!, w.obj.x, w.obj.y, p.x, p.y)) return p;
+    }
+    return null;
+  }
+
+  /** An open spot on the line to `o`, `keep` from them */
+  private towards(w: Walker, o: Walker, keep: number): NavPoint | null {
+    const d = dist(w.obj, o.obj) || 1;
+    const p = { x: o.obj.x + ((w.obj.x - o.obj.x) / d) * keep, y: o.obj.y + ((w.obj.y - o.obj.y) / d) * keep };
+    return this.spotOpen(p) && walkable(this.grid!, w.obj.x, w.obj.y, p.x, p.y) ? p : null;
   }
 
   private spotOpen(p: NavPoint): boolean {
@@ -933,53 +1197,19 @@ export class AmbientLife {
     return cell >= 0 && isOpen(this.grid!, cell) && this.grid!.area[cell] === this.mainArea;
   }
 
-  private startBout(a: Walker, b: Walker, magic: boolean): void {
-    const g = this.grid!;
-    const player = this.frame.player;
-    for (let k = 0; k < 15; k++) {
-      const cell = randomCell(g, this.rand, this.mainArea);
-      if (cell < 0) return;
-      const centre = cellCentre(g, cell);
-      if ((player && dist(centre, player) < (magic ? 3.5 : 2) * SQ) || this.bouts.some((o) => dist(o.centre, centre) < (magic || o.magic ? 6 : 3) * SQ)) continue;
-      const axis = this.rand() * Math.PI;
-      const pa = this.boutSpot(centre, axis, -1, magic),
-        pb = this.boutSpot(centre, axis, 1, magic);
-      if (!this.spotOpen(pa) || !this.spotOpen(pb) || !walkable(g, pa.x, pa.y, pb.x, pb.y)) continue;
-      const toA = findPath(g, a.obj, pa),
-        toB = findPath(g, b.obj, pb);
-      if (!toA || !toB) continue;
-      const bout: Bout = { magic, a, b, centre, axis, ms: 15000 + this.rand() * 25000, swingMs: 1200, circleMs: 4000 + this.rand() * 3000, ended: false };
-      a.bout = b.bout = bout;
-      this.walk(a, toA.length ? toA : [pa], false);
-      this.walk(b, toB.length ? toB : [pb], false);
-      this.bouts.push(bout);
-      return;
-    }
+  private between([lo, hi]: number[]): number {
+    return lo + this.rand() * (hi - lo);
   }
 
-  /** Fighters circle each other a little */
-  private circle(b: Bout): void {
-    const g = this.grid!;
-    const axis = b.axis + (this.rand() < 0.5 ? -1 : 1) * (b.magic ? 0.2 + this.rand() * 0.3 : 0.35 + this.rand() * 0.5);
-    const pa = this.boutSpot(b.centre, axis, -1, b.magic),
-      pb = this.boutSpot(b.centre, axis, 1, b.magic);
-    if (!this.spotOpen(pa) || !this.spotOpen(pb)) return;
-    if (!walkable(g, b.a.obj.x, b.a.obj.y, pa.x, pa.y) || !walkable(g, b.b.obj.x, b.b.obj.y, pb.x, pb.y)) return;
-    b.axis = axis;
-    this.walk(b.a, [pa], false);
-    this.walk(b.b, [pb], false);
-  }
-
-  private endBout(b: Bout, cheer = false): void {
+  private endBout(b: Bout): void {
     b.ended = true;
-    if (cheer) this.event({ type: "boutEnd", x: b.centre.x, y: b.centre.y });
     for (const w of [b.a, b.b]) {
       w.bout = null;
-      if (w.mode === "idle") {
-        this.setPose(w, "stand");
-        w.idleMs = 2000 + this.rand() * 5000;
-        w.faceAngle = -1;
-      }
+      w.webbedMs = 0;
+      if (w.mode === "walk") this.stand(w, 0);
+      this.setPose(w, "stand");
+      w.idleMs = 1000 + this.rand() * 2000;
+      w.faceAngle = -1;
     }
   }
 
@@ -992,20 +1222,117 @@ export class AmbientLife {
     this.say(w, chatterLine(this.rand, this.context(w)));
   }
 
-  /** A spell from one mage at the other: the casting arms, then the bolt across the floor */
+  /**
+   * A spell from a mage at their opponent: the casting arms, then a bolt across the floor, or one
+   * of the wall spells laid as walspell/*.kod lays them: a wall of fire or brambles across the way
+   * in front of the caster, a poison fog or a web on the target, a ring of flames round them
+   */
   private castAt(from: Walker, to: Walker): void {
-    const bolt = this.pick(BOLTS);
+    const spell = this.pickWeighted(SPELLS);
+    this.event({ type: "cast", x: from.obj.x, y: from.obj.y, spell });
+    if (spell === "fireball" || spell === "lightning") return this.shoot(from, to, BOLTS[spell === "fireball" ? 0 : 1]);
+    const f = from.obj,
+      t = to.obj;
+    const d = dist(f, t) || 1;
+    const ux = (t.x - f.x) / d,
+      uy = (t.y - f.y) / d;
+    // Across the way: perpendicular to caster -> target
+    const across = (cx: number, cy: number, n: number, gap: number) =>
+      Array.from({ length: n }, (_, k) => {
+        const off = (k - (n - 1) / 2) * gap;
+        return { x: cx - uy * off, y: cy + ux * off };
+      });
+    const ahead = { x: f.x + ux * Math.min(1.5 * SQ, d / 2), y: f.y + uy * Math.min(1.5 * SQ, d / 2) };
+    switch (spell) {
+      case "firewall":
+        across(ahead.x, ahead.y, 7, 0.5 * SQ).forEach((p, k) => this.field("fire", p, k % 2 === 0));
+        break;
+      case "bramble":
+        across(ahead.x, ahead.y, 5, 0.75 * SQ).forEach((p) => this.field("bramble", p));
+        break;
+      case "poisonfog":
+        across(t.x, t.y, 3, 0.7 * SQ).forEach((p) => this.field("fog", p));
+        break;
+      case "ring":
+        for (let k = 0; k < 8; k++) {
+          const a = (k * Math.PI) / 4;
+          this.field("fire", { x: t.x + Math.cos(a) * SQ, y: t.y + Math.sin(a) * SQ }, k % 2 === 0);
+        }
+        this.hurt(to, RING_DAMAGE);
+        break;
+      case "web":
+        this.field("web", { x: t.x, y: t.y });
+        // web.kod: it holds who it catches
+        if (to.bout) to.webbedMs = 2500 + this.rand() * 1500;
+        break;
+    }
+  }
+
+  private pickWeighted<T>(list: readonly (readonly [T, number])[]): T {
+    const total = list.reduce((s, [, w]) => s + w, 0);
+    let r = this.rand() * total;
+    for (const [v, w] of list) if ((r -= w) < 0) return v;
+    return list[list.length - 1][0];
+  }
+
+  /** A bolt across the floor (project.c, as the server sends a projectile) */
+  private shoot(from: Walker, to: Walker, bolt: (typeof BOLTS)[number]): void {
     const kind = bolt.file === "fireball.bgf" ? "fire" : "lightning";
-    this.event({ type: "cast", x: from.obj.x, y: from.obj.y, bolt: kind });
     const s = { x: from.obj.x, y: from.obj.y },
       d = { x: to.obj.x, y: to.obj.y };
     const len = dist(s, d) / SQ;
+    const id = ambientId();
+    this.shotTargets.set(id, to);
     this.shotList.push({
-      id: ambientId(), x: s.x, y: s.y, sourceX: s.x, sourceY: s.y, destX: d.x, destY: d.y, progress: 0,
+      id, x: s.x, y: s.y, sourceX: s.x, sourceY: s.y, destX: d.x, destY: d.y, progress: 0,
       increment: len ? bolt.speed / 1000 / len : 1, angle: angleTo(d.x - s.x, d.y - s.y), flags: 0, bolt: kind,
       info: { iconRes: localRes(bolt.file), light: { flags: 0x3, intensity: 100, color: bolt.color } },
       look: { anim: animStateFrom(bolt.animation), overlays: [], translation: 0 },
     });
+  }
+
+  /** One element of a wall spell on the floor (wallelem/*.kod), if there's open floor there */
+  private field(kind: keyof typeof FIELDS, at: NavPoint, lit = false): void {
+    if (!this.spotOpen(at) || this.fieldList.length >= MAX_FIELDS) return;
+    const f = FIELDS[kind];
+    const id = ambientId();
+    const animation: Animation = "cycle" in f ? { type: ANIMATE.CYCLE, period: f.cycle + Math.floor(this.rand() * 40), groupLow: 1, groupHigh: 5 }
+      : "grow" in f ? { type: ANIMATE.ONCE, period: f.grow, groupLow: 1, groupHigh: 5, groupFinal: 5 }
+      : { type: ANIMATE.NONE, group: 1 };
+    const look: Look = { anim: animStateFrom(animation), overlays: [], translation: 0 };
+    const light = lit && "light" in f ? { ...f.light } : { flags: 0, intensity: 0, color: 0 };
+    const obj: WorldObject = {
+      id, x: Math.round(at.x), y: Math.round(at.y), angle: Math.floor(this.rand() * 4096), normal: look, moving: look, look, motion: null, version: 0,
+      info: {
+        id, amount: 0, iconRes: localRes(f.file), nameRes: 0, flags: 0, drawingType: f.drawFx, minimapFlags: 0, nameColor: 0, objectType: 0,
+        moveOnType: 0, light, translation: 0, effect: 0, animation, overlays: [],
+      },
+    };
+    this.fieldList.push({ obj, ms: FIELD_MS + this.rand() * 3000, drawFx: f.drawFx, hurt: f.hurt });
+  }
+
+  /**
+   * The wall spells' elements burn out after a while, fading as they go, and hurt whoever stands
+   * in them
+   */
+  private burnFields(dt: number): void {
+    if (!this.fieldList.length) return;
+    for (const b of this.bouts)
+      for (const w of [b.a, b.b]) {
+        let hurt = 0;
+        for (const f of this.fieldList) if (f.hurt && dist(f.obj, w.obj) < FIELD_REACH) hurt = Math.max(hurt, f.hurt);
+        if (hurt) this.hurt(w, (hurt * dt) / 1000);
+      }
+    for (const f of this.fieldList) {
+      f.ms -= dt;
+      animStep(f.obj.look.anim, 0, dt);
+      // The last moment: more see-through (proto.h DRAWFX_TRANSLUCENT25)
+      if (f.ms < FIELD_FADE_MS && f.obj.info.drawingType !== 1) {
+        f.obj.info.drawingType = 1;
+        f.obj.version++;
+      }
+    }
+    this.fieldList = this.fieldList.filter((f) => f.ms > 0);
   }
 
   /** project.c ProjectilesMove: on their way, gone when they arrive */
@@ -1017,7 +1344,14 @@ export class AmbientLife {
       p.y = p.sourceY + Math.min(1, p.progress) * (p.destY - p.sourceY);
       animStep(p.look.anim, 0, dt);
     }
-    for (const p of this.shotList) if (p.progress >= 1) this.event({ type: "impact", x: p.destX, y: p.destY, bolt: p.bolt });
+    for (const p of this.shotList) {
+      if (p.progress < 1) continue;
+      this.event({ type: "impact", x: p.destX, y: p.destY, bolt: p.bolt });
+      // It hits if they're still about where it was aimed
+      const t = this.shotTargets.get(p.id);
+      this.shotTargets.delete(p.id);
+      if (t && dist(t.obj, { x: p.destX, y: p.destY }) < BOLT_REACH) this.hurt(t, this.between(BOLT_DAMAGE));
+    }
     this.shotList = this.shotList.filter((p) => p.progress < 1);
   }
 
@@ -1031,10 +1365,11 @@ export class AmbientLife {
     return this.galleries[0] ?? this.mainArea;
   }
 
-  /** The arena's stands are never empty: watchers, kept apart from the floor's count */
+  /** The arena's stands are never empty: watchers, kept apart from the floor's count (and the beaten, who go after a while) */
   private keepSpectators(n: number): void {
     if (!this.galleries.length) return;
-    const fans = this.walkers.filter((w) => w.role === "spectator" && w.fadeDir >= 0);
+    for (const w of this.walkers) if (w.beaten && w.stayMs < 0 && w.fadeDir >= 0 && !w.leaving) this.leave(w);
+    const fans = this.walkers.filter((w) => w.role === "spectator" && w.fadeDir >= 0 && !w.beaten);
     if (fans.length > n) {
       fans[fans.length - 1].fadeDir = -1;
       return;
@@ -1059,6 +1394,8 @@ export class AmbientLife {
 
   /** An emote for a while: a dance or a cheer lasts `ms`; a wave or a point plays once */
   private emote(w: Walker, pose: Pose, ms: number): void {
+    // A cheer is a frame of the dance, a different one each time
+    if (pose === "cheer") w.cheerFrame = Math.floor(this.rand() * 17) % 17;
     this.setPose(w, pose, true);
     w.emoteMs = ms;
     if (pose === "cheer" && this.spec.spectators) this.event({ type: "cheer", x: w.obj.x, y: w.obj.y, female: w.look.female });
@@ -1202,7 +1539,7 @@ export class AmbientLife {
     const o = w.obj;
     if (pose === "walk") o.look = o.moving;
     else {
-      o.normal = lookFor(w.look, pose, w.torch);
+      o.normal = lookFor(w.look, pose, w.torch, w.cheerFrame);
       o.look = o.normal;
     }
     o.info.overlays = o.look.overlays;
@@ -1303,7 +1640,8 @@ export class AmbientLife {
       } else w.waitedMs = 0;
       this.setPose(w, "walk");
       const wet = this.weather && town && w.role === "folk" ? WET_PACE : 1;
-      let move = w.pace * dt * (w.fleeing ? FLEE_PACE : wet);
+      const chase = w.bout && w.role === "fighter" ? CHASE_PACE : 1;
+      let move = w.pace * dt * (w.fleeing ? FLEE_PACE : wet * chase);
       let x = o.x,
         y = o.y;
       while (move > 0 && w.path.length) {

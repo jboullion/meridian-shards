@@ -24,7 +24,8 @@
 // they can walk in each room that has them (navGrid.ts), and roomterrain.json, each room's
 // terrain (viTerrain_type), for what critters scurry about there, and watertextures.json, floor
 // textures that are water even where the sector has no depth (waterTextures.ts), and
-// floortextures.json, which floors are grass, earth or rock, for Ground Detail (floorTextures.ts).
+// floortextures.json, which floors are grass, earth or rock, for Ground Detail (floorTextures.ts),
+// and rooms.json, every room by number and name, for the admin console's Travel list.
 // And our ambient sounds that aren't the game's (dist/sounds/amb_*.ogg, from fetch-sounds.ts).
 //
 // Output: dist/assets/<name> and dist/assets/manifest.json:
@@ -38,7 +39,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { buildItemSlots } from "./itemSlots.ts";
 import { buildSpellTimes } from "./spellTimes.ts";
-import { buildRoomExits, buildRoomLinks, buildRoomTerrain } from "./roomLinks.ts";
+import { buildRoomExits, buildRoomLinks, buildRoomList, buildRoomTerrain } from "./roomLinks.ts";
 import { parseRoo } from "../../packages/formats/src/index.ts";
 import { buildNavGrid, encodeNavGrid } from "../../packages/world/src/navGrid.ts";
 import { findWaterTextures } from "./waterTextures.ts";
@@ -206,6 +207,12 @@ if (existsSync(join(KOD, "object")) && existsSync(join(KOD, "include"))) {
   writeFileSync(join(OUT, "roomterrain.json"), terrain);
   files["roomterrain.json"] = { size: terrain.length, hash: createHash("sha1").update(terrain).digest("hex").slice(0, 16), mtime: 0 };
   console.log(`roomterrain.json: ${Object.keys(JSON.parse(terrain.toString()) as object).length} rooms`);
+  // Every room by number and name, for the admin console's Travel list (ours)
+  const roomList = buildRoomList(kodFiles, khd);
+  const rooms = Buffer.from(JSON.stringify(roomList));
+  writeFileSync(join(OUT, "rooms.json"), rooms);
+  files["rooms.json"] = { size: rooms.length, hash: createHash("sha1").update(rooms).digest("hex").slice(0, 16), mtime: 0 };
+  console.log(`rooms.json: ${roomList.length} rooms`);
   // Where worn items go on the Modern interface's paper doll, from the item classes' use types
   const slots = Buffer.from(JSON.stringify(buildItemSlots(kodFiles, khd)));
   writeFileSync(join(OUT, "itemslots.json"), slots);
