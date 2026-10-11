@@ -11,6 +11,8 @@ import { animStateFrom, type AnimState } from "./animation.ts";
 
 export interface OverlayState extends Overlay {
   anim: AnimState;
+  /** Ours: drawn upside down from where it attaches (ambient townsfolk raising their arms) */
+  raised?: boolean;
 }
 
 /** An appearance: animation, overlays and palette translation. */
@@ -50,6 +52,8 @@ export interface WorldObject {
   motion: Motion | null;
   /** Bumped whenever the look changes (for render caches). */
   version: number;
+  /** Ours: drawn this many times its size (ambient critters); the server's objects never have it */
+  scale?: number;
 }
 
 /** proto.h REMOTE_VIEW_* */

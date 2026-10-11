@@ -1344,6 +1344,7 @@ export function GameView({
         ]}
         // The Classic interface has the meter after the toolbar, as the original's lag box
         latency={settings.latencyMeter && !classic ? latency : undefined}
+        fps={settings.showFps && fps !== null && !classic ? fps : undefined}
         tooltips={settings.tooltips}
       />
       {classic && (
@@ -1356,6 +1357,7 @@ export function GameView({
             assets={assets}
             tooltips={settings.tooltips}
             latency={settings.latencyMeter ? latency : undefined}
+            fps={settings.showFps && fps !== null ? fps : undefined}
             buttons={
               settings.toolbar
                 ? [
@@ -1413,7 +1415,6 @@ export function GameView({
             />
           </div>
         )}
-        {settings.showFps && fps !== null && <div className="fps">{fps} fps</div>}
         {touch && (
           <TouchControls
             cooldown={cooldown}

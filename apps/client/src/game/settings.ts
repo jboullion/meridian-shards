@@ -12,6 +12,8 @@
 // client's table (module/merintr/merintr.c interface_key_table: arrows move and turn,
 // Alt+arrows strafe, PgUp/PgDn/Home/End look, Space goes, Enter looks).
 
+import { AMBIENT_SCALE, type AmbientLevel } from "@shards/world";
+
 /** Bind Editor actions, by tab, in its order (m59bind.exe; config.ini [keys]). */
 export const ACTION_TABS = {
   // Ours: no Mouselook Toggle (the mouse is never captured but while the right button drags the view)
@@ -403,6 +405,29 @@ export interface Settings {
    * (roomAo.ts) and shadows under figures (ObjectsView). Off, the original's look.
    */
   enhanced: boolean;
+
+  /**
+   * Ours, Ambient Life (the Bind Editor's Options, the phone's Configuration): townsfolk walking
+   * the streets and patrons in the inns, seen by this client only (packages/world ambient/).
+   */
+  ambientLife: AmbientLevel;
+  /**
+   * Ours, Critters (under Ambient Life): rats, spiders, centipedes and the like scurrying about,
+   * killed with a click, seen by this client only (packages/world ambient/critters.ts)
+   */
+  critters: boolean;
+  /** Ours, Birds and Bats (under Ambient Life): flocks in the sky, bats in caves (render flyers.ts) */
+  flyers: boolean;
+  /** Ours, Nature (under Ambient Life): butterflies, fireflies, falling leaves and leaping fish (render nature.ts) */
+  nature: boolean;
+  /** Ours, Ground Detail (its own option): grass, flowers, pebbles and stones on the ground (render groundCover.ts) */
+  groundDetail: boolean;
+  /**
+   * Ours, Ambient Sounds: the townsfolk's chatter, the arena's crowd, thunder, birds, critters and
+   * the like (game/ambientSounds.ts), and how loud, 0-100, under the Sound Volume
+   */
+  ambientSounds: boolean;
+  ambientVolume: number;
 }
 
 export type InterfaceStyle = "modern" | "classic";
@@ -481,6 +506,13 @@ export const DEFAULT_SETTINGS: Settings = {
   characterWindowAt: null,
   hudScale: 100,
   enhanced: true,
+  ambientLife: "normal",
+  critters: true,
+  flyers: true,
+  nature: true,
+  groundDetail: true,
+  ambientSounds: true,
+  ambientVolume: 70,
 };
 
 const STORAGE_KEY = "shards.settings";
@@ -501,6 +533,7 @@ export function migrate(s: SavedSettings): Settings {
   // Version 2 (milestone 6): E attacks in the modern preset; it no longer opens doors
   if (version < 2 && preset === "modern") keys.go = keys.go.filter((b) => b.code !== "KeyE");
   const out: Settings = { ...DEFAULT_SETTINGS, ...s, version: SETTINGS_VERSION, preset, keys };
+  if (!(out.ambientLife in AMBIENT_SCALE)) out.ambientLife = DEFAULT_SETTINGS.ambientLife;
   if (version < 3) {
     // Version 3 (the Preferences and Configuration dialogs): one mouselook speed became
     // the X and Y scales, and "right click looks" became Examine on the right button

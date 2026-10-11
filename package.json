@@ -25,6 +25,7 @@
     "assets:fetch": "node tools/assets/fetch-assets.ts",
     "release": "node tools/deploy/release.ts",
     "assets": "node tools/assets/build-assets.ts",
+    "sounds": "node tools/assets/fetch-sounds.ts",
     "gateway": "node tools/gateway/gateway.ts",
     "headless": "node tools/headless/client.ts",
     "smoke": "node tools/headless/client.ts --user shardbot --pass shardbot --stay 10",

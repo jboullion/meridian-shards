@@ -108,7 +108,7 @@ function WindowButtons() {
 }
 
 export function TitleBar({
-  assets, title, menu, latency, tooltips = true, className,
+  assets, title, menu, latency, fps, tooltips = true, className,
 }: {
   /** For the flower icon (ui/icon1.ico); none before the assets load */
   assets?: AssetStore | null;
@@ -116,6 +116,8 @@ export function TitleBar({
   menu?: TitleBarMenuItem[];
   /** The latency meter: a round trip in ms, null while waiting for the first echo, undefined for no meter */
   latency?: number | null;
+  /** Show FPS (config.showFPS): frames a second, beside the latency meter; undefined for none */
+  fps?: number;
   /** Show tooltips: the latency meter's (lagbox.c TTN_NEEDTEXT) */
   tooltips?: boolean;
   className?: string;
@@ -148,6 +150,7 @@ export function TitleBar({
       )}
       <span className="title-text">{title}</span>
       <span className="title-spacer" />
+      {fps !== undefined && <FpsReadout fps={fps} />}
       {latency !== undefined && <LatencyMeter ms={latency} tooltip={tooltips} />}
       {/* Ours: in a browser, the app for this system, and full screen without the address bar and tabs (the apps have their own windows) */}
       {!desktop && <DownloadButton tooltip={tooltips} />}
@@ -227,6 +230,15 @@ function DownloadButton({ tooltip }: { tooltip: boolean }) {
         <path d="M8 1v9M4 6.5 8 10.5l4-4M2 12v3h12v-3" fill="none" stroke="currentColor" strokeWidth="2" />
       </svg>
     </a>
+  );
+}
+
+/** Show FPS: frames a second, beside the latency meter (the title bar, or the Classic toolbar) */
+export function FpsReadout({ fps }: { fps: number }) {
+  return (
+    <span className="fps-readout" aria-label={`${fps} frames a second`}>
+      {fps} fps
+    </span>
   );
 }
 

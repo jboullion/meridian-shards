@@ -66,6 +66,23 @@ The Modern layout (`ui/ModernHud.tsx`, `ui/CharacterWindow.tsx`) has no counterp
 | The target's health and enchantment timers | The server sends neither. |
 | The attack timer on the quick slots | The server's one timer covers attacks too (a weapon's swing keeps spells back for a moment), but only spells start our cooldown. |
 
+## Ambient life (ours)
+
+Townsfolk, inn patrons, the castles' people and the arena's fighters (`packages/world/src/ambient/`, roadmap milestone 15) have no counterpart in the original. What they don't do yet:
+
+| What | What it needs |
+|---|---|
+| Critters in rooms without a terrain | 19 rooms' Kod classes give no `viTerrain_type` and aren't in a town (castles, the Duke's, some guild halls): no critters there. |
+| More places | Only the rooms in `ambientRooms.ts` have anyone: the main towns and their inns. Smaller villages, shops, halls and the guild halls have none. |
+| Hats and things to carry in town | Townsfolk wear shirts, jerkins, royal shirts, leather, robes, trousers and skirts. Armour, helms, shields and weapons go only to guards, knights and fighters; nobody carries baskets or tools. |
+| Someone sweeping outside the inn | The game has no broom to hold (`isweep.bgf` is a spell's icon), so no sweeper. |
+| Footsteps and voices | Townsfolk walk silently and their speech bubbles have no voice; the chatter under them is a recording. Fireballs land without a sound. |
+| Real reflections in puddles | The puddles take a sheen of the sky's colour, brighter at a glancing look; they don't mirror the scene. |
+| Walking round each other | They wait for us, but walk through one another. |
+| Talking back | Their lines are canned and over their heads only; they don't answer what's said in the chat. |
+| Rooms that change shape | The grid is built from the room file; a lift the server moves isn't seen. No town room has one. |
+| The same people for everyone | By design: each client makes up its own. |
+
 ## Deliberately different or left out
 
 | What | Why |

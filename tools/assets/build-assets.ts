@@ -19,7 +19,13 @@
 // Kod item classes (itemSlots.ts), and spelltimes.json, each spell's post-cast delay for the
 // quick slots' cooldowns (spellTimes.ts).
 // And roomlinks.json, which rooms connect to which, from the Kod source (roomLinks.ts), so
-// the client can load the rooms next to yours ahead of time.
+// the client can load the rooms next to yours ahead of time, and roomexits.json, where each
+// room's doors are, for the ambient townsfolk (ours) to walk between, and nav/<room>.nav, where
+// they can walk in each room that has them (navGrid.ts), and roomterrain.json, each room's
+// terrain (viTerrain_type), for what critters scurry about there, and watertextures.json, floor
+// textures that are water even where the sector has no depth (waterTextures.ts), and
+// floortextures.json, which floors are grass, earth or rock, for Ground Detail (floorTextures.ts).
+// And our ambient sounds that aren't the game's (dist/sounds/amb_*.ogg, from fetch-sounds.ts).
 //
 // Output: dist/assets/<name> and dist/assets/manifest.json:
 //   { generated, rsbHash, files: { name: { size, hash } } }
@@ -32,7 +38,13 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { buildItemSlots } from "./itemSlots.ts";
 import { buildSpellTimes } from "./spellTimes.ts";
-import { buildRoomLinks } from "./roomLinks.ts";
+import { buildRoomExits, buildRoomLinks, buildRoomTerrain } from "./roomLinks.ts";
+import { parseRoo } from "../../packages/formats/src/index.ts";
+import { buildNavGrid, encodeNavGrid } from "../../packages/world/src/navGrid.ts";
+import { findWaterTextures } from "./waterTextures.ts";
+import { averageColor, classifyFloor, isCobbled } from "./floorTextures.ts";
+import { gridTextureName, parseBgf } from "../../packages/formats/src/index.ts";
+import { AMBIENT_ROOMS } from "../../packages/world/src/ambient/ambientRooms.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const { values: opt } = parseArgs({
@@ -78,6 +90,8 @@ const sources: Source[] = [
   // server\setup-client.cmd puts the font in our client's run folder; the installed client has it beside its resource folder
   { label: "title font", dir: join(SERVER, "run", "localclient"), recursive: false, prefix: "ui/", exts: TTF },
   { label: "title font (installed client)", dir: dirname(opt.client!), recursive: false, prefix: "ui/", exts: TTF },
+  // Ours: ambient sounds that aren't the game's (chatter, crowds, thunder), from npm run sounds
+  { label: "ambient sounds (npm run sounds)", dir: join(ROOT, "dist", "sounds"), recursive: false, filter: (n) => n.startsWith("amb_") },
 ];
 
 function* walk(dir: string, recursive: boolean): Generator<string> {
@@ -182,6 +196,16 @@ if (existsSync(join(KOD, "object")) && existsSync(join(KOD, "include"))) {
   writeFileSync(join(OUT, "roomlinks.json"), json);
   files["roomlinks.json"] = { size: json.length, hash: createHash("sha1").update(json).digest("hex").slice(0, 16), mtime: 0 };
   console.log(`roomlinks.json: ${Object.keys(links).length} rooms`);
+  // Where each room's doors are, for the ambient townsfolk (ours)
+  const exits = Buffer.from(JSON.stringify(buildRoomExits(kodFiles, khd)));
+  writeFileSync(join(OUT, "roomexits.json"), exits);
+  files["roomexits.json"] = { size: exits.length, hash: createHash("sha1").update(exits).digest("hex").slice(0, 16), mtime: 0 };
+  console.log(`roomexits.json: ${Object.keys(JSON.parse(exits.toString()) as object).length} rooms`);
+  // Each room's terrain, for the ambient critters (ours)
+  const terrain = Buffer.from(JSON.stringify(buildRoomTerrain(kodFiles, khd)));
+  writeFileSync(join(OUT, "roomterrain.json"), terrain);
+  files["roomterrain.json"] = { size: terrain.length, hash: createHash("sha1").update(terrain).digest("hex").slice(0, 16), mtime: 0 };
+  console.log(`roomterrain.json: ${Object.keys(JSON.parse(terrain.toString()) as object).length} rooms`);
   // Where worn items go on the Modern interface's paper doll, from the item classes' use types
   const slots = Buffer.from(JSON.stringify(buildItemSlots(kodFiles, khd)));
   writeFileSync(join(OUT, "itemslots.json"), slots);
@@ -195,6 +219,50 @@ if (existsSync(join(KOD, "object")) && existsSync(join(KOD, "include"))) {
 } else {
   console.warn("!! no Kod source in server/src/kod; the client won't load neighbouring rooms ahead");
 }
+
+// Floor textures that are water even on a dry floor (Raza's pool), for ambient life (ours)
+const roomFiles = readdirSync(OUT).filter((f) => f.endsWith(".roo"));
+const waterTextures = findWaterTextures(roomFiles.map((f) => parseRoo(new Uint8Array(readFileSync(join(OUT, f))))));
+const waterJson = Buffer.from(JSON.stringify(waterTextures));
+writeFileSync(join(OUT, "watertextures.json"), waterJson);
+files["watertextures.json"] = { size: waterJson.length, hash: createHash("sha1").update(waterJson).digest("hex").slice(0, 16), mtime: 0 };
+console.log(`watertextures.json: ${waterTextures.length} textures`);
+
+// What each floor texture is (grass, earth, rocky) and its colour, for Ground Detail (ours)
+{
+  const palette = new Uint8Array(readFileSync(join(OUT, "palette.bin")));
+  const used = new Set<number>();
+  for (const f of roomFiles) for (const s of parseRoo(new Uint8Array(readFileSync(join(OUT, f)))).sectors) if (s.floorType) used.add(s.floorType);
+  const kinds: Record<string, [string, number, number, number, number]> = {};
+  for (const t of [...used].sort((a, b) => a - b)) {
+    const name = gridTextureName(t);
+    if (!existsSync(join(OUT, name))) continue;
+    const bgf = await parseBgf(new Uint8Array(readFileSync(join(OUT, name))));
+    if (!bgf.bitmaps[0]) continue;
+    const [r, g, b] = averageColor(bgf.bitmaps[0].pixels, palette);
+    const kind = classifyFloor(r, g, b);
+    if (kind) kinds[t] = [kind, r, g, b, isCobbled(bgf.bitmaps[0].pixels, palette) ? 1 : 0];
+  }
+  const json = Buffer.from(JSON.stringify(kinds));
+  writeFileSync(join(OUT, "floortextures.json"), json);
+  files["floortextures.json"] = { size: json.length, hash: createHash("sha1").update(json).digest("hex").slice(0, 16), mtime: 0 };
+  console.log(`floortextures.json: ${Object.keys(kinds).length} of ${used.size} floor textures`);
+}
+
+// Where townsfolk can walk in the rooms that have them (ours: navGrid.ts), built once here for
+// every player instead of in each client on entering
+mkdirSync(join(OUT, "nav"), { recursive: true });
+let navRooms = 0;
+for (const roo of Object.keys(AMBIENT_ROOMS)) {
+  if (!existsSync(join(OUT, roo))) continue;
+  const room = parseRoo(new Uint8Array(readFileSync(join(OUT, roo))));
+  const nav = encodeNavGrid(buildNavGrid(room, new Set(waterTextures)), room);
+  const name = `nav/${basename(roo, ".roo")}.nav`;
+  writeFileSync(join(OUT, name), nav);
+  files[name] = { size: nav.length, hash: createHash("sha1").update(nav).digest("hex").slice(0, 16), mtime: 0 };
+  navRooms++;
+}
+console.log(`nav/*.nav: ${navRooms} rooms`);
 
 writeFileSync(
   manifestPath,

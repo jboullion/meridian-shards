@@ -10,21 +10,47 @@
 //   PgUp/PgDn/Home: look up, down, straight; End: turn around;  Enter: chat
 
 import * as THREE from "three";
-import { FINENESS, ceilingHeightAt, floorHeightAt, gridTextureName, leafAt, skyboxForBackground, type Bgf, type Room } from "@shards/formats";
+import { FINENESS, SF, ceilingHeightAt, floorHeightAt, gridTextureName, leafAt, skyboxForBackground, type Bgf, type Room } from "@shards/formats";
 import {
-  DRAWFX, OF, ObjectsView, PARTICLE_STEPS_PER_SECOND, PostFx, RoomView, SkyOverlaysView, TrailBlur, WeatherParticles, XlatTable, type ParticleRoom, disposeSkybox, objectBrightness, paletteTexture, postFxActive, type LightSource,
+  DRAWFX, Flyers, GroundCover, Lightning, Nature, OF, ObjectsView, Puddles, type PuddleRoom, type GroundKind, type GroundRoom, type NatureRoom, type RockArt, PARTICLE_STEPS_PER_SECOND, PostFx, RoomView, SkyOverlaysView, TrailBlur, WeatherParticles, XlatTable, type ParticleRoom, disposeSkybox, objectBrightness, paletteTexture, postFxActive, type LightSource,
   type PostFxOptions,
   type NameLabel, type ViewObject,
 } from "@shards/render";
-import { LiveRoom, PlayerMover, REMOTE_VIEW, animStep, type DamageDealt, type RemoteView, type GameSession, type WorldObject } from "@shards/world";
+import {
+  AMBIENT_ROOMS, AMBIENT_SCALE, AmbientLife, boltArt, LiveRoom, MOVEON, PlayerMover, REMOTE_VIEW, animStep, isAmbientId, localRes, localResName, townsfolkArt,
+  Critters, critterArt, decodeNavGrid, habitatOf, hourFromSun, isImpressiveBody, type AmbientExits, type DamageDealt, type NavGrid, type NavPoint, type RemoteView, type GameSession, type WorldObject,
+} from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import { RoomCache } from "../render/roomCache.ts";
 import { loadSkybox, type LoadedRoom } from "../render/roomLoader.ts";
 import { ORIGINAL_FOV } from "../viewer/roomScene.ts";
+import { AmbientSounds } from "./ambientSounds.ts";
 import type { GameAudio } from "./audio.ts";
 import { ScreenOverlays } from "./screenOverlays.ts";
 import { HALO_COLOR, actionsFor, getSettings, isHeld, mouseCode, onSettings, touchUi, type Action, type Mods, type Settings } from "./settings.ts";
 
+/** Ours: a click kills a critter this far off, and an attack one this close (and ahead), fine units */
+const SQUISH_RANGE = 10 * FINENESS;
+const CRITTER_REACH = 1.6 * FINENESS;
+const CRITTER_DEATH_VOLUME = 0.7;
+/** Ours: puddles spread over this long in the rain, and dry up over this long after */
+const WET_UP_MS = 45000;
+const WET_DOWN_MS = 150000;
+/** Ours: terrain where people live, kept clear of rocks (Ground Detail) */
+const SETTLED = new Set(["CITY", "CASTLE", "GUILDHALL", "RESIDENCE", "TEMPLE", "SHOP"]);
+/** Ours: townsfolk this near make the chatter, and critters this near squeak */
+const HEARING = 14 * FINENESS;
+const CRITTER_VOICE_RANGE = 8 * FINENESS;
+/** Ours: how much darker the sky is in the rain */
+const OVERCAST = 0.4;
+/** Ours: how bright lightning makes the whole view, at most */
+const LIGHTNING_FLASH = 0.16;
+/** Ours: townsfolk within this many fine units of a new spell run from it */
+const SCATTER_RADIUS = 6 * FINENESS;
+/** Ours: townsfolk's words show within this many squares of the eye */
+const SPEECH_RANGE = 12;
+/** Ours: how many rooms' nav grids (ambient life) are kept */
+const NAV_GRIDS_KEPT = 8;
 /** Eye height above the floor (clientd3d/game.c player.height = 3/4 square). */
 const EYE_HEIGHT = 768;
 /** Mouse sensitivity in client angle units per pixel (4096 per circle). */
@@ -168,6 +194,50 @@ export class GameScene {
   private roomRes = 0;
   /** The current room as the cache loaded it (shared; never changed) */
   private loaded: LoadedRoom | null = null;
+  /** The current room's file name, lower case */
+  private roomFile = "";
+  /** Ours: the room's townsfolk or inn patrons (Ambient Life), and the room they're in */
+  private ambient: AmbientLife | null = null;
+  private ambientRoom = "";
+  /** roomexits.json, once loaded (empty without one) */
+  private ambientExits: Record<string, AmbientExits> | null = null;
+  /**
+   * Nav grids by room file, kept for the session so each room's is read or built once: the asset
+   * build's (nav/*.nav), else built here ("build" until the ambient life has made it)
+   */
+  private navGrids = new Map<string, NavGrid | "loading" | "build">();
+  /** Ours: the room's critters (rats, spiders and the like), and the room they're in */
+  private critters: Critters | null = null;
+  private critterRoom = "";
+  /** Ours: birds overhead and bats in caves (Birds and Bats), and the room they're for */
+  private flyers: Flyers | null = null;
+  private flyersRoom = "";
+  /** Ours: butterflies, fireflies, leaves and fish (Nature), and the room they're for */
+  private nature: Nature | null = null;
+  private natureRoom = "";
+  /** Whether the room has any open sky (a sector with no ceiling texture) */
+  private roomHasSky = false;
+  /** Ours: grass, flowers, pebbles and stones on the ground (Ground Detail), and the room they're for */
+  private groundCover: GroundCover | null = null;
+  /** Ours: puddles in the rain, how far they've spread (up while it rains, down after), and their room */
+  private puddles: Puddles | null = null;
+  private wetness = 0;
+  private puddleRoom = "";
+  /** Ours: lightning far off in the rain, and the view's flash with it */
+  private lightning: Lightning | null = null;
+  private flashEl: HTMLDivElement | null = null;
+  /** 0..1: how overcast the sky is (darkening in the rain) */
+  private overcast = 0;
+  /** Ours: the sounds of ambient life and the weather (Ambient Sounds), and where we were last frame */
+  private ambientSounds: AmbientSounds | null = null;
+  private soundAt: { x: number; y: number } | null = null;
+  private groundRoom = "";
+  /** floortextures.json: what each floor texture is, and its colour */
+  private floorTextures = new Map<number, { kind: "grass" | "earth" | "rocky"; color: [number, number, number]; cobbled: boolean }>();
+  /** watertextures.json: floor textures that are water even on a dry floor (Raza's pool) */
+  private waterTextures: Set<number> = new Set();
+  /** roomterrain.json, once loaded (empty without one) */
+  private roomTerrain: Record<string, string[]> | null = null;
   /** The current room with the server's changes (roomanim.c); `room` is its room */
   private live: LiveRoom | null = null;
   /** How many of the world's room changes `live` has applied */
@@ -236,6 +306,11 @@ export class GameScene {
   private readonly unsubscribe: () => void;
   private readonly resizeObserver: ResizeObserver;
   private labelPool: HTMLDivElement[] = [];
+  /** Ours: what ambient townsfolk say, over their heads */
+  private speechPool: HTMLDivElement[] = [];
+  /** Projectiles already seen (ambient townsfolk run from new ones), and whether the view was shaking */
+  private seenShots = new Set<number>();
+  private wasShaking = false;
   private damageFloats: DamageFloat[] = [];
   private readonly raycaster = new THREE.Raycaster();
   /** From our eyes to the outside views' camera, for the wall in between */
@@ -402,6 +477,22 @@ export class GameScene {
     this.xlats = new XlatTable(pal.rgb, lightPal);
     this.objects = new ObjectsView(this.palette, this.xlats, (id) => this.bgf(id), (id) => this.session.resource(id));
     this.scene.add(this.objects.group);
+    void this.assets.floorTextures().then(
+      (f) => void (this.floorTextures = f),
+      () => {},
+    );
+    void this.assets.waterTextures().then(
+      (w) => void (this.waterTextures = w),
+      () => {},
+    );
+    void this.assets.roomTerrain().then(
+      (t) => void (this.roomTerrain = t),
+      () => void (this.roomTerrain = {}),
+    );
+    void this.assets.roomExits().then(
+      (e) => void (this.ambientExits = e),
+      () => void (this.ambientExits = {}),
+    );
     this.skyOverlays = new SkyOverlaysView(pal.rgb);
     this.scene.add(this.skyOverlays.group);
     this.applyViewSettings();
@@ -413,6 +504,20 @@ export class GameScene {
     this.weather = new WeatherParticles(await this.snowTexture());
     this.weather.onFireworkSound = (x, y) => this.audio.playAt("firework.ogg", x, y);
     this.scene.add(this.weather.group);
+    this.flyers = new Flyers();
+    this.scene.add(this.flyers.group);
+    this.nature = new Nature();
+    this.scene.add(this.nature.group);
+    this.groundCover = new GroundCover();
+    this.scene.add(this.groundCover.group);
+    this.puddles = new Puddles();
+    this.scene.add(this.puddles.group);
+    this.lightning = new Lightning();
+    this.scene.add(this.lightning.group);
+    this.flashEl = document.createElement("div");
+    this.flashEl.className = "lightning-flash";
+    this.labelsEl.parentElement?.insertBefore(this.flashEl, this.labelsEl);
+    void this.loadRocks(pal.rgb);
     await this.syncRoom();
     const loop = (t: number) => {
       this.frame(Math.min(250, t - this.last), t);
@@ -433,7 +538,8 @@ export class GameScene {
     let p = this.bgfLoads.get(resource);
     if (!p) {
       this.bgfs.set(resource, undefined);
-      const name = this.session.resource(resource);
+      // Ambient life's art is named by file (ambientIds.ts), the rest by the server's resources
+      const name = localResName(resource) ?? this.session.resource(resource);
       if (!name) {
         this.bgfs.set(resource, null);
         p = Promise.resolve();
@@ -488,6 +594,7 @@ export class GameScene {
     if (this.disposed || this.roomRes !== p.roomRes) return;
     // The cache owns room views: neighbours stay loaded for when you walk back
     this.loaded = loaded;
+    this.roomFile = name.toLowerCase();
     this.resetLiveRoom();
     const self = this.session.world.self;
     if (self) {
@@ -660,6 +767,8 @@ export class GameScene {
     self.y = this.mover.y;
     self.angle = this.mover.angle;
     world.tick(dt);
+    this.updateAmbient(dt);
+    this.updateCritters(dt);
     this.audio.setListener(this.mover.x, this.mover.y, this.mover.angle);
 
     // --- camera: our eyes, or the object's we see through (draw.c DrawRoom) ---
@@ -690,7 +799,8 @@ export class GameScene {
     const selfLook = walking ? self.moving : self.normal;
     if (self.look !== selfLook) self.look = selfLook;
 
-    this.animate(world.objects.values(), dt);
+    const ambient = [...(this.ambient?.objects() ?? []), ...(this.critters?.objects() ?? [])];
+    this.animate([...world.objects.values(), ...ambient], dt);
     const lighting = world.lighting;
     // Enhanced Lighting (the Bind Editor's Options), or the original's
     const enhanced = this.settings.enhanced;
@@ -707,7 +817,7 @@ export class GameScene {
       flicker: enhanced,
       timeMs: now,
     };
-    const drawn = [...world.objects.values(), ...this.projectileViews()];
+    const drawn = [...world.objects.values(), ...ambient, ...this.projectileViews()];
     // Dynamic Lighting off: no light maps from torches and lamps, nor the targeting light
     this.lights = this.settings.dynamicLighting ? this.objects.lights(drawn, ctx) : [];
     const targeted = this.target !== null && this.target !== self.id ? world.objects.get(this.target) : undefined;
@@ -741,16 +851,497 @@ export class GameScene {
     this.updateHover();
     this.objects.setTarget(this.target);
     this.updateWeather(dt, room);
+    this.updateFlyers(dt, room);
+    this.updateNature(dt, room);
+    this.updateGroundCover(dt, room);
+    this.updateStorm(dt, room);
+    this.updateAmbientSounds(dt);
     // Enhanced's glow and vignette draw through PostFx; without them, straight to the screen
     const post: PostFxOptions = { bloom: enhanced ? GLOW_STRENGTH : 0, vignette: enhanced ? VIGNETTE : 0 };
     if (postFxActive(post))
-      (this.postFx ??= new PostFx()).render(this.renderer, this.scene, this.camera, post, [this.sky, this.skyOverlays?.group, this.weather?.group, this.objects.shadows]);
+      (this.postFx ??= new PostFx()).render(this.renderer, this.scene, this.camera, post, [this.sky, this.skyOverlays?.group, this.weather?.group, this.flyers?.group, this.objects.shadows, this.puddles?.group]);
     else this.renderer.render(this.scene, this.camera);
     if (world.effects.blur > 0 || world.effects.waver > 0) (this.blur ??= new TrailBlur()).apply(this.renderer);
     this.drawLabels(labels);
+    this.drawSpeech();
     this.drawDamage();
     this.drawOverlays(room, lighting);
     this.countFrame(now);
+  }
+
+  /**
+   * Ours (Ambient Life): the townsfolk or inn patrons of the room, if it has any. A new crowd for
+   * each room; they keep clear of whatever blocks (players, monsters, NPCs) and wait for us.
+   */
+  private updateAmbient(dt: number): void {
+    const level = this.settings.ambientLife;
+    const spec = AMBIENT_ROOMS[this.roomFile];
+    if (!spec || level === "off" || !this.ambientExits || !this.loaded) {
+      this.ambient = null;
+      this.ambientRoom = "";
+      return;
+    }
+    const file = this.roomFile;
+    if (this.ambientRoom !== file || !this.ambient) {
+      this.ambient = null;
+      const grid = this.navGrids.get(file);
+      if (grid === undefined) return this.loadNavGrid(file, this.loaded.room);
+      if (grid === "loading") return;
+      this.ambientRoom = file;
+      this.ambient = new AmbientLife(this.loaded.room, spec, this.ambientExits[file], undefined, grid === "build" ? undefined : grid, this.waterTextures);
+      for (const f of [...townsfolkArt(), ...boltArt()]) void this.loadBgf(localRes(f));
+    }
+    const world = this.session.world;
+    const self = world.self;
+    const fx = world.effects;
+    let others = 0;
+    for (const o of world.objects.values()) if (o.info.flags & OF.PLAYER && o.id !== self?.id) others++;
+    this.ambient.update(Math.min(dt, 100), {
+      player: self ? { x: self.x, y: self.y } : null,
+      facing: this.mover.angle,
+      scale: AMBIENT_SCALE[level],
+      obstacles: this.blockers(),
+      hour: this.gameHour(),
+      weather: fx.raining ? "rain" : fx.snowing ? "snow" : null,
+      impressive: !!self && isImpressiveBody(this.session.resource(self.info.iconRes) ?? ""),
+      others,
+    });
+    this.scatterAmbient();
+    // Built here: keep it for the next visit
+    if (this.navGrids.get(file) === "build" && this.ambient.nav) this.keepNavGrid(file, this.ambient.nav);
+  }
+
+  /**
+   * Townsfolk run from big spells: a new projectile where it's cast and where it lands, and the
+   * ground shaking (an earthquake) around us
+   */
+  private scatterAmbient(): void {
+    const ambient = this.ambient;
+    const world = this.session.world;
+    if (!ambient) return;
+    const shots = new Set<number>();
+    for (const p of world.projectiles.values()) {
+      shots.add(p.id);
+      if (this.seenShots.has(p.id)) continue;
+      ambient.scatter({ x: p.sourceX, y: p.sourceY }, SCATTER_RADIUS);
+      ambient.scatter({ x: p.destX, y: p.destY }, SCATTER_RADIUS);
+    }
+    this.seenShots = shots;
+    const shaking = world.effects.shake > 0;
+    if (shaking && !this.wasShaking && world.self) ambient.scatter(world.self, SCATTER_RADIUS * 1.5);
+    this.wasShaking = shaking;
+  }
+
+  /** Ours: lines the townsfolk say, over their heads (never in the chat), hidden by walls as names are */
+  private drawSpeech(): void {
+    const said = this.ambient?.speech() ?? [];
+    const w = this.canvas.clientWidth,
+      h = this.canvas.clientHeight;
+    const eye = this.camera.position;
+    const v = new THREE.Vector3();
+    const dir = new THREE.Vector3();
+    let n = 0;
+    for (const s of said) {
+      const top = this.objects?.topOf(s.obj.id);
+      if (!top) continue;
+      v.copy(top).project(this.camera);
+      if (v.z > 1 || v.z < -1) continue;
+      dir.subVectors(top, eye);
+      const d = dir.length();
+      if (d > SPEECH_RANGE) continue;
+      if (this.roomView) {
+        this.labelRay.set(eye, dir.divideScalar(d));
+        this.labelRay.far = d - LABEL_OCCLUSION_SLACK;
+        if (this.labelRay.far > 0 && this.roomView.occludes(this.labelRay)) continue;
+      }
+      const el = this.speechPool[n] ?? this.labelsEl.appendChild(document.createElement("div"));
+      if (!this.speechPool[n]) el.className = "speech-bubble";
+      this.speechPool[n++] = el;
+      if (el.textContent !== s.text) el.textContent = s.text;
+      el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -100%) translateY(-10px)`;
+      el.style.display = "";
+    }
+    for (let i = n; i < this.speechPool.length; i++) this.speechPool[i].style.display = "none";
+  }
+
+  /** The asset build's nav grid for a room, or "build" when there's none (or it's for another version of the room) */
+  private loadNavGrid(file: string, room: Room): void {
+    this.navGrids.set(file, "loading");
+    const done = (bytes: Uint8Array | null) => {
+      const grid = bytes ? decodeNavGrid(bytes, room) : null;
+      this.keepNavGrid(file, grid ?? "build");
+    };
+    this.assets.navGrid(file).then(done, () => done(null));
+  }
+
+  /** At most a few rooms' grids are kept (a city's is a few hundred KB), the oldest dropped */
+  private keepNavGrid(file: string, grid: NavGrid | "build"): void {
+    this.navGrids.delete(file);
+    this.navGrids.set(file, grid);
+    while (this.navGrids.size > NAV_GRIDS_KEPT) this.navGrids.delete(this.navGrids.keys().next().value!);
+  }
+
+  /**
+   * Ours: the room's critters, by its terrain (roomterrain.json): a new lot for each room, under
+   * the Ambient Life setting and the Critters option
+   */
+  private updateCritters(dt: number): void {
+    const level = this.settings.ambientLife;
+    const habitat = this.roomTerrain && this.loaded ? habitatOf(this.roomFile, this.roomTerrain[this.roomFile]) : null;
+    if (!habitat || !this.loaded || level === "off" || !this.settings.critters) {
+      this.critters = null;
+      this.critterRoom = "";
+      return;
+    }
+    if (this.critterRoom !== this.roomFile || !this.critters) {
+      this.critterRoom = this.roomFile;
+      this.critters = new Critters(this.loaded.room, habitat, undefined, this.waterTextures);
+      for (const f of critterArt(habitat)) void this.loadBgf(localRes(f));
+    }
+    const self = this.session.world.self;
+    this.critters.update(Math.min(dt, 100), {
+      player: self ? { x: self.x, y: self.y } : null, facing: this.mover.angle, scale: AMBIENT_SCALE[level], hour: this.gameHour(),
+    });
+  }
+
+  /** A live critter under the cursor, not behind a wall and not far off, or null */
+  private critterUnderCursor(): number | null {
+    const critters = this.critters;
+    const self = this.session.world.self;
+    if (!critters || !self || !this.objects || !this.cursorRay()) return null;
+    for (const h of this.objects.pickAll(this.raycaster, self.id)) {
+      if (!critters.has(h.id)) continue;
+      const o = critters.objects().find((c) => c.id === h.id)!;
+      if (Math.hypot(o.x - self.x, o.y - self.y) > SQUISH_RANGE) continue;
+      if (this.roomView) {
+        this.raycaster.far = h.distance - LABEL_OCCLUSION_SLACK;
+        const hidden = this.raycaster.far > 0 && this.roomView.occludes(this.raycaster);
+        this.raycaster.far = 40;
+        if (hidden) continue;
+      }
+      return h.id;
+    }
+    return null;
+  }
+
+  /** A critter killed: its death sound where it was (it leaves its corpse a while) */
+  private squish(id: number): void {
+    const dead = this.critters?.squish(id);
+    // Quieter than a real monster's death: it's only a critter
+    if (dead) this.audio.playAt(dead.sound, dead.x, dead.y, CRITTER_DEATH_VOLUME);
+  }
+
+  /** Attacking with nothing real to hit: the nearest critter in reach, ahead of us */
+  private squishAhead(): void {
+    const self = this.session.world.self;
+    const c = self ? this.critters?.nearest({ x: self.x, y: self.y }, CRITTER_REACH) : null;
+    if (!c || !self) return;
+    const toward = Math.round((Math.atan2(c.y - self.y, c.x - self.x) * 4096) / (2 * Math.PI));
+    const off = Math.abs(((toward - this.mover.angle + 6144) % 4096) - 2048);
+    if (off < 700) this.squish(c.id);
+  }
+
+  /** Dev tools: the game hour ambient life goes by instead of the sun's (null: the sun's) */
+  ambientHour: number | null = null;
+
+  /** The game hour, from where the server puts the sun (hourFromSun), or null before it's sent */
+  private gameHour(): number | null {
+    if (this.ambientHour !== null) return this.ambientHour;
+    for (const b of this.session.world.bgOverlays.values()) if (this.session.resource(b.info.iconRes)?.toLowerCase() === "sun.bgf") return hourFromSun(b.info.angle);
+    return null;
+  }
+
+  /** Room objects that block movement (move.c MoveObjectAllowed's MOVEON_NO), but us */
+  private *blockers(): Generator<NavPoint> {
+    const world = this.session.world;
+    for (const o of world.objects.values()) if (o.id !== world.self?.id && o.info.moveOnType === MOVEON.NO) yield o;
+  }
+
+  /** Ours: the ambient sounds (dev tools: window.shards.gameScene.ambientSounds.audition("thunder")) */
+  get ambientSoundBoard(): AmbientSounds {
+    return (this.ambientSounds ??= new AmbientSounds(this.audio));
+  }
+
+  /** The room's ambient life (dev tools: window.shards.gameScene.ambientLife) */
+  get ambientLife(): AmbientLife | null {
+    return this.ambient;
+  }
+
+  /**
+   * Ours (Birds and Bats, under Ambient Life): flocks crossing the sky by day where the room has
+   * any, a few bats under the sky at night, and bats in caves, mines and lairs at any hour
+   */
+  private updateFlyers(dt: number, room: Room): void {
+    const flyers = this.flyers;
+    const self = this.session.world.self;
+    if (!flyers || !self) return;
+    const level = this.settings.ambientLife;
+    flyers.group.visible = !this.session.world.effects.blind;
+    if (this.flyersRoom !== this.roomFile) {
+      this.flyersRoom = this.roomFile;
+      this.roomHasSky = room.sectors.some((s) => s.ceilingType === 0);
+      flyers.clear();
+    }
+    const scale = this.settings.flyers ? AMBIENT_SCALE[level] : 0;
+    const cave = habitatOf(this.roomFile, this.roomTerrain?.[this.roomFile])?.name === "cave";
+    const hour = this.gameHour();
+    const night = hour !== null && (hour >= 20 || hour < 5);
+    const sky = this.roomHasSky && !cave;
+    const opts = {
+      flocks: sky && !night ? Math.round(2 * scale) : 0,
+      // Not over the arena: its crowd is enough
+      bats: cave ? Math.round(9 * scale) : sky && night && AMBIENT_ROOMS[this.roomFile]?.kind !== "arena" ? Math.round(3 * scale) : 0,
+      cave,
+    };
+    const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    flyers.setProjection(buffer.y, this.camera.fov, this.camera.aspect);
+    // The bats take the light where we stand
+    flyers.setLight(this.lightHere(room));
+    const floor = this.mover.floorBase(this.mover.x, this.mover.y) ?? this.mover.z;
+    flyers.update(dt, { x: this.mover.x, y: this.mover.y, z: floor }, this.mover.angle, this.particleRoom(room), opts);
+  }
+
+  /**
+   * Ours (Nature, under Ambient Life), by the room's terrain and the hour: butterflies over green
+   * country by day (not in the rain), fireflies there and by water at night, leaves falling in
+   * forests, and fish leaping wherever there's open water
+   */
+  private updateNature(dt: number, room: Room): void {
+    const nature = this.nature;
+    const self = this.session.world.self;
+    if (!nature || !self) return;
+    const world = this.session.world;
+    nature.group.visible = !world.effects.blind;
+    const at = this.natureRoom === this.roomFile ? this.natureAt! : (this.natureAt = this.natureQueries(room));
+    if (this.natureRoom !== this.roomFile) {
+      this.natureRoom = this.roomFile;
+      nature.setRoom(at, room.thingsBox);
+    }
+    const scale = this.settings.nature ? AMBIENT_SCALE[this.settings.ambientLife] : 0;
+    const t = this.roomTerrain?.[this.roomFile] ?? [];
+    const has = (...names: string[]) => names.some((n) => t.includes(n));
+    const green = has("FOREST", "FIELDS", "HILLS", "JUNGLE");
+    const hour = this.gameHour();
+    const day = hour === null || (hour >= 7 && hour < 19);
+    const night = hour !== null && (hour >= 20 || hour < 5);
+    const opts = {
+      butterflies: green && day && !world.effects.raining ? Math.round(8 * scale) : 0,
+      fireflies: night && (green || has("SWAMP", "LAKE", "RIVER")) ? Math.round(25 * scale) : 0,
+      leaves: has("FOREST", "JUNGLE") ? Math.round(12 * scale) : 0,
+      fish: scale > 0 && !has("SEWERS", "CAVES", "MINES"),
+    };
+    const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    nature.setProjection(buffer.y, this.camera.fov);
+    nature.setLight(this.lightHere(room));
+    const floor = this.mover.floorBase(this.mover.x, this.mover.y) ?? this.mover.z;
+    nature.update(dt, { x: this.mover.x, y: this.mover.y, z: floor }, this.mover.angle, at, opts);
+  }
+
+  private natureAt: NatureRoom | null = null;
+
+  /**
+   * Ours (Ground Detail, its own option): grass and flowers on grassy floors, dry tufts and
+   * pebbles on earth, pebbles and stones on rock, under open sky (and in caves), by the floor
+   * texture (floortextures.json)
+   */
+  private updateGroundCover(dt: number, room: Room): void {
+    const cover = this.groundCover;
+    const self = this.session.world.self;
+    if (!cover || !self) return;
+    cover.group.visible = !this.session.world.effects.blind;
+    if (!this.settings.groundDetail || !this.floorTextures.size) {
+      cover.clear();
+      return;
+    }
+    if (this.groundRoom !== this.roomFile) {
+      this.groundRoom = this.roomFile;
+      cover.setRoom(this.roomFile, this.groundQueries(room));
+    }
+    const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    cover.setProjection(buffer.y, this.camera.fov);
+    cover.update(dt, { x: this.mover.x, y: this.mover.y });
+  }
+
+  /**
+   * Ground Detail's rocks: the game's rock ornaments (ornobj.kod, boulder.kod, mollusk.kod), each
+   * for the ground it suits
+   */
+  private async loadRocks(palette: Uint8Array): Promise<void> {
+    const rocks: [string, GroundKind[]][] = [
+      ["rocksm.bgf", ["grass", "earth"]],
+      ["rockla.bgf", ["grass", "rocky"]],
+      ["boulder.bgf", ["grass"]],
+      ["rockb.bgf", ["earth", "rocky"]],
+      ["molrock.bgf", ["earth"]],
+      ["rockc.bgf", ["earth", "rocky"]],
+      ["rock.bgf", ["rocky"]],
+      ["rock2.bgf", ["rocky"]],
+    ];
+    const art: RockArt[] = [];
+    for (const [name, kinds] of rocks) {
+      if (!this.assets.has(name)) continue;
+      const bgf = await this.assets.bgf(name).catch(() => null);
+      const bmp = bgf?.bitmaps[bgf.groups[0]?.[0] ?? 0];
+      if (bgf && bmp) art.push({ pixels: bmp.pixels, width: bmp.width, height: bmp.height, shrink: bgf.shrink, kinds });
+    }
+    if (!this.disposed) this.groundCover?.setRockArt(art, palette);
+  }
+
+  /**
+   * Ours, with the weather (the Weather option): puddles spread on open ground as the rain goes
+   * on and dry up after it; lightning strikes far off while it rains under open sky, lighting the
+   * sky and the view
+   */
+  private updateStorm(dt: number, room: Room): void {
+    const fx = this.session.world.effects;
+    const on = this.settings.weather && !fx.blind;
+    const raining = on && fx.raining;
+    this.wetness = Math.max(0, Math.min(1, this.wetness + (raining ? dt / WET_UP_MS : -dt / WET_DOWN_MS)));
+    const puddles = this.puddles;
+    if (puddles) {
+      if (this.puddleRoom !== this.roomFile) {
+        this.puddleRoom = this.roomFile;
+        puddles.setRoom(this.roomFile, this.puddleQueries(room));
+      }
+      puddles.update(dt, { x: this.mover.x, y: this.mover.y }, on ? this.wetness : 0, raining);
+    }
+    const bolt = this.lightning;
+    if (!bolt) return;
+    bolt.update(dt, raining && this.roomHasSky, this.camera.position);
+    const f = bolt.flash;
+    // A storm's sky is darker, but for the lightning
+    this.overcast += ((raining ? 1 : 0) - this.overcast) * Math.min(1, dt / 8000);
+    const sky = 1 - OVERCAST * this.overcast + 1.6 * f;
+    this.sky?.traverse((o) => {
+      if (o instanceof THREE.Mesh) (o.material as THREE.MeshBasicMaterial).color.setScalar(sky);
+    });
+    if (this.flashEl) this.flashEl.style.opacity = f ? (f * LIGHTNING_FLASH).toFixed(3) : "0";
+  }
+
+  /**
+   * Ours (Ambient Sounds): what the ambient life and the weather did this frame, for
+   * ambientSounds.ts to play. The events are taken every frame whether heard or not.
+   */
+  private updateAmbientSounds(dt: number): void {
+    const events = this.ambient?.takeEvents() ?? [];
+    const strike = this.lightning?.takeStrike() ?? null;
+    const splashes = this.nature?.takeSplashes() ?? [];
+    const sounds = (this.ambientSounds ??= new AmbientSounds(this.audio));
+    const me = { x: this.mover.x, y: this.mover.y, z: this.mover.z + EYE_HEIGHT };
+    const moved = this.soundAt ? Math.hypot(me.x - this.soundAt.x, me.y - this.soundAt.y) : 0;
+    this.soundAt = { x: me.x, y: me.y };
+    const near = HEARING * HEARING;
+    const people = (this.ambient?.objects() ?? []).filter((o) => (o.x - me.x) ** 2 + (o.y - me.y) ** 2 < near).length;
+    const life = this.settings.ambientLife !== "off";
+    sounds.update({
+      dt,
+      listener: { x: me.x, y: me.y, angle: this.mover.angle },
+      room: this.roomFile,
+      kind: life ? (AMBIENT_ROOMS[this.roomFile]?.kind ?? null) : null,
+      indoors: this.underRoof(me.x, me.y),
+      people,
+      raining: this.session.world.effects.raining,
+      events,
+      strike,
+      splashes,
+      flock: this.flyers?.nearestFlock(me) ?? null,
+      bat: this.flyers?.nearestBat(me) ?? null,
+      critterVoice: () => this.critters?.voice(me, CRITTER_VOICE_RANGE) ?? null,
+      wetUnderfoot: this.puddles?.wetAt(me.x, me.y) ?? false,
+      speed: dt > 0 && moved < FINENESS ? moved / dt : 0,
+    });
+  }
+
+  /** Whether there's a ceiling over a point (not the sky), so sounds there are indoors */
+  private underRoof(x: number, y: number): boolean {
+    const room = this.room;
+    const leaf = room ? leafAt(room, x, y) : null;
+    return !!room && !!leaf?.sector && room.sectors[leaf.sector - 1].ceilingType !== 0;
+  }
+
+  /** Open ground under the sky, as Puddles asks about it: paving, earth or grass (floortextures.json) */
+  private puddleQueries(room: Room): PuddleRoom {
+    const ground = this.groundQueries(room);
+    return {
+      spot: (x, y) => {
+        const leaf = leafAt(room, x, y);
+        const s = leaf?.sector ? room.sectors[leaf.sector - 1] : null;
+        if (!s || s.ceilingType !== 0 || s.flags & SF.DEPTH_MASK || this.waterTextures.has(s.floorType)) return null;
+        const kind = this.floorTextures.get(s.floorType)?.kind;
+        return { floor: floorHeightAt(s, x, y), ground: kind === "grass" ? "grass" : kind === "earth" ? "earth" : "paved" };
+      },
+      light: ground.light,
+    };
+  }
+
+  /** The ground as GroundCover asks about it */
+  private groundQueries(room: Room): GroundRoom {
+    const t = this.roomTerrain?.[this.roomFile] ?? [];
+    const cave = t.some((n) => n === "CAVES" || n === "MINES" || n === "LAIR");
+    // No rocks in towns, castles and the like: by the room's terrain, or as ambient life knows it
+    // (the castles' rooms mostly have no terrain)
+    const town = t.some((n) => SETTLED.has(n)) || AMBIENT_ROOMS[this.roomFile] !== undefined;
+    return {
+      spot: (x, y) => {
+        const leaf = leafAt(room, x, y);
+        const s = leaf?.sector ? room.sectors[leaf.sector - 1] : null;
+        if (!s || s.flags & SF.DEPTH_MASK || this.waterTextures.has(s.floorType)) return null;
+        // Under the sky, or anywhere in a cave
+        if (s.ceilingType !== 0 && !cave) return null;
+        const f = this.floorTextures.get(s.floorType);
+        // Cobbles (a road) get nothing strewn on them, but in a cave
+        return f ? { floor: floorHeightAt(s, x, y), kind: f.kind, color: f.color, town, bare: f.cobbled && !cave } : null;
+      },
+      light: (x, y, z) => {
+        const leaf = leafAt(room, x, y);
+        const sectorLight = leaf?.sector ? room.sectors[leaf.sector - 1].light : 0;
+        const lighting = this.session.world.lighting;
+        const [r, g, b] = objectBrightness({ x, y, z }, sectorLight, lighting.playerLight, lighting.ambient, []);
+        return [r, g, b];
+      },
+    };
+  }
+
+  /** The room as Nature asks about it: floors, roofs, and open water (a sector with depth, no ceiling) */
+  private natureQueries(room: Room): NatureRoom {
+    const p = this.particleRoom(room);
+    return {
+      floor: p.floor,
+      roofed: p.roofed,
+      water: (x, y) => {
+        const leaf = leafAt(room, x, y);
+        const s = leaf?.sector ? room.sectors[leaf.sector - 1] : null;
+        // A sector with depth, or water painted on a dry floor (Raza's pool)
+        return s && (s.flags & SF.DEPTH_MASK || this.waterTextures.has(s.floorType)) && s.ceilingType === 0 ? floorHeightAt(s, x, y) : null;
+      },
+    };
+  }
+
+  /** How light it is where we stand, 0..1 (D3DObjectLightingCalc, as for the hands) */
+  private lightHere(room: Room): number {
+    const lighting = this.session.world.lighting;
+    const leaf = leafAt(room, this.mover.x, this.mover.y);
+    const sectorLight = leaf?.sector ? room.sectors[leaf.sector - 1].light : 0;
+    const [r, g, b] = objectBrightness({ x: this.mover.x, y: this.mover.y, z: this.mover.z }, sectorLight, lighting.playerLight, lighting.ambient, this.lights);
+    return Math.max(r, g, b);
+  }
+
+  /** The room under particles and flyers (client3d.c GetPointFloor and friends) */
+  private particleRoom(room: Room): ParticleRoom {
+    return {
+      floor: (x, y) => {
+        const leaf = leafAt(room, x, y);
+        return leaf?.sector ? floorHeightAt(room.sectors[leaf.sector - 1], x, y) : -1;
+      },
+      ceiling: (x, y) => {
+        const leaf = leafAt(room, x, y);
+        return leaf?.sector ? ceilingHeightAt(room.sectors[leaf.sector - 1], x, y) : -1;
+      },
+      roofed: (x, y) => {
+        const leaf = leafAt(room, x, y);
+        return !!leaf?.sector && room.sectors[leaf.sector - 1].ceilingType !== 0;
+      },
+    };
   }
 
   /** d3drender.c PARTICLES: weather follows the viewer; nothing is drawn while blind */
@@ -765,20 +1356,7 @@ export class GameScene {
     this.particleTime = steps === 10 ? 0 : this.particleTime - (steps * 1000) / PARTICLE_STEPS_PER_SECOND;
     weather.setDensity(this.settings.particleDensity);
     weather.setFov(this.camera.fov);
-    const at: ParticleRoom = {
-      floor: (x, y) => {
-        const leaf = leafAt(room, x, y);
-        return leaf?.sector ? floorHeightAt(room.sectors[leaf.sector - 1], x, y) : -1;
-      },
-      ceiling: (x, y) => {
-        const leaf = leafAt(room, x, y);
-        return leaf?.sector ? ceilingHeightAt(room.sectors[leaf.sector - 1], x, y) : -1;
-      },
-      roofed: (x, y) => {
-        const leaf = leafAt(room, x, y);
-        return !!leaf?.sector && room.sectors[leaf.sector - 1].ceilingType !== 0;
-      },
-    };
+    const at = this.particleRoom(room);
     const weatherOn = this.settings.weather;
     weather.update(
       { x: this.mover.x, y: this.mover.y, z: this.mover.z + EYE_HEIGHT },
@@ -888,7 +1466,9 @@ export class GameScene {
       const leaf = room ? leafAt(room, x, y) : null;
       return room && leaf?.sector ? floorHeightAt(room.sectors[leaf.sector - 1], x, y) : -1;
     };
-    return [...this.session.world.projectiles.values()].map((p) => ({
+    // Ours: the arena mages' spells (ambient life), drawn the same way
+    const shots = this.ambient?.shots() ?? [];
+    return [...this.session.world.projectiles.values(), ...shots].map((p) => ({
       id: p.id, x: Math.round(p.x), y: Math.round(p.y), angle: p.angle, version: 0, fullBright: true,
       // project.c: from the source's height to the target's, or along the ground (PROJ_FLAG_FOLLOWGROUND)
       z: p.flags & PROJ_FLAG_FOLLOWGROUND
@@ -959,6 +1539,8 @@ export class GameScene {
     }
     const closest = this.visibleObjects(OF_ATTACKABLE, CLOSE_DISTANCE)[0];
     if (closest) this.session.attack(closest.id);
+    // Ours: nothing real to hit, but a critter at our feet
+    else this.squishAhead();
   }
 
   /**
@@ -1032,7 +1614,9 @@ export class GameScene {
     if (ndc) {
       this.raycaster.setFromCamera(ndc, this.camera);
       this.raycaster.far = 40;
-      id = this.objects.pick(this.raycaster, this.session.world.self?.id);
+      // Ambient life (ours) isn't there for the server: no cursor over it, and what's behind shows through
+      // (a critter shows the cross: a click kills it)
+      id = this.objects.pickAll(this.raycaster, this.session.world.self?.id).find((h) => !isAmbientId(h.id) || this.critters?.has(h.id))?.id ?? null;
     }
     // cursor.c GameWindowSetCursor: a cross over an object (with Shift over a container, the
     // "inside" one), the target cursor while choosing; nothing more (the halo is the target's alone)
@@ -1334,6 +1918,11 @@ export class GameScene {
    */
   private selectHovered(): void {
     const ids = this.objectsUnderCursor((o) => (o.info.flags & OF_ATTACKABLE) !== 0);
+    // Ours: with nothing real there, a critter under the cursor dies at once
+    if (!ids.length) {
+      const critter = this.critterUnderCursor();
+      if (critter !== null) return this.squish(critter);
+    }
     this.choose("Attack", ids, (id) => {
       this.setTarget(id);
       if (this.settings.attackOnTarget) this.attack();
@@ -1581,7 +2170,7 @@ export class GameScene {
       this.activateUnderCursor();
       return;
     }
-    if (this.objectsUnderCursor((o) => (o.info.flags & OF_ATTACKABLE) !== 0).length) return this.selectHovered();
+    if (this.objectsUnderCursor((o) => (o.info.flags & OF_ATTACKABLE) !== 0).length || this.critterUnderCursor() !== null) return this.selectHovered();
     const near = this.objectsUnderCursor((o) => (o.info.flags & (OF_GETTABLE | OF_CONTAINER)) !== 0 && this.distanceTo(o.id) <= CLOSE_DISTANCE);
     if (near.length) this.choose("Get", near, (id) => this.getOrOpen(id));
   }
@@ -1790,6 +2379,13 @@ export class GameScene {
     this.blur?.dispose();
     this.postFx?.dispose();
     this.weather?.dispose();
+    this.flyers?.dispose();
+    this.nature?.dispose();
+    this.groundCover?.dispose();
+    this.puddles?.dispose();
+    this.ambientSounds?.stop(0);
+    this.lightning?.dispose();
+    this.flashEl?.remove();
     if (this.sky) disposeSkybox(this.sky);
     this.renderer.dispose();
     this.labelsEl.replaceChildren();
