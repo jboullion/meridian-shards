@@ -3,12 +3,9 @@
 
 ## Current TODOS
 
-- add a second row of quick cast items
-
 - Set up blue host VPS, Cloudflare DNS and domain.
   - Move server to that domain
 
-- Look into a full 3D fork of shards where we render our 3D props from Unreal Meridian
 
 ## Releases
 

@@ -40,7 +40,7 @@ It would do for the static sites, not for the game files or the installers.
 6. **TLS:** Cloudflare's SSL mode is Full (strict). Caddy keeps getting its own Let's Encrypt certificate: let it issue the first one with the record DNS-only, then turn the proxy on. If renewals through the proxy fail, use a Cloudflare Origin Certificate in Caddy instead (15 years, trusted by Cloudflare only, which is all that connects).
 7. **Releases move to R2 later, in their own step:**
    - The desktop app's update feed becomes electron-builder's `generic` provider at `https://dl.<domain>/desktop/`.
-   - The Android update check (`host.ts`, the GitHub API today) reads a `latest.json` there.
+   - The Android update check and the browser's Download button (`host.ts` `LATEST_RELEASE`, the GitHub API today) read a `latest.json` there, as does the website's download page (`meridian-shards-website` `app/lib/releases.ts`).
    - CI uploads to R2 (its S3 API, with keys as GitHub secrets) instead of making a GitHub release.
    - Installed apps look at GitHub for updates, so one last GitHub release carries the switch.
 8. **During the move, both names work:** `SITE_ADDRESS` takes both hostnames (comma-separated), `GATEWAY_ORIGINS` lists `https://<domain>` next to the sslip.io one, and the apps' server lists (`apps/desktop/src/settings.ts`, `ShardsHost.java`) gain the domain before the old entry goes.

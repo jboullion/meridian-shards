@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" width="512" height="512">
+  <title>Meridian Shards: bouquet</title>
+  <defs>
+  <radialGradient id="glow">
+    <stop offset="0" stop-color="#fedf01" stop-opacity=".6"/>
+    <stop offset=".45" stop-color="#fedf01" stop-opacity=".2"/>
+    <stop offset="1" stop-color="#fedf01" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="stone" cx=".5" cy=".42" r=".7">
+    <stop offset="0" stop-color="#4a433b"/>
+    <stop offset="1" stop-color="#17130f"/>
+  </radialGradient>
+  <g id="rose">
+    <circle r="31" fill="#4f050b"/>
+    <g fill="#a3111c">
+      <circle cx="0" cy="-18" r="13"/><circle cx="17.1" cy="-5.6" r="13"/><circle cx="10.6" cy="14.6" r="13"/><circle cx="-10.6" cy="14.6" r="13"/><circle cx="-17.1" cy="-5.6" r="13"/>
+    </g>
+    <g fill="none" stroke="#5e060c" stroke-width="1.6">
+      <path d="M5.9,-8.1 L15.9,-21.8"/><path d="M9.5,3.1 L25.7,8.3"/><path d="M0,10 L0,27"/><path d="M-9.5,3.1 L-25.7,8.3"/><path d="M-5.9,-8.1 L-15.9,-21.8"/>
+    </g>
+    <circle r="18" fill="#c81d29"/>
+    <path d="M-1,-2 a3.5,3.5 0 1 1 4.5,4 a7.5,7.5 0 1 1 -11,-7 a11.5,11.5 0 1 1 16,13 a15,15 0 0 1 -19,-3" fill="none" stroke="#6e0811" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M-13,-18 a21,21 0 0 1 19,-4" fill="none" stroke="#f26a73" stroke-width="2.4" stroke-linecap="round" opacity=".9"/>
+  </g>
+  <g id="leaf">
+    <path d="M0,0 C14,-23 44,-23 64,0 C44,23 14,23 0,0Z" fill="#23662a" stroke="#0f3613" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M3,-1 C16,-19 42,-19 61,-1Z" fill="#3d9844"/>
+    <path d="M3,0 Q32,-2 61,0" fill="none" stroke="#14451a" stroke-width="1.8" stroke-linecap="round"/>
+  </g>
+  <g id="sparkle"><path d="M0,-14 L2.6,-2.6 L14,0 L2.6,2.6 L0,14 L-2.6,2.6 L-14,0 L-2.6,-2.6Z" fill="#fffbe0"/></g>
+  <g id="shard" stroke-linejoin="round">
+    <polygon points="8,-150 -40,-70 -8,-84" fill="#fff8b0"/>
+    <polygon points="8,-150 -8,-84 38,-96" fill="#fedf01"/>
+    <polygon points="-40,-70 -8,-84 -6,92 -32,98" fill="#ffe83a"/>
+    <polygon points="-8,-84 38,-96 30,102 -6,92" fill="#e0a80c"/>
+    <polygon points="-32,98 -6,92 -2,150" fill="#f2c10a"/>
+    <polygon points="-6,92 30,102 -2,150" fill="#9a650a"/>
+    <path d="M-27,-66 L-21,90" stroke="#fffbe0" stroke-width="4" stroke-linecap="round" opacity=".7"/>
+    <polygon points="8,-150 38,-96 30,102 -2,150 -32,98 -40,-70" fill="none" stroke="#4a3300" stroke-width="3.5"/>
+  </g>
+  </defs>
+  <rect x="12" y="12" width="488" height="488" rx="96" fill="url(#stone)" stroke="#685628" stroke-width="12"/>
+  <circle cx="256" cy="230" r="190" fill="url(#glow)"/>
+  <use href="#shard" transform="translate(256 222) rotate(0) scale(1.08)"/>
+  <use href="#leaf" transform="translate(198.9 407.9) rotate(-170) scale(1.5)"/>
+  <use href="#leaf" transform="translate(205.8 389) rotate(-150) scale(1.5)"/>
+  <use href="#leaf" transform="translate(220.3 372.3) rotate(-128) scale(1.5)"/>
+  <use href="#leaf" transform="translate(291.7 372.3) rotate(-52) scale(1.5)"/>
+  <use href="#leaf" transform="translate(306.2 389) rotate(-30) scale(1.5)"/>
+  <use href="#leaf" transform="translate(313.1 407.9) rotate(-10) scale(1.5)"/>
+  <use href="#rose" transform="translate(108 372) rotate(0) scale(1.08)"/>
+  <use href="#rose" transform="translate(404 372) rotate(0) scale(1.08)"/>
+  <use href="#rose" transform="translate(176 400) rotate(0) scale(1.32)"/>
+  <use href="#rose" transform="translate(336 400) rotate(0) scale(1.32)"/>
+  <use href="#rose" transform="translate(256 414) rotate(0) scale(1.52)"/>
+  <use href="#sparkle" transform="translate(296 96) rotate(0) scale(1.1)"/>
+</svg>

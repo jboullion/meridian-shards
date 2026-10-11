@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- A simplified emblem for favicons (tools/icons/emblem.png at 16-32 px): five roses as bold
+       discs with one swirl each, four leaves, and the shard-bladed sword in strong yellow -->
+  <title>Meridian Shards</title>
+  <defs>
+    <g id="r">
+      <circle r="11.5" fill="#b0121c" stroke="#4f050b" stroke-width="1.6"/>
+      <circle r="6.5" fill="#dc2a33"/>
+      <path d="M-1,-1 a2.5,2.5 0 1 1 3,3 a5.5,5.5 0 1 1 -7,-5 a8.5,8.5 0 1 1 11,9" fill="none" stroke="#6e0811" stroke-width="1.5" stroke-linecap="round"/>
+    </g>
+    <path id="l" d="M0,0 C4,-5 11,-5 15,0 C11,5 4,5 0,0Z" fill="#2e9a3a" stroke="#0f4416" stroke-width="1"/>
+  </defs>
+  <use href="#l" transform="translate(15 27) rotate(200)"/>
+  <use href="#l" transform="translate(49 27) rotate(-20)"/>
+  <use href="#l" transform="translate(19 52) rotate(140)"/>
+  <use href="#l" transform="translate(45 52) rotate(40)"/>
+  <use href="#r" transform="translate(19.5 18)"/>
+  <use href="#r" transform="translate(44.5 18)"/>
+  <use href="#r" transform="translate(13 36)"/>
+  <use href="#r" transform="translate(51 36)"/>
+  <use href="#r" transform="translate(32 50)"/>
+  <!-- the blade: the crystal shard -->
+  <polygon points="32,2 38,15 36,40 32,44 28,40 26,15" fill="#fedf01" stroke="#5a3d00" stroke-width="1.2" stroke-linejoin="round"/>
+  <polygon points="32,2 38,15 36,40 32,44" fill="#e8b10c"/>
+  <polygon points="32,2 26,15 28.5,15 32,5" fill="#fff6a8"/>
+  <!-- the hilt: crossguard, grip, pommel -->
+  <path d="M22.5,38 Q24,45 32,45 Q40,45 41.5,38" fill="none" stroke="#5a3d00" stroke-width="4.4" stroke-linecap="round"/>
+  <path d="M22.5,38 Q24,45 32,45 Q40,45 41.5,38" fill="none" stroke="#f2c10a" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M32,45 L32,56" stroke="#5a3d00" stroke-width="4.2" stroke-linecap="round"/>
+  <path d="M32,45 L32,56" stroke="#d99c0e" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="32" cy="58.5" r="3.2" fill="#fedf01" stroke="#5a3d00" stroke-width="1.2"/>
+</svg>

@@ -10,6 +10,8 @@ export interface ReleaseFile {
   browser_download_url: string;
   /** "sha256:<hex>", where GitHub gives it */
   digest?: string | null;
+  /** Bytes */
+  size?: number;
 }
 
 export interface Release {
@@ -46,4 +48,32 @@ export function parseRelease(json: unknown): Release | null {
   if (typeof r?.tag_name !== "string" || !Array.isArray(r.assets)) return null;
   const files = (r.assets as ReleaseFile[]).filter((f) => typeof f?.name === "string" && typeof f?.browser_download_url === "string");
   return { version: r.tag_name.replace(/^v/, ""), files };
+}
+
+// ---- the browser's Download button (ours, TitleBar.tsx): the same rules as the website's
+// download page (meridian-shards-website app/lib/releases.ts), so both offer the same file
+
+export type Platform = "windows" | "mac" | "linux" | "android";
+
+/** The visitor's system from the user agent; null where there's no app (iPhone, iPad) or no telling. Android first: its browsers say Linux too. */
+export function detectPlatform(userAgent: string): Platform | null {
+  if (/Android/.test(userAgent)) return "android";
+  if (/Windows/.test(userAgent)) return "windows";
+  if (/iPhone|iPad|iPod/.test(userAgent)) return null;
+  if (/Mac OS X|Macintosh/.test(userAgent)) return "mac";
+  if (/Linux|X11/.test(userAgent)) return "linux";
+  return null;
+}
+
+/** Each system's file (apps/desktop/electron-builder.yml artifactName; the APK from CI): the website's first choice for it */
+const INSTALLERS: Record<Platform, RegExp> = {
+  windows: /\.exe$/,
+  mac: /-mac\.dmg$/,
+  linux: /\.AppImage$/,
+  android: /\.apk$/,
+};
+
+/** The release's installer for `platform`, if it has one. */
+export function installerOf(release: Release, platform: Platform): ReleaseFile | null {
+  return release.files.find((f) => INSTALLERS[platform].test(f.name) && !f.name.includes("__uninstaller")) ?? null;
 }

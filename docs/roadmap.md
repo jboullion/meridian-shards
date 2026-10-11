@@ -316,3 +316,7 @@ Ours, beside the original's layout: Minecraft- and Diablo-style HUD clusters ove
 - **2026-10-09:**
   - The hosted browser client is back at https://35-206-75-121.sslip.io, for players who want to try the game without a download. `push.ts --web-only` updates it (and Caddy) without restarting blakserv.
   - The browser client moved to `/play/`, and Caddy takes player addresses from Cloudflare's header when Cloudflare is in front: the first steps towards our own domain on a Bluehost VPS behind Cloudflare ([ADR 0004](adr/0004-own-domain.md)).
+- **2026-10-10:**
+  - In a browser, the game's title bar has a Download button beside full screen: the latest release's installer for the player's system (Windows, macOS, Linux or Android), or the download page where there's no app or no telling.
+- **2026-10-11:**
+  - A new icon and logo: five red roses after the original client's icon, with the yellow shard standing among them where its sword was (an AI painting from the original icon, cut out as `tools/icons/emblem.png`). It's the logo everywhere: `npm run icons` makes the desktop and Android icons and the browser's favicons from it, and the website will use it too.

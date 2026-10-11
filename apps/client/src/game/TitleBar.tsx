@@ -6,7 +6,8 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { AssetStore } from "../assets.ts";
-import { desktop, isAndroid, type DesktopWindowState } from "../host.ts";
+import { browserDownload, desktop, isAndroid, type DesktopWindowState, type DownloadLink } from "../host.ts";
+import type { Platform } from "../updates.ts";
 
 export interface TitleBarMenuItem {
   label: string;
@@ -148,7 +149,8 @@ export function TitleBar({
       <span className="title-text">{title}</span>
       <span className="title-spacer" />
       {latency !== undefined && <LatencyMeter ms={latency} tooltip={tooltips} />}
-      {/* Ours: in a browser, full screen hides the address bar and tabs (the apps have their own windows) */}
+      {/* Ours: in a browser, the app for this system, and full screen without the address bar and tabs (the apps have their own windows) */}
+      {!desktop && <DownloadButton tooltip={tooltips} />}
       {!desktop && !isAndroid && typeof document !== "undefined" && document.fullscreenEnabled && <FullscreenButton tooltip={tooltips} />}
       {ownButtons && <WindowButtons />}
       {open && menu && <MenuList items={menu} onDone={() => setOpen(false)} className="title-menu" />}
@@ -171,7 +173,7 @@ function FullscreenButton({ tooltip }: { tooltip: boolean }) {
   return (
     <button
       type="button"
-      className="fullscreen-button"
+      className="title-tool"
       aria-label={label}
       title={tooltip ? label : undefined}
       onClick={(e) => {
@@ -189,6 +191,42 @@ function FullscreenButton({ tooltip }: { tooltip: boolean }) {
         )}
       </svg>
     </button>
+  );
+}
+
+const PLATFORM_NAMES: Record<Platform, string> = { windows: "Windows", mac: "macOS", linux: "Linux", android: "Android" };
+
+/**
+ * Download in a browser (ours): the latest release's installer for this system, or the download
+ * page when there's no telling (host.ts browserDownload). It opens in a new tab, so the game
+ * keeps running; an installer just downloads.
+ */
+function DownloadButton({ tooltip }: { tooltip: boolean }) {
+  const [link, setLink] = useState<DownloadLink | null>(null);
+  useEffect(() => {
+    let live = true;
+    void browserDownload().then((l) => live && setLink(l));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const size = link?.size ? ` (${Math.round(link.size / 1_000_000)} MB)` : "";
+  const label = link?.platform ? `Download Meridian Shards for ${PLATFORM_NAMES[link.platform]}${size}` : "Download Meridian Shards";
+  return (
+    <a
+      className="title-tool"
+      href={link?.url ?? "/download/"}
+      target="_blank"
+      rel="noopener"
+      aria-label={label}
+      title={tooltip ? label : undefined}
+      // Don't leave the keyboard focus on the link: the game's keys go on working
+      onClick={(e) => e.currentTarget.blur()}
+    >
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>
+        <path d="M8 1v9M4 6.5 8 10.5l4-4M2 12v3h12v-3" fill="none" stroke="currentColor" strokeWidth="2" />
+      </svg>
+    </a>
   );
 }
 

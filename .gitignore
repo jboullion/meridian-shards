@@ -44,3 +44,5 @@ Thumbs.db
 
 docs/research/reference-images/
 ReferenceImages/
+# The emblem cutout's working files (tools/icons/cutout-emblem.py)
+tools/icons/.cutout/

@@ -6,7 +6,7 @@
 // socket goes straight to that server's /ws. Both apps give the page a DesktopBridge, so
 // `desktop` below means "an app with a server list", whichever platform it is.
 
-import { apkOf, parseRelease, webBundleOf, type Release } from "./updates.ts";
+import { apkOf, detectPlatform, installerOf, parseRelease, webBundleOf, type Platform, type Release } from "./updates.ts";
 
 // Vite's (vite.config.ts; env.d.ts), declared here too because the desktop app type-checks this file
 declare const __APP_VERSION__: string;
@@ -354,4 +354,34 @@ export function serverName(): string {
 export function gameSocketUrl(): string {
   const base = desktop ? new URL(desktop.server) : new URL(location.href);
   return `${base.protocol === "https:" ? "wss" : "ws"}://${base.host}/ws`;
+}
+
+/** Where the browser's Download button goes (TitleBar.tsx) */
+export interface DownloadLink {
+  url: string;
+  /** The system the installer is for; null for the download page */
+  platform: Platform | null;
+  /** The installer's size in bytes, when known */
+  size: number | null;
+}
+
+/** The website's download page, beside the game on our server (deploy/web/Caddyfile) */
+const DOWNLOAD_PAGE = "/download/";
+let download: Promise<DownloadLink> | null = null;
+
+/**
+ * In a browser: the latest release's installer for this system (as the download page picks it),
+ * else the download page: on an iPhone, an unknown system, or when GitHub can't be asked. Asked
+ * once per page load (GitHub allows 60 unauthenticated requests an hour per address).
+ */
+export function browserDownload(): Promise<DownloadLink> {
+  download ??= (async () => {
+    const page: DownloadLink = { url: DOWNLOAD_PAGE, platform: null, size: null };
+    const platform = detectPlatform(navigator.userAgent);
+    if (!platform) return page;
+    const release = await latestRelease(LATEST_RELEASE);
+    const file = release && installerOf(release, platform);
+    return file ? { url: file.browser_download_url, platform, size: file.size ?? null } : page;
+  })();
+  return download;
 }
