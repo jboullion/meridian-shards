@@ -10,6 +10,10 @@
 //   - SF_LOOP sounds loop until the player leaves the room; the loop and random-place
 //     sounds can be switched off (config.play_loop_sounds / play_random_sounds).
 // Files come from dist/assets by the name the resource string gives (e.g. login.ogg).
+//
+// Ours: ambient sounds (playAmbient: chatter, crowds, thunder, birds) on a bus of their own under
+// the Sound Volume, with the Ambient Sounds option's volume, and voices of their own, so they
+// never take the server's 24.
 
 import { FINENESS } from "@shards/formats";
 import { SF } from "@shards/protocol";
@@ -23,12 +27,118 @@ const MAX_SOUNDS = 24;
 export type AudioPreview = Partial<Pick<Settings, "music" | "musicVolume" | "sound" | "soundVolume" | "loopSounds" | "randomSounds">>;
 const ROLLOFF = 0.00016;
 const MAX_DIST = FINENESS * 32;
+/** Ours: at most this many ambient sounds at once */
+const MAX_AMBIENT = 16;
+/** Ours: how far an ambient sound carries unless told (fine units) */
+const AMBIENT_RANGE = FINENESS * 20;
+
+/** Ours: how an ambient sound plays (GameAudio.playAmbient) */
+export interface AmbientSoundOptions {
+  /** Where it sounds from (fine units); none: about us (2D) */
+  at?: { x: number; y: number } | null;
+  /** How far it carries (fine units), falling off to nothing there */
+  range?: number;
+  /** Against the ambient volume, 1 as recorded */
+  volume?: number;
+  loop?: boolean;
+  /** Playback rate (pitch) */
+  rate?: number;
+  /** A low-pass cutoff in Hz: far off, or muffled by a wall or the rain */
+  lowpass?: number;
+  /** A fixed pan, -1 (left) .. 1, for a sound about us */
+  pan?: number;
+  /** ms to fade in */
+  fadeIn?: number;
+  /** Where to start in it, seconds; "random" for a loop not to start the same way each time */
+  offset?: number | "random";
+  /** ms to wait before it plays (thunder after the flash) */
+  delay?: number;
+}
+
+/** Ours: an ambient sound playing (or about to) */
+export interface AmbientSound {
+  readonly done: boolean;
+  setVolume(volume: number, ms?: number): void;
+  setAt(x: number, y: number): void;
+  setPan(pan: number): void;
+  setLowpass(hz: number, ms?: number): void;
+  stop(fadeMs?: number): void;
+}
+
+class AmbientVoice implements AmbientSound {
+  done = false;
+  at: { x: number; y: number } | null;
+  range: number;
+  volume: number;
+  fixedPan: number;
+  source: AudioBufferSourceNode | null = null;
+  readonly gain: GainNode;
+  readonly pan: StereoPannerNode;
+  readonly filter: BiquadFilterNode;
+  private readonly owner: GameAudio;
+  constructor(owner: GameAudio, ctx: AudioContext, bus: AudioNode, o: AmbientSoundOptions) {
+    this.owner = owner;
+    this.at = o.at ? { ...o.at } : null;
+    this.range = o.range ?? AMBIENT_RANGE;
+    this.volume = o.volume ?? 1;
+    this.fixedPan = o.pan ?? 0;
+    this.gain = ctx.createGain();
+    this.gain.gain.value = 0;
+    this.pan = ctx.createStereoPanner();
+    this.filter = ctx.createBiquadFilter();
+    this.filter.type = "lowpass";
+    this.filter.frequency.value = o.lowpass ?? 22000;
+    this.filter.connect(this.gain).connect(this.pan).connect(bus);
+  }
+  setVolume(volume: number, ms = 300): void {
+    this.volume = volume;
+    this.owner.placeAmbient(this, ms);
+  }
+  setAt(x: number, y: number): void {
+    if (!this.at) this.at = { x, y };
+    else {
+      this.at.x = x;
+      this.at.y = y;
+    }
+    this.owner.placeAmbient(this, 100);
+  }
+  setPan(pan: number): void {
+    this.fixedPan = pan;
+    this.owner.placeAmbient(this, 100);
+  }
+  setLowpass(hz: number, ms = 500): void {
+    const t = this.filter.context.currentTime;
+    this.filter.frequency.cancelScheduledValues(t);
+    this.filter.frequency.setTargetAtTime(hz, t, ms / 3000);
+  }
+  stop(fadeMs = 0): void {
+    if (this.done) return;
+    this.done = true;
+    const ctx = this.gain.context;
+    const t = ctx.currentTime;
+    this.gain.gain.cancelScheduledValues(t);
+    this.gain.gain.setValueAtTime(this.gain.gain.value, t);
+    this.gain.gain.linearRampToValueAtTime(0, t + fadeMs / 1000);
+    const src = this.source;
+    setTimeout(() => {
+      try {
+        src?.stop();
+      } catch {
+        // never started
+      }
+      this.pan.disconnect();
+      this.owner.dropAmbient(this);
+    }, fadeMs + 50);
+  }
+}
 
 interface Voice {
   file: string;
   flags: number;
   /** Fine coordinates, or null for a 2D sound */
   pos: { x: number; y: number } | null;
+  /** Ours: how loud against the Sound Volume (1 the original's) */
+  volume: number;
   source: AudioBufferSourceNode;
   gain: GainNode;
   pan: StereoPannerNode;
@@ -39,6 +149,9 @@ export class GameAudio {
   private master: GainNode | null = null;
   private readonly buffers = new Map<string, Promise<AudioBuffer | null>>();
   private voices: Voice[] = [];
+  /** Ours: the ambient sounds, on their own bus */
+  private ambientVoices: AmbientVoice[] = [];
+  private ambientBus: GainNode | null = null;
   private music: { file: string; source: AudioBufferSourceNode | null; gain: GainNode } | null = null;
   /** The room's track, kept while music is off so switching it on restarts it (MusicRestart). */
   private wantedMusic: string | null = null;
@@ -50,8 +163,11 @@ export class GameAudio {
   private readonly assets: AssetStore;
   /** Where an object is, for sounds that come from one (GamePlaySound: obj->motion.x/y) */
   objectPosition: (id: number) => { x: number; y: number } | undefined = () => undefined;
+  /** The name of an object a sound comes from, for the log */
+  objectName: (id: number) => string | undefined = () => undefined;
   /** Log of what plays, for the dev console (window.shards.audio.log) */
   readonly log: string[] = [];
+  private readonly listeners = new Set<(line: string) => void>();
 
   private readonly offSettings: () => void;
 
@@ -76,6 +192,9 @@ export class GameAudio {
       this.ctx = new AudioContext();
       this.master = this.ctx.createGain();
       this.master.connect(this.ctx.destination);
+      this.ambientBus = this.ctx.createGain();
+      this.ambientBus.gain.value = this.ambientLevel();
+      this.ambientBus.connect(this.master);
     }
     return this.ctx;
   }
@@ -101,10 +220,12 @@ export class GameAudio {
         void this.playMusic(e.file);
         break;
       case "stopLoops":
+        this.note("server: stop the looping sounds");
         this.stopWhere((v) => (v.flags & SF.LOOP) !== 0);
         break;
       case "stop":
         // audio.c SoundStopFile stops every voice playing that file
+        this.note(`server: stop ${e.file.toLowerCase()}`);
         this.stopWhere((v) => v.file === e.file.toLowerCase());
         break;
       case "play": {
@@ -115,7 +236,8 @@ export class GameAudio {
           // big row/col (1-based) to the middle of that square
           pos = { x: (w.col - 1) * FINENESS + FINENESS / 2, y: (w.row - 1) * FINENESS + FINENESS / 2 };
         }
-        void this.playSound(e.file, w.flags, pos);
+        const from = w.object ? `server, from ${this.objectName(w.object) ?? "object"} (${w.object})` : w.row > 0 || w.col > 0 ? `server, at row ${w.row} col ${w.col}` : "server";
+        void this.playSound(e.file, w.flags, pos, 1, from);
         break;
       }
     }
@@ -123,12 +245,102 @@ export class GameAudio {
 
   /** A sound the client plays itself (wading), at the player. */
   playLocal(file: string): void {
-    void this.playSound(file, 0, null);
+    void this.playSound(file, 0, null, 1, "client");
   }
 
   /** A sound the client plays itself at a spot (audio.c SoundPlayFile with x, y: fireworks). */
-  playAt(file: string, x: number, y: number): void {
-    void this.playSound(file, 0, { x, y });
+  /** A sound at a place; `volume` scales it (ours: ambient critters die quieter than monsters) */
+  playAt(file: string, x: number, y: number, volume = 1): void {
+    void this.playSound(file, 0, { x, y }, volume, "client");
+  }
+
+  /** Ours: whether ambient sounds can be heard at all */
+  get ambientOn(): boolean {
+    return this.ambientLevel() > 0;
+  }
+
+  /** Ours: how loud the ambient bus is (the Sound Volume and the Ambient Sounds option) */
+  private ambientLevel(): number {
+    const s = this.settings;
+    return s.sound && s.ambientSounds ? (s.soundVolume / 100) * (s.ambientVolume / 100) : 0;
+  }
+
+  /**
+   * Ours: an ambient sound (chatter, crowds, thunder, birds). It returns at once; the sound starts
+   * when its file has loaded (and after `delay`), unless stopped before.
+   */
+  playAmbient(file: string, o: AmbientSoundOptions = {}): AmbientSound {
+    const ctx = this.context();
+    const v = new AmbientVoice(this, ctx, this.ambientBus!, o);
+    if (this.ambientVoices.length >= MAX_AMBIENT || this.ambientLevel() === 0) {
+      v.done = true;
+      v.pan.disconnect();
+      return v;
+    }
+    this.ambientVoices.push(v);
+    const name = file.toLowerCase();
+    void this.buffer(name).then((buf) => {
+      if (!buf || v.done) {
+        if (!buf) this.dropAmbient(v);
+        v.done = true;
+        return;
+      }
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = !!o.loop;
+      src.playbackRate.value = o.rate ?? 1;
+      src.connect(v.filter);
+      v.source = src;
+      const start = ctx.currentTime + (o.delay ?? 0) / 1000;
+      const offset = o.offset === "random" ? Math.random() * buf.duration : Math.min(o.offset ?? 0, buf.duration);
+      this.placeAmbient(v, 0, start);
+      if (o.fadeIn) {
+        const target = v.gain.gain.value;
+        v.gain.gain.cancelScheduledValues(ctx.currentTime);
+        v.gain.gain.setValueAtTime(0, start);
+        v.gain.gain.linearRampToValueAtTime(target, start + o.fadeIn / 1000);
+      }
+      src.start(start, offset);
+      if (!o.loop)
+        src.onended = () => {
+          v.done = true;
+          v.pan.disconnect();
+          this.dropAmbient(v);
+        };
+      this.note(`ambient (ours): ${name}${o.loop ? " (loops)" : ""}`);
+    });
+    return v;
+  }
+
+  /** Ours: an ambient voice's gain and pan from where it is (falling off to nothing at its range) */
+  placeAmbient(v: AmbientVoice, ms: number, at?: number): void {
+    if (v.done) return;
+    let g = v.volume,
+      pan = v.fixedPan;
+    if (v.at) {
+      const dx = v.at.x - this.listener.x,
+        dy = v.at.y - this.listener.y;
+      const d = Math.hypot(dx, dy);
+      g *= Math.pow(Math.max(0, 1 - d / v.range), 2);
+      const a = (this.listener.angle * 2 * Math.PI) / 4096;
+      // Never hard to one side: a sound beside us still reaches the other ear
+      pan = d < 1 ? 0 : 0.85 * Math.max(-1, Math.min(1, (dx * -Math.sin(a) + dy * Math.cos(a)) / d));
+    }
+    const t = at ?? v.gain.context.currentTime;
+    v.gain.gain.cancelScheduledValues(t);
+    if (ms <= 0) v.gain.gain.setValueAtTime(g, t);
+    else v.gain.gain.setTargetAtTime(g, t, ms / 3000);
+    v.pan.pan.setTargetAtTime(pan, t, 0.03);
+  }
+
+  dropAmbient(v: AmbientVoice): void {
+    const i = this.ambientVoices.indexOf(v);
+    if (i >= 0) this.ambientVoices.splice(i, 1);
+  }
+
+  /** Ours: every ambient sound stops (the option turned off, the game left) */
+  stopAmbient(fadeMs = 0): void {
+    for (const v of [...this.ambientVoices]) v.stop(fadeMs);
   }
 
   private async playMusic(file: string): Promise<void> {
@@ -150,7 +362,7 @@ export class GameAudio {
     src.connect(gain);
     src.start();
     entry.source = src;
-    this.note(`music ${name}`);
+    this.note(`server: music ${name}`);
   }
 
   private stopMusic(): void {
@@ -160,11 +372,11 @@ export class GameAudio {
     this.music = null;
   }
 
-  private async playSound(file: string, flags: number, pos: Voice["pos"]): Promise<void> {
+  private async playSound(file: string, flags: number, pos: Voice["pos"], volume = 1, from = "client"): Promise<void> {
     const s = this.settings;
     const loop = (flags & SF.LOOP) !== 0;
     if (!s.sound || (loop && !s.loopSounds) || (flags & SF.RANDOM_PLACE && !s.randomSounds)) return;
-    if (this.voices.length >= MAX_SOUNDS) return this.note(`skip ${file} (max reached)`);
+    if (this.voices.length >= MAX_SOUNDS) return this.note(`${from}: skipped ${file} (${MAX_SOUNDS} playing)`);
     const name = file.toLowerCase();
     const buf = await this.buffer(name);
     if (!buf || this.voices.length >= MAX_SOUNDS) return;
@@ -175,12 +387,14 @@ export class GameAudio {
     const gain = ctx.createGain();
     const pan = ctx.createStereoPanner();
     source.connect(gain).connect(pan).connect(this.master!);
-    const v: Voice = { file: name, flags, pos, source, gain, pan };
+    const v: Voice = { file: name, flags, pos, volume, source, gain, pan };
     this.voices.push(v);
     this.place(v);
     source.onended = () => this.remove(v);
     source.start();
-    this.note(`play ${name}${loop ? " loop" : ""}${pos ? ` at ${(pos.x / FINENESS).toFixed(1)},${(pos.y / FINENESS).toFixed(1)}` : ""}`);
+    // What kind of sound it is: a room's loops and random sounds can be switched off in Preferences
+    const kind = [loop && "loops", flags & SF.RANDOM_PLACE && "random sound", flags & SF.RANDOM_PITCH && "random pitch"].filter(Boolean).join(", ");
+    this.note(`${from}: ${name}${kind ? ` (${kind})` : ""}${pos ? ` at ${(pos.x / FINENESS).toFixed(1)}, ${(pos.y / FINENESS).toFixed(1)}` : ""}`);
   }
 
   private remove(v: Voice): void {
@@ -200,7 +414,7 @@ export class GameAudio {
 
   /** Volume and pan of a voice from the listener (irrKlang 3D with audio.c's rolloff). */
   private place(v: Voice): void {
-    const vol = this.settings.soundVolume / 100;
+    const vol = (this.settings.soundVolume / 100) * v.volume;
     if (!v.pos) {
       v.gain.gain.value = vol;
       v.pan.pan.value = 0;
@@ -225,6 +439,7 @@ export class GameAudio {
     if (l.x === x && l.y === y && l.angle === angle) return;
     this.listener = { x, y, angle };
     for (const v of this.voices) if (v.pos) this.place(v);
+    for (const v of this.ambientVoices) if (v.at) this.placeAmbient(v, 60);
   }
 
   /**
@@ -246,11 +461,19 @@ export class GameAudio {
     if (!s.loopSounds) this.stopWhere((v) => (v.flags & SF.LOOP) !== 0);
     if (!s.randomSounds) this.stopWhere((v) => (v.flags & SF.RANDOM_PLACE) !== 0);
     if (s.soundVolume !== prev.soundVolume) for (const v of this.voices) this.place(v);
+    if (this.ambientBus) this.ambientBus.gain.setTargetAtTime(this.ambientLevel(), this.ambientBus.context.currentTime, 0.05);
   }
 
   private note(line: string): void {
     this.log.push(line);
     if (this.log.length > 200) this.log.shift();
+    for (const fn of this.listeners) fn(line);
+  }
+
+  /** Each line of the log as it's written (the admins' Debug tab) */
+  onLog(fn: (line: string) => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
   }
 
   dispose(): void {
@@ -259,6 +482,7 @@ export class GameAudio {
     window.removeEventListener("keydown", this.unlock);
     this.stopMusic();
     this.stopWhere(() => true);
+    this.stopAmbient();
     void this.ctx?.close();
     this.ctx = null;
   }

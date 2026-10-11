@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRoomLinks, parseRids } from "./roomLinks.ts";
+import { buildRoomExits, buildRoomLinks, buildRoomList, buildRoomTerrain, parseRids } from "./roomLinks.ts";
 
 const KHD = `
    RID_RAZA = 300
@@ -15,6 +15,7 @@ resources:
 classvars:
    prRoom = room_raza
    piRoom_num = RID_RAZA
+   viTerrain_type = TERRAIN_CITY | TERRAIN_ROAD
 messages:
    CreateStandardExits()
    {
@@ -39,6 +40,8 @@ resources:
    room_razaforest = razaforest.roo
 classvars:
    piRoom_num = RID_RAZA_FOREST
+   viTerrain_type = TERRAIN_FOREST | \
+                    TERRAIN_HILLS
    /* plExits = Cons([ 1, 1, RID_RAZA_INN ],plExits); */
 messages:
    CreateStandardExits()
@@ -67,5 +70,68 @@ describe("room links", () => {
       "razaforest.roo": ["raza.roo"],
       "razainn.roo": ["raza.roo"],
     });
+  });
+
+  it("lists door squares, locked ones too, and the sides that lead out", () => {
+    const exits = buildRoomExits(
+      [
+        { path: "raza.kod", text: RAZA },
+        { path: "razainn.kod", text: INN },
+        { path: "razaforest.kod", text: FOREST },
+      ],
+      KHD,
+    );
+    expect(exits["raza.roo"]).toEqual({
+      doors: [
+        [16, 60, null],
+        [7, 26, "razainn.roo"],
+      ],
+      edges: [{ side: "N", to: "razaforest.roo" }],
+      // The forest's south edge puts you here
+      arrivals: [[2, 38]],
+    });
+    // Farol West has no room class here: the side still leads out
+    expect(exits["razaforest.roo"]).toEqual({
+      doors: [],
+      edges: [
+        { side: "S", to: "raza.roo" },
+        { side: "N", to: null },
+      ],
+      arrivals: [[43, 41]],
+    });
+    // No exits of its own, but Raza's door puts you on (8, 6)
+    expect(exits["razainn.roo"]).toEqual({ doors: [], edges: [], arrivals: [[8, 6]] });
+  });
+
+  it("reads each room's terrain, over continued lines too", () => {
+    const terrain = buildRoomTerrain(
+      [
+        { path: "raza.kod", text: RAZA },
+        { path: "razainn.kod", text: INN },
+        { path: "razaforest.kod", text: FOREST },
+      ],
+      KHD,
+    );
+    expect(terrain).toEqual({ "raza.roo": ["CITY", "ROAD"], "razaforest.roo": ["FOREST", "HILLS"] });
+  });
+
+  it("lists every room by number with its name, a parent's, or its file's", () => {
+    const named = (cls: string, parent: string, body: string) => `${cls} is ${parent}\n${body}`;
+    const razaNamed = RAZA.replace("classvars:", `   room_name_raza = "The  Town of Raza "\nclassvars:\n   vrName = room_name_raza`);
+    const innBase = `resources:\n   inn_name = "Raza Inn"\nclassvars:\n   vrName = inn_name`;
+    const rooms = buildRoomList(
+      [
+        { path: "raza.kod", text: named("Raza", "Room", razaNamed) },
+        { path: "razainnbase.kod", text: named("RazaInnBase", "Room", innBase) },
+        { path: "razainn.kod", text: named("RazaInn", "RazaInnBase", INN) },
+        { path: "razaforest.kod", text: named("RazaForest", "Room", FOREST) },
+      ],
+      KHD,
+    );
+    expect(rooms).toEqual([
+      { rid: 300, name: "The Town of Raza", roo: "raza.roo" },
+      { rid: 301, name: "Raza Inn", roo: "razainn.roo" },
+      { rid: 330, name: "razaforest", roo: "razaforest.roo" },
+    ]);
   });
 });

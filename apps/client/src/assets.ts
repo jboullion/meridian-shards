@@ -3,6 +3,7 @@
 // cached by name; the manifest hash busts the browser cache when a file changes.
 
 import { parseBgf, parsePaletteBin, parseRoo, parseRsb, type Bgf, type Palette, type Room, type RsbBundle } from "@shards/formats";
+import type { AmbientExits } from "@shards/world";
 
 interface Manifest {
   /** When the asset build ran: a new value means the server has new files */
@@ -90,6 +91,43 @@ export class AssetStore {
   async roomLinks(): Promise<Record<string, string[]>> {
     if (!this.has("roomlinks.json")) return {};
     return JSON.parse(new TextDecoder().decode(await this.download("roomlinks.json"))) as Record<string, string[]>;
+  }
+
+  /** Room file -> its door squares and the sides that lead out (roomexits.json from the asset build); empty without one. */
+  async roomExits(): Promise<Record<string, AmbientExits>> {
+    if (!this.has("roomexits.json")) return {};
+    return JSON.parse(new TextDecoder().decode(await this.download("roomexits.json"))) as Record<string, AmbientExits>;
+  }
+
+  /** Room file -> its terrain (roomterrain.json from the asset build, the TERRAIN_* names); empty without one */
+  async roomTerrain(): Promise<Record<string, string[]>> {
+    if (!this.has("roomterrain.json")) return {};
+    return JSON.parse(new TextDecoder().decode(await this.download("roomterrain.json"))) as Record<string, string[]>;
+  }
+
+  /** Every room by number, with its name and file (rooms.json from the asset build), for the admin console; empty without one */
+  async roomList(): Promise<{ rid: number; name: string; roo: string }[]> {
+    if (!this.has("rooms.json")) return [];
+    return JSON.parse(new TextDecoder().decode(await this.download("rooms.json"))) as { rid: number; name: string; roo: string }[];
+  }
+
+  /** Floor textures that are water even on a dry floor (watertextures.json from the asset build); empty without one */
+  async waterTextures(): Promise<Set<number>> {
+    if (!this.has("watertextures.json")) return new Set();
+    return new Set(JSON.parse(new TextDecoder().decode(await this.download("watertextures.json"))) as number[]);
+  }
+
+  /** Floor texture -> what it is (grass, earth or rocky), its average colour, and whether it's cobbled (floortextures.json from the asset build); empty without one */
+  async floorTextures(): Promise<Map<number, { kind: "grass" | "earth" | "rocky"; color: [number, number, number]; cobbled: boolean }>> {
+    if (!this.has("floortextures.json")) return new Map();
+    const raw = JSON.parse(new TextDecoder().decode(await this.download("floortextures.json"))) as Record<string, ["grass" | "earth" | "rocky", number, number, number, number?]>;
+    return new Map(Object.entries(raw).map(([t, [kind, r, g, b, cobbled]]) => [Number(t), { kind, color: [r / 255, g / 255, b / 255], cobbled: cobbled === 1 }]));
+  }
+
+  /** A room's nav grid as the asset build made it (nav/<room>.nav, navGrid.ts encodeNavGrid), or null without one */
+  async navGrid(roomFile: string): Promise<Uint8Array | null> {
+    const name = `nav/${roomFile.toLowerCase().replace(/\.roo$/, "")}.nav`;
+    return this.has(name) ? this.download(name) : null;
   }
 
   /** Picture file -> where its item is worn (itemslots.json from the asset build); empty without one. */

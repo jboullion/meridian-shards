@@ -1,0 +1,108 @@
+{
+  "_doc": "Comparison and showcase screenshots, shared by every client (tools/screenshots/README.md). Positions are server (Kod) squares in the room `rid`, standing at the square's centre; `angle` is Kod's 0-4095 (0 east, 1024 south, 2048 west, 3072 north). `clients` says who takes the shot: classic, modern, mobile (tools/screenshots/capture.ts), unreal (meridian-unreal tools/ue/run_comparison_shots.ps1) and original (by hand). `steps` run after the character is placed (README).",
+  "account": { "user": "shardshots", "password": "shardshots", "character": "Shardshots" },
+  "time": "afternoon",
+  "equipment": ["Mace", "MetalShield"],
+  "shots": [
+    {
+      "id": "raza-pond",
+      "title": "Raza across the pond",
+      "note": "Inside the gap in the wall west of the pond, facing east-south-east: the shops across the pond on the left, the temple's clock tower on the right.",
+      "rid": 300, "row": 17, "col": 19, "angle": 190,
+      "clients": ["classic", "modern", "mobile", "unreal", "original"],
+      "steps": []
+    },
+    {
+      "id": "raza-wide",
+      "title": "The town of Raza",
+      "note": "South-east of the pond by the shops, facing north-west: the pond, the Inn and the north gate.",
+      "rid": 300, "row": 22, "col": 46, "angle": 2620,
+      "clients": ["classic", "modern", "mobile", "unreal", "original"],
+      "steps": []
+    },
+    {
+      "id": "inn-room",
+      "title": "The Inn of Raza",
+      "note": "Where a new character arrives: the Inn's teleport square, facing west-south-west towards the Welcome sign and Marcus.",
+      "rid": 301, "row": 3, "col": 8, "angle": 1792,
+      "clients": ["classic", "modern", "mobile", "unreal", "original"],
+      "steps": []
+    },
+    {
+      "id": "inn-inventory",
+      "title": "The inventory",
+      "note": "The same spot in the Inn with the inventory open.",
+      "rid": 301, "row": 3, "col": 8, "angle": 1792,
+      "clients": ["classic", "modern", "mobile", "unreal", "original"],
+      "steps": ["inventory"]
+    },
+    {
+      "id": "raza-inventory",
+      "title": "The inventory in town",
+      "note": "The raza-pond spot with the inventory open.",
+      "rid": 300, "row": 17, "col": 19, "angle": 190,
+      "clients": ["modern", "mobile"],
+      "steps": ["inventory"]
+    },
+    {
+      "id": "tos-fountain",
+      "title": "The streets of Tos",
+      "note": "Just north of the fountain, looking up the street to the Duke's castle gate.",
+      "rid": 50, "row": 53, "col": 18, "angle": 3072,
+      "clients": ["modern", "mobile"],
+      "steps": []
+    },
+    {
+      "id": "tos-arena",
+      "title": "The Arena of Kraanan",
+      "note": "In the south stands, facing north-east across the arena to the spectators and the Watcher's box.",
+      "rid": 60, "row": 22, "col": 11, "angle": 3300,
+      "clients": ["modern", "mobile"],
+      "steps": []
+    },
+    {
+      "id": "chase-behind",
+      "title": "Third person: behind",
+      "rid": 300, "row": 10, "col": 33, "angle": 700,
+      "clients": ["modern"],
+      "steps": ["hideHud", "view:behind"]
+    },
+    {
+      "id": "chase-front",
+      "title": "Third person: in front",
+      "rid": 300, "row": 10, "col": 33, "angle": 700,
+      "clients": ["modern"],
+      "steps": ["hideHud", "view:front"]
+    },
+    {
+      "id": "chase-side",
+      "title": "Third person: from the side",
+      "rid": 300, "row": 10, "col": 33, "angle": 700,
+      "clients": ["modern"],
+      "steps": ["hideHud", "chase:1724:-0.15:3"]
+    },
+    {
+      "id": "chase-high",
+      "title": "Third person: from above",
+      "rid": 300, "row": 10, "col": 33, "angle": 700,
+      "clients": ["modern"],
+      "steps": ["hideHud", "chase:2900:-0.45:5"]
+    },
+    {
+      "id": "mobile-wheel",
+      "title": "The casting wheel",
+      "note": "The phone's Cast button held open on the quick slots; the Attack button shows the mace.",
+      "rid": 300, "row": 17, "col": 19, "angle": 190,
+      "clients": ["mobile"],
+      "steps": ["wheel"]
+    },
+    {
+      "id": "unreal-login",
+      "title": "The Unreal login screen",
+      "note": "Over Raza's square, where the online login screen flies (meridian-unreal square_overview).",
+      "clients": ["unreal"],
+      "unreal": { "location_cm": [9900, 5200, 700], "rotation": [-10.5, -146.3], "fov": 90 },
+      "steps": ["login"]
+    }
+  ]
+}

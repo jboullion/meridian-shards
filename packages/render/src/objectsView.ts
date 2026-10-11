@@ -49,6 +49,8 @@ export interface ViewObject {
   fullBright?: boolean;
   /** A height of its own instead of the floor's (projectiles fly from source to target: project.c) */
   z?: number;
+  /** Ours: drawn this many times its size (ambient critters: small ones of the monsters' art) */
+  scale?: number;
   /** The look to draw now (normal, or the motion look while moving). */
   look: {
     anim: { group: number };
@@ -202,6 +204,8 @@ interface Entry {
   lightAdjust: number;
   /** OF_BOUNCING clock (moveobj.c obj.bounceTime) */
   bounceTime: number;
+  /** ViewObject.scale */
+  scale: number;
 }
 
 export class ObjectsView {
@@ -377,7 +381,7 @@ export class ObjectsView {
         const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
         mesh.name = `object ${o.id}`;
         this.group.add(mesh);
-        e = { mesh, halo: null, key: "", composite: null, texture: null, colorTexture: null, shadow: null, x, y, z: 0, flashTime: 0, lightAdjust: 0, bounceTime: 0 };
+        e = { mesh, halo: null, key: "", composite: null, texture: null, colorTexture: null, shadow: null, x, y, z: 0, flashTime: 0, lightAdjust: 0, bounceTime: 0, scale: 1 };
         this.entries.set(o.id, e);
       }
       if (e.key !== key) {
@@ -417,6 +421,8 @@ export class ObjectsView {
       else e.lightAdjust = 0;
       e.mesh.position.set(x / FINENESS, e.z / FINENESS, y / FINENESS);
       e.mesh.rotation.set(0, ctx.yaw, 0);
+      e.scale = o.scale ?? 1;
+      e.mesh.scale.setScalar(e.scale);
 
       // Lighting (D3DObjectLightingCalc) and draw effects
       const leaf = leafAt(ctx.room, x, y);
@@ -474,14 +480,14 @@ export class ObjectsView {
   topOf(id: number): THREE.Vector3 | null {
     const e = this.entries.get(id);
     if (!e?.composite || !e.mesh.visible) return null;
-    return new THREE.Vector3(e.x / FINENESS, (e.z + Math.max(e.composite.baseTop, e.composite.top)) / FINENESS, e.y / FINENESS);
+    return new THREE.Vector3(e.x / FINENESS, (e.z + Math.max(e.composite.baseTop, e.composite.top) * e.scale) / FINENESS, e.y / FINENESS);
   }
 
   /** An object's ground height and sprite height in fine units (game.c SetPlayerRemoteView), or null. */
   extentOf(id: number): { z: number; height: number } | null {
     const e = this.entries.get(id);
     if (!e?.composite) return null;
-    return { z: e.z, height: Math.max(e.composite.baseTop, e.composite.top) };
+    return { z: e.z, height: Math.max(e.composite.baseTop, e.composite.top) * e.scale };
   }
 
   /**
@@ -535,7 +541,7 @@ export class ObjectsView {
     // The faintest translucent figures (25%) cast none
     e.shadow.visible = alpha > 0.3;
     const floor = this.ground(o, e.x, e.y, ctx);
-    const r = shadowRadius(c.widthFine) / FINENESS;
+    const r = (shadowRadius(c.widthFine) * e.scale) / FINENESS;
     e.shadow.position.set(e.x / FINENESS, (floor + 2) / FINENESS, e.y / FINENESS);
     e.shadow.scale.set(r, 1, r);
   }

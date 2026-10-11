@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { CF } from "@shards/protocol";
-import type { GameSession } from "@shards/world";
+import type { AmbientLevel, GameSession } from "@shards/world";
 import {
   ACTION_LABELS, ACTION_TABS, DEFAULT_SETTINGS, PRESETS, bindingLabel, mouseCode, presetSettings,
   type Action, type ActionTab, type HaloColor, type HotkeyAlias, type KeyBinding, type Settings,
@@ -308,7 +308,47 @@ export function LogoutTimerDialog({ settings, iconUrl, onApply, onClose }: { set
 const ENHANCED_TITLE =
   "Soft highlights, flickering and glowing flames, light that stops at walls, shaded corners, shadows and a vignette; off, the original's look";
 
-const CONFIG_TABS = [...(Object.keys(ACTION_TABS) as ActionTab[]), "Mouse"] as const;
+const AMBIENT_TITLE = "Townsfolk walking the streets and patrons in the inns, seen by you alone";
+const CRITTERS_TITLE = "Rats, spiders, centipedes and other small creatures scurrying about, killed with a click; seen by you alone, with no experience or loot";
+const FLYERS_TITLE = "Flocks of birds crossing the sky by day, and bats in caves (and out at night); seen by you alone";
+const GROUND_TITLE = "Tufts of grass, flowers, pebbles and stones on the ground outdoors and in caves";
+const NATURE_TITLE = "Butterflies by day, fireflies at night, leaves falling in the woods and fish leaping in lakes and rivers; seen by you alone";
+const AMBIENT_OPTIONS = [
+  { key: "off", label: "Off" },
+  { key: "few", label: "Few" },
+  { key: "normal", label: "Normal" },
+  { key: "many", label: "Many" },
+] as const;
+
+/** Ours: how many townsfolk and inn patrons (Ambient Life) */
+const FRAME_LIMIT_TITLE = "Draw at most 60 frames a second on a faster screen: cooler, quieter and kinder to batteries";
+const AMBIENT_SOUNDS_TITLE = "The townsfolk's chatter, the arena's crowd, distant thunder, birds and critters: sounds of our own, under the Sound Volume";
+
+/** Ours: Ambient Sounds, and how loud */
+function AmbientSoundsOption({ d, set }: { d: Settings; set: (patch: Patch) => void }) {
+  return (
+    <>
+      <Check label="Ambient Sounds" title={AMBIENT_SOUNDS_TITLE} checked={d.ambientSounds} onChange={(v) => set({ ambientSounds: v })} />
+      <label className={d.ambientSounds ? "hud-scale ambient-volume" : "hud-scale ambient-volume disabled"} title="How loud the ambient sounds are, under the Sound Volume">
+        <span>Volume</span>
+        <Trackbar min={0} max={100} step={5} value={d.ambientVolume} onChange={(v) => set({ ambientVolume: v })} label="Ambient volume" />
+        <span className="bind-scale-value">{d.ambientVolume}%</span>
+      </label>
+    </>
+  );
+}
+
+function AmbientLifeSelect({ value, onChange }: { value: AmbientLevel; onChange: (v: AmbientLevel) => void }) {
+  return (
+    <label className="ambient-life" title={AMBIENT_TITLE}>
+      <span>Ambient Life</span>
+      <Select value={value} options={AMBIENT_OPTIONS} onChange={onChange} />
+    </label>
+  );
+}
+
+/** The Bind Editor's tabs: its Options box first (ours: a tab, for room), then the keys and the mouse */
+const CONFIG_TABS = ["Options", ...(Object.keys(ACTION_TABS) as ActionTab[]), "Mouse"] as const;
 type ConfigTab = (typeof CONFIG_TABS)[number];
 
 const MODIFIER_CODES = new Set(["AltLeft", "AltRight", "ControlLeft", "ControlRight", "ShiftLeft", "ShiftRight", "MetaLeft", "MetaRight"]);
@@ -364,7 +404,7 @@ function useKeyListener(active: boolean, onKey: (b: KeyBinding | null) => void):
 /** The Bind Editor (m59bind.exe) without Classic Key Binding and Software Renderer. */
 export function ConfigurationDialog({ settings, onApply, onClose }: { settings: Settings; onApply: (patch: Patch) => void; onClose: () => void }) {
   const [d, setD] = useState<Settings>(settings);
-  const [tab, setTab] = useState<ConfigTab>("Movement");
+  const [tab, setTab] = useState<ConfigTab>("Options");
   const [listening, setListening] = useState<{ action: Action; index: number } | null>(null);
   const set = (patch: Patch) => setD((s) => ({ ...s, ...patch }));
   const onKey = useMemo(
@@ -395,86 +435,105 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
     <Modal>
       <Window title="Bind Editor" onClose={() => !listening && onClose()} className="options-dialog bind-editor">
         <div className="bind-layout">
-          <div className="bind-main">
-            <Tabs tabs={CONFIG_TABS} active={tab} onChange={setTab} />
-            <div className="mk-page bind-page">
-              {tab === "Mouse" ? (
-                <div className="bind-mouse">
-                  {scale("Mouselook X Scale", "mouseXScale")}
-                  {scale("Mouselook Y Scale", "mouseYScale")}
-                  <Check label="Invert mouselook up/down" checked={d.invertMouse} onChange={(v) => set({ invertMouse: v })} />
-                </div>
-              ) : (
-                <div className="bind-grid">
-                  {ACTION_TABS[tab].map((a: Action) => (
-                    <div key={a} className="bind-row">
-                      <span className="bind-label">
-                        {/* Add a key: before the name, apart from the keys' × buttons */}
-                        <Button className="add" title="Add a key" onClick={() => setListening({ action: a, index: d.keys[a].length })}>
-                          +
-                        </Button>
-                        <span>{ACTION_LABELS[a]}</span>
-                      </span>
-                      <span className="bind-keys">
-                        {d.keys[a].map((b, i) => (
-                          <span key={i} className="bind-key">
-                            {/* Drawn as an edit field (styles.css .key-field), so it reads as a value to change */}
-                            <Button
-                              className={listening?.action === a && listening.index === i ? "key-field listening" : "key-field"}
-                              onClick={() => setListening({ action: a, index: i })}
-                              title="Click, then press a key or mouse button"
-                            >
-                              {listening?.action === a && listening.index === i ? "press a key…" : bindingLabel(b)}
-                            </Button>
-                            <Button className="x" title="Remove this key" onClick={() => remove(a, i)}>
-                              ×
-                            </Button>
-                          </span>
-                        ))}
-                        {/* The key being added, until it's pressed */}
-                        {listening?.action === a && listening.index === d.keys[a].length && (
-                          <span className="bind-key">
-                            <Button className="key-field listening" onClick={() => setListening(null)} title="Press a key or mouse button (Esc cancels)">
-                              press a key…
-                            </Button>
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+          <Tabs tabs={CONFIG_TABS} active={tab} onChange={setTab} />
+          <div className="mk-page bind-page">
+            {tab === "Options" ? (
+              <div className="bind-options">
+                <GroupBox label="Playing" className="flow">
+                  <Check label="Quick Chat" checked={d.typeToChat} onChange={(v) => set({ typeToChat: v })} />
+                  <Check label="Always Run" checked={d.alwaysRun} onChange={(v) => set({ alwaysRun: v })} />
+                  <Check label="Attack On Target" checked={d.attackOnTarget} onChange={(v) => set({ attackOnTarget: v })} />
+                  <Check
+                    label="Original Command Typing"
+                    title="Every typed line is a command, as in the original: speech needs say, and the start of a command's name will do"
+                    checked={d.originalCommands}
+                    onChange={(v) => set({ originalCommands: v })}
+                  />
+                </GroupBox>
+                <GroupBox label="World" className="flow">
+                  <Check label="Dynamic Lighting" checked={d.dynamicLighting} onChange={(v) => set({ dynamicLighting: v })} />
+                  <Check label="Ground Detail" title={GROUND_TITLE} checked={d.groundDetail} onChange={(v) => set({ groundDetail: v })} />
+                  {/* Ours: Enhanced Lighting, or the original's look */}
+                  <Check label="Enhanced Lighting" title={ENHANCED_TITLE} checked={d.enhanced} onChange={(v) => set({ enhanced: v })} />
+                  <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
+                  <Check label="Limit to 60 FPS" title={FRAME_LIMIT_TITLE} checked={d.frameLimit} onChange={(v) => set({ frameLimit: v })} />
+                  <AmbientLifeSelect value={d.ambientLife} onChange={(v) => set({ ambientLife: v })} />
+                  <Check label="Critters" title={CRITTERS_TITLE} checked={d.critters} onChange={(v) => set({ critters: v })} />
+                  <Check label="Birds and Bats" title={FLYERS_TITLE} checked={d.flyers} onChange={(v) => set({ flyers: v })} />
+                  <Check label="Nature" title={NATURE_TITLE} checked={d.nature} onChange={(v) => set({ nature: v })} />
+                  <AmbientSoundsOption d={d} set={set} />
+                </GroupBox>
+                <GroupBox label="Interface" className="flow">
+                  {/* Ours: the HUD over the whole view, or the original's interface column */}
+                  <Check
+                    label="Modern Interface"
+                    title="The view fills the window with the bars, quick slots, map and chat over it; off, the original's layout"
+                    checked={d.interfaceStyle === "modern"}
+                    onChange={(v) => set({ interfaceStyle: v ? "modern" : "classic" })}
+                  />
+                  <Check
+                    label="Second Hotbar"
+                    title="A second row of quick slots (11-20) above the first, on the numpad's keys (Modern interface)"
+                    checked={d.secondHotbar}
+                    disabled={d.interfaceStyle !== "modern"}
+                    onChange={(v) => set({ secondHotbar: v })}
+                  />
+                  {/* Ours: the Modern HUD's size (CSS zoom on its clusters) */}
+                  <label className={d.interfaceStyle === "modern" ? "hud-scale" : "hud-scale disabled"} title="The size of the Modern interface's bars, quick slots, map, chat and character window">
+                    <span>HUD Size</span>
+                    <Trackbar min={75} max={150} step={5} value={d.hudScale} onChange={(v) => set({ hudScale: v })} label="HUD size" />
+                    <span className="bind-scale-value">{d.hudScale}%</span>
+                  </label>
+                </GroupBox>
+              </div>
+            ) : tab === "Mouse" ? (
+              <div className="bind-mouse">
+                {scale("Mouselook X Scale", "mouseXScale")}
+                {scale("Mouselook Y Scale", "mouseYScale")}
+                <Check label="Invert mouselook up/down" checked={d.invertMouse} onChange={(v) => set({ invertMouse: v })} />
+              </div>
+            ) : (
+              <div className="bind-grid">
+                {ACTION_TABS[tab].map((a: Action) => (
+                  <div key={a} className="bind-row">
+                    <span className="bind-label">
+                      {/* Add a key: before the name, apart from the keys' × buttons */}
+                      <Button className="add" title="Add a key" onClick={() => setListening({ action: a, index: d.keys[a].length })}>
+                        +
+                      </Button>
+                      <span>{ACTION_LABELS[a]}</span>
+                    </span>
+                    <span className="bind-keys">
+                      {d.keys[a].map((b, i) => (
+                        <span key={i} className="bind-key">
+                          {/* Drawn as an edit field (styles.css .key-field), so it reads as a value to change */}
+                          <Button
+                            className={listening?.action === a && listening.index === i ? "key-field listening" : "key-field"}
+                            onClick={() => setListening({ action: a, index: i })}
+                            title="Click, then press a key or mouse button"
+                          >
+                            {listening?.action === a && listening.index === i ? "press a key…" : bindingLabel(b)}
+                          </Button>
+                          <Button className="x" title="Remove this key" onClick={() => remove(a, i)}>
+                            ×
+                          </Button>
+                        </span>
+                      ))}
+                      {/* The key being added, until it's pressed */}
+                      {listening?.action === a && listening.index === d.keys[a].length && (
+                        <span className="bind-key">
+                          <Button className="key-field listening" onClick={() => setListening(null)} title="Press a key or mouse button (Esc cancels)">
+                            press a key…
+                          </Button>
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="bind-side">
-            <GroupBox label="Options" className="flow">
-              <Check label="Quick Chat" checked={d.typeToChat} onChange={(v) => set({ typeToChat: v })} />
-              <Check label="Always Run" checked={d.alwaysRun} onChange={(v) => set({ alwaysRun: v })} />
-              <Check label="Attack On Target" checked={d.attackOnTarget} onChange={(v) => set({ attackOnTarget: v })} />
-              <Check label="Dynamic Lighting" checked={d.dynamicLighting} onChange={(v) => set({ dynamicLighting: v })} />
-              <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
-              {/* Ours: the HUD over the whole view, or the original's interface column */}
-              <Check
-                label="Modern Interface"
-                title="The view fills the window with the bars, quick slots, map and chat over it; off, the original's layout"
-                checked={d.interfaceStyle === "modern"}
-                onChange={(v) => set({ interfaceStyle: v ? "modern" : "classic" })}
-              />
-              {/* Ours: Enhanced Lighting, or the original's look */}
-              <Check label="Enhanced Lighting" title={ENHANCED_TITLE} checked={d.enhanced} onChange={(v) => set({ enhanced: v })} />
-              {/* Ours: the Modern HUD's size (CSS zoom on its clusters) */}
-              <label className={d.interfaceStyle === "modern" ? "hud-scale" : "hud-scale disabled"} title="The size of the Modern interface's bars, quick slots, map, chat and character window">
-                <span>HUD Size</span>
-                <Trackbar min={75} max={150} step={5} value={d.hudScale} onChange={(v) => set({ hudScale: v })} label="HUD size" />
-                <span className="bind-scale-value">{d.hudScale}%</span>
-              </label>
-              <Check
-                label="Original Command Typing"
-                title="Every typed line is a command, as in the original: speech needs say, and the start of a command's name will do"
-                checked={d.originalCommands}
-                onChange={(v) => set({ originalCommands: v })}
-              />
-            </GroupBox>
+          <div className="bind-footer">
             <Button onClick={() => set({ ...presetSettings("modern"), keys: PRESETS.modern })}>Restore Defaults</Button>
             <div className="bind-buttons">
               <Button
@@ -853,6 +912,13 @@ export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Se
         </label>
         <Check label="Dynamic Lighting" checked={d.dynamicLighting} onChange={(v) => set({ dynamicLighting: v })} />
         <Check label="Enhanced Lighting" title={ENHANCED_TITLE} checked={d.enhanced} onChange={(v) => set({ enhanced: v })} />
+        <Check label="Ground Detail" title={GROUND_TITLE} checked={d.groundDetail} onChange={(v) => set({ groundDetail: v })} />
+        <Check label="Limit to 60 FPS" title={FRAME_LIMIT_TITLE} checked={d.frameLimit} onChange={(v) => set({ frameLimit: v })} />
+        <AmbientLifeSelect value={d.ambientLife} onChange={(v) => set({ ambientLife: v })} />
+        <Check label="Critters" title={CRITTERS_TITLE} checked={d.critters} onChange={(v) => set({ critters: v })} />
+        <Check label="Birds and Bats" title={FLYERS_TITLE} checked={d.flyers} onChange={(v) => set({ flyers: v })} />
+        <Check label="Nature" title={NATURE_TITLE} checked={d.nature} onChange={(v) => set({ nature: v })} />
+        <AmbientSoundsOption d={d} set={set} />
         <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
         <Check label="Attack On Target" checked={d.attackOnTarget} onChange={(v) => set({ attackOnTarget: v })} />
         <div className="touch-config-buttons">
@@ -864,6 +930,14 @@ export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Se
                 touchLookScale: d.touchLookScale,
                 dynamicLighting: d.dynamicLighting,
                 enhanced: d.enhanced,
+                ambientLife: d.ambientLife,
+                ambientSounds: d.ambientSounds,
+                frameLimit: d.frameLimit,
+                ambientVolume: d.ambientVolume,
+                critters: d.critters,
+                flyers: d.flyers,
+                nature: d.nature,
+                groundDetail: d.groundDetail,
                 damageNumbers: d.damageNumbers,
                 attackOnTarget: d.attackOnTarget,
               });

@@ -38,7 +38,7 @@ import { isProfane } from "./profanity.ts";
 import { AnnotateDialog } from "./ui/AnnotateDialog.tsx";
 import { AboutDialog } from "./ui/AboutDialog.tsx";
 import { ChessWindow, type ChessState } from "./ui/ChessWindow.tsx";
-import { AdminConsole, appendAdminText } from "./ui/AdminConsole.tsx";
+import { AdminConsole, appendAdminText, type AdminRoom } from "./ui/AdminConsole.tsx";
 import { languageName } from "./languages.ts";
 import { MAX_ANNOTATIONS, annotationAt, loadAnnotations, saveAnnotations, type MapAnnotation } from "./annotations.ts";
 import { useWorld } from "./ui/hooks.ts";
@@ -54,20 +54,26 @@ const CHAT_TABS: { tab: ChatTab; label: string }[] = [
   { tab: "chat", label: "Chat" },
   { tab: "combat", label: "Combat" },
   { tab: "server", label: "Server" },
+  { tab: "debug", label: "Debug" },
 ];
+/** The Debug tab (admins only) keeps this many lines */
+const MAX_DEBUG_LINES = 300;
 /** The camera views' names (gameScene.ts ViewMode), shown for VIEW_NOTE_MS when one is chosen */
 const VIEW_NAMES: Record<ViewMode, string> = { first: "First person", chase: "Chase camera", behind: "Behind", front: "Front" };
 const VIEW_NOTE_MS = 1500;
 
 /** The Modern interface's chat: lines show this long after they come, then fade (until hovered), ms */
 const CHAT_FRESH_MS = 10000;
+/** The admin console: the server's messages this long after a DM command are its answers, ms */
+const DM_ANSWER_MS = 3000;
 /** Its width, dragged by its right edge: at least this */
 const MIN_CHAT_WIDTH = 220;
 /** The chat window's height, dragged by its top edge: at least this, and leaving the view this much */
 const MIN_CHAT_HEIGHT = 60;
 const MIN_VIEW_HEIGHT = 160;
 
-const inTab = (tab: ChatTab, l: ChatLine) => tab === "all" || l.channel === tab;
+// All leaves out the admins' Debug lines
+const inTab = (tab: ChatTab, l: ChatLine) => (tab === "all" ? l.channel !== "debug" : l.channel === tab);
 
 /**
  * A new chat line, keeping at most `max` of each channel: a long fight can't push the
@@ -113,6 +119,11 @@ const ACTIONS_MENU: ([command: string, label: string] | null)[] = [
   ["who", "Who is logged on"], ["group", "Modify groups"], ["alias", "Hotkey aliases"], ["cmdalias", "Command aliases"], ["guild", "Guild configuration"],
   null, ["wave", "Wave"], ["point", "Point"], ["dance", "Dance"],
   null, ["happy", "Happy"], ["sad", "Sad"], ["neutral", "Neutral"], ["wry", "Wry"],
+];
+
+/** Ours: the Quick Emotes menu (Q): the emotes and the moods, each its typed command, null between them */
+const QUICK_EMOTES: ([command: string, label: string] | null)[] = [
+  ["wave", "Wave"], ["point", "Point"], ["dance", "Dance"], null, ["happy", "Happy"], ["sad", "Sad"], ["neutral", "Neutral"], ["wry", "Wry"],
 ];
 
 /** textin.c EDITBOX_HISTORY: lines the chat box remembers */
@@ -324,7 +335,7 @@ export function GameView({
   /** When each chat tab was last looked at, for the new-lines mark on the others */
   const [seenAt, setSeenAt] = useState<Record<ChatTab, number>>(() => {
     const now = Date.now();
-    return { all: now, chat: now, combat: now, server: now };
+    return { all: now, chat: now, combat: now, server: now, debug: now };
   });
   /** Read Mail (mailread.c), open or not; the kept messages; its info line */
   const [mailOpen, setMailOpen] = useState(false);
@@ -378,6 +389,18 @@ export function GameView({
    * Shift+4, hidden rather than closed; its text and command history
    */
   const [adminConsole, setAdminConsole] = useState<{ open: boolean; text: string; command: string; history: string[] } | null>(null);
+  /** The Quick Emotes menu (Q), over the top of the view */
+  const [emoteMenu, setEmoteMenu] = useState(false);
+  useEffect(() => {
+    if (!emoteMenu) return;
+    const esc = (e: KeyboardEvent) => {
+      if (e.code === "Escape") setEmoteMenu(false);
+    };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [emoteMenu]);
+  /** The Debug tab's lines (admins only) */
+  const [debugLines, setDebugLines] = useState<ChatLine[]>([]);
   /** The chess module's window (module/chess), while the server has it loaded */
   const [chess, setChess] = useState<ChessState | null>(null);
   /** The same, for the toolbar's Rest/Stand toggle */
@@ -545,6 +568,13 @@ export function GameView({
   useEffect(() => admin((text) => setAdminConsole((a) => (a ? { ...a, text: appendAdminText(a.text, text) } : a))), [admin]);
   // admin.c admin_key_table: Shift+4 opens the console (in the game, not while typing)
   const adminLoaded = adminConsole !== null;
+  // Ours: the Debug tab, the admins' console.log: every sound played (to find one), and the like
+  useEffect(() => {
+    if (!adminLoaded) return;
+    return audio.onLog((text) =>
+      setDebugLines((d) => [...d.slice(-(MAX_DEBUG_LINES - 1)), { kind: "system", channel: "debug", spans: [{ text }], time: Date.now() }]),
+    );
+  }, [adminLoaded, audio]);
   useEffect(() => {
     if (!adminLoaded) return;
     const onKey = (e: KeyboardEvent) => {
@@ -555,13 +585,50 @@ export function GameView({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [adminLoaded]);
+  /** Ours: every room (rooms.json), for the console's Travel tab, loaded when the module is */
+  const [adminRooms, setAdminRooms] = useState<AdminRoom[]>([]);
+  useEffect(() => {
+    if (!adminLoaded) return;
+    let live = true;
+    assets
+      .roomList()
+      .then((r) => live && setAdminRooms(r))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [adminLoaded, assets]);
   /** BK_SENDCMD: to the server, and to the top of the history unless it's there already */
-  const adminCommand = (command: string) => {
-    session.adminCommand(command);
+  const rememberAdmin = (command: string) =>
     setAdminConsole((a) =>
       a ? { ...a, command, history: a.history[0]?.toLowerCase() === command.toLowerCase() ? a.history : [command, ...a.history] } : a,
     );
+  const adminCommand = (command: string) => {
+    session.adminCommand(command);
+    rememberAdmin(command);
   };
+  /**
+   * Ours (the remaster's console): a DM command (SAY_DM, module/dm's "dm"), echoed in the
+   * console; the server's messages in the next few seconds are its answers, copied there too
+   */
+  const dmAnswersUntil = useRef(0);
+  const dmSeen = useRef(new WeakSet<ChatLine>());
+  const adminDm = (text: string) => {
+    if (!text) return;
+    session.say(text, SAY.DM);
+    dmAnswersUntil.current = Date.now() + DM_ANSWER_MS;
+    rememberAdmin(`dm ${text}`);
+    setAdminConsole((a) => (a ? { ...a, text: appendAdminText(a.text, `> dm ${text}\n`) } : a));
+  };
+  useEffect(() => {
+    const until = dmAnswersUntil.current;
+    if (Date.now() > until) return;
+    const answers = chat
+      .slice(-20)
+      .filter((l) => l.kind === "system" && l.time >= until - DM_ANSWER_MS && !dmSeen.current.has(l))
+      .map((l) => (dmSeen.current.add(l), l.spans.map((s) => s.text).join("")));
+    if (answers.length) setAdminConsole((a) => (a ? { ...a, text: appendAdminText(a.text, answers.join("\n") + "\n") } : a));
+  }, [chat]);
   useEffect(
     () =>
       minigame((e) => {
@@ -687,7 +754,7 @@ export function GameView({
   useEffect(() => {
     const el = logRef.current;
     if (el && (!settings.scrollLock || atBottomRef.current)) el.scrollTop = el.scrollHeight;
-  }, [chat, settings.scrollLock, settings.chatTab]);
+  }, [chat, debugLines, settings.scrollLock, settings.chatTab]);
 
   /** gameuser.c GetObjects3D(CLOSE_DISTANCE, flag): the nearest object with the flag. */
   const nearest = (flag: number) => {
@@ -705,8 +772,8 @@ export function GameView({
   const handleAction = (a: string): void => {
     if (a.startsWith("quickSlot")) {
       const i = Number(a.slice("quickSlot".length)) - 1;
-      // The second row (11-20) shows only in the Modern interface: elsewhere its keys do nothing
-      if (i >= QUICK_SLOTS && !modern) return;
+      // The second row (11-20) shows only in the Modern interface with Second Hotbar on: elsewhere its keys do nothing
+      if (i >= QUICK_SLOTS && !(modern && settings.secondHotbar)) return;
       return activateSlot(i);
     }
     const toggle = (type: "preferences" | "configuration" | "actions") => setModal((m) => (m?.type === type ? null : { type }));
@@ -726,6 +793,8 @@ export function GameView({
         return toggle("configuration");
       case "actions":
         return toggle("actions");
+      case "quickEmotes":
+        return setEmoteMenu((v) => !v);
       case "who":
         return setModal({ type: "action", window: "who" });
       case "map":
@@ -958,7 +1027,11 @@ export function GameView({
     // "alias word command" defines a command alias; alone it opens the window
     if (window && !((id === "alias" || id === "cmdalias") && args)) return openWindow(window);
     const ua = USER_ACTIONS[id];
-    if (ua !== undefined) return session.action(ua);
+    if (ua !== undefined) {
+      // Ours: townsfolk close by wave back
+      if (ua === UA.WAVE) sceneRef.current?.waveAtAmbient();
+      return session.action(ua);
+    }
     const option = OPTION_COMMANDS[id];
     if (option) {
       const [flag, on] = option;
@@ -1221,13 +1294,14 @@ export function GameView({
     if (url !== null && self !== undefined) session.changeUrl(self, url);
   };
 
-  const chatTab = settings.chatTab;
-  const shown = chat.filter((l) => inTab(chatTab, l));
+  // The Debug tab is the admins' alone
+  const chatTab = settings.chatTab === "debug" && !adminLoaded ? "all" : settings.chatTab;
+  const shown = chatTab === "debug" ? debugLines : chat.filter((l) => inTab(chatTab, l));
   /** `at`: the click's time, in the chat lines' clock (ms since 1970) */
   const pickTab = (tab: ChatTab, at: number) => {
     const now = at;
     // Leaving All, everything in it has been seen
-    setSeenAt((s) => (chatTab === "all" ? { all: now, chat: now, combat: now, server: now } : { ...s, [chatTab]: now, [tab]: now }));
+    setSeenAt((s) => (chatTab === "all" ? { ...s, all: now, chat: now, combat: now, server: now } : { ...s, [chatTab]: now, [tab]: now }));
     atBottomRef.current = true;
     updateSettings({ chatTab: tab });
   };
@@ -1321,6 +1395,8 @@ export function GameView({
         menu={[
           { label: "Preferences…", onSelect: () => setModal({ type: "preferences" }) },
           { label: "Configuration…", onSelect: () => setModal({ type: "configuration" }) },
+          // Ours: the admin console (Shift+4) for admin characters, easier to find here
+          ...(adminLoaded ? [{ label: "Admin console…", onSelect: () => setAdminConsole((a) => (a ? { ...a, open: true } : a)) }] : []),
           // actions.c: each item runs its typed command
           { label: "Actions", items: ACTIONS_MENU.map((a) => (a ? { label: a[1], onSelect: () => runCommand(a[0]) } : { label: "", separator: true })) },
           ...(spellsMenu.length ? [{ label: "Spells", items: spellsMenu }] : []),
@@ -1344,6 +1420,7 @@ export function GameView({
         ]}
         // The Classic interface has the meter after the toolbar, as the original's lag box
         latency={settings.latencyMeter && !classic ? latency : undefined}
+        fps={settings.showFps && fps !== null && !classic ? fps : undefined}
         tooltips={settings.tooltips}
       />
       {classic && (
@@ -1356,6 +1433,7 @@ export function GameView({
             assets={assets}
             tooltips={settings.tooltips}
             latency={settings.latencyMeter ? latency : undefined}
+            fps={settings.showFps && fps !== null ? fps : undefined}
             buttons={
               settings.toolbar
                 ? [
@@ -1413,7 +1491,6 @@ export function GameView({
             />
           </div>
         )}
-        {settings.showFps && fps !== null && <div className="fps">{fps} fps</div>}
         {touch && (
           <TouchControls
             cooldown={cooldown}
@@ -1514,6 +1591,28 @@ export function GameView({
               />
             )}
           </>
+        )}
+        {emoteMenu && (
+          <div className="quick-emotes" role="menu" aria-label="Quick emotes">
+            {QUICK_EMOTES.map((e, i) =>
+              e ? (
+                <button
+                  key={e[0]}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setEmoteMenu(false);
+                    runCommand(e[0]);
+                    focusView();
+                  }}
+                >
+                  {e[1]}
+                </button>
+              ) : (
+                <span key={i} className="quick-emotes-gap" />
+              ),
+            )}
+          </div>
         )}
         {viewNote && <div key={viewNote.at} className="view-note">{VIEW_NAMES[viewNote.mode]}</div>}
         {hideNote && (
@@ -1662,13 +1761,21 @@ export function GameView({
         {adminConsole?.open && (
           <AdminConsole
             session={session}
+            rooms={adminRooms}
             text={adminConsole.text}
             command={adminConsole.command}
             onCommandChange={(command) => setAdminConsole((a) => (a ? { ...a, command } : a))}
             history={adminConsole.history}
             onCommand={adminCommand}
+            onDm={adminDm}
+            onTell={(name) => {
+              setAdminConsole((a) => (a ? { ...a, open: false } : a));
+              setText(`tell "${name}" `);
+              inputRef.current?.focus();
+            }}
             onHide={() => setAdminConsole((a) => (a ? { ...a, open: false } : a))}
             onQuit={() => setAdminConsole((a) => (a ? { ...a, open: false, text: "" } : a))}
+            onClear={() => setAdminConsole((a) => (a ? { ...a, text: "" } : a))}
           />
         )}
         {chess && (
@@ -1705,9 +1812,9 @@ export function GameView({
               ✕
             </button>
           )}
-          {CHAT_TABS.map(({ tab, label }) => {
-            // On All every line is on screen, so no tab has unseen ones
-            const unread = chatTab !== "all" && tab !== "all" && tab !== chatTab && chat.some((l) => inTab(tab, l) && l.time > seenAt[tab]);
+          {CHAT_TABS.filter(({ tab }) => tab !== "debug" || adminLoaded).map(({ tab, label }) => {
+            // On All every line is on screen, so no tab has unseen ones (and Debug is never marked)
+            const unread = chatTab !== "all" && tab !== "all" && tab !== "debug" && tab !== chatTab && chat.some((l) => inTab(tab, l) && l.time > seenAt[tab]);
             return (
               <button
                 key={tab}

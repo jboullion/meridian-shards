@@ -50,6 +50,8 @@ export interface WorldObject {
   motion: Motion | null;
   /** Bumped whenever the look changes (for render caches). */
   version: number;
+  /** Ours: drawn this many times its size (ambient critters); the server's objects never have it */
+  scale?: number;
 }
 
 /** proto.h REMOTE_VIEW_* */

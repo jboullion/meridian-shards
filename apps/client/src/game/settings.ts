@@ -12,6 +12,8 @@
 // client's table (module/merintr/merintr.c interface_key_table: arrows move and turn,
 // Alt+arrows strafe, PgUp/PgDn/Home/End look, Space goes, Enter looks).
 
+import { AMBIENT_SCALE, type AmbientLevel } from "@shards/world";
+
 /** Bind Editor actions, by tab, in its order (m59bind.exe; config.ini [keys]). */
 export const ACTION_TABS = {
   // Ours: no Mouselook Toggle (the mouse is never captured but while the right button drags the view)
@@ -22,7 +24,7 @@ export const ACTION_TABS = {
   Map: ["map", "mapZoomIn", "mapZoomOut"],
   // Ours: keys for our own panels and menus, and the quick slots (quickSlots.ts)
   Interface: [
-    "inventory", "settings", "configuration", "actions", "cameraView", "hideInterface",
+    "inventory", "settings", "configuration", "actions", "quickEmotes", "cameraView", "hideInterface",
     "quickSlot1", "quickSlot2", "quickSlot3", "quickSlot4", "quickSlot5", "quickSlot6", "quickSlot7", "quickSlot8", "quickSlot9",
     "quickSlot10",
     // The Modern interface's second row
@@ -80,6 +82,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   actions: "Actions",
   cameraView: "Camera View",
   hideInterface: "Hide Interface",
+  quickEmotes: "Quick Emotes",
   quickSlot1: "Quick Slot 1",
   quickSlot2: "Quick Slot 2",
   quickSlot3: "Quick Slot 3",
@@ -162,6 +165,8 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     settings: k("KeyO", "F10"),
     configuration: [],
     actions: [],
+    // Ours: the emotes and moods in a small menu over the view (GameView emoteMenu)
+    quickEmotes: k("KeyQ"),
     // Ours: first person, chase, behind, front (the Modern interface only; gameScene.ts ViewMode)
     cameraView: k("KeyV"),
     // Ours: the Modern interface's HUD away and back, for screenshots (GameView hudHidden)
@@ -232,6 +237,7 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     settings: k("F10"),
     configuration: [],
     actions: [],
+    quickEmotes: [],
     cameraView: [],
     hideInterface: [],
     // Typing starts a chat line in the original preset, digits too: no keys unless the player adds them
@@ -403,12 +409,39 @@ export interface Settings {
    * (roomAo.ts) and shadows under figures (ObjectsView). Off, the original's look.
    */
   enhanced: boolean;
+
+  /**
+   * Ours, Ambient Life (the Bind Editor's Options, the phone's Configuration): townsfolk walking
+   * the streets and patrons in the inns, seen by this client only (packages/world ambient/).
+   */
+  ambientLife: AmbientLevel;
+  /**
+   * Ours, Critters (under Ambient Life): rats, spiders, centipedes and the like scurrying about,
+   * killed with a click, seen by this client only (packages/world ambient/critters.ts)
+   */
+  critters: boolean;
+  /** Ours, Birds and Bats (under Ambient Life): flocks in the sky, bats in caves (render flyers.ts) */
+  flyers: boolean;
+  /** Ours, Nature (under Ambient Life): butterflies, fireflies, falling leaves and leaping fish (render nature.ts) */
+  nature: boolean;
+  /** Ours, Ground Detail (its own option): grass, flowers, pebbles and stones on the ground (render groundCover.ts) */
+  groundDetail: boolean;
+  /**
+   * Ours, Ambient Sounds: the townsfolk's chatter, the arena's crowd, thunder, birds, critters and
+   * the like (game/ambientSounds.ts), and how loud, 0-100, under the Sound Volume
+   */
+  ambientSounds: boolean;
+  ambientVolume: number;
+  /** Ours, Second Hotbar (the Modern interface): quick slots 11-20 in a row above the first, on the numpad's keys; off by default */
+  secondHotbar: boolean;
+  /** Ours, Limit to 60 FPS: a faster screen draws at most 60 frames a second (cooler, kinder to batteries) */
+  frameLimit: boolean;
 }
 
 export type InterfaceStyle = "modern" | "classic";
 
-/** The chat window's tabs: everything, or one channel (packages/world chatChannel.ts) */
-export type ChatTab = "all" | "chat" | "combat" | "server";
+/** The chat window's tabs: everything, or one channel (packages/world chatChannel.ts); Debug is the admins' */
+export type ChatTab = "all" | "chat" | "combat" | "server" | "debug";
 
 export type TouchControls = "auto" | "on" | "off";
 
@@ -418,7 +451,7 @@ export function touchUi(s: Settings): boolean {
   return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 }
 
-const SETTINGS_VERSION = 9;
+const SETTINGS_VERSION = 11;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
@@ -448,7 +481,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dynamicMap: true,
   coloredText: true,
   mapAnnotations: true,
-  showFps: false,
+  showFps: true,
   profanityFilter: true,
   profanityIgnore: false,
   logoutTimer: false,
@@ -481,6 +514,15 @@ export const DEFAULT_SETTINGS: Settings = {
   characterWindowAt: null,
   hudScale: 100,
   enhanced: true,
+  ambientLife: "normal",
+  critters: true,
+  flyers: true,
+  nature: true,
+  groundDetail: true,
+  ambientSounds: true,
+  ambientVolume: 70,
+  frameLimit: true,
+  secondHotbar: false,
 };
 
 const STORAGE_KEY = "shards.settings";
@@ -501,6 +543,7 @@ export function migrate(s: SavedSettings): Settings {
   // Version 2 (milestone 6): E attacks in the modern preset; it no longer opens doors
   if (version < 2 && preset === "modern") keys.go = keys.go.filter((b) => b.code !== "KeyE");
   const out: Settings = { ...DEFAULT_SETTINGS, ...s, version: SETTINGS_VERSION, preset, keys };
+  if (!(out.ambientLife in AMBIENT_SCALE)) out.ambientLife = DEFAULT_SETTINGS.ambientLife;
   if (version < 3) {
     // Version 3 (the Preferences and Configuration dialogs): one mouselook speed became
     // the X and Y scales, and "right click looks" became Examine on the right button
@@ -536,6 +579,13 @@ export function migrate(s: SavedSettings): Settings {
       const slot = `quickSlot${i}` as Action;
       keys[slot] = keys[slot].filter((b) => b.code !== `Numpad${i % 10}` || b.alt || b.ctrl);
     }
+  }
+  // Version 10: Show FPS is on by default (beside the latency meter); on once for everyone
+  if (version < 10) out.showFps = true;
+  // Version 11 (Quick Emotes on Q): not if the player had put Q to another use
+  if (version < 11) {
+    const taken = Object.entries(keys).some(([a, list]) => a !== "quickEmotes" && list.some((b) => b.code === "KeyQ" && !b.alt && !b.ctrl));
+    if (taken) keys.quickEmotes = keys.quickEmotes.filter((b) => b.code !== "KeyQ" || b.alt || b.ctrl);
   }
   delete (out as SavedSettings).mouseSpeed;
   delete (out as SavedSettings).rightClickLooks;

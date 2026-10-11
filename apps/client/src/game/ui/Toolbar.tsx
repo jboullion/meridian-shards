@@ -10,7 +10,7 @@
 import { useState, type ReactNode } from "react";
 import type { AssetStore } from "../../assets.ts";
 import { useKeyedHalves } from "./keyed.ts";
-import { LatencyMeter } from "../TitleBar.tsx";
+import { FpsReadout, LatencyMeter } from "../TitleBar.tsx";
 
 /** One button: the bitmap, its tooltip (merintr.rc IDS_TB*, mailnews.rc IDS_READMAIL), and what it does */
 export interface ToolbarButton {
@@ -50,7 +50,7 @@ export function ToolbarButtonView({ assets, button, tooltips }: { assets: AssetS
 
 /** The Classic interface's toolbar row over the view (graphics.c: the view starts MIN_TOP_TOOLBAR below it). */
 export function ClassicToolbar({
-  assets, buttons, tooltips, latency, children,
+  assets, buttons, tooltips, latency, fps, children,
 }: {
   assets: AssetStore;
   /** None with Show toolbar off (config.toolbar) */
@@ -58,6 +58,8 @@ export function ClassicToolbar({
   tooltips: boolean;
   /** The latency meter's round trip (null while measuring); undefined with Show latency meter off */
   latency?: number | null;
+  /** Show FPS, beside the meter; undefined for none */
+  fps?: number;
   /** The room's enchantments, right-aligned */
   children?: ReactNode;
 }) {
@@ -71,6 +73,7 @@ export function ClassicToolbar({
         </div>
       )}
       {latency !== undefined && <LatencyMeter ms={latency} tooltip={tooltips} />}
+      {fps !== undefined && <FpsReadout fps={fps} />}
       <div className="classic-room-enchantments">{children}</div>
     </div>
   );

@@ -212,6 +212,33 @@ button.link {
     -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
 }
 
+/* Ours: the view lit up by lightning far off (gameScene.ts updateStorm) */
+.lightning-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: rgb(205, 218, 255);
+  mix-blend-mode: screen;
+  opacity: 0;
+}
+
+/* Ours: what ambient townsfolk say (gameScene.ts drawSpeech), never in the chat */
+.speech-bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: 220px;
+  width: max-content;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(20, 16, 10, 0.72);
+  border: 1px solid rgba(214, 190, 140, 0.55);
+  color: #f1e6c8;
+  font: italic 13px Georgia, "Times New Roman", serif;
+  text-align: center;
+  white-space: normal;
+}
+
 .loading {
   position: absolute;
   inset: 0;
@@ -1102,6 +1129,28 @@ button.link {
   outline: none;
 }
 
+/* Show FPS (TitleBar.tsx FpsReadout): beside the latency meter */
+.fps-readout {
+  margin-right: 8px;
+  color: inherit;
+  opacity: 0.85;
+  font: 12px Arial, Helvetica, sans-serif;
+  font-variant-numeric: tabular-nums;
+  min-width: 46px;
+  text-align: right;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* On the Classic toolbar's stone, after the meter */
+.classic-toolbar .fps-readout {
+  margin-left: 6px;
+  color: #eee2c4;
+  text-shadow: 1px 1px 0 #000;
+  opacity: 1;
+  text-align: left;
+}
+
 /* The latency meter (lagbox.c): a square, green to 250 ms, yellow to 750 ms, red beyond */
 .latency {
   position: relative;
@@ -1252,16 +1301,6 @@ button.link {
 }
 
 /* Show FPS */
-.view .fps {
-  position: absolute;
-  right: 8px;
-  top: 6px;
-  color: #fff;
-  font: bold 12px Arial, Helvetica, sans-serif;
-  text-shadow: 1px 1px 0 #000;
-  pointer-events: none;
-}
-
 .chat-time {
   color: rgb(60, 60, 60);
 }
@@ -1342,14 +1381,8 @@ button.link {
   overflow: hidden;
 }
 
+/* One column: the tabs (Options first), the page the window's width, the buttons under it */
 .bind-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 170px;
-  gap: 12px;
-  min-height: 0;
-}
-
-.bind-main {
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -1357,8 +1390,38 @@ button.link {
 }
 
 .bind-page {
-  max-height: 340px;
+  height: 340px;
+  max-height: calc(100vh - 160px);
   overflow-y: auto;
+}
+
+/* The Options tab: three boxes side by side, one under another on a narrow window */
+.bind-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  align-items: start;
+  gap: 12px;
+  padding: 12px 10px;
+}
+
+.bind-options .mk-group.flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  padding: 14px 10px 10px;
+}
+
+.bind-options .mk-check span {
+  white-space: normal;
+  line-height: 1.15;
+}
+
+.bind-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
 }
 
 .bind-grid {
@@ -1427,33 +1490,13 @@ button.link {
   font-style: italic;
 }
 
-.bind-side {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-/* One column as wide as the box: long option names wrap rather than widen the window */
-.bind-side .mk-group.flow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 4px;
-  padding: 14px 8px 8px;
-}
-
-.bind-side .mk-check span {
-  white-space: normal;
-  line-height: 1.15;
-}
-
 .bind-buttons {
   display: flex;
   gap: 6px;
-  margin-top: auto;
 }
 
 .bind-buttons .mk-btn {
-  flex: 1;
+  min-width: 80px;
 }
 
 .bind-mouse {
@@ -1497,10 +1540,22 @@ button.link {
   opacity: 0.5;
 }
 
+/* Ours: Ambient Life, its name over a drop-down the box's width (as HUD Size) */
+.ambient-life {
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 4px;
+  color: var(--ui-text, #e7e7e7);
+  white-space: nowrap;
+}
+
+.ambient-life .mk-edit,
+.ambient-life select {
+  box-sizing: border-box;
+  width: 100%;
+}
+
 @media (max-width: 700px) {
-  .bind-layout {
-    grid-template-columns: 1fr;
-  }
   .bind-grid {
     grid-template-columns: 1fr;
   }
@@ -1566,19 +1621,15 @@ button.link {
   min-height: 36px;
 }
 
-/* The Bind Editor's seven tabs share the column with the keys: they wrap rather than overlap */
-.bind-editor .bind-main .mk-tabs {
+/* The Bind Editor's nine tabs: they wrap on a narrow window rather than overlap */
+.bind-editor .bind-layout .mk-tabs {
   flex-wrap: wrap;
   row-gap: 2px;
 }
 
-.bind-editor .bind-main .mk-tabs button {
+.bind-editor .bind-layout .mk-tabs button {
   padding: 0 8px;
   font-size: 105%;
-}
-
-.bind-editor .bind-side {
-  padding-top: calc(var(--dy) * 15 + 4px);
 }
 
 /* ---- looking at things (LookDialogs.tsx): client.rc IDD_DESC / IDD_DESCPLAYER, 338 dialog units across ---- */
@@ -2229,6 +2280,18 @@ canvas.server-wait {
 
 .admin-window .mk-body {
   overflow: visible;
+}
+
+.admin-status {
+  color: #ff8c73;
+}
+
+.admin-window .mk-tabs button {
+  padding: 0 10px;
+}
+
+.admin-rooms .mk-list {
+  font-family: Consolas, "Courier New", monospace;
 }
 
 .admin-text {
@@ -3208,10 +3271,6 @@ canvas.server-wait {
 .game.modern-ui.hud-hidden .map-cluster,
 .game.modern-ui.hud-hidden .action-bar,
 .game.modern-ui.hud-hidden .character-window-anchor,
-.game.modern-ui.hud-hidden .view .fps {
-  display: none;
-}
-
 .game.modern-ui.hud-hidden .chat:not(:focus-within) {
   opacity: 0;
   pointer-events: none;
@@ -3239,12 +3298,6 @@ canvas.server-wait {
   100% {
     opacity: 0;
   }
-}
-
-.game.modern-ui .view .fps {
-  top: auto;
-  bottom: 10px;
-  right: 10px;
 }
 
 /* The chat down the left side. Idle, only lines newer than CHAT_FRESH_MS show (GameView .fresh),
@@ -3701,4 +3754,50 @@ canvas.server-wait {
   padding: 21px 21px 18px 8px;
   border-left: none;
   background: transparent !important;
+}
+
+/* Ours: the Quick Emotes menu (Q, GameView emoteMenu), over the top of the view; under the
+   Modern interface's target frame */
+.view .quick-emotes {
+  position: absolute;
+  left: 50%;
+  top: 10px;
+  z-index: 6;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  background: rgba(27, 22, 18, 0.88);
+  border: 1px solid var(--panel-edge);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.game.modern-ui .view .quick-emotes {
+  top: calc(78px * var(--hud-scale, 1));
+}
+
+.view .quick-emotes button {
+  font: 13px Georgia, "Times New Roman", serif;
+  color: var(--text);
+  background: #2a2119;
+  border: 1px solid var(--panel-edge);
+  border-radius: 3px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+.view .quick-emotes button:hover,
+.view .quick-emotes button:focus-visible {
+  color: var(--gold);
+  border-color: var(--gold);
+  outline: none;
+}
+
+.view .quick-emotes-gap {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 3px;
+  background: var(--panel-edge);
 }
