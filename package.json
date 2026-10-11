@@ -32,6 +32,7 @@
     "soak": "node tools/headless/client.ts --user shardbot --pass shardbot --walk \"8.5,7.5 9.05,6.5\" --loop --stay 300",
     "icons": "node tools/icons/make-icons.ts",
     "maint": "node tools/maint/maint.ts",
+    "shots": "node tools/screenshots/capture.ts",
     "build": "npm run build -w @shards/client",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/client/tsconfig.json --noEmit && tsc -p apps/desktop/tsconfig.json --noEmit",
     "lint": "eslint .",
@@ -43,6 +44,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.4",
     "@types/ws": "^8.18.2",
     "eslint": "^10.12.0",
