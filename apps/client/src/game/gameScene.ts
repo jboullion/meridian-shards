@@ -379,6 +379,10 @@ export class GameScene {
     this.assets = assets;
     this.audio = audio;
     this.audio.objectPosition = (id) => session.world.objects.get(id);
+    this.audio.objectName = (id) => {
+      const o = session.world.objects.get(id);
+      return o ? session.resource(o.info.nameRes) : undefined;
+    };
     this.offSettings = onSettings((s) => {
       this.settings = s;
       this.applyViewSettings();
@@ -925,6 +929,11 @@ export class GameScene {
    * Townsfolk run from big spells: a new projectile where it's cast and where it lands, and the
    * ground shaking (an earthquake) around us
    */
+  /** We waved (UA_WAVE): someone close by in front of us waves back (ambient life) */
+  waveAtAmbient(): void {
+    this.ambient?.wavedAt({ x: this.mover.x, y: this.mover.y }, this.mover.angle);
+  }
+
   private scatterAmbient(): void {
     const ambient = this.ambient;
     const world = this.session.world;
@@ -1093,7 +1102,9 @@ export class GameScene {
       flyers.clear();
     }
     const scale = this.settings.flyers ? AMBIENT_SCALE[level] : 0;
-    const cave = habitatOf(this.roomFile, this.roomTerrain?.[this.roomFile])?.name === "cave";
+    // Caves, and dungeons (Castle Victoria): bats
+    const habitat = habitatOf(this.roomFile, this.roomTerrain?.[this.roomFile])?.name;
+    const cave = habitat === "cave" || habitat === "dungeon";
     const hour = this.gameHour();
     const night = hour !== null && (hour >= 20 || hour < 5);
     const sky = this.roomHasSky && !cave;
@@ -2300,6 +2311,7 @@ export class GameScene {
       case "settings":
       case "configuration":
       case "actions":
+      case "quickEmotes":
       case "who":
       case "offer":
       case "buy":

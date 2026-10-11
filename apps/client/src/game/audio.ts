@@ -163,8 +163,11 @@ export class GameAudio {
   private readonly assets: AssetStore;
   /** Where an object is, for sounds that come from one (GamePlaySound: obj->motion.x/y) */
   objectPosition: (id: number) => { x: number; y: number } | undefined = () => undefined;
+  /** The name of an object a sound comes from, for the log */
+  objectName: (id: number) => string | undefined = () => undefined;
   /** Log of what plays, for the dev console (window.shards.audio.log) */
   readonly log: string[] = [];
+  private readonly listeners = new Set<(line: string) => void>();
 
   private readonly offSettings: () => void;
 
@@ -217,10 +220,12 @@ export class GameAudio {
         void this.playMusic(e.file);
         break;
       case "stopLoops":
+        this.note("server: stop the looping sounds");
         this.stopWhere((v) => (v.flags & SF.LOOP) !== 0);
         break;
       case "stop":
         // audio.c SoundStopFile stops every voice playing that file
+        this.note(`server: stop ${e.file.toLowerCase()}`);
         this.stopWhere((v) => v.file === e.file.toLowerCase());
         break;
       case "play": {
@@ -231,7 +236,8 @@ export class GameAudio {
           // big row/col (1-based) to the middle of that square
           pos = { x: (w.col - 1) * FINENESS + FINENESS / 2, y: (w.row - 1) * FINENESS + FINENESS / 2 };
         }
-        void this.playSound(e.file, w.flags, pos);
+        const from = w.object ? `server, from ${this.objectName(w.object) ?? "object"} (${w.object})` : w.row > 0 || w.col > 0 ? `server, at row ${w.row} col ${w.col}` : "server";
+        void this.playSound(e.file, w.flags, pos, 1, from);
         break;
       }
     }
@@ -239,13 +245,13 @@ export class GameAudio {
 
   /** A sound the client plays itself (wading), at the player. */
   playLocal(file: string): void {
-    void this.playSound(file, 0, null);
+    void this.playSound(file, 0, null, 1, "client");
   }
 
   /** A sound the client plays itself at a spot (audio.c SoundPlayFile with x, y: fireworks). */
   /** A sound at a place; `volume` scales it (ours: ambient critters die quieter than monsters) */
   playAt(file: string, x: number, y: number, volume = 1): void {
-    void this.playSound(file, 0, { x, y }, volume);
+    void this.playSound(file, 0, { x, y }, volume, "client");
   }
 
   /** Ours: whether ambient sounds can be heard at all */
@@ -301,7 +307,7 @@ export class GameAudio {
           v.pan.disconnect();
           this.dropAmbient(v);
         };
-      this.note(`ambient ${name}${o.loop ? " loop" : ""}`);
+      this.note(`ambient (ours): ${name}${o.loop ? " (loops)" : ""}`);
     });
     return v;
   }
@@ -356,7 +362,7 @@ export class GameAudio {
     src.connect(gain);
     src.start();
     entry.source = src;
-    this.note(`music ${name}`);
+    this.note(`server: music ${name}`);
   }
 
   private stopMusic(): void {
@@ -366,11 +372,11 @@ export class GameAudio {
     this.music = null;
   }
 
-  private async playSound(file: string, flags: number, pos: Voice["pos"], volume = 1): Promise<void> {
+  private async playSound(file: string, flags: number, pos: Voice["pos"], volume = 1, from = "client"): Promise<void> {
     const s = this.settings;
     const loop = (flags & SF.LOOP) !== 0;
     if (!s.sound || (loop && !s.loopSounds) || (flags & SF.RANDOM_PLACE && !s.randomSounds)) return;
-    if (this.voices.length >= MAX_SOUNDS) return this.note(`skip ${file} (max reached)`);
+    if (this.voices.length >= MAX_SOUNDS) return this.note(`${from}: skipped ${file} (${MAX_SOUNDS} playing)`);
     const name = file.toLowerCase();
     const buf = await this.buffer(name);
     if (!buf || this.voices.length >= MAX_SOUNDS) return;
@@ -386,7 +392,9 @@ export class GameAudio {
     this.place(v);
     source.onended = () => this.remove(v);
     source.start();
-    this.note(`play ${name}${loop ? " loop" : ""}${pos ? ` at ${(pos.x / FINENESS).toFixed(1)},${(pos.y / FINENESS).toFixed(1)}` : ""}`);
+    // What kind of sound it is: a room's loops and random sounds can be switched off in Preferences
+    const kind = [loop && "loops", flags & SF.RANDOM_PLACE && "random sound", flags & SF.RANDOM_PITCH && "random pitch"].filter(Boolean).join(", ");
+    this.note(`${from}: ${name}${kind ? ` (${kind})` : ""}${pos ? ` at ${(pos.x / FINENESS).toFixed(1)}, ${(pos.y / FINENESS).toFixed(1)}` : ""}`);
   }
 
   private remove(v: Voice): void {
@@ -459,6 +467,13 @@ export class GameAudio {
   private note(line: string): void {
     this.log.push(line);
     if (this.log.length > 200) this.log.shift();
+    for (const fn of this.listeners) fn(line);
+  }
+
+  /** Each line of the log as it's written (the admins' Debug tab) */
+  onLog(fn: (line: string) => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
   }
 
   dispose(): void {

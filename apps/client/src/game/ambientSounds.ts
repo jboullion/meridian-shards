@@ -51,7 +51,7 @@ export interface AmbientSoundFrame {
 }
 
 /** The chatter under each kind of crowd: the file, how loud, and how many people make it full */
-const BEDS: Record<AmbientKind, { file: string; indoorFile?: string; volume: number; full: number }> = {
+const BEDS: Partial<Record<AmbientKind, { file: string; indoorFile?: string; volume: number; full: number }>> = {
   town: { file: "amb_town_talk.ogg", volume: 0.18, full: 7 },
   inn: { file: "amb_inn_talk.ogg", volume: 0.28, full: 4 },
   castle: { file: "amb_town_talk.ogg", indoorFile: "amb_hall_talk.ogg", volume: 0.15, full: 5 },
@@ -124,9 +124,9 @@ export class AmbientSounds {
       setTimeout(() => s.stop(800), 5000);
     };
     switch (cue) {
-      case "town": taste(BEDS.town.file, BEDS.town.volume); break;
-      case "inn": taste(BEDS.inn.file, BEDS.inn.volume); break;
-      case "hall": taste(BEDS.arena.file, BEDS.arena.volume); break;
+      case "town": taste(BEDS.town!.file, BEDS.town!.volume); break;
+      case "inn": taste(BEDS.inn!.file, BEDS.inn!.volume); break;
+      case "hall": taste(BEDS.arena!.file, BEDS.arena!.volume); break;
       case "swing": once(pick(SWISH), 0.45); break;
       case "hit": once(pick(HITS.metal), 0.55); break;
       case "cast-fire": once("ffirebal.ogg", 0.5); break;
@@ -139,7 +139,7 @@ export class AmbientSounds {
       case "splash": once("splash.ogg", 0.45); break;
       case "step": once("weatstp1.ogg", 0.3); break;
       case "dice": once("dice.ogg", 0.45); break;
-      case "drink": once("drink.ogg", 0.35); break;
+      case "drink": once("drink.ogg", 0.175); break;
       case "ouch": once(pick(OUCH.male), 0.35); break;
       case "death": once("pdeath.ogg", 0.5); break;
     }
@@ -155,7 +155,8 @@ export class AmbientSounds {
   // ---- chatter ----
 
   private updateBed(f: AmbientSoundFrame): void {
-    const spec = f.kind ? BEDS[f.kind] : null;
+    // (A shop's one or two customers make no crowd)
+    const spec = f.kind ? (BEDS[f.kind] ?? null) : null;
     const file = spec ? (f.indoors && spec.indoorFile) || spec.file : null;
     let volume = spec && f.people > 0 ? spec.volume * Math.min(1, 0.25 + (0.75 * f.people) / spec.full) : 0;
     // The rain drowns out the street, and muffles it
@@ -222,7 +223,7 @@ export class AmbientSounds {
         a.playAmbient("dice.ogg", { at, range: 12 * SQ, volume: 0.45 });
         break;
       case "drink":
-        a.playAmbient("drink.ogg", { at, range: 10 * SQ, volume: 0.35 });
+        a.playAmbient("drink.ogg", { at, range: 10 * SQ, volume: 0.175 });
         break;
     }
   }

@@ -382,18 +382,17 @@ export function guardAppearance(rand: () => number, livery: number): Appearance 
   };
 }
 
-/** A knight of an army: plate, gauntlets, mostly helmed, the army's shield and a weapon */
+/** A knight of an army: plate, gauntlets, the plain helm (it suits them best), the army's shield and a weapon */
 export function knightAppearance(rand: () => number, faction: Faction): Appearance {
   const p = person(rand, rand() < 0.35);
   const sex = p.female ? 1 : 0;
   const army = FACTIONS[faction];
   const shirt = twoColorXlat(army.color, p.skin);
-  const kind = weighted<Helm | null>(rand, [["knight", 4], ["ornate", 1.5], ["war", 1], [null, 1.5]]);
   return {
     ...p, body: ARMOUR.plate[sex], bodyXlat: shirt, arms: GAUNTLET_ARMS[sex], armsXlat: shirt,
     legs: PANTS[sex], legsXlat: twoColorXlat(weighted(rand, DARK_PANTS), p.skin),
     gear: {
-      hat: kind ? helm(p.female, kind) : undefined,
+      hat: helm(p.female, "simple"),
       weapon: weighted<string>(rand, [[WEAPONS.sword, 4], [WEAPONS.mace, 2], [WEAPONS.hammer, 1], [WEAPONS.axe, 1], [WEAPONS.scimitar, 1]]),
       shield: { file: "gshe.bgf", xlat: twoColorXlat(army.color, army.color), emblem: army.emblem },
     },
@@ -410,14 +409,30 @@ export function ladyAppearance(rand: () => number): Appearance {
   };
 }
 
-/** A gentleman of the court: a royal shirt, sometimes a circlet */
+/** Robes' bodies and sleeves (robebase.kod) */
+const ROBE_BODY: Art = ["btc.bgf", "btd.bgf"];
+const ROBE_ARMS: ArmArt = [["blc.bgf", "brc.bgf"], ["bld.bgf", "brd.bgf"]];
+
+/**
+ * Nobility at court, men and women: a robe or a royal shirt in rich colours, with bright
+ * trousers or a skirt, and mostly a circlet
+ */
 export function nobleAppearance(rand: () => number): Appearance {
-  const p = person(rand, false);
+  const p = person(rand, rand() < 0.45);
+  const sex = p.female ? 1 : 0;
   const c1 = weighted(rand, ROYAL_COLORS);
+  const c2 = weighted(rand, ROYAL_COLORS.filter(([c]) => c !== c1));
+  const gear = rand() < 0.85 ? { hat: { file: pick(rand, CIRCLETS), hidesHair: false } } : undefined;
+  if (rand() < 0.5) {
+    const robe = twoColorXlat(c1, p.skin);
+    return { ...p, body: ROBE_BODY[sex], bodyXlat: robe, arms: ROBE_ARMS[sex], armsXlat: robe, legs: ROBE_LEGS[sex], legsXlat: robe, gear };
+  }
+  // Not the second colour on the arms: it's their hands' (they'd look gloved)
+  const skirt = p.female && rand() < 0.6;
   return {
-    ...p, body: SHIRT_BODY[0], bodyXlat: twoColorXlat(c1, weighted(rand, ROYAL_COLORS.filter(([c]) => c !== c1))), arms: SHIRT_ARMS[0],
-    armsXlat: twoColorXlat(c1, p.skin), legs: PANTS[0], legsXlat: twoColorXlat(weighted(rand, DARK_PANTS), p.skin),
-    gear: rand() < 0.35 ? { hat: { file: pick(rand, CIRCLETS), hidesHair: false } } : undefined,
+    ...p, body: SHIRT_BODY[sex], bodyXlat: twoColorXlat(c1, c2), arms: SHIRT_ARMS[sex], armsXlat: twoColorXlat(c1, p.skin),
+    legs: skirt ? ROBE_LEGS[1] : PANTS[sex], legsXlat: twoColorXlat(weighted(rand, skirt ? ROYAL_COLORS : [...ROYAL_COLORS, ...DARK_PANTS]), p.skin),
+    gear,
   };
 }
 

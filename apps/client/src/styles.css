@@ -3755,3 +3755,49 @@ canvas.server-wait {
   border-left: none;
   background: transparent !important;
 }
+
+/* Ours: the Quick Emotes menu (Q, GameView emoteMenu), over the top of the view; under the
+   Modern interface's target frame */
+.view .quick-emotes {
+  position: absolute;
+  left: 50%;
+  top: 10px;
+  z-index: 6;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  background: rgba(27, 22, 18, 0.88);
+  border: 1px solid var(--panel-edge);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.game.modern-ui .view .quick-emotes {
+  top: calc(78px * var(--hud-scale, 1));
+}
+
+.view .quick-emotes button {
+  font: 13px Georgia, "Times New Roman", serif;
+  color: var(--text);
+  background: #2a2119;
+  border: 1px solid var(--panel-edge);
+  border-radius: 3px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+.view .quick-emotes button:hover,
+.view .quick-emotes button:focus-visible {
+  color: var(--gold);
+  border-color: var(--gold);
+  outline: none;
+}
+
+.view .quick-emotes-gap {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 3px;
+  background: var(--panel-edge);
+}

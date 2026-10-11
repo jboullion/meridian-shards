@@ -24,7 +24,7 @@ export const ACTION_TABS = {
   Map: ["map", "mapZoomIn", "mapZoomOut"],
   // Ours: keys for our own panels and menus, and the quick slots (quickSlots.ts)
   Interface: [
-    "inventory", "settings", "configuration", "actions", "cameraView", "hideInterface",
+    "inventory", "settings", "configuration", "actions", "quickEmotes", "cameraView", "hideInterface",
     "quickSlot1", "quickSlot2", "quickSlot3", "quickSlot4", "quickSlot5", "quickSlot6", "quickSlot7", "quickSlot8", "quickSlot9",
     "quickSlot10",
     // The Modern interface's second row
@@ -82,6 +82,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   actions: "Actions",
   cameraView: "Camera View",
   hideInterface: "Hide Interface",
+  quickEmotes: "Quick Emotes",
   quickSlot1: "Quick Slot 1",
   quickSlot2: "Quick Slot 2",
   quickSlot3: "Quick Slot 3",
@@ -164,6 +165,8 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     settings: k("KeyO", "F10"),
     configuration: [],
     actions: [],
+    // Ours: the emotes and moods in a small menu over the view (GameView emoteMenu)
+    quickEmotes: k("KeyQ"),
     // Ours: first person, chase, behind, front (the Modern interface only; gameScene.ts ViewMode)
     cameraView: k("KeyV"),
     // Ours: the Modern interface's HUD away and back, for screenshots (GameView hudHidden)
@@ -234,6 +237,7 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     settings: k("F10"),
     configuration: [],
     actions: [],
+    quickEmotes: [],
     cameraView: [],
     hideInterface: [],
     // Typing starts a chat line in the original preset, digits too: no keys unless the player adds them
@@ -436,8 +440,8 @@ export interface Settings {
 
 export type InterfaceStyle = "modern" | "classic";
 
-/** The chat window's tabs: everything, or one channel (packages/world chatChannel.ts) */
-export type ChatTab = "all" | "chat" | "combat" | "server";
+/** The chat window's tabs: everything, or one channel (packages/world chatChannel.ts); Debug is the admins' */
+export type ChatTab = "all" | "chat" | "combat" | "server" | "debug";
 
 export type TouchControls = "auto" | "on" | "off";
 
@@ -447,7 +451,7 @@ export function touchUi(s: Settings): boolean {
   return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 }
 
-const SETTINGS_VERSION = 10;
+const SETTINGS_VERSION = 11;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
@@ -578,6 +582,11 @@ export function migrate(s: SavedSettings): Settings {
   }
   // Version 10: Show FPS is on by default (beside the latency meter); on once for everyone
   if (version < 10) out.showFps = true;
+  // Version 11 (Quick Emotes on Q): not if the player had put Q to another use
+  if (version < 11) {
+    const taken = Object.entries(keys).some(([a, list]) => a !== "quickEmotes" && list.some((b) => b.code === "KeyQ" && !b.alt && !b.ctrl));
+    if (taken) keys.quickEmotes = keys.quickEmotes.filter((b) => b.code !== "KeyQ" || b.alt || b.ctrl);
+  }
   delete (out as SavedSettings).mouseSpeed;
   delete (out as SavedSettings).rightClickLooks;
   for (const k of OLD_GRAPHICS_KEYS) delete (out as unknown as Record<string, unknown>)[k];

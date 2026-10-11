@@ -66,6 +66,17 @@ The Self and World buttons are DM commands. Their text fields send with their bu
 
 Admin characters also get the original's DM commands, said with `SAY_DM` (`dm.kod` and `admin.kod` `UserSay`). Type `dm` and the command on the command line, such as `dm item long sword`, `dm monster orc`, `dm night` or `dm place brazier`. `dm help` lists them; `dm help lights`, `dm help scenery` and `dm help messages` list more. Their answers are game messages: they show in the chat's Server tab and, for a few seconds after a DM command, in the console too.
 
+### The Debug tab
+
+Admin characters get a **Debug** tab in the chat window, beside Server. It's the client's own log, for tracking things down. For now it lists every sound as it starts:
+
+- **server**: the server asked for it, with the object it comes from (and its number) or the square it plays at. **loops** means it plays until you leave the room; **random sound** is one of the room's random sounds. Preferences can switch both kinds off (Play looping sounds, Play random sounds).
+- **server: music**: the room's music track.
+- **ambient (ours)**: our ambient sounds (chatter, the arena, thunder and the like), which the Ambient Sounds option and its volume control.
+- **client**: sounds the client plays itself (a tell's ding, wading, a squished critter).
+
+It isn't in the All tab, and nobody else sees it.
+
 ### Looking at things
 
 While the console is showing, **looking at something sends `show object <its number>`** instead of opening its description. That works with a right click in the view or on an inventory item, and with the Look key. It's the quickest way to find an object's number. Hide the console (Esc) to look at things normally again.

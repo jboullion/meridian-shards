@@ -6,7 +6,7 @@ export type Place =
   | "tos" | "barloque" | "marion" | "jasper" | "cornoth" | "raza" | "kocatan" | "bergen" | "jixa" | "blackstone" | "castle" | "arena";
 
 /** Who's speaking */
-export type Role = "folk" | "patron" | "guard" | "knight" | "lady" | "noble" | "fighter" | "mage" | "spectator";
+export type Role = "folk" | "patron" | "customer" | "guard" | "knight" | "lady" | "noble" | "fighter" | "mage" | "spectator";
 
 export type Weather = "rain" | "snow" | null;
 
@@ -68,6 +68,7 @@ const BY_PLACE: Partial<Record<Place, string[]>> = {
   arena: ["Kraanan guide your blade!", "Did you see that blow?", "My money's on the tall one.", "Another bout!", "What a fight!"],
 };
 const BY_ROLE: Partial<Record<Role, string[]>> = {
+  customer: ["How much for this one?", "Anything cheaper?", "Just looking.", "I'll take it.", "Is this the best you have?", "Hmm, decent quality.", "Can you mend this?"],
   patron: ["Another round!", "Who's buying?", "This ale is watered.", "Heard a good song last night.", "Pull up a stool."],
   guard: ["Move along.", "Keep the peace.", "All quiet.", "Nothing to see here."],
   knight: ["For the crown!", "Steel and honour.", "Ready for the field.", "Drills at dawn."],
@@ -92,7 +93,7 @@ export function chatterLine(rand: () => number, ctx: ChatterContext): string {
   const place = ctx.place ? BY_PLACE[ctx.place] : undefined;
   if (place) pools.push([place, 2]);
   // Indoors, the weather and the hour matter less
-  const outside = ctx.role !== "patron";
+  const outside = ctx.role !== "patron" && ctx.role !== "customer";
   if (outside && ctx.weather === "rain") pools.push([RAIN, 4]);
   if (outside && ctx.weather === "snow") pools.push([SNOW, 4]);
   if (ctx.hour !== null) {
@@ -100,7 +101,7 @@ export function chatterLine(rand: () => number, ctx: ChatterContext): string {
     else if (ctx.hour >= 17 && ctx.hour < 21) pools.push([EVENING, 1.5]);
     else if (night && outside) pools.push([NIGHT, 2]);
   }
-  if (ctx.role === "folk" || ctx.role === "patron" || ctx.role === "noble") pools.push([ANY, 3]);
+  if (ctx.role === "folk" || ctx.role === "patron" || ctx.role === "customer" || ctx.role === "noble") pools.push([ANY, 3]);
   if (!pools.length) pools.push([ANY, 1]);
   const total = pools.reduce((s, [, w]) => s + w, 0);
   let r = rand() * total;

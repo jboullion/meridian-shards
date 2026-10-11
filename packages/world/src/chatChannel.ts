@@ -3,6 +3,7 @@
 //   chat:   what people and NPCs say (BP_SAID: say, tell, yell, broadcast, emote, guild)
 //   combat: server messages about fighting (BP_MESSAGE): hits, misses, kills, damage...
 //   server: everything else the server or the client itself says (BP_MESSAGE, BP_SYS_MESSAGE)
+//   debug:  ours, for admins only: what the client is doing (every sound it plays), its console.log
 //
 // Server messages carry no kind, only a format resource ("%s%s%s hits you."), so combat is
 // recognised by that format string, before the names are filled in: a monster or player called
@@ -11,7 +12,7 @@
 // The logon's messages skip this and go to Server (GameSession LOGON_SERVER_TAB_MS): the
 // newbie help text says "E key - attack monsters".
 
-export type ChatChannel = "chat" | "combat" | "server";
+export type ChatChannel = "chat" | "combat" | "server" | "debug";
 
 /** Announcements ("[###] Your safety is now ON", "[Event] ..."), even when they mention fighting */
 const ANNOUNCEMENT = /^(~[a-zA-Z])*\s*\[(###|Event)\]/;

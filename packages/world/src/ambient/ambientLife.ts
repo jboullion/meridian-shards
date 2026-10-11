@@ -9,11 +9,13 @@
 // - In inns, patrons stand about, wander, gather to chat, and now and then leave by the door
 //   while others come in.
 // - In the castles, knights pace the halls and courtiers stand about as patrons do.
+// - In the cities' shops, a customer or two comes in by the door, stands at the counter (by the
+//   shopkeeper) or looks about a while, and goes.
 // - At the arena, fighters and mages fight in rounds on its floor while spectators watch from the
 //   sides (unless real players are there): the beaten are sent to the stands, as players are,
 //   until one is left, who wins, and after a few seconds the next lot comes in.
-// They step aside for the player, look twice at fine armour, run from spells, and say a word now
-// and then (over their heads, never in the chat). Rain and snow thin the streets and hurry
+// They step aside for the player, look twice at fine armour, wave back when waved at, run from
+// spells, and say a word now and then (over their heads, never in the chat). Rain and snow thin the streets and hurry
 // whoever is out. Nothing here is sent to the server.
 
 import { ANIMATE, type Animation } from "@shards/protocol";
@@ -130,6 +132,9 @@ const TURN_RATE = 6;
 /** How long a walker waits for the player to get out of the way before going on */
 const WAIT_FOR_PLAYER_MS = 1600;
 const GREET_DISTANCE = 1.6 * SQ;
+/** Waved at from this close, someone in front of the player waves back (or, nearer, anyone) */
+const WAVE_RANGE = 6 * SQ;
+const WAVE_NEAR = 2.5 * SQ;
 const GREET_COOLDOWN_MS = 30000;
 /** The player this close ahead: step aside */
 const SIDESTEP_DISTANCE = 1.4 * SQ;
@@ -271,6 +276,8 @@ interface Walker {
   webbedMs: number;
   /** The arena: health left; at 0 they're beaten */
   hp: number;
+  /** Waved at: ms until they wave back (turning to us first) */
+  waveBackMs: number;
   /** Beaten in the arena and sent to the stands (not counted as one of them) */
   beaten: boolean;
 }
@@ -332,6 +339,8 @@ export class AmbientLife {
   private winner: Walker | null = null;
   /** The population scale this frame: the setting, the hour and the weather */
   private busy = 1;
+  /** The real objects that block (shopkeepers and the like), as of the last look */
+  private blockers: NavPoint[] = [];
   private eventList: AmbientEvent[] = [];
   private walkers: Walker[] = [];
   private bouts: Bout[] = [];
@@ -446,6 +455,30 @@ export class AmbientLife {
         if (this.rand() < 0.7) this.say(w, scatterLine(this.rand));
       }
     }
+  }
+
+  /**
+   * The player waved (UA_WAVE) from `p`, facing `facing`: the nearest close by in front of them
+   * (or anyone right beside them) stops, turns to them and waves back. Anyone holding a weapon
+   * (guards, knights) turns and says a word instead.
+   */
+  wavedAt(p: NavPoint, facing: number): void {
+    if (!this.ready) return;
+    const ahead = (w: Walker) => Math.abs(((angleTo(w.obj.x - p.x, w.obj.y - p.y) - facing + 6144) % 4096) - 2048) < 700;
+    const near = this.walkers
+      .filter((w) => w.fadeDir >= 0 && w.fade >= 1 && !w.bout && !w.fleeing && w.waveBackMs <= 0 && dist(w.obj, p) < WAVE_RANGE)
+      .filter((w) => ahead(w) || dist(w.obj, p) < WAVE_NEAR)
+      .sort((a, b) => dist(a.obj, p) - dist(b.obj, p));
+    const w = near[0];
+    if (!w) return;
+    if (w.mode === "walk") this.pause(w, 2500 + this.rand() * 1500);
+    else w.idleMs = Math.max(w.idleMs, 2000);
+    w.emoteMs = 0;
+    w.faceAngle = angleTo(p.x - w.obj.x, p.y - w.obj.y);
+    w.greetCooldown = GREET_COOLDOWN_MS;
+    w.waveBackMs = 450 + this.rand() * 400;
+    const armed = !!w.look.gear?.weapon;
+    if (!w.say && (armed || this.rand() < 0.4)) this.say(w, chatterLine(this.rand, this.context(w, { greeting: true })));
   }
 
   update(dt: number, frame: AmbientFrame): void {
@@ -611,6 +644,7 @@ export class AmbientLife {
   /** Close the cells next to things that block, so paths go round them */
   private closeAround(g: NavGrid, obstacles: Iterable<NavPoint>): void {
     g.closed.fill(0);
+    this.blockers = [...obstacles].map((o) => ({ x: o.x, y: o.y }));
     const r = Math.ceil(OBSTACLE_RADIUS / NAV_CELL);
     for (const o of obstacles) {
       const c0 = Math.round(o.x / NAV_CELL),
@@ -706,7 +740,10 @@ export class AmbientLife {
       case "inn":
         return "patron";
       case "castle":
-        return r < 0.4 ? "knight" : r < 0.75 ? "lady" : "noble";
+        // Mostly the court: few knights
+        return r < 0.1 ? "knight" : r < 0.45 ? "lady" : "noble";
+      case "shop":
+        return "customer";
       case "arena":
         // The arena's floor: fighters and mages (the stands are kept apart); its foyer, all sorts
         // At least two mages, so there's magic to see
@@ -754,10 +791,10 @@ export class AmbientLife {
     const pace = (PACE_MIN + this.rand() * (PACE_MAX - PACE_MIN)) * (slow ? 0.75 : 1);
     const w: Walker = {
       obj, look, role, pose: "stand", mode: "idle", path: [], pace, idleMs: 0, faceAngle: -1, leaving: false, fade: fadeIn ? 0 : 1,
-      fadeDir: fadeIn ? 1 : 0, waitedMs: 0, greetCooldown: 0, sidestepMs: 0, glanceMs: 0, stayMs: 60000 + this.rand() * 180000, faceId: -1,
+      fadeDir: fadeIn ? 1 : 0, waitedMs: 0, greetCooldown: 0, sidestepMs: 0, glanceMs: 0, stayMs: this.spec.kind === "shop" ? 20000 + this.rand() * 40000 : 60000 + this.rand() * 180000, faceId: -1,
       torchBearer: role === "guard" || (role === "folk" && this.rand() < TORCH_BEARERS), torch: false, area, errand: null, fleeing: false,
       say: null, beat: null, beatEnd: 0, bout: null, emoteMs: 0, nextEmoteMs: 2000 + this.rand() * 8000, cheerFrame: 0, actMs: 0, stepMs: 0, webbedMs: 0,
-      hp: role === "mage" ? MAGE_HP : FIGHTER_HP, beaten: false,
+      hp: role === "mage" ? MAGE_HP : FIGHTER_HP, beaten: false, waveBackMs: 0,
     };
     this.applyFade(w);
     this.walkers.push(w);
@@ -1419,8 +1456,8 @@ export class AmbientLife {
     }
     const inn = this.spec.kind === "inn";
     if (inn && r < 0.1) return this.emote(w, "dance", 6000 + this.rand() * 9000);
-    // A roll of the dice or a drink now and then
-    if (inn && r > 0.88) return this.event({ type: r > 0.95 ? "dice" : "drink", x: w.obj.x, y: w.obj.y });
+    // A roll of the dice (5%) or a drink (14%) now and then
+    if (inn && r > 0.81) return this.event({ type: r > 0.95 ? "dice" : "drink", x: w.obj.x, y: w.obj.y });
     const near = this.walkers.find((v) => v !== w && v.fadeDir >= 0 && dist(v.obj, w.obj) < 2.5 * SQ);
     if (near && r < 0.3) {
       w.faceAngle = angleTo(near.obj.x - w.obj.x, near.obj.y - w.obj.y);
@@ -1605,6 +1642,8 @@ export class AmbientLife {
       this.applyFade(w);
     }
     if (w.fadeDir < 0) return;
+    // Waved at: the wave back, once they've turned to us
+    if (w.waveBackMs > 0 && (w.waveBackMs -= dt) <= 0 && w.mode === "idle" && !w.look.gear?.weapon) this.emote(w, "wave", 0);
     w.greetCooldown -= dt;
     w.stayMs -= dt;
     w.sidestepMs -= dt;
@@ -1740,6 +1779,11 @@ export class AmbientLife {
     this.stand(w, (fled ? 2000 : 6000) + this.rand() * 25000);
     const friend = this.walkers.find((v) => v.obj.id === w.faceId);
     if (friend) this.face(w, friend);
+    // Shops: whoever's at the counter faces the shopkeeper
+    else if (this.spec.kind === "shop") {
+      const by = this.blockers.filter((b) => dist(b, o) < 1.8 * SQ).sort((a, b) => dist(a, o) - dist(b, o))[0];
+      if (by) w.faceAngle = angleTo(by.x - o.x, by.y - o.y);
+    }
   }
 
   /** Inns and the rest: go and stand somewhere else in their part of the room, often next to someone */
@@ -1749,7 +1793,10 @@ export class AmbientLife {
     const others = this.walkers.filter((v) => v !== w && v.mode === "idle" && !v.leaving && !v.bout && !v.beat && v.area === w.area);
     let cell = -1,
       friend: Walker | null = null;
-    if (others.length && this.rand() < 0.4) {
+    // Shops: up to the counter, beside the shopkeeper (or whatever else stands in the room), as often as not
+    const counter = this.spec.kind === "shop" && this.rand() < 0.6 ? this.blockers.filter((b) => dist(b, here) < 10 * SQ) : [];
+    if (counter.length) cell = this.besideCell(this.pick(counter), w.area);
+    else if (others.length && this.rand() < 0.4) {
       friend = this.pick(others);
       cell = this.besideCell(friend.obj, w.area);
     }

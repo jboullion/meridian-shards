@@ -9,8 +9,9 @@
   - Move server to that domain
 
 
+Drinking sounds in inns should be 50% quieter.
 
-
+Have ambient rats not make any sound except on death.
 
 ## Future Ideas
 

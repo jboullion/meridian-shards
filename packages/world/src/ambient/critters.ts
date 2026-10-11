@@ -77,10 +77,13 @@ const has = (t: readonly string[], ...names: string[]) => names.some((n) => t.in
  */
 /** The vaults (each town's vault keeper's room: barvault.kod, bergvault.kod, jasvault.kod, razavault.kod, kocbank.kod) */
 const VAULTS = new Set(["barvault.roo", "bergvault.roo", "jasvault.roo", "razavault.roo", "kocbank.roo"]);
+/** Castle Victoria, a dungeon (its rooms say no terrain): rats and spiders, and bats (gameScene) */
+const DUNGEONS = new Set(["castle1.roo", "castle1b.roo", "castle1d.roo", "throne1.roo", "throne2.roo", "greeny.roo"]);
 
 export function habitatOf(roomFile: string, terrain: readonly string[] | undefined): Habitat | null {
   // The vaults' cellars have rats; the arena has none (its crowd is enough)
   if (VAULTS.has(roomFile)) return { name: "vault", count: 4, mix: [["rat", 1]] };
+  if (DUNGEONS.has(roomFile)) return { name: "dungeon", count: 5, mix: [["rat", 3], ["spider", 2]] };
   if (AMBIENT_ROOMS[roomFile]?.kind === "arena") return null;
   const t = terrain ?? [];
   if (!t.length) {
@@ -215,7 +218,8 @@ export class Critters {
 
   /** A live critter within `range` to make a noise (its Kod "aware" sound), or null */
   voice(p: NavPoint, range: number, rand = Math.random): { x: number; y: number; sound: string } | null {
-    const near = this.critters.filter((c) => c.mode !== "dead" && !c.fadeDir && Math.hypot(c.obj.x - p.x, c.obj.y - p.y) < range);
+    // Rats are quiet but when they die
+    const near = this.critters.filter((c) => c.mode !== "dead" && !c.fadeDir && c.species !== SPECIES.rat && Math.hypot(c.obj.x - p.x, c.obj.y - p.y) < range);
     if (!near.length) return null;
     const c = near[Math.floor(rand() * near.length) % near.length];
     return { x: c.obj.x, y: c.obj.y, sound: c.species.sound.replace("_dth", "_awr") };
