@@ -169,9 +169,9 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     actions: [],
     // Ours: the emotes and moods in a small menu over the view (GameView emoteMenu)
     quickEmotes: k("KeyQ"),
-    // Ours: the Friends window (docs/adr/0005-friends.md 3)
+    // Ours: the Friends tab (docs/adr/0005-friends.md 3)
     friends: k("KeyP"),
-    // Ours: the Pets window (docs/adr/0006-pets.md 4)
+    // Ours: the Pets tab (docs/adr/0006-pets.md 4)
     pets: k("KeyN"),
     // Ours: first person, chase, behind, front (the Modern interface only; gameScene.ts ViewMode)
     cameraView: k("KeyV"),
@@ -600,12 +600,12 @@ export function migrate(s: SavedSettings): Settings {
     const taken = Object.entries(keys).some(([a, list]) => a !== "quickEmotes" && list.some((b) => b.code === "KeyQ" && !b.alt && !b.ctrl));
     if (taken) keys.quickEmotes = keys.quickEmotes.filter((b) => b.code !== "KeyQ" || b.alt || b.ctrl);
   }
-  // Version 12 (the Friends window on P): not if the player had put P to another use
+  // Version 12 (the Friends tab on P): not if the player had put P to another use
   if (version < 12) {
     const taken = Object.entries(keys).some(([a, list]) => a !== "friends" && list.some((b) => b.code === "KeyP" && !b.alt && !b.ctrl));
     if (taken) keys.friends = keys.friends.filter((b) => b.code !== "KeyP" || b.alt || b.ctrl);
   }
-  // Version 13 (the Pets window on N): not if the player had put N to another use
+  // Version 13 (the Pets tab on N): not if the player had put N to another use
   if (version < 13) {
     const taken = Object.entries(keys).some(([a, list]) => a !== "pets" && list.some((b) => b.code === "KeyN" && !b.alt && !b.ctrl));
     if (taken) keys.pets = keys.pets.filter((b) => b.code !== "KeyN" || b.alt || b.ctrl);

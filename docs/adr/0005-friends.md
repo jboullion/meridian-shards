@@ -114,16 +114,17 @@ Yes, and it doesn't need the relay beyond its clock (1.5): **the seed is a funct
 
 ## As built (2026-10-12)
 
-Where the code is: the relay is `tools/gateway/relay.ts` (in the gateway's process, `/social`); the protocol, the relay client, the friends logic and the follow planner are `packages/world/src/social/` (`socialProtocol.ts`, `socialClient.ts`, `friends.ts`, `follow.ts`); the game side is `apps/client/src/game/social.ts` (`SocialLink`), `socialKeys.ts` (IndexedDB), `ui/FriendsWindow.tsx`, and the follow driving and friends' labels in `gameScene.ts`. `tools/headless/friend.ts` is a scripted friend for trying it alone.
+Where the code is: the relay is `tools/gateway/relay.ts` (in the gateway's process, `/social`); the protocol, the relay client, the friends logic and the follow planner are `packages/world/src/social/` (`socialProtocol.ts`, `socialClient.ts`, `friends.ts`, `follow.ts`); the game side is `apps/client/src/game/social.ts` (`SocialLink`), `socialKeys.ts` (IndexedDB), `ui/FriendsPanel.tsx`, and the follow driving and friends' labels in `gameScene.ts`. `tools/headless/friend.ts` is a scripted friend for trying it alone.
 
 Where it differs from the decisions above, or fills in what they left open:
 
 - **Presence is mutual.** The relay tells a client a key is online only while both watch each other's keys, so watching someone's key (from the search list) says nothing until they've added you too. A friend removed while offline is told when next seen: the remover keeps watching that key until then.
 - **In-room positions come from the server.** The map marker and following use the friend's object in `WorldState`, which the server already moves for us, so there's no 2-second location message (3); a location goes to friends on every room change and when a friend comes online.
-- **"Needs pairing again"** (2.5): every 30 s the client asks the relay (`lookup`) whether a friend who's in the game but not online under their key is on it under another; the Friends window then offers "Pair again".
+- **"Needs pairing again"** (2.5): every 30 s the client asks the relay (`lookup`) whether a friend who's in the game but not online under their key is on it under another; the Friends tab then offers "Pair again".
 - **Room numbers:** several rooms share a file (tos.roo is four), so the sender picks its RID by the room's name from `BP_PLAYER`, and the receiver names the room by that RID.
 - **Exits** (4.3): the leader's client finds the door near its last square that leads to the new room, else an edge that does (`follow.ts exitTaken`); neither means a teleport or the like, and the follower stops. The follower walks onto the door's square (`BP_REQ_GO` needs it) and presses go every 1.2 s for up to 6 s.
 - **Following stops** also when the follower uses an exit themselves, when the relay connection drops, and after a path can't be found for 3 s. The leader's "Stop them" and the window's "Refuse followers" are both there.
+- **A tab, not a window** (3, changed 2026-10-12): Friends is a tab beside Inventory, Spells and the rest, in the Modern character window and the Classic and phone column; P, the menu's Friends… and the requests' notice open it. The page flows to fit the column: friends first, requests when there are any, then the search and the options.
 - **A save** (`BP_INVALIDATE_DATA`, every half hour on our server) empties the room for a moment; the link and following carry on through it.
 
 Shared ambient life (6), as the user scoped it on 2026-10-12: the fight in the arena must be the same for friends; the rest of the crowd may differ, and a late arrival needs syncing once, not keeping in step after.

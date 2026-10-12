@@ -40,8 +40,8 @@ import { AboutDialog } from "./ui/AboutDialog.tsx";
 import { ChessWindow, type ChessState } from "./ui/ChessWindow.tsx";
 import { AdminConsole, appendAdminText, type AdminRoom } from "./ui/AdminConsole.tsx";
 import { SocialLink } from "./social.ts";
-import { FriendsMapHint, FriendsNotices, FriendsWindow } from "./ui/FriendsWindow.tsx";
-import { PetsWindow } from "./ui/PetsWindow.tsx";
+import { FriendsMapHint, FriendsNotices, FriendsPanel } from "./ui/FriendsPanel.tsx";
+import { PetsPanel } from "./ui/PetsPanel.tsx";
 import { loadPet, savePet } from "./pet.ts";
 import { languageName } from "./languages.ts";
 import { MAX_ANNOTATIONS, annotationAt, loadAnnotations, saveAnnotations, type MapAnnotation } from "./annotations.ts";
@@ -155,10 +155,6 @@ type Modal =
   /** Study mode's window, with what we know as it opens (study.ts) */
   | { type: "study"; spells: StudySpell[]; carried: Map<string, number>; mana: number; maxMana: number; memory: StudyMemory }
   | { type: "about" }
-  /** Ours (docs/adr/0005-friends.md 3): the Friends window */
-  | { type: "friends" }
-  /** Ours (docs/adr/0006-pets.md 4): the Pets window */
-  | { type: "pets" }
   | { type: "actions" }
   | { type: "action"; window: ActionWindow }
   /** lookdlg.c DisplayLookList: choose among objects (to get, look at, attack, put away...) */
@@ -549,6 +545,25 @@ export function GameView({
     // (status: the scene is made after this effect first runs; its first status means it's there)
   }, [pet, social, status]);
   const spellSchools = session.world.spellSchools;
+  // Ours: the Friends and Pets tabs' pages, for the character window and the interface column
+  const friendsPanel = (
+    <FriendsPanel
+      link={social}
+      inGame={(name) => [...session.world.players.values()].some((p) => p.name.toLowerCase() === name.toLowerCase())}
+      onFollow={followFriend}
+    />
+  );
+  const petsPanel = (
+    <PetsPanel
+      key={pet.name}
+      icons={icons}
+      current={pet.pet}
+      // 2.1: our maximum health, piMax_health: STAT_HP's currentMax (its max is always 100: user.kod sends
+      // health as 4,GetHealth, 4,0, 4,100, 4,piMax_health)
+      maxHealth={session.world.stats.get(STAT_GROUP.MAIN)?.find((x) => x.num === STAT_HP)?.numeric?.currentMax ?? null}
+      onChoose={choosePet}
+    />
+  );
   /** textin.c: the lines typed, newest first, and where Up/Down has got to (-1 = the line being typed) */
   const historyRef = useRef<string[]>([]);
   const historyPos = useRef(-1);
@@ -959,9 +974,9 @@ export function GameView({
       case "quickEmotes":
         return setEmoteMenu((v) => !v);
       case "friends":
-        return setModal((m) => (m?.type === "friends" ? null : { type: "friends" }));
       case "pets":
-        return setModal((m) => (m?.type === "pets" ? null : { type: "pets" }));
+        // Ours: tabs beside the inventory's; the key opens and closes the character window on its tab
+        return openTab(a, true);
       case "who":
         return setModal({ type: "action", window: "who" });
       case "map":
@@ -996,6 +1011,16 @@ export function GameView({
         inputRef.current?.focus();
         return;
     }
+  };
+
+  /**
+   * A tab of the character window (Modern) or the interface column (Classic, the phone's drawer):
+   * shown, or with `toggle` (its key) put away again when it's showing
+   */
+  const openTab = (t: Tab, toggle = false) => {
+    if (modern) setCharacterOpen((open) => !toggle || !open || tab !== t);
+    else if (touch) setDrawerOpen((open) => !toggle || !open || tab !== t);
+    setTab(t);
   };
 
   /** alias.c: a function key's alias goes into the chat line, or is sent at once with Automatic Enter. */
@@ -1702,8 +1727,8 @@ export function GameView({
               ...ACTIONS_MENU.map((a) => (a ? { label: a[1], onSelect: () => runCommand(a[0]) } : { label: "", separator: true })),
               // Ours (docs/adr/0005-friends.md 3)
               { label: "", separator: true },
-              { label: "Friends…", onSelect: () => setModal({ type: "friends" }) },
-              { label: "Pets…", onSelect: () => setModal({ type: "pets" }) },
+              { label: "Friends…", onSelect: () => openTab("friends") },
+              { label: "Pets…", onSelect: () => openTab("pets") },
             ],
           },
           ...(spellsMenu.length ? [{ label: "Spells", items: spellsMenu }] : []),
@@ -1894,6 +1919,8 @@ export function GameView({
                 selecting={selecting}
                 onSelectObject={selectObject}
                 onCast={castSpell}
+                friendsPanel={friendsPanel}
+                petsPanel={petsPanel}
               />
             )}
           </>
@@ -1926,7 +1953,7 @@ export function GameView({
             {hideNote.hidden ? `Interface hidden (${hideKeyLabel} shows it)` : "Interface shown"}
           </div>
         )}
-        <FriendsNotices link={social} onOpen={() => setModal({ type: "friends" })} />
+        <FriendsNotices link={social} onOpen={() => openTab("friends")} />
         {studying && (
           <div className="study-banner" role="status">
             <span>{studying}</span>
@@ -2045,25 +2072,6 @@ export function GameView({
               if (flags !== null) session.sendPreferences(flags);
             }}
             onPreview={previewAudio}
-            onClose={() => setModal(null)}
-          />
-        )}
-        {modal?.type === "friends" && social && (
-          <FriendsWindow
-            link={social}
-            inGame={(name) => [...session.world.players.values()].some((p) => p.name.toLowerCase() === name.toLowerCase())}
-            onFollow={followFriend}
-            onClose={() => setModal(null)}
-          />
-        )}
-        {modal?.type === "pets" && (
-          <PetsWindow
-            icons={icons}
-            current={pet.pet}
-            // 2.1: our maximum health, piMax_health: STAT_HP's currentMax (its max is always 100: user.kod sends
-            // health as 4,GetHealth, 4,0, 4,100, 4,piMax_health)
-            maxHealth={session.world.stats.get(STAT_GROUP.MAIN)?.find((x) => x.num === STAT_HP)?.numeric?.currentMax ?? null}
-            onChoose={choosePet}
             onClose={() => setModal(null)}
           />
         )}
@@ -2269,6 +2277,8 @@ export function GameView({
           onCast={castSpell}
           annotations={annotations?.list ?? []}
           onAnnotate={annotateAt}
+          friendsPanel={friendsPanel}
+          petsPanel={petsPanel}
         />
       )}
       {touch && drawerOpen && <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} />}

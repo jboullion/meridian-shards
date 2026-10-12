@@ -365,7 +365,7 @@ export class FriendsService {
       this.codes.set(r.key, tell.code);
       this.incoming = [...this.incoming.filter((x) => x.key !== r.key), { key: r.key, name: tell.sender, at: this.host.now() }];
       const already = this.friendByKey(r.key);
-      this.host.message(already ? `${tell.sender} wants to pair with you again (Friends window).` : `${tell.sender} wants to be your friend (Friends window).`);
+      this.host.message(already ? `${tell.sender} wants to pair with you again (the Friends tab).` : `${tell.sender} wants to be your friend (the Friends tab).`);
       found = true;
     }
     if (found) this.changed();

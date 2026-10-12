@@ -7,7 +7,7 @@
 // double click the title to put it back beside the map. Drag the figure to turn it; drop an item
 // on it to put it on. Sort puts the bag in the original's order for lists (inventoryOrder.ts).
 
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { STAT_GROUP, type ObjectInfo } from "@shards/protocol";
 import type { GameSession } from "@shards/world";
 import type { AssetStore } from "../../assets.ts";
@@ -132,7 +132,11 @@ function Figure({ session, icons }: { session: GameSession; icons: IconRenderer 
 
 export function CharacterWindow({
   session, icons, assets, settings, itemSlots, tab, onTab, onClose, onLookItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, selecting, onSelectObject, onCast,
+  friendsPanel, petsPanel,
 }: {
+  /** Ours: the Friends and Pets tabs' pages (GameView makes them) */
+  friendsPanel: ReactNode;
+  petsPanel: ReactNode;
   session: GameSession;
   icons: IconRenderer;
   assets: AssetStore;
@@ -160,7 +164,7 @@ export function CharacterWindow({
   // tab shows weight and bulk from the Stats group, so it asks for that.
   useEffect(() => {
     const group = tab === "inventory" ? STAT_GROUP.STATS : TABS.find((t) => t.tab === tab)?.group;
-    if (group !== undefined) session.requestStats(group);
+    if (group !== undefined && group !== null) session.requestStats(group);
   }, [session, tab]);
 
   const inUse = [...world.inventory.values()].filter((o) => world.inUse.has(o.id));
@@ -252,7 +256,7 @@ export function CharacterWindow({
       <Window title={self ? rs(self.info.nameRes) : "Character"} onClose={onClose} className="character-window">
         <div className="cw-tabs" role="tablist">
           {TABS.map((t) => (
-            <StatTab key={t.tab} assets={assets} bitmap={t.bitmap} label={t.label} tooltip={settings.tooltips} active={tab === t.tab} onClick={() => onTab(t.tab)} />
+            <StatTab key={t.tab} assets={assets} bitmap={t.bitmap} tab={t.tab} label={t.label} tooltip={settings.tooltips} active={tab === t.tab} onClick={() => onTab(t.tab)} />
           ))}
         </div>
         {tab === "inventory" ? (
@@ -307,6 +311,10 @@ export function CharacterWindow({
           <div className="cw-page stat-area">
             {tab === "stats" ? (
               <NumericStats stats={world.stats.get(STAT_GROUP.STATS) ?? []} rs={rs} />
+            ) : tab === "friends" ? (
+              friendsPanel
+            ) : tab === "pets" ? (
+              petsPanel
             ) : (
               <StatList
                 session={session}

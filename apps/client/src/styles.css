@@ -3842,11 +3842,6 @@ canvas.server-wait {
   opacity: 0.6;
 }
 
-.mk-text.friends-note,
-.mk-text.friends-hint {
-  white-space: normal;
-  font-size: 0.9em;
-}
 
 /* ---- Pets (ours, docs/adr/0006-pets.md) ---- */
 
@@ -3862,18 +3857,148 @@ canvas.server-wait {
   pointer-events: none;
 }
 
-.pets-window .pet-grid {
+
+
+/* ---- The Friends and Pets tabs (ours: ui/FriendsPanel.tsx, ui/PetsPanel.tsx), in the character
+   window and the interface column; they flow to fit either ---- */
+
+.stat-tab .glyph.drawn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-tab .glyph.drawn svg {
+  width: 20px;
+  height: 16px;
+  fill: rgb(214, 200, 160);
+}
+
+.stat-tab.active .glyph.drawn svg {
+  fill: rgb(255, 230, 140);
+}
+
+.friends-panel,
+.pets-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px;
+  font: 13px Georgia, "Times New Roman", serif;
+  color: rgb(231, 231, 231);
+}
+
+.panel-section h3 {
+  margin: 2px 0 3px;
+  font: bold 13px Georgia, "Times New Roman", serif;
+  color: rgb(240, 208, 25);
+  border-bottom: 1px solid rgba(214, 190, 140, 0.3);
+}
+
+.panel-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.panel-row.wrap {
+  flex-wrap: wrap;
+}
+
+.panel-row .mk-btn {
+  padding: 2px 8px;
+  min-height: 22px;
+}
+
+.panel-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.panel-grow input {
+  width: 100%;
+}
+
+.friends-panel .mk-edit.list,
+.pets-panel .mk-edit.list {
+  display: block;
+  height: 110px;
+}
+
+.friends-panel .mk-edit.list.short {
+  height: 64px;
+}
+
+.friends-panel .mk-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0;
+}
+
+.panel-note {
+  margin: 2px 0;
+  font-size: 12px;
+  opacity: 0.75;
+  white-space: normal;
+}
+
+.pet-current {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.pet-preview {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  height: 84px;
+  border: 1px solid rgba(214, 190, 140, 0.35);
+  background: #000;
+  color: #c8bca0;
+  font: italic 12px Georgia, "Times New Roman", serif;
+}
+
+.pet-preview img {
+  max-width: 90%;
+  max-height: 90%;
+  image-rendering: pixelated;
+}
+
+.pet-current-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pet-name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.pet-name-field input {
+  width: 100%;
+}
+
+.pet-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
   gap: 4px;
 }
 
-.pets-window .pet-tile {
+.pet-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  height: calc(var(--dy) * 64);
+  height: 76px;
   padding: 2px;
   border: 1px solid rgba(214, 190, 140, 0.35);
   background: #000;
@@ -3882,47 +4007,32 @@ canvas.server-wait {
   cursor: pointer;
 }
 
-.pets-window .pet-tile img {
+.pet-tile img {
   max-width: 100%;
-  max-height: calc(var(--dy) * 48);
+  max-height: 56px;
   image-rendering: pixelated;
 }
 
-.pets-window .pet-tile.selected {
+.pet-tile.selected {
   border-color: rgb(240, 208, 25);
   box-shadow: inset 0 0 0 1px rgb(240, 208, 25);
 }
 
-.pets-window .pet-tile.locked {
+.pet-tile.locked {
   opacity: 0.4;
+  cursor: default;
 }
 
-.pets-window .pet-preview {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(214, 190, 140, 0.35);
-  background: #000;
-  color: #c8bca0;
-  font: italic 12px Georgia, "Times New Roman", serif;
-}
-
-.pets-window .pet-preview img {
-  max-width: 90%;
-  max-height: 90%;
-  image-rendering: pixelated;
-}
-
-.pets-window .pet-colours {
+.pet-colours {
   display: flex;
   flex-wrap: wrap;
   gap: 3px;
 }
 
-.pets-window .pet-colours button.selected {
+.pet-colours button.selected {
   outline: 1px solid rgb(240, 208, 25);
 }
 
-.pets-window .pet-colours button.locked {
+.pet-colours button.locked {
   opacity: 0.4;
 }

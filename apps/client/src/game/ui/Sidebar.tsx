@@ -28,14 +28,39 @@ export const STAT_HP = 1,
   STAT_XP = 4;
 export const MIN_VIGOR = 10; // statmain.h: below this you can't run; the bar turns red
 
-export type Tab = "inventory" | "stats" | "spells" | "skills" | "quests";
-export const TABS: { tab: Tab; group: number; bitmap: string; label: string }[] = [
+export type Tab = "inventory" | "stats" | "spells" | "skills" | "quests" | "friends" | "pets";
+/** The tabs: the original's stat groups (stats.c), then ours, drawn with an icon of our own (no group, no bitmap) */
+export const TABS: { tab: Tab; group: number | null; bitmap: string | null; label: string }[] = [
   { tab: "inventory", group: STAT_GROUP.INVENTORY, bitmap: "statbtn_left_invent.bmp", label: "Inventory" },
   { tab: "stats", group: STAT_GROUP.STATS, bitmap: "statbtn_left_stats.bmp", label: "Statistics" },
   { tab: "spells", group: STAT_GROUP.SPELLS, bitmap: "statbtn_left_spell.bmp", label: "Spells" },
   { tab: "skills", group: STAT_GROUP.SKILLS, bitmap: "statbtn_left_skills.bmp", label: "Skills" },
   { tab: "quests", group: STAT_GROUP.QUESTS, bitmap: "statbtn_left_quest.bmp", label: "Quests" },
+  // Ours: docs/adr/0005-friends.md and 0006-pets.md
+  { tab: "friends", group: null, bitmap: null, label: "Friends" },
+  { tab: "pets", group: null, bitmap: null, label: "Pets" },
 ];
+
+/** Our tabs' icons, drawn where the original's tabs have their glyph bitmap */
+const TAB_ICONS: Partial<Record<Tab, ReactNode>> = {
+  friends: (
+    <svg viewBox="0 0 26 20" aria-hidden>
+      <circle cx="9" cy="7" r="3.2" />
+      <path d="M3 17c0-3.6 2.7-5.8 6-5.8s6 2.2 6 5.8z" />
+      <circle cx="17.5" cy="6.5" r="2.7" />
+      <path d="M14.8 11.6c.8-.5 1.8-.8 2.7-.8 2.8 0 5 1.9 5 5h-6.1c-.2-1.7-.8-3.1-1.6-4.2z" />
+    </svg>
+  ),
+  pets: (
+    <svg viewBox="0 0 26 20" aria-hidden>
+      <ellipse cx="13" cy="13.5" rx="4.2" ry="3.6" />
+      <ellipse cx="7.6" cy="9" rx="1.8" ry="2.3" />
+      <ellipse cx="10.9" cy="5.6" rx="1.8" ry="2.3" />
+      <ellipse cx="15.1" cy="5.6" rx="1.8" ry="2.3" />
+      <ellipse cx="18.4" cy="9" rx="1.8" ry="2.3" />
+    </svg>
+  ),
+};
 
 export function ObjIcon({
   icons, object, opts, className, title, onContextMenu, onClick,
@@ -62,24 +87,30 @@ export function ObjIcon({
  * the right piece, each from the up or down half of its bitmap, drawn transparently.
  */
 export function StatTab({
-  assets, bitmap, label, tooltip, active, onClick,
+  assets, bitmap, tab, label, tooltip, active, onClick,
 }: {
   assets: AssetStore;
-  bitmap: string;
+  /** The glyph's bitmap; null for our own tabs, drawn with their icon */
+  bitmap: string | null;
+  tab?: Tab;
   label: string;
   /** statbtn.c: the button's name as a tooltip (Show tooltips) */
   tooltip: boolean;
   active: boolean;
   onClick: () => void;
 }) {
-  const left = useKeyedHalves(assets.url(`ui/${bitmap}`));
   const mid = useKeyedHalves(assets.url("ui/statbtn_mid.bmp"));
+  // Our tabs: the middle piece's stone under our icon
+  const left = useKeyedHalves(assets.url(`ui/${bitmap ?? "statbtn_mid.bmp"}`));
+  const icon = !bitmap && tab ? TAB_ICONS[tab] : null;
   const right = useKeyedHalves(assets.url("ui/statbtn_right.bmp"));
   const half = (h: [string, string] | null) => (h ? { backgroundImage: `url(${h[active ? 1 : 0]})` } : undefined);
   return (
     <button className={active ? "stat-tab active" : "stat-tab"} title={tooltip ? label : undefined} aria-label={label} onClick={onClick}>
       <span className="mid" style={half(mid)} />
-      <span className="glyph" style={half(left)} />
+      <span className={icon ? "glyph drawn" : "glyph"} style={half(left)}>
+        {icon}
+      </span>
       <span className="cap" style={half(right)} />
     </button>
   );
@@ -210,8 +241,11 @@ export function HudEnchantments({
 
 export function Sidebar({
   session, icons, assets, getRoom, tab, onTab, settings, onLookItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, target, selecting, onSelectObject, onCast,
-  annotations, onAnnotate,
+  annotations, onAnnotate, friendsPanel, petsPanel,
 }: {
+  /** Ours: the Friends and Pets tabs' pages (GameView makes them) */
+  friendsPanel: ReactNode;
+  petsPanel: ReactNode;
   /** The room's map annotations (annotate.c), drawn with Map annotations on */
   annotations: readonly MapAnnotation[];
   /** A right click on the minimap, in room coordinates: add or edit an annotation */
@@ -253,9 +287,9 @@ export function Sidebar({
   /** tooltip.c: names on hover only with Show tooltips (enchant.c TTN_NEEDTEXT, statbtn.c) */
   const tip = (text: string) => (settings.tooltips ? text : undefined);
 
-  const pick = (t: Tab, group: number) => {
-    // stats.c: the inventory is always here; other groups are asked for when shown
-    if (t !== "inventory") session.requestStats(group);
+  const pick = (t: Tab, group: number | null) => {
+    // stats.c: the inventory is always here; other groups are asked for when shown (ours have none)
+    if (t !== "inventory" && group !== null) session.requestStats(group);
     onTab(t);
   };
 
@@ -322,7 +356,7 @@ export function Sidebar({
       </div>
       <div className="stat-tabs">
         {TABS.map((t) => (
-          <StatTab key={t.tab} assets={assets} bitmap={t.bitmap} label={t.label} tooltip={settings.tooltips} active={tab === t.tab} onClick={() => pick(t.tab, t.group)} />
+          <StatTab key={t.tab} assets={assets} bitmap={t.bitmap} tab={t.tab} label={t.label} tooltip={settings.tooltips} active={tab === t.tab} onClick={() => pick(t.tab, t.group)} />
         ))}
       </div>
       {/* "inventory-panel": where dragging an object from the view picks it up (mermain.c A_ENDDRAG) */}
@@ -345,6 +379,10 @@ export function Sidebar({
           />
         ) : tab === "stats" ? (
           <NumericStats stats={world.stats.get(STAT_GROUP.STATS) ?? []} rs={rs} />
+        ) : tab === "friends" ? (
+          friendsPanel
+        ) : tab === "pets" ? (
+          petsPanel
         ) : (
           <StatList
             session={session}

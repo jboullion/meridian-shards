@@ -397,7 +397,7 @@ const ENHANCED_TITLE =
   "Soft highlights, flickering and glowing flames, light that stops at walls, shaded corners, shadows and a vignette; off, the original's look";
 
 const AMBIENT_TITLE = "Townsfolk walking the streets and patrons in the inns, seen by you alone";
-const PETS_TITLE = "Other players' pets following them (your own always shows: choose No pet in the Pets window to hide it)";
+const PETS_TITLE = "Other players' pets following them (your own always shows: choose No pet in the Pets tab to hide it)";
 const PET_NAMES_TITLE = "The names under pets";
 const CRITTERS_TITLE = "Rats, spiders, centipedes and other small creatures scurrying about, killed with a click; seen by you alone, with no experience or loot";
 const FLYERS_TITLE = "Flocks of birds crossing the sky by day, and bats in caves (and out at night); seen by you alone";
