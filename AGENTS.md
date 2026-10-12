@@ -6,7 +6,7 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 
 **Meridian Shards** is a faithful browser port of the Meridian 59 client. It talks to **our own** server, which runs the unmodified Server 104 `blakserv` through a WebSocket-to-TCP gateway. It's the third experiment beside the UE remaster (`E:\2026_Experiments\meridian-unreal`) and the Roblox spin-off "Fantasy Blocks".
 
-- Decisions: [docs/adr/0001-direction.md](docs/adr/0001-direction.md), the desktop app in [docs/adr/0002-desktop-shell.md](docs/adr/0002-desktop-shell.md), the Android app in [docs/adr/0003-android.md](docs/adr/0003-android.md), the move to our own domain behind Cloudflare in [docs/adr/0004-own-domain.md](docs/adr/0004-own-domain.md), and friends, the relay and shared ambient life in [docs/adr/0005-friends.md](docs/adr/0005-friends.md)
+- Decisions: [docs/adr/0001-direction.md](docs/adr/0001-direction.md), the desktop app in [docs/adr/0002-desktop-shell.md](docs/adr/0002-desktop-shell.md), the Android app in [docs/adr/0003-android.md](docs/adr/0003-android.md), the move to our own domain behind Cloudflare in [docs/adr/0004-own-domain.md](docs/adr/0004-own-domain.md), friends, the relay and shared ambient life in [docs/adr/0005-friends.md](docs/adr/0005-friends.md), and pets in [docs/adr/0006-pets.md](docs/adr/0006-pets.md)
 - Milestones and progress: [docs/roadmap.md](docs/roadmap.md)
 - Protocol notes: [docs/research/protocol.md](docs/research/protocol.md)
 - What the original has that we don't yet: [docs/missing-features.md](docs/missing-features.md). Add to it whenever something is skipped.
