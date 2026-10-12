@@ -356,6 +356,11 @@ export function gameSocketUrl(): string {
   return `${base.protocol === "https:" ? "wss" : "ws"}://${base.host}/ws`;
 }
 
+/** The friends relay's WebSocket URL (docs/adr/0005-friends.md), beside the gateway's */
+export function socialSocketUrl(): string {
+  return gameSocketUrl().replace(/\/ws$/, "/social");
+}
+
 /** Where the browser's Download button goes (TitleBar.tsx) */
 export interface DownloadLink {
   url: string;

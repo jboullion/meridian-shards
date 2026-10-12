@@ -45,6 +45,8 @@ export interface AmbientSoundFrame {
   splashes: { x: number; y: number; big: boolean }[];
   /** A critter about us to make a noise, asked now and then */
   critterVoice: () => { x: number; y: number; sound: string } | null;
+  /** A pet about us to make its noise (docs/adr/0006-pets.md 5.5), asked every minute or two */
+  petVoice: () => { x: number; y: number; sound: string } | null;
   /** Standing in a puddle, and how fast we move (fine units a ms) */
   wetUnderfoot: boolean;
   speed: number;
@@ -85,6 +87,7 @@ export class AmbientSounds {
   private readonly audio: GameAudio;
   private bed: { file: string; sound: AmbientSound; volume: number } | null = null;
   private critterMs = 4000;
+  private petMs = 30000;
   private cheerMs = 0;
   private stepMs = 0;
 
@@ -108,6 +111,7 @@ export class AmbientSounds {
     for (const e of f.events) this.event(e);
     for (const s of f.splashes) this.audio.playAmbient("splash.ogg", { at: s, range: 22 * SQ, volume: s.big ? 0.45 : 0.25, rate: s.big ? 1 : 1.3 });
     this.updateCritters(f);
+    this.updatePets(f);
     this.updateSteps(f);
   }
 
@@ -251,6 +255,14 @@ export class AmbientSounds {
     const c = f.critterVoice();
     // Small things squeak higher
     if (c) this.audio.playAmbient(c.sound, { at: c, range: 12 * SQ, volume: 0.28, rate: rnd(1.15, 1.4) });
+  }
+
+  /** A pet's noise every minute or two, at the critters' quiet volume */
+  private updatePets(f: AmbientSoundFrame): void {
+    if ((this.petMs -= f.dt) > 0) return;
+    this.petMs = rnd(60000, 120000);
+    const p = f.petVoice();
+    if (p) this.audio.playAmbient(p.sound, { at: p, range: 12 * SQ, volume: 0.28, rate: rnd(1.15, 1.4) });
   }
 
   // ---- puddles ----

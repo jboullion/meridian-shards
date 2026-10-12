@@ -19,6 +19,7 @@ import {
 import {
   AMBIENT_ROOMS, AMBIENT_SCALE, AmbientLife, boltArt, LiveRoom, MOVEON, PlayerMover, REMOTE_VIEW, animStep, isAmbientId, localRes, localResName, townsfolkArt,
   Critters, critterArt, decodeNavGrid, habitatOf, hourFromSun, isImpressiveBody, type AmbientExits, type DamageDealt, type NavGrid, type NavPoint, type RemoteView, type GameSession, type WorldObject,
+  FollowPlanner, navGridBuilder, AmbientStepper, type AmbientFrame, type AmbientSeed, Pets, petArt, type PetChoice, type PetOwner,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import { RoomCache } from "../render/roomCache.ts";
@@ -27,6 +28,7 @@ import { ORIGINAL_FOV } from "../viewer/roomScene.ts";
 import { AmbientSounds } from "./ambientSounds.ts";
 import type { GameAudio } from "./audio.ts";
 import { ScreenOverlays } from "./screenOverlays.ts";
+import type { SocialLink } from "./social.ts";
 import { HALO_COLOR, actionsFor, getSettings, isHeld, mouseCode, onSettings, touchUi, type Action, type Mods, type Settings } from "./settings.ts";
 
 /** Ours: a click kills a critter this far off, and an attack one this close (and ahead), fine units */
@@ -54,6 +56,24 @@ const SCATTER_RADIUS = 6 * FINENESS;
 const SPEECH_RANGE = 12;
 /** Ours: how many rooms' nav grids (ambient life) are kept */
 const NAV_GRIDS_KEPT = 8;
+/**
+ * Ours (the same crowd as friends): with the friends feature not started yet, wait this long after
+ * the scene starts for it before making a crowd of our own (ms)
+ */
+const SOCIAL_START_WAIT_MS = 3000;
+/** Ours (pets, docs/adr/0006-pets.md 3.5): at most this many drawn, ours and the nearest */
+const MAX_PETS = 12;
+/** Players have this many overlays at least (icons.ts): fewer is a disguise or shadow form, which shows no pet (3.3) */
+const MIN_PLAYER_OVERLAYS = 7;
+/** Pets' names show within this many squares of the eye */
+const PET_NAME_RANGE = 10;
+/** Ours (following a friend): building a room's nav grid takes at most this long a frame (ms) */
+const FOLLOW_BUILD_MS = 3;
+/** Ours (following): don't turn towards a spot this close (fine units); we'd spin on it */
+const FOLLOW_TURN_SLOP = 96;
+/** Ours (health bars over friends): the bar's width a square away, and the least it shrinks to (px) */
+const FRIEND_BAR_WIDTH = 120;
+const FRIEND_BAR_MIN = 36;
 /** Eye height above the floor (clientd3d/game.c player.height = 3/4 square). */
 const EYE_HEIGHT = 768;
 /** Mouse sensitivity in client angle units per pixel (4096 per circle). */
@@ -199,9 +219,20 @@ export class GameScene {
   private loaded: LoadedRoom | null = null;
   /** The current room's file name, lower case */
   private roomFile = "";
-  /** Ours: the room's townsfolk or inn patrons (Ambient Life), and the room they're in */
+  /**
+   * Ours: the room's townsfolk or inn patrons (Ambient Life), and the room they're in. `ambient`
+   * is null while the crowd catches up (docs/adr/0005-friends.md 6); `ambientStep` steps it
+   */
   private ambient: AmbientLife | null = null;
+  private ambientStep: AmbientStepper | null = null;
   private ambientRoom = "";
+  /** The crowd to make for a room: asked of the friends feature, "pending" until it says */
+  private ambientSeed: { file: string; seed: AmbientSeed | null | "pending" } | null = null;
+  private readonly startedAt = performance.now();
+  /** The crowd steps alike on every client (the arena, shared): it doesn't react to us */
+  private ambientLockstep = false;
+  /** The room BP_PLAYER last put us in (file, lower case) */
+  private playerRoomFile = "";
   /** roomexits.json, once loaded (empty without one) */
   private ambientExits: Record<string, AmbientExits> | null = null;
   /**
@@ -371,6 +402,29 @@ export class GameScene {
   onSelecting?: (on: boolean) => void;
   /** A line for the chat window from the client itself */
   onMessage?: (text: string) => void;
+  /**
+   * Ours (docs/adr/0005-friends.md): the friends feature, for friends' health bars over their heads
+   * (5) and following (4)
+   */
+  social: SocialLink | null = null;
+  /**
+   * Ours (docs/adr/0006-pets.md): our own pet (GameView sets it; null for none), our character's
+   * name (pets idle by their owner's name), and every pet in the room, ours and other players'
+   */
+  ownPet: PetChoice | null = null;
+  ownName = "";
+  private pets: Pets | null = null;
+  private petsRoom = "";
+  private petNamePool: HTMLDivElement[] = [];
+  private petArtLoaded = false;
+  /** Where we were last frame, for how fast our pet must go */
+  private petLastAt: { x: number; y: number } | null = null;
+  /** Following a friend: the plan, and whose object to walk after (their key; ids change) */
+  private follow: { planner: FollowPlanner; key: string } | null = null;
+  /** A room's nav grid being built for following, a slice a frame */
+  private followBuild: { file: string; gen: Generator<void, NavGrid> } | null = null;
+  /** Following stopped of itself (we moved, the way was lost): why, for GameView to tell the friend and the chat */
+  onFollowStop?: (why: string) => void;
 
   constructor(canvas: HTMLCanvasElement, labels: HTMLElement, session: GameSession, assets: AssetStore, audio: GameAudio) {
     this.canvas = canvas;
@@ -407,8 +461,23 @@ export class GameScene {
     this.unsubscribe = session.world.on((e) => {
       const self = session.world.self;
       switch (e.type) {
-        case "player":
+        case "player": {
+          // Another room (a save renumbers this one, so not by its id): a new crowd, asked for again
+          // (docs/adr/0005-friends.md 6), even back in the same room after a moment elsewhere
+          const file = (session.resource(e.player.roomRes) ?? "").toLowerCase();
+          if (file !== this.playerRoomFile) {
+            this.playerRoomFile = file;
+            this.ambientSeed = null;
+            this.ambientStep = null;
+            this.ambient = null;
+            this.ambientRoom = "";
+          }
           if (e.roomChanged) {
+            // Following: this should be the room the leader went to
+            if (this.follow) {
+              const why = this.follow.planner.enteredRoom((session.resource(e.player.roomRes) ?? "").toLowerCase());
+              if (why) this.stopFollowing(why);
+            }
             // BP_ROOM_CONTENTS follows BP_PLAYER on entering a room
             this.contentsArrived = new Promise((r) => (this.contentsResolve = r));
             // game.c EnterNewRoom: SetUserTargetID(INVALID_ID)
@@ -418,6 +487,7 @@ export class GameScene {
           // BP_PLAYER carries the room's background too (teleports change both)
           void this.syncRoom();
           break;
+        }
         case "background":
           void this.syncSky();
           break;
@@ -757,12 +827,25 @@ export class GameScene {
       forward = 1;
       strafe = 0;
     }
-    const turn = remote && !(rv & REMOTE_VIEW.TURN) ? 0 : held("turnRight") - held("turnLeft");
+    let turn = remote && !(rv & REMOTE_VIEW.TURN) ? 0 : held("turnRight") - held("turnLeft");
+    // Following a friend (ours): moving or turning ourselves stops it; else it walks for us
+    let followRun: boolean | null = null;
+    if (this.follow) {
+      if (forward || strafe || turn) this.stopFollowing("you moved");
+      else if (!still && !remote) {
+        const walk = this.followFrame(now, room, self);
+        if (walk) {
+          forward = 1;
+          followRun = walk.run;
+          turn = 0;
+        }
+      }
+    }
     // Always Run (config.ini alwaysrun): the Run/Walk key walks instead
     // mermain.c: too tired to run below MIN_VIGOR (10)
     const vigor = world.stats.get(1)?.find((st) => st.num === STAT_VIGOR)?.numeric?.value ?? MIN_VIGOR;
     const joystick = tm.forward !== 0 || tm.strafe !== 0;
-    const wantsRun = joystick ? tm.run || this.settings.alwaysRun : (held("run") === 1) !== this.settings.alwaysRun;
+    const wantsRun = followRun ?? (joystick ? tm.run || this.settings.alwaysRun : (held("run") === 1) !== this.settings.alwaysRun);
     const run = wantsRun && vigor >= MIN_VIGOR;
     const angleBefore = this.mover.angle;
     this.mover.turnKeys(turn, run, dt);
@@ -782,6 +865,7 @@ export class GameScene {
     world.tick(dt);
     this.updateAmbient(dt);
     this.updateCritters(dt);
+    this.updatePets(dt);
     this.audio.setListener(this.mover.x, this.mover.y, this.mover.angle);
 
     // --- camera: our eyes, or the object's we see through (draw.c DrawRoom) ---
@@ -812,7 +896,7 @@ export class GameScene {
     const selfLook = walking ? self.moving : self.normal;
     if (self.look !== selfLook) self.look = selfLook;
 
-    const ambient = [...(this.ambient?.objects() ?? []), ...(this.critters?.objects() ?? [])];
+    const ambient = [...(this.ambient?.objects() ?? []), ...(this.critters?.objects() ?? []), ...(this.pets?.objects() ?? [])];
     this.animate([...world.objects.values(), ...ambient], dt);
     const lighting = world.lighting;
     // Enhanced Lighting (the Bind Editor's Options), or the original's
@@ -878,6 +962,7 @@ export class GameScene {
     if (world.effects.blur > 0 || world.effects.waver > 0) (this.blur ??= new TrailBlur()).apply(this.renderer);
     this.drawLabels(labels);
     this.drawSpeech();
+    this.drawPetNames();
     this.drawDamage();
     this.drawOverlays(room, lighting);
     this.countFrame(now);
@@ -892,37 +977,80 @@ export class GameScene {
     const spec = AMBIENT_ROOMS[this.roomFile];
     if (!spec || level === "off" || !this.ambientExits || !this.loaded) {
       this.ambient = null;
+      this.ambientStep = null;
       this.ambientRoom = "";
+      this.social?.setAmbient(this.roomFile, null);
       return;
     }
     const file = this.roomFile;
-    if (this.ambientRoom !== file || !this.ambient) {
+    if (this.ambientRoom !== file || !this.ambientStep) {
       this.ambient = null;
+      this.ambientStep = null;
       const grid = this.navGrids.get(file);
       if (grid === undefined) return this.loadNavGrid(file, this.loaded.room);
       if (grid === "loading") return;
+      // The same crowd as friends (docs/adr/0005-friends.md 6): a friend's in the room, or the room's for now
+      const seed = this.crowdSeed(file);
+      if (seed === "pending") return;
       this.ambientRoom = file;
-      this.ambient = new AmbientLife(this.loaded.room, spec, this.ambientExits[file], undefined, grid === "build" ? undefined : grid, this.waterTextures);
+      const life = new AmbientLife(this.loaded.room, spec, this.ambientExits[file], seed?.seed, grid === "build" ? undefined : grid, this.waterTextures);
+      this.ambientStep = new AmbientStepper(life, seed);
+      this.social?.setAmbient(file, seed);
       for (const f of [...townsfolkArt(), ...boltArt()]) void this.loadBgf(localRes(f));
     }
     const world = this.session.world;
     const self = world.self;
     const fx = world.effects;
+    // The arena's mock bouts stop for real fights: friends (who see the same bouts) don't count
     let others = 0;
-    for (const o of world.objects.values()) if (o.info.flags & OF.PLAYER && o.id !== self?.id) others++;
-    this.ambient.update(Math.min(dt, 100), {
+    for (const o of world.objects.values()) if (o.info.flags & OF.PLAYER && o.id !== self?.id && !this.social?.friendIds.has(o.id)) others++;
+    const frame: AmbientFrame = {
       player: self ? { x: self.x, y: self.y } : null,
       facing: this.mover.angle,
       scale: AMBIENT_SCALE[level],
-      obstacles: this.blockers(),
+      obstacles: [...this.blockers()],
       hour: this.gameHour(),
       weather: fx.raining ? "rain" : fx.snowing ? "snow" : null,
       impressive: !!self && isImpressiveBody(this.session.resource(self.info.iconRes) ?? ""),
       others,
-    });
-    this.scatterAmbient();
+    };
+    // What every client gives the shared crowd alike: nobody of ours to react to, and no players in
+    // the way (the server's other objects are the same for all). Catching up, it's that; in the arena
+    // (spec.bouts) always, so friends watching see the same bouts. Elsewhere the crowd reacts to us
+    // as before, and each copy drifts its own way.
+    const step = this.ambientStep;
+    // (Obstacles as a list: a tick may read them more than once a frame)
+    const lockstep = step.shared !== null && !!spec.bouts;
+    const neutral: AmbientFrame = { ...frame, player: null, facing: undefined, impressive: false, obstacles: [...this.blockers(true)] };
+    // The arena's keeps the hour it was made in and pays the weather no mind (a late arrival can't
+    // know either as they were), never stops for players (a friend's name can come a moment after
+    // their figure, so they'd count as a stranger on one client only), and is the usual size
+    // whatever each player's Ambient Life setting: the same fight for everyone
+    if (lockstep) Object.assign(neutral, { hour: step.shared!.hour ?? null, weather: null, others: 0, scale: AMBIENT_SCALE.normal });
+    step.advance(this.social?.relayNow() ?? Date.now(), dt, lockstep ? neutral : frame, neutral);
+    this.ambient = step.catchingUp ? null : step.life;
+    this.ambientLockstep = lockstep;
+    if (!this.ambient) return;
+    if (!lockstep) this.scatterAmbient();
     // Built here: keep it for the next visit
     if (this.navGrids.get(file) === "build" && this.ambient.nav) this.keepNavGrid(file, this.ambient.nav);
+  }
+
+  /**
+   * The crowd to make in a room (docs/adr/0005-friends.md 6): asked of the friends feature once per
+   * visit; "pending" until it answers, null for one of our own (no relay)
+   */
+  private crowdSeed(file: string): AmbientSeed | null | "pending" {
+    if (this.ambientSeed?.file !== file) {
+      if (!this.social && performance.now() - this.startedAt < SOCIAL_START_WAIT_MS) return "pending";
+      const entry: { file: string; seed: AmbientSeed | null | "pending" } = { file, seed: this.social ? "pending" : null };
+      this.ambientSeed = entry;
+      this.social?.ambientSeed(file, this.gameHour()).then(
+        (s) => void (entry.seed = s),
+        () => void (entry.seed = null),
+      );
+    }
+    return this.ambientSeed.seed;
   }
 
   /**
@@ -931,6 +1059,8 @@ export class GameScene {
    */
   /** We waved (UA_WAVE): someone close by in front of us waves back (ambient life) */
   waveAtAmbient(): void {
+    // The arena's shared crowd doesn't answer one player alone (docs/adr/0005-friends.md 6)
+    if (this.ambientLockstep) return;
     this.ambient?.wavedAt({ x: this.mover.x, y: this.mover.y }, this.mover.angle);
   }
 
@@ -1071,9 +1201,11 @@ export class GameScene {
   }
 
   /** Room objects that block movement (move.c MoveObjectAllowed's MOVEON_NO), but us */
-  private *blockers(): Generator<NavPoint> {
+  /** Real objects in the way; `noPlayers`: none of the players (they differ from client to client) */
+  private *blockers(noPlayers = false): Generator<NavPoint> {
     const world = this.session.world;
-    for (const o of world.objects.values()) if (o.id !== world.self?.id && o.info.moveOnType === MOVEON.NO) yield o;
+    for (const o of world.objects.values())
+      if (o.id !== world.self?.id && o.info.moveOnType === MOVEON.NO && !(noPlayers && o.info.flags & OF.PLAYER)) yield o;
   }
 
   /** Ours: the ambient sounds (dev tools: window.shards.gameScene.ambientSounds.audition("thunder")) */
@@ -1267,6 +1399,7 @@ export class GameScene {
       strike,
       splashes,
       critterVoice: () => this.critters?.voice(me, CRITTER_VOICE_RANGE) ?? null,
+      petVoice: () => this.petVoice(me),
       wetUnderfoot: this.puddles?.wetAt(me.x, me.y) ?? false,
       speed: dt > 0 && moved < FINENESS ? moved / dt : 0,
     });
@@ -1662,6 +1795,176 @@ export class GameScene {
     else delete this.canvas.dataset.cursor;
   }
 
+  // ---- pets (ours, docs/adr/0006-pets.md) ----
+
+  /** Every pet in the room: ours always, other players' with Show Pets (and the relay's word on them) */
+  private updatePets(dt: number): void {
+    const loaded = this.loaded;
+    const world = this.session.world;
+    const self = world.self;
+    if (!loaded || !self) {
+      this.pets = null;
+      return;
+    }
+    if (this.petsRoom !== this.roomFile || !this.pets) {
+      this.petsRoom = this.roomFile;
+      this.pets = new Pets(loaded.room);
+      this.petLastAt = null;
+    }
+    const grid = this.navGrids.get(this.roomFile);
+    this.pets.setGrid(grid && typeof grid === "object" ? grid : this.ambientRoom === this.roomFile ? (this.ambient?.nav ?? null) : null);
+    const owners: (PetOwner & { d: number })[] = [];
+    // Ours, at the pace we go (squares per 10 s, as the server's speeds)
+    const at = { x: this.mover.x, y: this.mover.y };
+    const moved = this.petLastAt ? Math.hypot(at.x - this.petLastAt.x, at.y - this.petLastAt.y) : 0;
+    this.petLastAt = at;
+    if (this.ownPet && this.ownName) {
+      const speed = dt > 0 && moved < FINENESS ? (moved / FINENESS / (dt / 1000)) * 10 : 0;
+      owners.push({ id: self.id, name: this.ownName, ...at, angle: this.mover.angle, speed, pet: this.ownPet, d: 0 });
+    }
+    if (this.settings.showPets && this.social)
+      for (const o of world.objects.values()) {
+        // 3.3: only a player seen as one: not invisible, nor disguised or in shadow form
+        if (o.id === self.id || !(o.info.flags & OF.PLAYER) || o.info.drawingType === DRAWFX.INVISIBLE || o.look.overlays.length < MIN_PLAYER_OVERLAYS) continue;
+        const name = this.session.resource(o.info.nameRes) ?? "";
+        const pet = name ? this.social.petOf(name) : null;
+        if (pet) owners.push({ id: o.id, name, x: o.x, y: o.y, angle: o.angle, speed: o.motion?.speed ?? 0, pet, d: Math.hypot(o.x - at.x, o.y - at.y) });
+      }
+    if (owners.length && !this.petArtLoaded) {
+      this.petArtLoaded = true;
+      for (const f of petArt()) void this.loadBgf(localRes(f));
+    }
+    owners.sort((a, b) => a.d - b.d);
+    this.pets.update(dt, owners.slice(0, MAX_PETS), this.social?.relayNow() ?? Date.now());
+  }
+
+  /** Pets' names, under them, smaller and dimmer than players' (Show Pet Names), hidden by walls */
+  private drawPetNames(): void {
+    const named = this.settings.showPetNames ? (this.pets?.named() ?? []) : [];
+    const w = this.canvas.clientWidth,
+      h = this.canvas.clientHeight;
+    const eye = this.camera.position;
+    const v = new THREE.Vector3();
+    const dir = new THREE.Vector3();
+    let n = 0;
+    for (const { obj, name } of named) {
+      const floor = this.mover.floorBase(obj.x, obj.y) ?? this.mover.z;
+      v.set(obj.x / FINENESS, floor / FINENESS, obj.y / FINENESS);
+      dir.subVectors(v, eye);
+      const d = dir.length();
+      if (d > PET_NAME_RANGE) continue;
+      if (this.roomView) {
+        this.labelRay.set(eye, dir.divideScalar(d));
+        this.labelRay.far = d - LABEL_OCCLUSION_SLACK;
+        if (this.labelRay.far > 0 && this.roomView.occludes(this.labelRay)) continue;
+      }
+      v.project(this.camera);
+      if (v.z > 1 || v.z < -1) continue;
+      const el = this.petNamePool[n] ?? this.labelsEl.appendChild(document.createElement("div"));
+      if (!this.petNamePool[n]) el.className = "pet-name";
+      this.petNamePool[n++] = el;
+      const shown = this.session.textFilter ? this.session.textFilter(name) : name;
+      if (el.textContent !== shown) el.textContent = shown;
+      el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, 4px)`;
+      el.style.display = "";
+    }
+    for (let i = n; i < this.petNamePool.length; i++) this.petNamePool[i].style.display = "none";
+  }
+
+  /** A pet near us to make its noise now and then (the Ambient Sounds), or null */
+  private petVoice(at: { x: number; y: number }): { x: number; y: number; sound: string } | null {
+    return this.pets?.voice(at, CRITTER_VOICE_RANGE, Math.random) ?? null;
+  }
+
+  // ---- following a friend (ours, docs/adr/0005-friends.md 4) ----
+
+  /** Start walking after a friend whose character is in our room */
+  startFollowing(key: string, name: string): void {
+    this.follow = { planner: new FollowPlanner(name), key };
+  }
+
+  /** Stop following; `why`, when following stopped of itself, goes to onFollowStop */
+  stopFollowing(why: string | null): void {
+    if (!this.follow) return;
+    this.follow = null;
+    if (why !== null) this.onFollowStop?.(why);
+  }
+
+  get followingKey(): string | null {
+    return this.follow?.key ?? null;
+  }
+
+  /** The leader's exit message (4.3), onto the trail; one we can't follow stops it */
+  followExit(exit: Parameters<FollowPlanner["addExit"]>[0]): void {
+    const why = this.follow?.planner.addExit(exit);
+    if (why) this.stopFollowing(why);
+  }
+
+  /** The room's nav grid for following: the asset build's or the ambient life's, else built here a slice a frame */
+  private followGrid(): NavGrid | null {
+    const file = this.roomFile;
+    const loaded = this.loaded;
+    if (!file || !loaded) return null;
+    const grid = this.navGrids.get(file);
+    if (grid && typeof grid === "object") return grid;
+    if (this.ambientRoom === file && this.ambient?.nav) return this.ambient.nav;
+    if (grid === undefined) {
+      this.loadNavGrid(file, loaded.room);
+      return null;
+    }
+    if (grid === "loading") return null;
+    // "build": the ambient life builds its own; otherwise we do
+    if (this.ambientRoom === file && this.ambient) return null;
+    if (this.followBuild?.file !== file) this.followBuild = { file, gen: navGridBuilder(loaded.room, 2, this.waterTextures) };
+    const end = performance.now() + FOLLOW_BUILD_MS;
+    while (performance.now() < end) {
+      const r = this.followBuild.gen.next();
+      if (r.done) {
+        this.followBuild = null;
+        this.keepNavGrid(file, r.value);
+        return r.value;
+      }
+    }
+    return null;
+  }
+
+  /** This frame of following: whether to walk (we turn to face the way here), or null to stand */
+  private followFrame(now: number, room: Room, self: WorldObject): { run: boolean } | null {
+    const f = this.follow!;
+    const world = this.session.world;
+    const id = this.social?.objectOf(f.key) ?? null;
+    const leader = id !== null ? world.objects.get(id) : undefined;
+    const step = f.planner.step({
+      now,
+      room: this.roomFile,
+      self: { x: self.x, y: self.y },
+      leader: leader ? { x: leader.x, y: leader.y, speed: leader.motion?.speed ?? 0 } : null,
+      grid: this.followGrid(),
+      size: { width: room.width, height: room.height },
+      exits: this.ambientExits?.[this.roomFile],
+    });
+    switch (step.kind) {
+      case "stop":
+        this.stopFollowing(step.why);
+        return null;
+      case "go":
+        this.mover.flush(now); // A_GO: MoveUpdatePosition first
+        this.session.go();
+        return null;
+      case "idle":
+        return null;
+      case "walk": {
+        const dx = step.to.x - self.x,
+          dy = step.to.y - self.y;
+        if (Math.hypot(dx, dy) < FOLLOW_TURN_SLOP) return null;
+        const facing = Math.round((Math.atan2(dy, dx) * 4096) / (2 * Math.PI)) & 4095;
+        const diff = ((facing - this.mover.angle + 6144) % 4096) - 2048;
+        if (diff) this.mover.turnBy(diff);
+        return { run: step.run };
+      }
+    }
+  }
+
   private drawLabels(labels: NameLabel[]): void {
     const w = this.canvas.clientWidth,
       h = this.canvas.clientHeight;
@@ -1683,9 +1986,25 @@ export class GameScene {
       }
       const el = this.labelPool[n] ?? this.labelsEl.appendChild(document.createElement("div"));
       this.labelPool[n++] = el;
-      el.className = `name-label${l.id === this.hovered ? " hovered" : ""}${l.id === this.target ? " target" : ""}`;
-      el.textContent = l.name;
-      el.style.color = l.color;
+      // Ours (docs/adr/0005-friends.md 5): a friend's name in the friends colour, their health under it
+      const friend = this.social?.friends.options.healthBars ? this.social.friendIds.get(l.id) : undefined;
+      el.className = `name-label${l.id === this.hovered ? " hovered" : ""}${l.id === this.target ? " target" : ""}${friend ? " friend" : ""}`;
+      if (friend) {
+        const hp = this.social!.friends.healthOf(friend.key);
+        // Smaller further off, as the sprite is
+        const width = Math.max(FRIEND_BAR_MIN, Math.min(FRIEND_BAR_WIDTH, FRIEND_BAR_WIDTH / Math.max(1, l.position.distanceTo(eye))));
+        if (el.children.length !== 2) el.replaceChildren(document.createElement("span"), document.createElement("i"));
+        const [name, bar] = [el.children[0] as HTMLElement, el.children[1] as HTMLElement];
+        if (name.textContent !== l.name) name.textContent = l.name;
+        bar.className = hp === null ? "friend-hp unknown" : "friend-hp";
+        bar.style.width = `${Math.round(width)}px`;
+        bar.style.setProperty("--hp", `${hp ?? 0}%`);
+        el.style.color = "";
+      } else {
+        if (el.children.length) el.replaceChildren();
+        if (el.textContent !== l.name) el.textContent = l.name;
+        el.style.color = l.color;
+      }
       el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -110%)`;
       el.style.display = "";
     }
@@ -2020,6 +2339,8 @@ export class GameScene {
       sy = this.settings.mouseYScale / 15;
     const remote = this.remoteView();
     const rv = remote?.view.flags ?? 0;
+    // Turning ourselves stops following (the chase view's camera turns alone)
+    if (this.follow && dx && !remote && this.viewMode !== "chase") this.stopFollowing("you turned");
     // The chase view orbits the camera, not us
     if (!remote && this.viewMode === "chase") this.chaseAngle = (this.chaseAngle + Math.round(dx * MOUSE_TURN * sx) + 4096) & 4095;
     else if (!remote) this.mover.turnBy(dx * MOUSE_TURN * sx);
@@ -2237,6 +2558,7 @@ export class GameScene {
     switch (a) {
       case "go":
         if (this.resting) break; // mermain.c A_GO: not while resting
+        if (this.follow) this.stopFollowing("you used an exit yourself");
         this.mover.flush(performance.now()); // A_GO: MoveUpdatePosition first
         this.session.go();
         break;
@@ -2312,6 +2634,8 @@ export class GameScene {
       case "configuration":
       case "actions":
       case "quickEmotes":
+      case "friends":
+      case "pets":
       case "who":
       case "offer":
       case "buy":

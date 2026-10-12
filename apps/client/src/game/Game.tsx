@@ -3,11 +3,11 @@ import type { CharInfo, CharacterSlot } from "@shards/protocol";
 import { SAY } from "@shards/protocol";
 import {
   GameSession, type ChatLine, type ContainerContents, type DamageDealt, type LookResult, type OfferEvent, type SessionPhase, type TradeList,
-  type MailNewsEvent, type GuildEvent, type MinigameEvent,
-} from "@shards/world";
+  type MailNewsEvent, type GuildEvent, type MinigameEvent, localResName } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
 import { allowPortrait, desktop, gameSocketUrl, onAndroidAway } from "../host.ts";
+import { hideFriendTells } from "./social.ts";
 import { GameAudio } from "./audio.ts";
 import { Intro } from "./Intro.tsx";
 import { CharacterCreator } from "./CharacterCreator.tsx";
@@ -219,10 +219,12 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     );
     // srvrstr.c: the profanity filter on every line shown
     s.textFilter = filterIncoming;
+    // Ours: a friend request's tell is never shown, even before the friends feature has started (social.ts)
+    hideFriendTells(s);
     s.setLanguage(getSettings().language);
     void loadProfanity(assets);
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => s.resource(id)), trades, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
   };
 
   const logout = () => {

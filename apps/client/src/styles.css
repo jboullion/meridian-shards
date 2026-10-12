@@ -3743,3 +3743,186 @@ canvas.server-wait {
   margin: 2px 3px;
   background: var(--panel-edge);
 }
+
+/* ---- Friends (ours, docs/adr/0005-friends.md) ---- */
+
+/* A friend's name over their head in the friends colour, their health under it (gameScene.ts drawLabels) */
+.name-label.friend {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  color: rgb(120, 240, 150);
+}
+
+.name-label .friend-hp {
+  display: block;
+  height: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.85);
+  background: linear-gradient(to right, rgb(200, 30, 30) var(--hp, 0%), rgba(40, 10, 10, 0.75) var(--hp, 0%));
+}
+
+/* No word from them yet: the bar's outline only */
+.name-label .friend-hp.unknown {
+  background: rgba(40, 40, 40, 0.6);
+}
+
+/* Who follows us, whom we follow, requests waiting: under the study banner's place */
+.view .friends-notices {
+  position: absolute;
+  left: 50%;
+  top: 40px;
+  z-index: 6;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: calc(100% - 32px);
+  pointer-events: none;
+}
+
+.view .friends-notices > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 6px 3px 12px;
+  border: 1px solid rgba(120, 240, 150, 0.6);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.6);
+  font: bold 13px Georgia, "Times New Roman", serif;
+  color: rgb(120, 240, 150);
+  text-shadow: 1px 1px 0 #000;
+  pointer-events: auto;
+}
+
+.view .friends-notices span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.view .friends-notices button {
+  flex: none;
+  padding: 2px 10px;
+  border: 1px solid rgb(120, 240, 150);
+  border-radius: 2px;
+  background: #10251a;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.game.modern-ui .view .friends-notices {
+  top: calc(128px * var(--hud-scale, 1));
+}
+
+.game.touch-ui .view .friends-notices {
+  top: 80px;
+  font-size: 12px;
+}
+
+/* The full map: where located friends are, when not in our room */
+.full-map .friends-map-hint {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 4px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  background: rgba(245, 235, 210, 0.85);
+  font: 13px Georgia, "Times New Roman", serif;
+  color: #201508;
+  pointer-events: none;
+}
+
+.friend-row small {
+  opacity: 0.75;
+}
+
+.mk-list li.friend-offline {
+  opacity: 0.6;
+}
+
+.mk-text.friends-note,
+.mk-text.friends-hint {
+  white-space: normal;
+  font-size: 0.9em;
+}
+
+/* ---- Pets (ours, docs/adr/0006-pets.md) ---- */
+
+/* A pet's name under it: smaller and dimmer than players' (gameScene.ts drawPetNames) */
+.pet-name {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font: italic 11px Georgia, "Times New Roman", serif;
+  color: rgba(225, 215, 190, 0.75);
+  text-shadow: 1px 1px 0 #000;
+  pointer-events: none;
+}
+
+.pets-window .pet-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.pets-window .pet-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: calc(var(--dy) * 64);
+  padding: 2px;
+  border: 1px solid rgba(214, 190, 140, 0.35);
+  background: #000;
+  color: #e8dcc0;
+  font: 11px Georgia, "Times New Roman", serif;
+  cursor: pointer;
+}
+
+.pets-window .pet-tile img {
+  max-width: 100%;
+  max-height: calc(var(--dy) * 48);
+  image-rendering: pixelated;
+}
+
+.pets-window .pet-tile.selected {
+  border-color: rgb(240, 208, 25);
+  box-shadow: inset 0 0 0 1px rgb(240, 208, 25);
+}
+
+.pets-window .pet-tile.locked {
+  opacity: 0.4;
+}
+
+.pets-window .pet-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(214, 190, 140, 0.35);
+  background: #000;
+  color: #c8bca0;
+  font: italic 12px Georgia, "Times New Roman", serif;
+}
+
+.pets-window .pet-preview img {
+  max-width: 90%;
+  max-height: 90%;
+  image-rendering: pixelated;
+}
+
+.pets-window .pet-colours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.pets-window .pet-colours button.selected {
+  outline: 1px solid rgb(240, 208, 25);
+}
+
+.pets-window .pet-colours button.locked {
+  opacity: 0.4;
+}

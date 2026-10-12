@@ -81,12 +81,24 @@ Townsfolk, inn patrons, the castles' people and the arena's fighters (`packages/
 | Walking round each other | They wait for us, but walk through one another. |
 | Talking back | Their lines are canned and over their heads only; they don't answer what's said in the chat. |
 | Rooms that change shape | The grid is built from the room file; a lift the server moves isn't seen. No town room has one. |
-| The same people for everyone | By design: each client makes up its own. |
+
+## Friends (ours)
+
+Friends, the relay, following and health bars ([ADR 0005](adr/0005-friends.md)) have no counterpart in the original. What they don't do yet:
+
+| What | What it needs |
+|---|---|
+| Friends on a second device | Keys live in one browser's IndexedDB; a new device or cleared data means pairing again. Syncing keys is out of scope. |
+| End-to-end encryption | The relay is ours and sees friends' locations; ECDH on the same keys is a possible later step. |
+| Walking to a friend in another room | Following starts only in the same room (ADR 0005 4.7). |
+| More pet kinds and colours | [ADR 0006](adr/0006-pets.md) 6.4: the pets are the critters' eight species, each in its own colours; bigger monsters drawn small and recoloured ones come once each is looked at in the game. |
+| Original-client players | Only players of this client are on the relay; the one tell they might see is readable. |
 
 ## Deliberately different or left out
 
 | What | Why |
 |---|---|
+| Critters and nature shared between friends | Won't do (decided 2026-10-12): only the townsfolk and the arena's fights are shared ([ADR 0005](adr/0005-friends.md) 6). Critters, butterflies, fireflies, leaves and fish keep each client's own random seed, and a squished critter is seen by its squisher alone. |
 | Objects under the cursor | The original takes everything whose on-screen rectangle holds the cursor; we take the objects with an opaque pixel there, so a list comes up only when sprites really overlap. Rectangles would ask too often. |
 | Ignore list by name resource | The original keys ignores by name resource; we use the name, which survives across sessions. |
 | The client patcher (`download.c`, `AP_DOWNLOAD`) | Our game files come from the asset manifest, and the desktop app updates itself. `AP_DOWNLOAD` now ends the login with the server's reason. |

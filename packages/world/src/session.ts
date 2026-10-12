@@ -617,6 +617,12 @@ export class GameSession {
    */
   textFilter: ((text: string) => string) | null = null;
 
+  /**
+   * Ours: a line this returns true for is never shown, nor put in a chat tab (the friend request's
+   * tell, docs/adr/0005-friends.md 2.4.2). Called with the raw text and, for speech, who said it.
+   */
+  lineFilter: ((text: string, sender: { id: number; name: string } | null) => boolean) | null = null;
+
   private chatLine(kind: ChatLine["kind"], text: string, channel: ChatChannel, extra: Pick<ChatLine, "sender" | "sayType"> = {}): void {
     const shown = this.textFilter ? this.textFilter(text) : text;
     this.events.chat?.({ kind, channel, spans: parseMarkup(shown, DEFAULT_COLORS[kind]), time: Date.now(), ...extra });
@@ -756,7 +762,7 @@ export class GameSession {
           // The logon's messages (welcome, news, quests, the help text) all go to the Server tab,
           // whatever words they use; after that, the format string decides
           const channel = type === BP.SYS_MESSAGE || Date.now() < this.logonUntil ? "server" : messageChannel(formatText);
-          if (text !== null) this.chatLine("system", text, channel);
+          if (text !== null && !this.lineFilter?.(text, null)) this.chatLine("system", text, channel);
           if (type === BP.MESSAGE) {
             const hit = readDamageDealt(formatText, params, (id) => this.resource(id));
             if (hit) this.events.damageDealt?.(hit);
@@ -771,7 +777,7 @@ export class GameSession {
           const senderName = this.resource(r.u32()) ?? "";
           const sayType = r.u8();
           const text = formatServerMessage(r.u32(), r, (id) => this.resource(id));
-          if (text !== null)
+          if (text !== null && !this.lineFilter?.(text, { id: senderId, name: senderName }))
             this.chatLine(sayType === SAY.RESOURCE ? "said-resource" : "say", text, "chat", { sender: { id: senderId, name: senderName }, sayType });
           break;
         }

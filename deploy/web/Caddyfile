@@ -1,5 +1,5 @@
 # Caddy: HTTPS for the website at / (with the downloads at /download/ and the wiki at /wiki/),
-# the browser client at /play/, the game assets and the WebSocket gateway at /ws. The apps
+# the browser client at /play/, the game assets, the WebSocket gateway at /ws and the friends relay at /social. The apps
 # themselves are GitHub Releases. SITE_ADDRESS is the hostname (e.g. 34-123-45-67.sslip.io, or
 # several, comma-separated); Caddy gets its certificate from Let's Encrypt by itself. For a local
 # test without TLS, set SITE_ADDRESS=http://localhost. The planned layout on our own domain
@@ -21,6 +21,14 @@
 	# The game connection. The gateway limits connections per address and reads it from the
 	# first X-Forwarded-For entry (GATEWAY_TRUST_PROXY), so that entry is the player's alone.
 	handle /ws {
+		reverse_proxy gateway:8059 {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+
+	# The friends relay (docs/adr/0005-friends.md), in the gateway's process: it limits connections
+	# per address the same way.
+	handle /social {
 		reverse_proxy gateway:8059 {
 			header_up X-Forwarded-For {client_ip}
 		}

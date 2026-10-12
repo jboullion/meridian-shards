@@ -1,6 +1,6 @@
 # ADR 0005: Friends, a relay of our own, and shared ambient life
 
-- **Status:** accepted, 2026-10-12; not built yet
+- **Status:** accepted, 2026-10-12. Parts 1-5 (the relay, keys, the Friends window, follow, health bars: section 7 steps 1-4) built 2026-10-12, and shared ambient life (6) the same day, simplified as below. See "As built" at the end.
 
 ## Context
 
@@ -111,3 +111,25 @@ Yes, and it doesn't need the relay beyond its clock (1.5): **the seed is a funct
 - Players on original clients see none of this, and nothing here changes what they see. The one tell they might see is readable.
 - Shared ambient life changes how `AmbientLife` steps and reacts; that's the biggest change to existing code here, and why it comes last.
 - `AGENTS.md` and `docs/missing-features.md` need entries when each part lands.
+
+## As built (2026-10-12)
+
+Where the code is: the relay is `tools/gateway/relay.ts` (in the gateway's process, `/social`); the protocol, the relay client, the friends logic and the follow planner are `packages/world/src/social/` (`socialProtocol.ts`, `socialClient.ts`, `friends.ts`, `follow.ts`); the game side is `apps/client/src/game/social.ts` (`SocialLink`), `socialKeys.ts` (IndexedDB), `ui/FriendsWindow.tsx`, and the follow driving and friends' labels in `gameScene.ts`. `tools/headless/friend.ts` is a scripted friend for trying it alone.
+
+Where it differs from the decisions above, or fills in what they left open:
+
+- **Presence is mutual.** The relay tells a client a key is online only while both watch each other's keys, so watching someone's key (from the search list) says nothing until they've added you too. A friend removed while offline is told when next seen: the remover keeps watching that key until then.
+- **In-room positions come from the server.** The map marker and following use the friend's object in `WorldState`, which the server already moves for us, so there's no 2-second location message (3); a location goes to friends on every room change and when a friend comes online.
+- **"Needs pairing again"** (2.5): every 30 s the client asks the relay (`lookup`) whether a friend who's in the game but not online under their key is on it under another; the Friends window then offers "Pair again".
+- **Room numbers:** several rooms share a file (tos.roo is four), so the sender picks its RID by the room's name from `BP_PLAYER`, and the receiver names the room by that RID.
+- **Exits** (4.3): the leader's client finds the door near its last square that leads to the new room, else an edge that does (`follow.ts exitTaken`); neither means a teleport or the like, and the follower stops. The follower walks onto the door's square (`BP_REQ_GO` needs it) and presses go every 1.2 s for up to 6 s.
+- **Following stops** also when the follower uses an exit themselves, when the relay connection drops, and after a path can't be found for 3 s. The leader's "Stop them" and the window's "Refuse followers" are both there.
+- **A save** (`BP_INVALIDATE_DATA`, every half hour on our server) empties the room for a moment; the link and following carry on through it.
+
+Shared ambient life (6), as the user scoped it on 2026-10-12: the fight in the arena must be the same for friends; the rest of the crowd may differ, and a late arrival needs syncing once, not keeping in step after.
+
+- **The seed** (`packages/world/src/ambient/ambientStepper.ts`): a room's crowd is `{ seed, since, hour }`. Entering a room with ambient life, the client asks friends in the room which crowd they see (`ambient-ask`, answered by `ambient`, friends only, 1.5 s); with no answer it takes the room's for this 10-minute slot of the relay's clock (`slotSeed`, an FNV hash of the file and the slot), with `since` the slot's start and `hour` the game hour now. Without the relay (no clock in 2.5 s), a crowd of its own as before.
+- **Ticks:** the crowd steps in fixed 50 ms ticks counted from `since` by the relay's clock (`AmbientStepper`), drawn between the last two ticks so it moves smoothly. A late arrival runs the ticks it missed a few ms a frame (about 70 ms of work for five minutes of the arena), showing nobody until it's done, then carries on alone.
+- **The arena** (`spec.bouts`) is lockstep: every client gives its crowd the same inputs, with no player of ours to avoid or react to, no players as obstacles, the hour the crowd was made in, no weather, the usual size whatever the Ambient Life setting, and bouts that never pause for players (a friend's name can arrive a moment after their figure, which made one client pause and not the other). Waves and spells don't stir it. Two browsers in the arena, one there 30 s before the other, showed the same 27 figures on the same squares, mid-fight, and still did 30 s later.
+- **Elsewhere** the seed is shared, so the same people set off on the same errands, but the crowd reacts to each player as before and drifts apart; nobody needs those to match.
+- **Won't do** (decided 2026-10-12): only the human NPCs and the arena's fights are shared. Critters and nature keep each client's own random seeds (they spawn about each player anyway), and a squished critter isn't shown to friends; 6.1's seeds for `Critters` and `Nature` and 6.4's squish message are dropped.

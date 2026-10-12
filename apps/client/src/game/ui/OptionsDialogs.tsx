@@ -397,6 +397,8 @@ const ENHANCED_TITLE =
   "Soft highlights, flickering and glowing flames, light that stops at walls, shaded corners, shadows and a vignette; off, the original's look";
 
 const AMBIENT_TITLE = "Townsfolk walking the streets and patrons in the inns, seen by you alone";
+const PETS_TITLE = "Other players' pets following them (your own always shows: choose No pet in the Pets window to hide it)";
+const PET_NAMES_TITLE = "The names under pets";
 const CRITTERS_TITLE = "Rats, spiders, centipedes and other small creatures scurrying about, killed with a click; seen by you alone, with no experience or loot";
 const FLYERS_TITLE = "Flocks of birds crossing the sky by day, and bats in caves (and out at night); seen by you alone";
 const GROUND_TITLE = "Tufts of grass, flowers, pebbles and stones on the ground outdoors and in caves";
@@ -550,6 +552,8 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
                   <Check label="Birds and Bats" title={FLYERS_TITLE} checked={d.flyers} onChange={(v) => set({ flyers: v })} />
                   <Check label="Nature" title={NATURE_TITLE} checked={d.nature} onChange={(v) => set({ nature: v })} />
                   <AmbientSoundsOption d={d} set={set} />
+                  <Check label="Show Pets" title={PETS_TITLE} checked={d.showPets} onChange={(v) => set({ showPets: v })} />
+                  <Check label="Show Pet Names" title={PET_NAMES_TITLE} checked={d.showPetNames} onChange={(v) => set({ showPetNames: v })} />
                 </GroupBox>
                 <GroupBox label="Interface" className="flow">
                   {/* Ours: the HUD over the whole view, or the original's interface column */}
@@ -1007,6 +1011,8 @@ export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Se
         <Check label="Birds and Bats" title={FLYERS_TITLE} checked={d.flyers} onChange={(v) => set({ flyers: v })} />
         <Check label="Nature" title={NATURE_TITLE} checked={d.nature} onChange={(v) => set({ nature: v })} />
         <AmbientSoundsOption d={d} set={set} />
+        <Check label="Show Pets" title={PETS_TITLE} checked={d.showPets} onChange={(v) => set({ showPets: v })} />
+        <Check label="Show Pet Names" title={PET_NAMES_TITLE} checked={d.showPetNames} onChange={(v) => set({ showPetNames: v })} />
         <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
         <Check label="Attack On Target" checked={d.attackOnTarget} onChange={(v) => set({ attackOnTarget: v })} />
         <div className="touch-config-buttons">
@@ -1026,6 +1032,8 @@ export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Se
                 flyers: d.flyers,
                 nature: d.nature,
                 groundDetail: d.groundDetail,
+                showPets: d.showPets,
+                showPetNames: d.showPetNames,
                 damageNumbers: d.damageNumbers,
                 attackOnTarget: d.attackOnTarget,
               });

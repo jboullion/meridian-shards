@@ -6,7 +6,7 @@ The hosted stack is three containers on one small Linux VM:
 |---|---|
 | `blakserv` | The unmodified Server 104 server, built for Linux (32-bit), with the compiled Kod, resources and rooms from our build. Game state lives on the `savegame` volume. |
 | `gateway` | The WebSocket-to-TCP gateway (`tools/gateway/gateway.ts`). |
-| `web` | Caddy: HTTPS (Let's Encrypt), the website at `/` (the landing page, `/download/` and the wiki: the `meridian-shards-website` repository next to this one), the browser client at `/play/`, the game assets at `/assets/` and the gateway at `/ws`. Without a staged website every other path redirects to `/play/`, as before. The browser client was taken down on 2026-10-08 and is back since 2026-10-09; most players use the desktop or Android app. |
+| `web` | Caddy: HTTPS (Let's Encrypt), the website at `/` (the landing page, `/download/` and the wiki: the `meridian-shards-website` repository next to this one), the browser client at `/play/`, the game assets at `/assets/`, the gateway at `/ws` and the friends relay at `/social` (in the gateway's process, [ADR 0005](../docs/adr/0005-friends.md); it keeps nothing on disk). Without a staged website every other path redirects to `/play/`, as before. The browser client was taken down on 2026-10-08 and is back since 2026-10-09; most players use the desktop or Android app. |
 
 Port 5959 is also open for original Windows clients built with our `SecretKey`. Our apps only need 443.
 

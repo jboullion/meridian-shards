@@ -28,6 +28,8 @@ export default defineConfig({
     proxy: {
       // Same-origin WebSocket in dev, like /ws behind Caddy in production.
       "/ws": { target: "ws://127.0.0.1:8059", ws: true, rewrite: () => "/" },
+      // The friends relay, in the gateway's process (docs/adr/0005-friends.md)
+      "/social": { target: "ws://127.0.0.1:8059", ws: true },
     },
   },
   build: {

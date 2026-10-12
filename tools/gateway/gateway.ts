@@ -8,11 +8,16 @@
 // Env equivalents: GATEWAY_PORT, BLAKSERV_ADDR, GATEWAY_MAX_PER_IP,
 // GATEWAY_ORIGINS (comma-separated allowed Origin headers; empty = allow all),
 // GATEWAY_TRUST_PROXY=1 (take the client IP from X-Forwarded-For).
+//
+// The path /social is the friends relay instead (relay.ts, docs/adr/0005-friends.md): JSON text
+// frames between players of this client, never reaching blakserv. It has its own per-IP limit,
+// the same number, so a player's two connections don't crowd each other out.
 
 import { createServer } from "node:http";
 import { connect } from "node:net";
 import { parseArgs } from "node:util";
 import { WebSocketServer } from "ws";
+import { RELAY_MAX_MESSAGE, SocialRelay } from "./relay.ts";
 
 const { values: args } = parseArgs({
   options: {
@@ -31,6 +36,7 @@ const TRUST_PROXY = process.env.GATEWAY_TRUST_PROXY === "1";
 const MAX_MESSAGE = 1 << 20;
 
 const perIp = new Map<string, number>();
+const socialPerIp = new Map<string, number>();
 let nextId = 1;
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
@@ -47,6 +53,16 @@ const wss = new WebSocketServer({
   handleProtocols: (protocols) => (protocols.has("binary") ? "binary" : false),
 });
 
+const social = new SocialRelay({ log });
+const socialWss = new WebSocketServer({ noServer: true, maxPayload: RELAY_MAX_MESSAGE, perMessageDeflate: false });
+
+/** One fewer connection from this address */
+const release = (counts: Map<string, number>, ip: string) => {
+  const n = (counts.get(ip) ?? 1) - 1;
+  if (n <= 0) counts.delete(ip);
+  else counts.set(ip, n);
+};
+
 http.on("upgrade", (req, socket, head) => {
   const fwd = String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim();
   const ip = (TRUST_PROXY && fwd) || req.socket.remoteAddress || "?";
@@ -59,13 +75,39 @@ http.on("upgrade", (req, socket, head) => {
     socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
     return;
   }
-  const count = perIp.get(ip) ?? 0;
+  const isSocial = (req.url ?? "/").split("?")[0] === "/social";
+  const counts = isSocial ? socialPerIp : perIp;
+  const count = counts.get(ip) ?? 0;
   if (count >= MAX_PER_IP) {
-    log(`reject ${ip}: ${count} connections already`);
+    log(`reject ${ip}: ${count} ${isSocial ? "social " : ""}connections already`);
     socket.end("HTTP/1.1 429 Too Many Requests\r\n\r\n");
     return;
   }
-  perIp.set(ip, count + 1);
+  counts.set(ip, count + 1);
+
+  if (isSocial) {
+    socialWss.handleUpgrade(req, socket, head, (ws) => {
+      let open = true;
+      const conn = social.connect({
+        send: (text) => ws.send(text),
+        close: (code, reason) => ws.close(code, reason),
+      });
+      const finish = () => {
+        if (!open) return;
+        open = false;
+        release(socialPerIp, ip);
+        conn.closed();
+      };
+      ws.on("message", (data, isBinary) => {
+        if (isBinary) return ws.close(1003, "text only");
+        const buf = Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data as ArrayBuffer);
+        void conn.receive(buf.toString("utf8"));
+      });
+      ws.on("close", finish);
+      ws.on("error", finish);
+    });
+    return;
+  }
 
   wss.handleUpgrade(req, socket, head, (ws) => {
     const id = nextId++;
@@ -82,9 +124,7 @@ http.on("upgrade", (req, socket, head) => {
     const finish = (why: string) => {
       if (done) return;
       done = true;
-      const n = (perIp.get(ip) ?? 1) - 1;
-      if (n <= 0) perIp.delete(ip);
-      else perIp.set(ip, n);
+      release(perIp, ip);
       log(`#${id} closed (${why}); up ${up} B, down ${down} B`);
       tcp.destroy();
       ws.close(1000);
@@ -115,5 +155,5 @@ http.on("upgrade", (req, socket, head) => {
 });
 
 http.listen(PORT, () => {
-  log(`gateway listening on ws://localhost:${PORT} -> ${SERVER_HOST}:${SERVER_PORT} (max ${MAX_PER_IP}/IP)`);
+  log(`gateway listening on ws://localhost:${PORT} -> ${SERVER_HOST}:${SERVER_PORT} (max ${MAX_PER_IP}/IP), friends relay on /social`);
 });

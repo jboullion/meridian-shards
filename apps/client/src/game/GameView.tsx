@@ -39,6 +39,10 @@ import { AnnotateDialog } from "./ui/AnnotateDialog.tsx";
 import { AboutDialog } from "./ui/AboutDialog.tsx";
 import { ChessWindow, type ChessState } from "./ui/ChessWindow.tsx";
 import { AdminConsole, appendAdminText, type AdminRoom } from "./ui/AdminConsole.tsx";
+import { SocialLink } from "./social.ts";
+import { FriendsMapHint, FriendsNotices, FriendsWindow } from "./ui/FriendsWindow.tsx";
+import { PetsWindow } from "./ui/PetsWindow.tsx";
+import { loadPet, savePet } from "./pet.ts";
 import { languageName } from "./languages.ts";
 import { MAX_ANNOTATIONS, annotationAt, loadAnnotations, saveAnnotations, type MapAnnotation } from "./annotations.ts";
 import { useWorld } from "./ui/hooks.ts";
@@ -151,6 +155,10 @@ type Modal =
   /** Study mode's window, with what we know as it opens (study.ts) */
   | { type: "study"; spells: StudySpell[]; carried: Map<string, number>; mana: number; maxMana: number; memory: StudyMemory }
   | { type: "about" }
+  /** Ours (docs/adr/0005-friends.md 3): the Friends window */
+  | { type: "friends" }
+  /** Ours (docs/adr/0006-pets.md 4): the Pets window */
+  | { type: "pets" }
   | { type: "actions" }
   | { type: "action"; window: ActionWindow }
   /** lookdlg.c DisplayLookList: choose among objects (to get, look at, attack, put away...) */
@@ -452,6 +460,94 @@ export function GameView({
       [slots[a], slots[b]] = [slots[b], slots[a]];
       return slots;
     });
+  /**
+   * Ours (docs/adr/0005-friends.md): this character's friends and the relay, once we know who we
+   * are; without the relay, friends just show offline
+   */
+  const [social, setSocial] = useState<SocialLink | null>(null);
+  // Our object is gone for a moment at every save (BP_INVALIDATE_DATA): keep the name we had, so the
+  // link (and following) carries on
+  const [socialName, setSocialName] = useState("");
+  if (charName && charName !== socialName) setSocialName(charName);
+  useEffect(() => {
+    if (!socialName) return;
+    let link: SocialLink | null = null;
+    let live = true;
+    SocialLink.start(session, assets, socialName).then(
+      (l) => {
+        if (!live) return l.dispose();
+        link = l;
+        setSocial(l);
+      },
+      (e: unknown) => console.warn("friends:", e),
+    );
+    return () => {
+      live = false;
+      link?.dispose();
+      setSocial(null);
+    };
+  }, [session, assets, socialName]);
+  // The scene draws friends' health bars and walks after the friend we follow (4, 5)
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene || !social) return;
+    scene.social = social;
+    social.setRoomSize(() => {
+      const r = scene.currentRoom;
+      return r ? { width: r.width, height: r.height } : null;
+    });
+    // The scene stopped following of itself (we moved, the way was lost): the friend hears, the chat says why
+    scene.onFollowStop = (why) => social.friends.stopFollowing(why);
+    const offEvents = social.friends.onEvent((e) => {
+      if (e.type === "exit") scene.followExit(e.exit);
+      else if (e.type === "stopFollowing") scene.stopFollowing(null);
+    });
+    // 4.5: the follower casting, attacking or being hit stops it
+    const offCast = session.onCastSent(() => social.friends.following && social.friends.stopFollowing("you cast a spell"));
+    let hp = session.world.stats.get(STAT_GROUP.MAIN)?.find((x) => x.num === STAT_HP)?.numeric?.value ?? null;
+    const offHit = session.world.on((e) => {
+      if (e.type !== "stats" || e.group !== STAT_GROUP.MAIN) return;
+      const now = session.world.stats.get(STAT_GROUP.MAIN)?.find((x) => x.num === STAT_HP)?.numeric?.value ?? null;
+      if (now !== null && hp !== null && now < hp && social.friends.following) social.friends.stopFollowing("you were hit");
+      hp = now;
+    });
+    return () => {
+      offEvents();
+      offCast();
+      offHit();
+      scene.stopFollowing(null);
+      scene.social = null;
+      scene.onFollowStop = undefined;
+    };
+  }, [social, session]);
+  /** Follow a friend whose character is in our room (4.1) */
+  const followFriend = (key: string) => {
+    if (!social) return;
+    const f = social.friends.friendByKey(key);
+    if (!f) return;
+    if (social.objectOf(key) === null) return session.localMessage(`${f.name} isn't here: you can only start following someone in your room.`);
+    const err = social.friends.startFollow(key);
+    if (err) return session.localMessage(err);
+    sceneRef.current?.startFollowing(key, f.name);
+    setModal(null);
+  };
+  /** Ours (docs/adr/0006-pets.md): this character's pet, loaded once we know who we are */
+  const [pet, setPetState] = useState<{ name: string; pet: ReturnType<typeof loadPet> }>({ name: "", pet: null });
+  if (socialName && pet.name !== socialName) setPetState({ name: socialName, pet: loadPet(localStorage, gameSocketUrl(), socialName) });
+  const choosePet = (p: ReturnType<typeof loadPet>) => {
+    savePet(localStorage, gameSocketUrl(), pet.name, p);
+    setPetState({ name: pet.name, pet: p });
+  };
+  // The scene walks it; the relay tells everyone else (3.1)
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (scene) {
+      scene.ownPet = pet.pet;
+      scene.ownName = pet.name;
+    }
+    social?.setPet(pet.pet);
+    // (status: the scene is made after this effect first runs; its first status means it's there)
+  }, [pet, social, status]);
   const spellSchools = session.world.spellSchools;
   /** textin.c: the lines typed, newest first, and where Up/Down has got to (-1 = the line being typed) */
   const historyRef = useRef<string[]>([]);
@@ -862,6 +958,10 @@ export function GameView({
         return toggle("actions");
       case "quickEmotes":
         return setEmoteMenu((v) => !v);
+      case "friends":
+        return setModal((m) => (m?.type === "friends" ? null : { type: "friends" }));
+      case "pets":
+        return setModal((m) => (m?.type === "pets" ? null : { type: "pets" }));
       case "who":
         return setModal({ type: "action", window: "who" });
       case "map":
@@ -1596,7 +1696,16 @@ export function GameView({
           // Ours: the admin console (Shift+4) for admin characters, easier to find here
           ...(adminLoaded ? [{ label: "Admin console…", onSelect: () => setAdminConsole((a) => (a ? { ...a, open: true } : a)) }] : []),
           // actions.c: each item runs its typed command
-          { label: "Actions", items: ACTIONS_MENU.map((a) => (a ? { label: a[1], onSelect: () => runCommand(a[0]) } : { label: "", separator: true })) },
+          {
+            label: "Actions",
+            items: [
+              ...ACTIONS_MENU.map((a) => (a ? { label: a[1], onSelect: () => runCommand(a[0]) } : { label: "", separator: true })),
+              // Ours (docs/adr/0005-friends.md 3)
+              { label: "", separator: true },
+              { label: "Friends…", onSelect: () => setModal({ type: "friends" }) },
+              { label: "Pets…", onSelect: () => setModal({ type: "pets" }) },
+            ],
+          },
           ...(spellsMenu.length ? [{ label: "Spells", items: spellsMenu }] : []),
           // language.c: the Language menu, sorted by name, the chosen one checked
           ...(languages.length > 1
@@ -1688,6 +1797,7 @@ export function GameView({
               onClick={modern ? () => setFullMap(false) : undefined}
               tooltips={settings.tooltips}
             />
+            <FriendsMapHint link={social} />
           </div>
         )}
         {touch && (
@@ -1816,6 +1926,7 @@ export function GameView({
             {hideNote.hidden ? `Interface hidden (${hideKeyLabel} shows it)` : "Interface shown"}
           </div>
         )}
+        <FriendsNotices link={social} onOpen={() => setModal({ type: "friends" })} />
         {studying && (
           <div className="study-banner" role="status">
             <span>{studying}</span>
@@ -1934,6 +2045,25 @@ export function GameView({
               if (flags !== null) session.sendPreferences(flags);
             }}
             onPreview={previewAudio}
+            onClose={() => setModal(null)}
+          />
+        )}
+        {modal?.type === "friends" && social && (
+          <FriendsWindow
+            link={social}
+            inGame={(name) => [...session.world.players.values()].some((p) => p.name.toLowerCase() === name.toLowerCase())}
+            onFollow={followFriend}
+            onClose={() => setModal(null)}
+          />
+        )}
+        {modal?.type === "pets" && (
+          <PetsWindow
+            icons={icons}
+            current={pet.pet}
+            // 2.1: our maximum health, piMax_health: STAT_HP's currentMax (its max is always 100: user.kod sends
+            // health as 4,GetHealth, 4,0, 4,100, 4,piMax_health)
+            maxHealth={session.world.stats.get(STAT_GROUP.MAIN)?.find((x) => x.num === STAT_HP)?.numeric?.currentMax ?? null}
+            onChoose={choosePet}
             onClose={() => setModal(null)}
           />
         )}

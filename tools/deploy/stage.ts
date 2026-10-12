@@ -9,7 +9,7 @@
 //   deploy/.stage/site/           the website (landing page, downloads, wiki) from the
 //                                 meridian-shards-website repository next to this one
 //   deploy/.stage/assets/         the asset build (dist/assets)
-//   deploy/.stage/gateway/        the gateway script and its one dependency (ws)
+//   deploy/.stage/gateway/        the gateway script, the friends relay and their one dependency (ws)
 //
 //   node tools/deploy/stage.ts [--skip-client] [--skip-assets] [--skip-site] [--client-only] [--web-only]
 //
@@ -132,6 +132,7 @@ copy(join(ROOT, "deploy", "blakserv", "maint.sh"), join(STAGE, "maint.sh"));
 
 // Gateway: the script plus ws (pure JS, no dependencies of its own)
 copy(join(ROOT, "tools", "gateway", "gateway.ts"), join(STAGE, "gateway", "gateway.ts"));
+copy(join(ROOT, "tools", "gateway", "relay.ts"), join(STAGE, "gateway", "relay.ts"));
 copy(join(ROOT, "node_modules", "ws"), join(STAGE, "gateway", "node_modules", "ws"));
 
 if (!opt["skip-client"]) stageClient();

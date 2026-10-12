@@ -9,6 +9,7 @@ import { annotationAt, annotationRadius, type MapAnnotation } from "../annotatio
 import { FINENESS, type Room } from "@shards/formats";
 import { DRAWFX, OF } from "@shards/render";
 import type { WorldState } from "@shards/world";
+import { currentSocial } from "../social.ts";
 
 /** include/proto.h MM_* */
 const MM = {
@@ -33,6 +34,8 @@ const COLOR = {
   miniboss: "rgb(160,66,194)",
   boss: "rgb(127,0,0)",
   rareItem: "rgb(237,255,9)",
+  /** Ours: a friend's pin (docs/adr/0005-friends.md 3, Map marker) */
+  friendPin: "rgb(60,220,120)",
 };
 const WF_MAP_NEVER = 0x8;
 const PLAYER_WIDTH = (31 * 64) / 4; // game.c player.width
@@ -195,6 +198,14 @@ export function MiniMap({
         }
       }
 
+      // Ours: friends' pins (Map marker), over their dots
+      const marked = currentSocial()?.markerIds();
+      if (marked?.size)
+        for (const id of marked) {
+          const o = world.objects.get(id);
+          if (o) pin(ctx, xo + o.x * scale, yo + o.y * scale, Math.max(5, 2.2 * radius));
+        }
+
       // The player (MapDrawPlayer): a line through us with an arrowhead in front
       const mm = self.info.minimapFlags;
       ctx.strokeStyle = mm & MM.TEMPSAFE ? COLOR.tempsafe : mm & MM.NO_PVP ? COLOR.noPvp : COLOR.player;
@@ -240,6 +251,23 @@ export function MiniMap({
       }}
     />
   );
+}
+
+/** Ours: a friend's pin, its point on them */
+function pin(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.arc(x, y - 2 * r, r, Math.PI * 0.75, Math.PI * 0.25);
+  ctx.closePath();
+  ctx.fillStyle = COLOR.friendPin;
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "rgb(0,0,0)";
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x, y - 2 * r, r * 0.4, 0, Math.PI * 2);
+  ctx.fillStyle = "rgb(255,255,255)";
+  ctx.fill();
 }
 
 /** map.c DrawMinimapStar: a five-pointed star for rare items. */
