@@ -381,3 +381,4 @@ Players of the original ran bots to cast spells while away, to raise them. Study
   - Study mode (milestone 16): practise a spell while away, with the casts the reagents allow and the time it will take shown first.
   - Interface after play testing: the minimap's arrow a filled arrowhead, the bars' numbers a pixel lower, our face at one scale both ways, a search over Study's spells.
   - Login after play testing: the login dialog open at once over the splash picture (one screen, not two), the login names used before in a list under the name field, Switch character in the ☰ menu (back to Select character, still logged in), and the Trickster preset left out of the creator.
+  - Help (F1, ☰ → Help…): the keyboard and mouse as bound now, a labelled picture of the player's own screen, and every menu and window explained.

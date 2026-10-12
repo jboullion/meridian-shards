@@ -1,3 +1,4 @@
+import { HelpDialog } from "./ui/HelpDialog.tsx";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { CF, SAY, STAT_GROUP, UA, UC, objId, type ObjectInfo } from "@shards/protocol";
 import {
@@ -152,6 +153,8 @@ type Modal =
   | { type: "preferences" }
   | { type: "configuration" }
   | { type: "logoutTimer" }
+  /** Ours: the Help window (F1, help) */
+  | { type: "help" }
   /** Study mode's window, with what we know as it opens (study.ts) */
   | { type: "study"; spells: StudySpell[]; carried: Map<string, number>; mana: number; maxMana: number; memory: StudyMemory }
   | { type: "about" }
@@ -375,6 +378,9 @@ export function GameView({
   /** The Modern chat's width while its edge is being dragged */
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const gameRef = useRef<HTMLDivElement>(null);
+  const getGameRoot = useCallback(() => gameRef.current, []);
+  /** The 3D view's next frame, for Help's picture of the screen */
+  const captureView = useCallback(() => sceneRef.current?.captureView() ?? Promise.resolve(null), []);
   /** When each chat tab was last looked at, for the new-lines mark on the others */
   const [seenAt, setSeenAt] = useState<Record<ChatTab, number>>(() => {
     const now = Date.now();
@@ -1479,7 +1485,7 @@ export function GameView({
       case "hel":
         return session.localMessage('Type the entire word "help" to open help.');
       case "help":
-        return session.localMessage("The help pages aren't in Meridian Shards yet.");
+        return setModal({ type: "help" });
       case "mail":
         return openMail();
       case "suicid":
@@ -1829,6 +1835,7 @@ export function GameView({
           { label: "Change password…", onSelect: () => setModal({ type: "password" }) },
           { label: "Logout timer…", onSelect: () => setModal({ type: "logoutTimer" }) },
           { label: studying ? "Stop studying" : "Study…", onSelect: () => (studying ? stopStudy() : openStudy()) },
+          { label: "Help…", onSelect: () => setModal({ type: "help" }) },
           { label: "About Meridian…", onSelect: () => setModal({ type: "about" }) },
           // Ours: back to Select character, still logged in
           { label: "Switch character", onSelect: () => session.toCharacters() },
@@ -2165,6 +2172,17 @@ export function GameView({
               if (flags !== null) session.sendPreferences(flags);
             }}
             onPreview={previewAudio}
+            onClose={() => setModal(null)}
+          />
+        )}
+        {modal?.type === "help" && (
+          <HelpDialog
+            settings={settings}
+            layout={touch ? "touch" : modern ? "modern" : "classic"}
+            admin={adminLoaded}
+            captureView={captureView}
+            getRoot={getGameRoot}
+            onConfiguration={() => setModal({ type: "configuration" })}
             onClose={() => setModal(null)}
           />
         )}

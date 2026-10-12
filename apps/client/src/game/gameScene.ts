@@ -967,7 +967,29 @@ export class GameScene {
     this.drawPetNames();
     this.drawDamage();
     this.drawOverlays(room, lighting);
+    this.takeCaptures();
     this.countFrame(now);
+  }
+
+  private captures: ((c: HTMLCanvasElement) => void)[] = [];
+
+  /**
+   * Ours (the Help window's HUD picture): the 3D view as the next frame draws it, copied. The
+   * WebGL canvas keeps no picture once shown, so it's copied straight after drawing. The hands are
+   * a canvas of their own (screenOverlays.ts), read whenever.
+   */
+  captureView(): Promise<HTMLCanvasElement> {
+    return new Promise((resolve) => this.captures.push(resolve));
+  }
+
+  private takeCaptures(): void {
+    if (!this.captures.length) return;
+    const src = this.renderer.domElement;
+    const c = document.createElement("canvas");
+    c.width = src.width;
+    c.height = src.height;
+    c.getContext("2d")?.drawImage(src, 0, 0);
+    for (const f of this.captures.splice(0)) f(c);
   }
 
   /**

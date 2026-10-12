@@ -20,7 +20,7 @@ Phase 2 is done: the original's command table, emotes and moods, resting, the Sp
 
 | What | Original | What it needs |
 |---|---|---|
-| `help` | `A_HELP` (`StartHelp`) | The original opens its web help pages; we say they aren't in yet. |
+| `help`'s web pages | `A_HELP` (`StartHelp`) | The original opens its web help pages. Ours opens our own Help window instead (F1, `ui/HelpDialog.tsx`: controls, the HUD, the menus); there are no pages on the game's lore or classes. |
 
 ## Social systems (phase 3)
 
