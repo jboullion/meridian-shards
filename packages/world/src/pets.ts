@@ -1,20 +1,20 @@
 // Ours (docs/adr/0006-pets.md): one cosmetic pet per character, following its owner about, seen by
 // everyone with this client and never by the server. The kinds are monsters' own art drawn small,
-// as the critters are (ambient/critters.ts SPECIES); which ones a player may choose goes by their
-// maximum health, Meridian 59 having no levels. Every client walks every pet itself from where its
-// owner is (the server tells everyone that), so nothing about a pet's position is ever sent.
+// with their Kod walk cycles (a table of their own, apart from the critters'); which ones a player
+// may choose goes by their maximum health, Meridian 59 having no levels. Every client walks every
+// pet itself from where its owner is (the server tells everyone that), so nothing about a pet's
+// position is ever sent.
 
-import { FINENESS, type Room } from "@shards/formats";
+import { FINENESS, floorHeightAt, leafAt, type Room } from "@shards/formats";
 import { ANIMATE, type Animation, type ObjectInfo } from "@shards/protocol";
 import { animStateFrom } from "./animation.ts";
 import { findPath, navWalls, walkable, type NavGrid, type NavPoint } from "./navGrid.ts";
-import type { Look, WorldObject } from "./state.ts";
+import type { Look, OverlayState, WorldObject } from "./state.ts";
 import { ambientId, localRes } from "./ambient/ambientIds.ts";
 import { seededRandom } from "./ambient/ambientLife.ts";
-import { SPECIES, type Species } from "./ambient/critters.ts";
 
 /** 2.1: the health tiers kinds and colours unlock at */
-export const PET_TIERS = [20, 35, 50, 65, 80, 100, 120, 150] as const;
+export const PET_TIERS = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150] as const;
 
 export interface PetColour {
   label: string;
@@ -24,12 +24,16 @@ export interface PetColour {
   health: number;
 }
 
+/** A cycle through groups (1-based, as the Kod's AddPacket gives them), or null: group 1, still */
+export type PetAnim = { period: number; low: number; high: number } | null;
+
 export interface PetKind {
   label: string;
   icon: string;
-  /** SendMoveAnimation's cycle (groups 1-based); standing is group 1 */
-  walk: Species["walk"];
-  /** Drawn this many times the art's size */
+  /** Standing (the Kod's SendAnimation) and moving (SendMoveAnimation) */
+  stand: PetAnim;
+  walk: PetAnim;
+  /** Drawn this many times the art's size (measured against the rat's, tried in the game) */
   scale: number;
   /** Its own pace, squares a second (it hurries to keep up with its owner) */
   pace: number;
@@ -38,30 +42,61 @@ export interface PetKind {
   /** Its idle noise (the monster's "aware" sound) */
   sound: string;
   colours: PetColour[];
+  /** It flies this high over the floor (fine units) */
+  fly?: number;
+  /** It bobs up and down (OF_BOUNCING, as the fey do) */
+  bounce?: boolean;
+  /** An overlay (the dragonfly's wings): its art, hotspot, cycles and whether it's translucent */
+  overlay?: { icon: string; hotspot: number; stand: PetAnim; walk: PetAnim; translucent?: boolean };
+  /** Kinds shown as one in the window, the owner's karma choosing which (the fey) */
+  group?: { name: string; label: string; karma: "good" | "evil" };
 }
 
 const natural = (health: number): PetColour[] => [{ label: "Natural", xlat: 0, health }];
+const cycle = (period: number, low: number, high: number): PetAnim => ({ period, low, high });
 
-/** From a critter's species: the same art, cycle and size, already measured in the game */
-const fromSpecies = (s: Species, label: string, health: number): PetKind => ({
-  label, icon: s.icon, walk: s.walk, scale: s.scale, pace: s.pace, health, sound: s.sound.replace("_dth", "_awr"), colours: natural(health),
-});
+/** A kind from its Kod class: the art, animations and aware sound (monster/*.kod) */
+function kind(label: string, health: number, k: Omit<PetKind, "label" | "health" | "colours">): PetKind {
+  return { label, health, colours: natural(health), ...k };
+}
+
+/** The fey's: they fly, bobbing (fairy.kod, evfairy.kod piDrawEffectFlag = OF_BOUNCING) */
+const FEY = { stand: cycle(100, 1, 2), walk: cycle(100, 3, 4), scale: 0.5, pace: 3, fly: 380, bounce: true } as const;
 
 /**
- * 1.3: the kinds. The critters' species first; more monsters drawn small, and more colours, are
- * added once each has been looked at in the game (docs/adr/0006-pets.md 6.4).
+ * 1.3: the kinds, from the Kod's monster classes. Small pests stay critter-sized (the rat at 0.4, a
+ * third of a square long); the rarer ones grow, to half a person's height for the troll (a drawn
+ * height of art height / shrink * scale / 64 squares; a person is about 0.86). More colours come
+ * once each is looked at in the game (docs/adr/0006-pets.md 6.4)
  */
 export const PET_KINDS = {
-  bunny: fromSpecies(SPECIES.bunny, "Bunny", 20),
-  rat: fromSpecies(SPECIES.rat, "Rat", 20),
-  greyBunny: fromSpecies(SPECIES.greyBunny, "Grey bunny", 35),
-  centipede: fromSpecies(SPECIES.centipede, "Centipede", 35),
-  babySpider: fromSpecies(SPECIES.babySpider, "Baby spider", 50),
-  mutantAnt: fromSpecies(SPECIES.mutantAnt, "Mutant ant", 65),
-  scorpion: fromSpecies(SPECIES.scorpion, "Scorpion", 80),
-  spider: fromSpecies(SPECIES.spider, "Spider", 100),
+  babySpider: kind("Baby spider", 20, { icon: "spdrby.bgf", stand: null, walk: cycle(150, 1, 3), scale: 0.21, pace: 2.4, sound: "bsp_awr.ogg" }),
+  rat: kind("Rat", 30, { icon: "rat.bgf", stand: null, walk: cycle(75, 2, 6), scale: 0.4, pace: 3.4, sound: "rat_awr.ogg" }),
+  centipede: kind("Centipede", 40, { icon: "centip.bgf", stand: null, walk: cycle(120, 2, 6), scale: 0.18, pace: 1.1, sound: "cnt_awr.ogg" }),
+  goodFey: kind("Fey", 50, { icon: "faerie-g.bgf", ...FEY, sound: "god_awr.ogg", group: { name: "fey", label: "Fey", karma: "good" } }),
+  evilFey: kind("Dark fey", 50, { icon: "faerie-e.bgf", ...FEY, sound: "evl_awr.ogg", group: { name: "fey", label: "Fey", karma: "evil" } }),
+  mutantAnt: kind("Mutant ant", 60, { icon: "antr.bgf", stand: null, walk: cycle(125, 1, 3), scale: 0.12, pace: 2.2, sound: "ant_awr.ogg" }),
+  spider: kind("Spider", 70, { icon: "spider.bgf", stand: null, walk: cycle(150, 1, 3), scale: 0.25, pace: 2.6, sound: "spd_awr.ogg" }),
+  scorpion: kind("Scorpion", 80, { icon: "scorp.bgf", stand: null, walk: cycle(200, 2, 3), scale: 0.16, pace: 1.5, sound: "scp_awr.ogg" }),
+  blackSpider: kind("Black spider", 90, { icon: "spidmagc.bgf", stand: null, walk: cycle(150, 2, 7), scale: 0.3, pace: 2.6, sound: "spd_awr.ogg" }),
+  troll: kind("Troll", 100, { icon: "troll.bgf", stand: null, walk: cycle(200, 2, 3), scale: 0.47, pace: 2, sound: "trl_awr.ogg" }),
+  // dfly.kod: hovering (groups 2-3) and flying (4-5), its wings an overlay a frame behind, translucent
+  dragonfly: kind("Dragonfly", 110, {
+    icon: "dfly.bgf", stand: cycle(100, 2, 3), walk: cycle(100, 4, 5), scale: 0.6, pace: 3.5, fly: 260, sound: "df_awr.ogg",
+    overlay: { icon: "dflywing.bgf", hotspot: 1, stand: cycle(100, 1, 2), walk: cycle(100, 3, 4), translucent: true },
+  }),
+  mollusk: kind("Mollusk creature", 120, { icon: "mollusk.bgf", stand: null, walk: cycle(80, 2, 6), scale: 0.53, pace: 1.6, sound: "mol_awr.ogg" }),
+  narthylWorm: kind("Narthyl worm", 130, { icon: "darkbeas.bgf", stand: cycle(150, 1, 4), walk: cycle(150, 1, 4), scale: 0.53, pace: 1.4, sound: "wrm_awr.ogg" }),
+  lupogg: kind("Lupogg", 140, { icon: "lupogg.bgf", stand: null, walk: cycle(200, 2, 5), scale: 0.69, pace: 3, sound: "lup_awr.ogg" }),
+  shadowbeast: kind("Shadowbeast", 150, { icon: "shadow.bgf", stand: null, walk: cycle(125, 2, 6), scale: 0.78, pace: 2.5, sound: "sha_awr.ogg" }),
 } satisfies Record<string, PetKind>;
 export type PetKindName = keyof typeof PET_KINDS;
+
+/** The kind of a group (the fey) a karma calls for: good at 0 and above */
+export function petForKarma(group: string, karma: number | null): string | undefined {
+  const want = (karma ?? 0) >= 0 ? "good" : "evil";
+  return Object.entries(PET_KINDS as Record<string, PetKind>).find(([, k]) => k.group?.name === group && k.group.karma === want)?.[0];
+}
 
 export const petKind = (name: string): PetKind | undefined => (PET_KINDS as Record<string, PetKind>)[name];
 
@@ -132,7 +167,7 @@ export interface PetOwner {
 }
 
 interface Pet {
-  obj: WorldObject;
+  obj: PetObject;
   owner: number;
   ownerName: string;
   /** Which kind and colour it's drawn as (a change remakes it) */
@@ -157,7 +192,6 @@ interface Pet {
 }
 
 const none = (group: number): Animation => ({ type: ANIMATE.NONE, group });
-const look = (animation: Animation, translation: number): Look => ({ anim: animStateFrom(animation), overlays: [], translation });
 const dist = (a: NavPoint, b: NavPoint) => Math.hypot(a.x - b.x, a.y - b.y);
 const angleTo = (dx: number, dy: number) => Math.round((Math.atan2(dy, dx) * 4096) / (2 * Math.PI)) & 4095;
 
@@ -170,8 +204,26 @@ function hash(s: string): number {
 
 /** The art every kind needs, to load ahead */
 export function petArt(): string[] {
-  return [...new Set(Object.values(PET_KINDS).map((k) => k.icon))];
+  return [...new Set(Object.values(PET_KINDS as Record<string, PetKind>).flatMap((k) => [k.icon, ...(k.overlay ? [k.overlay.icon] : [])]))];
 }
+
+/** proto.h OF_BOUNCING */
+const OF_BOUNCING = 0x10000;
+
+const animOf = (a: PetAnim): Animation => (a ? { type: ANIMATE.CYCLE, period: a.period, groupLow: a.low, groupHigh: a.high } : none(1));
+
+/** A kind's look, standing or moving, in a colour: its art's cycle, and its overlay's */
+function petLook(k: PetKind, moving: boolean, xlat: number): Look {
+  const overlays: OverlayState[] = [];
+  if (k.overlay) {
+    const animation = animOf(moving ? k.overlay.walk : k.overlay.stand);
+    overlays.push({ iconRes: localRes(k.overlay.icon), hotspot: k.overlay.hotspot, translation: xlat, effect: k.overlay.translucent ? 1 : 0, animation, anim: animStateFrom(animation) });
+  }
+  return { anim: animStateFrom(animOf(moving ? k.walk : k.stand)), overlays, translation: xlat };
+}
+
+/** A pet: a room object with a height of its own when it flies */
+type PetObject = WorldObject & { z?: number };
 
 /** Every pet in a room (ours and other players'), walked after its owner */
 export class Pets {
@@ -235,7 +287,14 @@ export class Pets {
         p.regroup = false;
       }
     for (const p of this.pets) if (!p.seen) this.fadeStep(p, dt);
+    // Those that fly, over the floor beneath them
+    for (const p of this.pets) if (p.kind.fly) p.obj.z = (this.floorAt(p.obj.x, p.obj.y) ?? 0) + p.kind.fly;
     this.pets = this.pets.filter((p) => !(p.fadeDir < 0 && p.fade <= 0 && !p.regroup));
+  }
+
+  private floorAt(x: number, y: number): number | null {
+    const leaf = leafAt(this.room, x, y);
+    return leaf?.sector ? floorHeightAt(this.room.sectors[leaf.sector - 1], x, y) : null;
   }
 
   /** A spot beside the owner (behind, to its side) that the room allows */
@@ -253,13 +312,13 @@ export class Pets {
     const at = this.besideOwner(o, side);
     const id = ambientId();
     const colour = kind.colours[readPetChoice(o.pet)?.colour ?? 0] ?? kind.colours[0];
-    const normal = look(none(1), colour.xlat);
-    const walk = look({ type: ANIMATE.CYCLE, period: kind.walk.period, groupLow: kind.walk.low, groupHigh: kind.walk.high }, colour.xlat);
+    const normal = petLook(kind, false, colour.xlat);
+    const walk = petLook(kind, true, colour.xlat);
     const info: ObjectInfo = {
-      id, amount: 0, iconRes: localRes(kind.icon), nameRes: 0, flags: 0, drawingType: FADE_FX[0], minimapFlags: 0, nameColor: 0, objectType: 0,
+      id, amount: 0, iconRes: localRes(kind.icon), nameRes: 0, flags: kind.bounce ? OF_BOUNCING : 0, drawingType: FADE_FX[0], minimapFlags: 0, nameColor: 0, objectType: 0,
       moveOnType: 0, light: { flags: 0, intensity: 0, color: 0 }, translation: colour.xlat, effect: 0, animation: none(1), overlays: [],
     };
-    const obj: WorldObject = { id, info, x: at.x, y: at.y, angle: o.angle, normal, moving: walk, look: normal, motion: null, version: 0, scale: kind.scale };
+    const obj: PetObject = { id, info, x: at.x, y: at.y, angle: o.angle, normal, moving: walk, look: normal, motion: null, version: 0, scale: kind.scale };
     const pet: Pet = {
       obj, owner: o.id, ownerName: o.name, key, kind, name: o.pet.name, side, mode: "rest", to: null, path: [], timer: 0, stillSince: 0,
       ownerAt: { x: o.x, y: o.y }, stuckMs: 0, fade: 0, fadeDir: 1, regroup: false, seen: true,

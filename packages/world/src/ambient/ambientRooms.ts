@@ -29,8 +29,15 @@ export interface AmbientRoomSpec {
   countRange?: [number, number];
 }
 
+/**
+ * Rooms much bigger than others of their kind (the Bhrama & Falcon is a hall of an inn): their
+ * crowd is the kind's times this, so they don't look empty
+ */
+export const BIG_ROOM = 2;
+
 const town = (count: number, place: Place, guards: number, livery: number): AmbientRoomSpec => ({ kind: "town", count, place, guards, livery });
-const inn = (count: number, place?: Place): AmbientRoomSpec => ({ kind: "inn", count, place });
+/** `size`: 1, or BIG_ROOM for a big one */
+const inn = (count: number, place?: Place, size = 1): AmbientRoomSpec => ({ kind: "inn", count: count * size, place });
 const castle = (count: number, faction: Faction, guards: number): AmbientRoomSpec => ({
   kind: "castle", count, faction, guards, place: faction === "duke" ? "blackstone" : "castle",
 });
@@ -51,7 +58,8 @@ export const AMBIENT_ROOMS: Record<string, AmbientRoomSpec> = {
   "barls.roo": town(14, "barloque", 2, C.PURPLE),
   "barlport.roo": town(9, "barloque", 1, C.PURPLE),
   "barinn.roo": inn(5, "barloque"),
-  "barlbar1.roo": inn(4, "barloque"),
+  // The Bhrama & Falcon: much bigger than the other inns
+  "barlbar1.roo": inn(4, "barloque", BIG_ROOM),
   // Blackstone Keep, the Duke's: its courtyard, hall, chambers and feast hall. Few knights; the
   // court mostly nobles
   "duke1.roo": castle(10, "duke", 1),

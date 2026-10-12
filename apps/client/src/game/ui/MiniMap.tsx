@@ -206,24 +206,30 @@ export function MiniMap({
           if (o) pin(ctx, xo + o.x * scale, yo + o.y * scale, Math.max(5, 2.2 * radius));
         }
 
-      // The player (MapDrawPlayer): a line through us with an arrowhead in front
+      // The player. Ours: a filled arrowhead, outlined, at fractional pixels. The original's
+      // (MapDrawPlayer: a line through us with a head in front) rounded each point on its own,
+      // so it bent and twitched as we turned.
       const mm = self.info.minimapFlags;
-      ctx.strokeStyle = mm & MM.TEMPSAFE ? COLOR.tempsafe : mm & MM.NO_PVP ? COLOR.noPvp : COLOR.player;
-      ctx.lineWidth = 2;
       const a = (self.angle * 2 * Math.PI) / 4096;
-      const arrowScale = Math.max(scale, MIN_ARROW / ((PLAYER_WIDTH * 3) / 4));
-      const off = (d: number, ang: number) => [Math.trunc(d * Math.cos(ang) * arrowScale), Math.trunc(d * Math.sin(ang) * arrowScale)];
-      const [dx, dy] = off((PLAYER_WIDTH * 3) / 4, a);
-      const [ldx, ldy] = off(PLAYER_WIDTH / 4, a + Math.PI / 2);
-      const [rdx, rdy] = off(PLAYER_WIDTH / 4, a - Math.PI / 2);
-      const cx = xo + Math.trunc(px * scale),
-        cy = yo + Math.trunc(py * scale);
+      const size = Math.max(scale * ((PLAYER_WIDTH * 3) / 4), MIN_ARROW);
+      const cx = xo + px * scale,
+        cy = yo + py * scale;
+      const at = (d: number, side: number) => {
+        const c = Math.cos(a),
+          s = Math.sin(a);
+        return [cx + (d * c - side * s) * size, cy + (d * s + side * c) * size] as const;
+      };
       ctx.beginPath();
-      ctx.moveTo(cx - dx, cy - dy);
-      ctx.lineTo(cx + dx, cy + dy);
-      ctx.lineTo(cx + ldx, cy + ldy);
-      ctx.lineTo(cx + rdx, cy + rdy);
-      ctx.lineTo(cx + dx, cy + dy);
+      ctx.moveTo(...at(1, 0));
+      ctx.lineTo(...at(-0.7, 0.62));
+      ctx.lineTo(...at(-0.35, 0));
+      ctx.lineTo(...at(-0.7, -0.62));
+      ctx.closePath();
+      ctx.fillStyle = mm & MM.TEMPSAFE ? COLOR.tempsafe : mm & MM.NO_PVP ? COLOR.noPvp : COLOR.player;
+      ctx.fill();
+      ctx.lineJoin = "round";
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(0,0,0,0.85)";
       ctx.stroke();
     };
     raf = requestAnimationFrame(draw);

@@ -22,3 +22,4 @@ export * from "./social/friends.ts";
 export * from "./social/follow.ts";
 export * from "./ambient/ambientStepper.ts";
 export * from "./pets.ts";
+export * from "./ambient/names.ts";

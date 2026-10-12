@@ -591,3 +591,70 @@
 .mk-choice-info {
   overflow: hidden;
 }
+
+/* Ours: an edit with a list under it (LoginScreen.tsx NameField: the login names used before) */
+.mk-combo {
+  position: relative;
+}
+
+.mk-edit.mk-combo > input {
+  padding-right: calc(var(--dx) * 12);
+}
+
+.mk-combo-button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  bottom: 2px;
+  width: calc(var(--dx) * 11);
+  padding: 0;
+  border: 0;
+  border-left: 1px solid #a8a090;
+  background: #d8d4c8;
+  color: #000;
+  font: calc(var(--dy) * 8) / 1 var(--font-ui);
+  cursor: pointer;
+}
+
+.mk-combo-button:hover {
+  background: #f4f0e4;
+}
+
+.mk-combo-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  height: auto;
+  max-height: calc(var(--dy) * 80);
+  border: 1px solid #a8a090;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+}
+
+.mk-combo-list li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.mk-combo-list li > span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mk-combo-forget {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.mk-combo-forget:hover {
+  opacity: 1;
+}

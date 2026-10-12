@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { CF, SAY, STAT_GROUP, UA, UC, objId, type ObjectInfo } from "@shards/protocol";
 import {
   PROFANITY_WARNING, isNumberItem, type SpellRefusal, OBSERVER, WHITE, BLACK, decodeBoard, type GuildEvent, type MinigameEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
-  type TradeList,
+  type TradeList, petForKarma, petKind, type AmbientPersonInfo,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import type { AudioPreview, GameAudio } from "./audio.ts";
@@ -19,7 +19,7 @@ import { GuildCreateDialog, GuildHallsDialog, GuildWindow, legalShield, type Gui
 import { ReadMailDialog, ReadNewsDialog, SendMailDialog, type MailDraft, type Newsgroup } from "./ui/MailNewsDialogs.tsx";
 import type { NewsArticle } from "@shards/protocol";
 import { AmountDialog, GiveDialog, OfferDialog, PasswordDialog, SuicideDialog, TradeDialog, reduceOffer } from "./ui/Dialogs.tsx";
-import { DESC, DescriptionDialog, LookListDialog, type DescAction, type LookListChoice } from "./ui/LookDialogs.tsx";
+import { AmbientPersonDialog, DESC, DescriptionDialog, LookListDialog, type DescAction, type LookListChoice } from "./ui/LookDialogs.tsx";
 import { MiniMap } from "./ui/MiniMap.tsx";
 import {
   ActionsDialog, CommandAliasesDialog, ConfigurationDialog, GroupsDialog, HotkeyAliasesDialog, LogoutTimerDialog, PreferencesDialog, StudyDialog, TouchConfigDialog,
@@ -216,6 +216,29 @@ export function GameView({
   const [status, setStatus] = useState<GameSceneStatus | null>(null);
   /** The description dialog (dialog.c DisplayDescription) and its DESC_* buttons */
   const [desc, setDesc] = useState<{ look: LookResult; buttons: number } | null>(null);
+  /** Ours: one of the townsfolk examined (the inspect window) */
+  const [ambientLook, setAmbientLook] = useState<AmbientPersonInfo | null>(null);
+  /** rooms.json: rooms' names by file, for where townsfolk come and go (the likeliest of a file's) */
+  const [roomNames, setRoomNames] = useState<Map<string, string>>(() => new Map());
+  useEffect(() => {
+    let live = true;
+    assets
+      .roomList()
+      .then((list) => {
+        if (!live) return;
+        const m = new Map<string, string>();
+        for (const r of list) {
+          const file = r.roo.toLowerCase();
+          // A file's first room with a real name (not "Room", nor a Death Realm copy)
+          if (!m.has(file) || /^(new )?room$|^death realm$/i.test(m.get(file)!)) m.set(file, r.name);
+        }
+        setRoomNames(m);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [assets]);
   /** dialog.c SetDescParams: the buttons for the next description, set when we ask for it */
   const descParams = useRef<number>(DESC.NONE);
   const [text, setText] = useState("");
@@ -516,6 +539,36 @@ export function GameView({
       scene.onFollowStop = undefined;
     };
   }, [social, session]);
+  /**
+   * Ours: Add or Remove friend on another player's description. Adding asks the relay for their
+   * key by name; only players of Meridian Shards who show in search can be asked this way.
+   */
+  const friendButton = (look: LookResult) => {
+    if (!social || !look.player || look.object.id === session.world.player?.id || !look.name) return undefined;
+    const fs = social.friends;
+    const f = fs.friendByName(look.name);
+    if (f)
+      return {
+        label: "Remove friend",
+        onClick: () => {
+          fs.remove(f.key);
+          setDesc(null);
+        },
+      };
+    if (fs.outgoing.some((r) => r.name.toLowerCase() === look.name.toLowerCase())) return { label: "Asked", disabled: true, onClick: () => {} };
+    return {
+      label: "Add friend",
+      title: "Ask them to be your friend (they must play Meridian Shards)",
+      onClick: async () => {
+        const found = await social.client.lookup([look.name]);
+        const p = found.find((x) => x.name.toLowerCase() === look.name.toLowerCase());
+        if (!p) return session.localMessage(`${look.name} doesn't play Meridian Shards, or doesn't show in its search.`);
+        const err = fs.add(p);
+        session.localMessage(err ?? `You asked ${p.name} to be your friend.`);
+        setDesc(null);
+      },
+    };
+  };
   /** Follow a friend whose character is in our room (4.1) */
   const followFriend = (key: string) => {
     if (!social) return;
@@ -534,16 +587,42 @@ export function GameView({
     savePet(localStorage, gameSocketUrl(), pet.name, p);
     setPetState({ name: pet.name, pet: p });
   };
+  /**
+   * Our maximum health (piMax_health: STAT_HP's currentMax, its max always 100) and karma (the
+   * Stats group's, -100 to 100), for the Pets tab; kept as they change, not on every regen tick
+   */
+  const [petStats, setPetStats] = useState<{ maxHealth: number | null; karma: number | null }>({ maxHealth: null, karma: null });
+  useEffect(() => {
+    const world = session.world;
+    const read = () => {
+      const maxHealth = world.stats.get(STAT_GROUP.MAIN)?.find((x) => x.num === STAT_HP)?.numeric?.currentMax ?? null;
+      const karmaStat = world.stats.get(STAT_GROUP.STATS)?.find((x) => x.numeric && session.englishResource(x.nameRes)?.toLowerCase() === "karma");
+      const karma = karmaStat?.numeric?.value ?? null;
+      setPetStats((p) => (p.maxHealth === maxHealth && p.karma === karma ? p : { maxHealth, karma }));
+    };
+    read();
+    return world.on((e) => e.type === "stats" && read());
+  }, [session]);
+  // The fey: good or dark as our karma goes (docs/adr/0006-pets.md), whichever was saved
+  const ourPet = useMemo(() => {
+    const group = pet.pet ? petKind(pet.pet.kind)?.group : undefined;
+    const kind = group && petStats.karma !== null ? petForKarma(group.name, petStats.karma) : undefined;
+    return pet.pet && kind && kind !== pet.pet.kind ? { ...pet.pet, kind } : pet.pet;
+  }, [pet, petStats.karma]);
+  // The Pets tab shows our karma's fey: the server sends the Stats group when asked
+  useEffect(() => {
+    if (tab === "pets") session.requestStats(STAT_GROUP.STATS);
+  }, [tab, session]);
   // The scene walks it; the relay tells everyone else (3.1)
   useEffect(() => {
     const scene = sceneRef.current;
     if (scene) {
-      scene.ownPet = pet.pet;
+      scene.ownPet = ourPet;
       scene.ownName = pet.name;
     }
-    social?.setPet(pet.pet);
+    social?.setPet(ourPet);
     // (status: the scene is made after this effect first runs; its first status means it's there)
-  }, [pet, social, status]);
+  }, [ourPet, pet.name, social, status]);
   const spellSchools = session.world.spellSchools;
   // Ours: the Friends and Pets tabs' pages, for the character window and the interface column
   const friendsPanel = (
@@ -557,10 +636,11 @@ export function GameView({
     <PetsPanel
       key={pet.name}
       icons={icons}
-      current={pet.pet}
+      current={ourPet}
       // 2.1: our maximum health, piMax_health: STAT_HP's currentMax (its max is always 100: user.kod sends
       // health as 4,GetHealth, 4,0, 4,100, 4,piMax_health)
-      maxHealth={session.world.stats.get(STAT_GROUP.MAIN)?.find((x) => x.num === STAT_HP)?.numeric?.currentMax ?? null}
+      maxHealth={petStats.maxHealth}
+      karma={petStats.karma}
       onChoose={choosePet}
     />
   );
@@ -599,6 +679,7 @@ export function GameView({
     scene.onSelecting = setSelecting;
     scene.onMessage = (t) => session.localMessage(t);
     scene.onLook = (id) => lookRef.current(id);
+    scene.onLookAmbient = (id) => setAmbientLook(scene.ambientLife?.describe(id) ?? null);
     const roomObjects = (ids: number[]) => ids.flatMap((id) => session.world.objects.get(id)?.info ?? []);
     // gameuser.c UserPickup: LD_MULTIPLESEL | LD_SINGLEAUTO
     scene.onPickup = (ids) =>
@@ -1749,6 +1830,8 @@ export function GameView({
           { label: "Logout timer…", onSelect: () => setModal({ type: "logoutTimer" }) },
           { label: studying ? "Stop studying" : "Study…", onSelect: () => (studying ? stopStudy() : openStudy()) },
           { label: "About Meridian…", onSelect: () => setModal({ type: "about" }) },
+          // Ours: back to Select character, still logged in
+          { label: "Switch character", onSelect: () => session.toCharacters() },
           { label: "Log off", onSelect: () => onLogout() },
         ]}
         // The Classic interface has the meter after the toolbar, as the original's lag box
@@ -1972,7 +2055,17 @@ export function GameView({
             icons={icons}
             onAction={(a) => descAction(a, desc.look.object.id, desc.buttons)}
             onSave={(d, u) => descSave(desc.look.object.id, d, u)}
+            extra={friendButton(desc.look)}
             onClose={() => setDesc(null)}
+          />
+        )}
+        {ambientLook && (
+          <AmbientPersonDialog
+            key={ambientLook.object.id}
+            person={ambientLook}
+            icons={icons}
+            roomName={(file) => roomNames.get(file) ?? file.replace(/\.roo$/, "")}
+            onClose={() => setAmbientLook(null)}
           />
         )}
         {modal?.type === "list" && (

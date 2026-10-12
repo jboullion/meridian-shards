@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { parseRoo } from "@shards/formats";
-import { PET_KINDS, PET_TIERS, Pets, cleanPetName, petUnlocked, readPetChoice, type PetOwner } from "../src/index.ts";
+import { PET_KINDS, PET_TIERS, Pets, cleanPetName, petArt, petForKarma, petUnlocked, readPetChoice, type PetOwner } from "../src/index.ts";
 
 const ASSETS = join(import.meta.dirname, "../../../dist/assets");
 const have = existsSync(join(ASSETS, "razainn.roo"));
@@ -15,12 +15,24 @@ describe("pet kinds and choices", () => {
     }
   });
 
-  test("unlocked by maximum health", () => {
-    expect(petUnlocked("rat", 0, 20)).toBe(true);
-    expect(petUnlocked("spider", 0, 99)).toBe(false);
-    expect(petUnlocked("spider", 0, 100)).toBe(true);
+  test("unlocked by maximum health, a tier every 10 from the baby spider's 20 to the shadowbeast's 150", () => {
+    expect(petUnlocked("babySpider", 0, 20)).toBe(true);
+    expect(petUnlocked("rat", 0, 29)).toBe(false);
+    expect(petUnlocked("rat", 0, 30)).toBe(true);
+    expect(petUnlocked("shadowbeast", 0, 149)).toBe(false);
+    expect(petUnlocked("shadowbeast", 0, 150)).toBe(true);
+    expect(new Set(Object.values(PET_KINDS).map((k) => k.health))).toEqual(new Set(PET_TIERS));
+    expect("bunny" in PET_KINDS).toBe(false);
     expect(petUnlocked("dragon", 0, 999)).toBe(false);
     expect(petUnlocked("rat", 5, 999)).toBe(false);
+  });
+
+  test("the fey: good at karma 0 and above, dark below; the dragonfly's wings are art too", () => {
+    expect(petForKarma("fey", 40)).toBe("goodFey");
+    expect(petForKarma("fey", 0)).toBe("goodFey");
+    expect(petForKarma("fey", null)).toBe("goodFey");
+    expect(petForKarma("fey", -1)).toBe("evilFey");
+    expect(petArt()).toContain("dflywing.bgf");
   });
 
   test("names: 16 Latin-1 characters, tidied; unknown kinds aren't pets", () => {
@@ -72,7 +84,7 @@ describe.skipIf(!have)("pets following their owners", () => {
     const pets = new Pets(room());
     const now = { t: 0 };
     run(pets, owner(sq(8, 8)), 500, now);
-    run(pets, { ...owner(sq(8, 8)), pet: { kind: "bunny", colour: 0, name: "" } }, 1000, now);
+    run(pets, { ...owner(sq(8, 8)), pet: { kind: "babySpider", colour: 0, name: "" } }, 1000, now);
     expect(pets.objects()).toHaveLength(1);
     expect(pets.named()).toEqual([]);
   });

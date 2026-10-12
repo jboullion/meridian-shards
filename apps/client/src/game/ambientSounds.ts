@@ -55,7 +55,8 @@ export interface AmbientSoundFrame {
 /** The chatter under each kind of crowd: the file, how loud, and how many people make it full */
 const BEDS: Partial<Record<AmbientKind, { file: string; indoorFile?: string; volume: number; full: number }>> = {
   town: { file: "amb_town_talk.ogg", volume: 0.18, full: 7 },
-  inn: { file: "amb_inn_talk.ogg", volume: 0.28, full: 4 },
+  // (Louder since 2026-10-12: the talk was lost under the room's own sounds)
+  inn: { file: "amb_inn_talk.ogg", volume: 0.45, full: 4 },
   castle: { file: "amb_town_talk.ogg", indoorFile: "amb_hall_talk.ogg", volume: 0.15, full: 5 },
   arena: { file: "amb_hall_talk.ogg", volume: 0.29, full: 10 },
 };

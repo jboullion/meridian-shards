@@ -1,17 +1,9 @@
 # TODOs and Branstorming
 
 
-## Current TODOS
-
-- Hide the top hotkey bar by default. Can enable in options
-
-- Set up blue host VPS, Cloudflare DNS and domain.
-  - Move server to that domain
+## Current TODOs
 
 
-Drinking sounds in inns should be 50% quieter.
-
-Have ambient rats not make any sound except on death.
 
 ## Future Ideas
 
@@ -26,10 +18,6 @@ Have ambient rats not make any sound except on death.
 ## UI
 
 - Create our own "Shards" splash screen?
-
-
-- add 'AFK Training' ability
-  - Basically a built in slow training bot
 
 
 ## Modern UI

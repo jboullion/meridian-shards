@@ -3,8 +3,12 @@
 // "New to ..." box says so, as the Server 104 template does. In the browser there's one server
 // (the page's own), so the Server field is left out and the box moves up; the desktop app has
 // the template's Server field as a drop-down of the servers it knows.
+//
+// Ours: the splash picture (Intro.tsx) behind the dialog, and the login names used before in a
+// list under the name field (▾), newest first, each with × to forget it. Only names: never
+// passwords (the browser's own password manager can keep those).
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { AssetStore } from "../assets.ts";
 import { desktop, devPagesEnabled, isAndroid, type DesktopBridge, type DesktopUpdate } from "../host.ts";
 import { Backdrop, Button, GroupBox, MessageBox, Select, Text, TextField, Window, at, type Rect } from "./ui/kit.tsx";
@@ -41,18 +45,49 @@ const LAYOUT = desktop
       ok: [137, 136, 100, 14] as Rect,
     };
 
-function readRemembered(): string {
+/** The login names used before, newest first (localStorage `shards.usernames`) */
+const NAMES_KEY = "shards.usernames";
+/** Before the list there was one name */
+const OLD_NAME_KEY = "shards.username";
+const MAX_NAMES = 10;
+
+export function savedNames(): string[] {
   try {
-    return localStorage.getItem("shards.username") ?? "";
+    const list = JSON.parse(localStorage.getItem(NAMES_KEY) ?? "null") as unknown;
+    if (Array.isArray(list)) return list.filter((n): n is string => typeof n === "string" && n.length > 0).slice(0, MAX_NAMES);
+    const old = localStorage.getItem(OLD_NAME_KEY);
+    return old ? [old] : [];
   } catch {
-    return "";
+    return [];
   }
 }
 
+function storeNames(names: string[]): void {
+  try {
+    localStorage.setItem(NAMES_KEY, JSON.stringify(names.slice(0, MAX_NAMES)));
+    localStorage.removeItem(OLD_NAME_KEY);
+  } catch {
+    // storage unavailable: fine
+  }
+}
+
+/** A name just logged in with goes to the top of the list (names differing only in case are one) */
+export function rememberName(name: string): void {
+  storeNames([name, ...savedNames().filter((n) => n.toLowerCase() !== name.toLowerCase())]);
+}
+
+function forgetName(name: string): string[] {
+  const names = savedNames().filter((n) => n !== name);
+  storeNames(names);
+  return names;
+}
+
 export function LoginScreen({
-  assets, onLogin, error, onClearError, initialUsername, initialPassword,
+  assets, onLogin, error, onClearError, initialUsername, initialPassword, behind,
 }: {
   assets: AssetStore;
+  /** Ours: drawn behind the dialog (the splash picture) */
+  behind?: ReactNode;
   /** The desktop app's /U and /W (the original fills its login dialog from them) */
   initialUsername?: string;
   initialPassword?: string;
@@ -60,7 +95,8 @@ export function LoginScreen({
   error: string | null;
   onClearError: () => void;
 }) {
-  const [username, setUsername] = useState(() => initialUsername ?? readRemembered());
+  const [names, setNames] = useState(savedNames);
+  const [username, setUsername] = useState(() => initialUsername ?? names[0] ?? "");
   const [password, setPassword] = useState(initialPassword ?? "");
   const [update, setUpdate] = useState<DesktopUpdate | null>(null);
   useEffect(() => desktop?.onUpdate(setUpdate), []);
@@ -69,7 +105,7 @@ export function LoginScreen({
     if (username.trim() && password) onLogin(username.trim(), password);
   };
   return (
-    <Backdrop>
+    <Backdrop behind={behind}>
       <Window title="Login" dlu={LAYOUT.size}>
         <form onSubmit={submit}>
           <img className="mk-login-icon" src={assets.url("ui/icon1.ico")} alt="" style={at([6, 6, 20, 20])} />
@@ -82,7 +118,7 @@ export function LoginScreen({
           </Text>
           <GroupBox at={LAYOUT.accountBox} label="Enter Your Account Information" />
           <Text at={LAYOUT.nameLabel}>Login name:</Text>
-          <TextField at={LAYOUT.name} value={username} onChange={setUsername} autoFocus={!username} autoComplete="username" />
+          <NameField at={LAYOUT.name} value={username} onChange={setUsername} names={names} onForget={(n) => setNames(forgetName(n))} />
           <Text at={LAYOUT.passLabel}>Password:</Text>
           <TextField
             at={LAYOUT.pass}
@@ -107,6 +143,105 @@ export function LoginScreen({
       </p>
       {error && <MessageBox text={error} onResult={onClearError} />}
     </Backdrop>
+  );
+}
+
+/** The login name: typed, or picked from the names used before (▾, or the down arrow) */
+function NameField({
+  at: r, value, onChange, names, onForget,
+}: {
+  at: Rect;
+  value: string;
+  onChange: (v: string) => void;
+  names: string[];
+  onForget: (name: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [hot, setHot] = useState(0);
+  const shown = open && names.length > 0;
+  const pick = (name: string, el: HTMLElement) => {
+    onChange(name);
+    setOpen(false);
+    // On to the password
+    el.closest("form")?.querySelector<HTMLInputElement>("input[type=password]")?.focus();
+  };
+  return (
+    <span className={names.length ? "mk-edit mk-combo" : "mk-edit"} style={at(r)}>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoFocus={!value}
+        autoComplete="username"
+        spellCheck={false}
+        aria-label="Login name"
+        onBlur={() => setOpen(false)}
+        onKeyDown={(e) => {
+          if (!names.length) return;
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            if (!shown) {
+              setOpen(true);
+              setHot(Math.max(0, names.indexOf(value)));
+            } else setHot((h) => (h + (e.key === "ArrowDown" ? 1 : names.length - 1)) % names.length);
+          } else if (shown && e.key === "Enter") {
+            e.preventDefault();
+            pick(names[hot] ?? value, e.currentTarget);
+          } else if (shown && e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(false);
+          }
+        }}
+      />
+      {names.length > 0 && (
+        <button
+          type="button"
+          className="mk-combo-button"
+          tabIndex={-1}
+          aria-label="Login names used before"
+          title="Login names used before"
+          // Keeps the focus in the name, so the list doesn't close as it opens
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => {
+            setHot(Math.max(0, names.indexOf(value)));
+            setOpen((o) => !o);
+            e.currentTarget.parentElement?.querySelector("input")?.focus();
+          }}
+        >
+          ▾
+        </button>
+      )}
+      {shown && (
+        <ul className="mk-list mk-combo-list" role="listbox" aria-label="Login names used before" onMouseDown={(e) => e.preventDefault()}>
+          {names.map((n, i) => (
+            <li
+              key={n}
+              role="option"
+              aria-selected={i === hot}
+              className={i === hot ? "selected" : undefined}
+              onMouseEnter={() => setHot(i)}
+              onClick={(e) => pick(n, e.currentTarget)}
+            >
+              <span>{n}</span>
+              <button
+                type="button"
+                className="mk-combo-forget"
+                tabIndex={-1}
+                title={`Forget ${n}`}
+                aria-label={`Forget ${n}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onForget(n);
+                  setHot(0);
+                }}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </span>
   );
 }
 

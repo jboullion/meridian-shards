@@ -91,7 +91,7 @@ Friends, the relay, following and health bars ([ADR 0005](adr/0005-friends.md)) 
 | Friends on a second device | Keys live in one browser's IndexedDB; a new device or cleared data means pairing again. Syncing keys is out of scope. |
 | End-to-end encryption | The relay is ours and sees friends' locations; ECDH on the same keys is a possible later step. |
 | Walking to a friend in another room | Following starts only in the same room (ADR 0005 4.7). |
-| More pet kinds and colours | [ADR 0006](adr/0006-pets.md) 6.4: the pets are the critters' eight species, each in its own colours; bigger monsters drawn small and recoloured ones come once each is looked at in the game. |
+| Pet colours | [ADR 0006](adr/0006-pets.md) 6.4: every pet kind is in its own colours; recoloured ones come once each is looked at in the game. |
 | Original-client players | Only players of this client are on the relay; the one tell they might see is readable. |
 
 ## Deliberately different or left out
@@ -110,7 +110,7 @@ Friends, the relay, following and health bars ([ADR 0005](adr/0005-friends.md)) 
 | Blur and waver over the hands | The D3D client blurs the whole frame, hands and screen flashes included; ours blurs the 3D view, since the hands are drawn on a 2D canvas over it. |
 | Sector flicker (`BP_SECTOR_LIGHT`, `SF_FLICKER`) | The D3D client keeps the sector's own light while flickering, so it's parsed and has no effect, as there. |
 | The DM module | Staff tools (BGF editor, quest editor, G-Channel); staff use the maintenance port. |
-| The intro's logo and splash | The original fades in `logo.bmp` (Near Death Studios' logo), then shows `splash.bgf`, which in the Server 104 files names that server. We skip the logo and show `xsplash.bgf`, the original Meridian 59 splash, with the same button and music. |
+| The intro's logo and splash | The original fades in `logo.bmp` (Near Death Studios' logo), then shows `splash.bgf`, which in the Server 104 files names that server. We skip the logo and show `xsplash.bgf`, the original Meridian 59 splash, with its music, filling the screen behind the login dialog, which is open from the start: no "Click here to log on!" button (2026-10-12). |
 | One desktop app at a time | The original ran as many clients as you liked. Ours share one profile (storage, the asset cache), so a second start brings the first forward (`requestSingleInstanceLock`). |
 | `/H` and `/P` | The original connects to that host and port; our desktop app takes the listed server with that host (and port), else `https://host:port` (http for localhost), or a whole origin, for this run only. |
 | Mouselook | The original captures the mouse on a click or with A_MOUSELOOK until Esc. Ours captures it only while the right button is held and dragged to turn the view, in both interfaces; a right click without dragging still examines. |

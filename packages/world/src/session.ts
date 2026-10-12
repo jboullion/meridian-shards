@@ -28,6 +28,13 @@ import { readSpellRefusal, type SpellRefusal } from "./spellRefusal.ts";
  */
 export const LOGON_SERVER_TAB_MS = 5000;
 
+/**
+ * Ours: how long logging in may take before we give up and say so, rather than wait forever
+ * (a hung server still accepts connections, then never answers): the socket opening, the server's
+ * first word (AP_GETLOGIN comes at once from a server that's well), and the character list
+ */
+export const LOGIN_TIMEOUTS = { connect: 15_000, firstWord: 15_000, characters: 45_000 };
+
 export interface ChatLine {
   kind: "system" | "say" | "said-resource";
   /** The chat tab it belongs in (chatChannel.ts) */
@@ -152,6 +159,8 @@ export interface SessionOptions {
   pingIntervalMs?: number;
   /** Factory for the socket; defaults to the global WebSocket. */
   createSocket?: (url: string) => WebSocket;
+  /** How long logging in may take (LOGIN_TIMEOUTS, ms); the tests shorten them */
+  loginTimeouts?: Partial<typeof LOGIN_TIMEOUTS>;
 }
 
 export interface SessionEvents {
@@ -228,9 +237,25 @@ export class GameSession {
       { pingIntervalMs: opts.pingIntervalMs },
     );
     this.conn.token.lookup = opts.lookupResource;
-    this.ws.onopen = () => this.conn.start();
-    this.ws.onmessage = (ev) => this.conn.receive(new Uint8Array(ev.data as ArrayBuffer));
+    const limits = { ...LOGIN_TIMEOUTS, ...opts.loginTimeouts };
+    // Ours: a server that doesn't open, doesn't answer, or never gets us to the character list
+    this.loginTimer = setTimeout(() => this.loginStalled("Can't reach the server. Check your connection, or try again in a few minutes."), limits.connect);
+    let heard = false;
+    this.ws.onopen = () => {
+      this.armLoginTimer(limits.firstWord, "The server isn't answering. It may be starting up or busy: try again in a few minutes.");
+      this.charactersTimer = setTimeout(() => this.loginStalled("Logging in is taking too long. Try again in a few minutes."), limits.characters);
+      this.conn.start();
+    };
+    this.ws.onmessage = (ev) => {
+      if (!heard) {
+        heard = true;
+        this.clearLoginTimer();
+      }
+      this.conn.receive(new Uint8Array(ev.data as ArrayBuffer));
+    };
     this.ws.onclose = () => {
+      this.clearLoginTimer();
+      this.clearCharactersTimer();
       if (!this.closedByUs && this.phase !== "closed") this.events.error?.("Disconnected from the server.");
       this.setPhase("closed");
       this.conn.close();
@@ -240,6 +265,32 @@ export class GameSession {
 
   /** Resynchronizing after a transmission error (the beacon handshake) */
   private resyncing = false;
+
+  /** Ours: the login's timers (LOGIN_TIMEOUTS) */
+  private loginTimer: ReturnType<typeof setTimeout> | null = null;
+  private charactersTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private armLoginTimer(ms: number, why: string): void {
+    this.clearLoginTimer();
+    this.loginTimer = setTimeout(() => this.loginStalled(why), ms);
+  }
+
+  private clearLoginTimer(): void {
+    if (this.loginTimer) clearTimeout(this.loginTimer);
+    this.loginTimer = null;
+  }
+
+  private clearCharactersTimer(): void {
+    if (this.charactersTimer) clearTimeout(this.charactersTimer);
+    this.charactersTimer = null;
+  }
+
+  /** Logging in got stuck: say why, and let go of the connection (the account isn't left held) */
+  private loginStalled(why: string): void {
+    this.loginTimer = this.charactersTimer = null;
+    if (this.phase === "closed" || this.closedByUs) return;
+    this.fail(why);
+  }
 
   /**
    * game.c ResetUserData (BP_INVALIDATE_DATA, and after a resync): every id we hold is
@@ -564,7 +615,18 @@ export class GameSession {
     if (this.conn.state === "game") this.conn.sendGame(body);
   }
 
+  /**
+   * Ours: back to the character list, still logged in (to play another character). The server
+   * answers BP_REQ_QUIT with BP_QUIT, as for the original's quit (gameuser.c RequestQuit), and the
+   * menu that follows brings the list (see the BP.QUIT case).
+   */
+  toCharacters(): void {
+    this.send(buildSimple(BP.REQ_QUIT));
+  }
+
   close(): void {
+    this.clearLoginTimer();
+    this.clearCharactersTimer();
     this.closedByUs = true;
     try {
       if (this.conn.state === "game") this.conn.sendGame(buildSimple(BP.REQ_QUIT));
@@ -629,6 +691,7 @@ export class GameSession {
   }
 
   private setPhase(p: SessionPhase): void {
+    if (p === "characters" || p === "entering" || p === "game") this.clearCharactersTimer();
     if (this.phase === p) return;
     this.phase = p;
     this.events.phase?.(p);
@@ -728,6 +791,8 @@ export class GameSession {
           break;
         }
         case BP.CHARACTERS: {
+          // Logged in: the login's timers are done
+          this.clearCharactersTimer();
           const { characters, motd } = readCharacters(r);
           this.characters = characters;
           this.setPhase("characters");

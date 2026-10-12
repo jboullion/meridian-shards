@@ -1,12 +1,13 @@
-// The intro module (module/intro/intro.c IntroShowSplash): the splash picture with
-// "Click here to log on!" under it, as wide as the picture, and the main theme (main.ogg)
-// after 3 s. It comes before the login at startup and after logging off.
+// The intro module (module/intro/intro.c IntroShowSplash): the splash picture, and the main theme
+// (main.ogg) after 3 s. It's behind the login dialog at startup and after logging off.
 //
-// Unlike the original, there's no logo first (logo.bmp is Near Death Studios' logo), and
-// the picture is xsplash.bgf, the original Meridian 59 splash: splash.bgf in the Server 104
-// files names that server. See docs/missing-features.md.
+// Unlike the original, there's no logo first (logo.bmp is Near Death Studios' logo), the
+// picture is xsplash.bgf, the original Meridian 59 splash (splash.bgf in the Server 104 files
+// names that server), and there's no "Click here to log on!" button: the login dialog is open
+// over the picture from the start (ours, 2026-10-12: one screen, not two). See
+// docs/missing-features.md.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { AssetStore } from "../assets.ts";
 import type { GameAudio } from "./audio.ts";
 
@@ -14,56 +15,43 @@ import type { GameAudio } from "./audio.ts";
 const MUSIC_DELAY = 3000;
 const SPLASH_MUSIC = "main.ogg";
 const SPLASH = "xsplash.bgf";
-/** BUTTON_XSIZE: the button's width without a picture */
-const BUTTON_XSIZE = 300;
 
-export function Intro({ assets, audio, onDone }: { assets: AssetStore; audio: GameAudio; onDone: () => void }) {
+/** The splash picture filling the screen behind the login dialog (it keeps its shape), and its music */
+export function SplashPicture({ assets, audio }: { assets: AssetStore; audio: GameAudio | null }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
 
   useEffect(() => {
     let alive = true;
     void Promise.all([assets.bgf(SPLASH).catch(() => null), assets.palette()]).then(([bgf, pal]) => {
       const canvas = canvasRef.current;
       const b = bgf?.bitmaps[0];
-      if (!alive || !canvas) return;
-      if (b) {
-        // The first bitmap, in the game palette
-        canvas.width = b.width;
-        canvas.height = b.height;
-        const ctx = canvas.getContext("2d")!;
-        const img = ctx.createImageData(b.width, b.height);
-        for (let i = 0; i < b.pixels.length; i++) {
-          const v = b.pixels[i];
-          img.data[i * 4] = pal.rgb[v * 3];
-          img.data[i * 4 + 1] = pal.rgb[v * 3 + 1];
-          img.data[i * 4 + 2] = pal.rgb[v * 3 + 2];
-          img.data[i * 4 + 3] = 255;
-        }
-        ctx.putImageData(img, 0, 0);
+      if (!alive || !canvas || !b) return;
+      // The first bitmap, in the game palette
+      canvas.width = b.width;
+      canvas.height = b.height;
+      const ctx = canvas.getContext("2d")!;
+      const img = ctx.createImageData(b.width, b.height);
+      for (let i = 0; i < b.pixels.length; i++) {
+        const v = b.pixels[i];
+        img.data[i * 4] = pal.rgb[v * 3];
+        img.data[i * 4 + 1] = pal.rgb[v * 3 + 1];
+        img.data[i * 4 + 2] = pal.rgb[v * 3 + 2];
+        img.data[i * 4 + 3] = 255;
       }
-      setSize(b ? { w: b.width, h: b.height } : { w: BUTTON_XSIZE, h: 0 });
-      buttonRef.current?.focus();
+      ctx.putImageData(img, 0, 0);
+      canvas.classList.add("ready");
     });
-    // PlayMusicProc (GameAudio checks the Music option)
-    const music = window.setTimeout(() => audio.handle({ type: "music", file: SPLASH_MUSIC }), MUSIC_DELAY);
     return () => {
       alive = false;
-      clearTimeout(music);
     };
-  }, [assets, audio]);
+  }, [assets]);
 
-  return (
-    <div className="intro">
-      {/* The picture's width, less to fit the screen (it keeps its shape), and the button as wide */}
-      <div className="intro-stack" style={size ? { width: size.h ? `min(${size.w}px, 100%, calc((100vh - 80px) * ${size.w / size.h}))` : size.w } : undefined}>
-        <canvas ref={canvasRef} className="intro-picture" />
-        {/* MainButtonProc: a click, Enter or Space logs on */}
-        <button ref={buttonRef} type="button" className="intro-button" onClick={onDone}>
-          Click here to log on!
-        </button>
-      </div>
-    </div>
-  );
+  useEffect(() => {
+    if (!audio) return;
+    // PlayMusicProc (GameAudio checks the Music option)
+    const music = window.setTimeout(() => audio.handle({ type: "music", file: SPLASH_MUSIC }), MUSIC_DELAY);
+    return () => clearTimeout(music);
+  }, [audio]);
+
+  return <canvas ref={canvasRef} className="intro-picture" aria-hidden />;
 }

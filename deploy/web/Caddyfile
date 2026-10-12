@@ -1,8 +1,9 @@
 # Caddy: HTTPS for the website at / (with the downloads at /download/ and the wiki at /wiki/),
 # the browser client at /play/, the game assets, the WebSocket gateway at /ws and the friends relay at /social. The apps
-# themselves are GitHub Releases. SITE_ADDRESS is the hostname (e.g. 34-123-45-67.sslip.io, or
-# several, comma-separated); Caddy gets its certificate from Let's Encrypt by itself. For a local
-# test without TLS, set SITE_ADDRESS=http://localhost. The planned layout on our own domain
+# themselves are GitHub Releases. SITE_ADDRESS is the hostname (e.g. 34-123-45-67.sslip.io), or
+# several separated by a comma *and a space*, quoted in .env: SITE_ADDRESS="a.sslip.io, example.com"
+# (without the space Caddy refuses to start). Caddy gets its certificates from Let's Encrypt by
+# itself. For a local test without TLS, set SITE_ADDRESS=http://localhost. The planned layout on our own domain
 # behind Cloudflare is docs/adr/0004-own-domain.md.
 {
 	# Behind Cloudflare, every request comes from Cloudflare's addresses

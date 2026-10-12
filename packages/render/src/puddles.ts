@@ -76,14 +76,17 @@ void main() {
   // The ground about it is wet too: a darker rim
   float rim = (1.0 - smoothstep(edge, edge + 0.22, r)) * (1.0 - water);
   if (water + rim <= 0.001) discard;
-  // Rings where the drops fall
+  // Rings where the drops fall, about the puddle's mean size: not the wobbly edge, which changes
+  // with the angle about the middle, so each pixel had its own centre for a ring (bent rings,
+  // pinched to a point in every puddle's middle)
+  float size = 0.74 * mix(0.35, 1.0, uWet);
   float ripple = 0.0;
   for (int i = 0; i < 4; i++) {
     float fi = float(i);
     float t = uTime * (0.0011 + 0.0005 * hash(vSeed + fi)) + hash(vSeed * 7.0 + fi);
     float cycle = floor(t);
     float phase = fract(t);
-    vec2 c = (vec2(hash(vSeed + fi * 3.1 + cycle), hash(vSeed + fi * 5.7 + cycle * 1.3)) - 0.5) * edge * 1.1;
+    vec2 c = (vec2(hash(vSeed + fi * 3.1 + cycle), hash(vSeed + fi * 5.7 + cycle * 1.3)) - 0.5) * size * 1.1;
     float ring = 1.0 - smoothstep(0.0, 0.035, abs(length(vUv - c) - phase * 0.32));
     ripple += ring * (1.0 - phase);
   }

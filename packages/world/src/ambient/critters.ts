@@ -111,6 +111,8 @@ export function critterArt(h: Habitat): string[] {
   return [...new Set(h.mix.flatMap(([n]) => [SPECIES[n].icon, SPECIES[n].dead]))];
 }
 
+/** Fewer than the habitats say: half (2026-10-12: there were too many about) */
+const DENSITY = 0.5;
 /** Spawned this far from the player (fine units), and gone past the last */
 const SPAWN_NEAR = 4 * FINENESS,
   SPAWN_FAR = 12 * FINENESS,
@@ -259,7 +261,7 @@ export class Critters {
       if (this.sampler && !this.started) return;
     }
     const night = frame.hour !== null && frame.hour !== undefined && (frame.hour >= 20 || frame.hour < 6);
-    const raw = this.habitat.count * frame.scale;
+    const raw = this.habitat.count * frame.scale * DENSITY;
     const target = Math.floor(raw) + (this.extra < raw % 1 ? 1 : 0);
     if (target === 0) {
       this.critters = this.critters.filter((c) => c.mode === "dead");

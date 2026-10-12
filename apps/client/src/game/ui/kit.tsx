@@ -152,8 +152,13 @@ globalThis.window?.addEventListener("keydown", (e) => {
 // ---- frames and windows ----
 
 /** The full page behind the pre-game dialogs: bkgnd.bmp tiled on black (color.c COLOR_BGD). */
-export function Backdrop({ children }: { children: ReactNode }) {
-  return <div className="mk-backdrop">{children}</div>;
+export function Backdrop({ children, behind }: { children: ReactNode; /** Ours: a picture behind it all (the login's splash) */ behind?: ReactNode }) {
+  return (
+    <div className={behind ? "mk-backdrop with-picture" : "mk-backdrop"}>
+      {behind && <div className="mk-backdrop-picture">{behind}</div>}
+      {children}
+    </div>
+  );
 }
 
 /** drawint.c's edge treatment around a box: four L-shaped corners and four repeat strips. */
@@ -360,9 +365,11 @@ export function Button({
 
 /** EDITTEXT: Times (font.c FONT_INPUT) in the edit treatment. */
 export function TextField({
-  at: r, value, onChange, password, autoFocus, maxLength, autoComplete, className, type = "text", min, max, disabled,
+  at: r, value, onChange, password, autoFocus, maxLength, autoComplete, className, type = "text", min, max, disabled, placeholder,
 }: {
   at?: Rect;
+  /** Ours: grey text while it's empty, also its accessible name */
+  placeholder?: string;
   /** WS_DISABLED */
   disabled?: boolean;
   value: string | number;
@@ -388,6 +395,8 @@ export function TextField({
         min={min}
         max={max}
         disabled={disabled}
+        placeholder={placeholder}
+        aria-label={placeholder}
         spellCheck={false}
       />
     </span>

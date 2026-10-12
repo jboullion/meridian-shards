@@ -424,6 +424,21 @@ button.link {
   image-rendering: pixelated;
 }
 
+/* Our face (Sidebar.tsx PortraitIcon): the box's size is its limit, the scale one both ways */
+.portrait > img:not(.self-target),
+.unit-portrait img {
+  width: auto;
+  height: auto;
+  max-width: 44px;
+  max-height: 66px;
+  image-rendering: auto;
+}
+
+.portrait > img.crisp,
+.unit-portrait img.crisp {
+  image-rendering: pixelated;
+}
+
 .main-stats {
   flex: 1;
   display: flex;
@@ -473,7 +488,7 @@ button.link {
 
 .stat-bar .num {
   position: absolute;
-  top: -1px;
+  top: 0;
   font: bold 10px Arial, Helvetica, sans-serif;
   line-height: 13px;
   color: #fff;
@@ -1843,6 +1858,12 @@ button.link {
   left: calc(100% * 262 / 338);
 }
 
+/* Ours: Add or Remove friend on a player's description, where Get and Use would be */
+.desc-buttons .mk-btn.slot-friend {
+  left: calc(100% * 206 / 338);
+  width: calc(100% * 100 / 338);
+}
+
 /* lookdlg.c's pick list (IDD_ITEMLISTMULTIPLE: the list on the left, OK, Cancel and All on the right) */
 .mk-window.look-list-dialog {
   width: min(calc(var(--dx) * 215 + 40px), calc(100vw - 24px));
@@ -2130,35 +2151,43 @@ canvas.server-wait {
   image-rendering: pixelated;
 }
 
-/* The intro (module/intro): the logo, then the splash with its button, centred on black */
-.intro {
-  /* Flex, not grid: a grid column would grow to the picture's width, cutting it off on a narrow
-     (upright) phone instead of shrinking it */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
+/* The splash picture behind the login dialog (Intro.tsx SplashPicture, kit.tsx Backdrop behind):
+   filling the screen (cropped to keep its shape) and a little darker, so the dialog stands out;
+   it fades in once drawn */
+.mk-backdrop.with-picture {
+  position: relative;
   background: #000;
-  overflow: hidden;
 }
 
-.intro-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  max-width: 100%;
-  max-height: 100%;
+.mk-backdrop-picture {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.mk-backdrop-picture::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.55));
+}
+
+.mk-backdrop.with-picture > :not(.mk-backdrop-picture) {
+  position: relative;
 }
 
 .intro-picture {
   display: block;
   width: 100%;
-  image-rendering: pixelated;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.6s;
 }
 
-.intro-button {
-  height: 30px;
-  font: 13px "MS Sans Serif", Tahoma, sans-serif;
+.intro-picture.ready {
+  opacity: 1;
 }
 
 /* cursor.c GameWindowSetCursor: the original's cursors over the view (kit.tsx installUiTheme) */
@@ -2541,8 +2570,8 @@ canvas.server-wait {
 }
 
 .touch-hud .unit-portrait img {
-  width: 40px;
-  height: 58px;
+  max-width: 40px;
+  max-height: 58px;
 }
 
 .touch-hud .unit-side {
@@ -2932,10 +2961,8 @@ canvas.server-wait {
 }
 
 .unit-portrait img {
-  width: 52px;
-  height: 78px;
-  object-fit: contain;
-  image-rendering: pixelated;
+  max-width: 52px;
+  max-height: 78px;
 }
 
 .unit-portrait.selecting {
@@ -3759,7 +3786,7 @@ canvas.server-wait {
   display: block;
   height: 4px;
   border: 1px solid rgba(0, 0, 0, 0.85);
-  background: linear-gradient(to right, rgb(200, 30, 30) var(--hp, 0%), rgba(40, 10, 10, 0.75) var(--hp, 0%));
+  background: linear-gradient(to right, rgb(40, 190, 70) var(--hp, 0%), rgba(10, 40, 15, 0.75) var(--hp, 0%));
 }
 
 /* No word from them yet: the bar's outline only */
@@ -3845,15 +3872,10 @@ canvas.server-wait {
 
 /* ---- Pets (ours, docs/adr/0006-pets.md) ---- */
 
-/* A pet's name under it: smaller and dimmer than players' (gameScene.ts drawPetNames) */
-.pet-name {
-  position: absolute;
-  left: 0;
-  top: 0;
-  white-space: nowrap;
-  font: italic 11px Georgia, "Times New Roman", serif;
-  color: rgba(225, 215, 190, 0.75);
-  text-shadow: 1px 1px 0 #000;
+/* A pet's name over its head: the players' names' style (.name-label), a size smaller (gameScene.ts drawPetNames) */
+.name-label.pet-name {
+  font-size: 12px;
+  color: rgb(235, 235, 235);
   pointer-events: none;
 }
 
@@ -3863,6 +3885,8 @@ canvas.server-wait {
    window and the interface column; they flow to fit either ---- */
 
 .stat-tab .glyph.drawn {
+  z-index: 1;
+  background: none !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3872,6 +3896,11 @@ canvas.server-wait {
   width: 20px;
   height: 16px;
   fill: rgb(214, 200, 160);
+}
+
+/* Our tabs: the middle piece the whole width, our icon over it */
+.stat-tab.drawn .mid {
+  left: 0;
 }
 
 .stat-tab.active .glyph.drawn svg {
@@ -3950,6 +3979,7 @@ canvas.server-wait {
   align-items: stretch;
 }
 
+/* Like the paper doll's figure (.equip-figure): the window's stone through a dark glass, dragged to turn */
 .pet-preview {
   flex: none;
   display: flex;
@@ -3957,8 +3987,12 @@ canvas.server-wait {
   justify-content: center;
   width: 84px;
   height: 84px;
-  border: 1px solid rgba(214, 190, 140, 0.35);
-  background: #000;
+  border: 1px solid #000;
+  background: rgba(0, 0, 0, 0.55);
+  box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.9);
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
   color: #c8bca0;
   font: italic 12px Georgia, "Times New Roman", serif;
 }
@@ -4000,8 +4034,9 @@ canvas.server-wait {
   justify-content: flex-end;
   height: 76px;
   padding: 2px;
-  border: 1px solid rgba(214, 190, 140, 0.35);
-  background: #000;
+  border: 1px solid #000;
+  background: rgba(0, 0, 0, 0.55);
+  box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.9);
   color: #e8dcc0;
   font: 11px Georgia, "Times New Roman", serif;
   cursor: pointer;
@@ -4035,4 +4070,26 @@ canvas.server-wait {
 
 .pet-colours button.locked {
   opacity: 0.4;
+}
+
+/* Ours: the townsfolk's inspect window (LookDialogs.tsx AmbientPersonDialog) */
+.ambient-facts {
+  margin: 6px 0 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ambient-facts > div {
+  display: flex;
+  gap: 8px;
+}
+
+.ambient-facts dt {
+  flex: none;
+  width: 72px;
+  color: rgb(240, 208, 25);
+}
+
+.ambient-facts dd {
+  margin: 0;
 }

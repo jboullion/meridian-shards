@@ -331,11 +331,15 @@ export function StudyDialog({
   const [untilOut, setUntilOut] = useState(memory.count === null);
   const [count, setCount] = useState(String(memory.count ?? 10));
   const [logOff, setLogOff] = useState(memory.logOff);
-  const chosen = spells.find((s) => s.key === spell);
+  // Ours: the list narrowed to names with the search's words in them
+  const [search, setSearch] = useState("");
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = spells.filter((s) => words.every((w) => s.label.toLowerCase().includes(w)));
+  const chosen = shown.find((s) => s.key === spell) ?? shown[0];
   const wanted = untilOut ? null : Math.max(Number.parseInt(count, 10) || 0, 0);
   let note: string;
   let ready = false;
-  if (!chosen) note = "You don't know any spells yet.";
+  if (!chosen) note = spells.length ? "No spell you know has that name." : "You don't know any spells yet.";
   else if (!chosen.info) note = "There's no data for this spell in the game files: rebuild the assets.";
   else if (maxMana > 0 && maxMana < chosen.info.mana) note = `${chosen.label} needs ${chosen.info.mana} mana, more than you can hold.`;
   else if (wanted === 0) note = "Cast it how many times?";
@@ -363,13 +367,13 @@ export function StudyDialog({
         }}
       >
         <Text at={[8, 6, 174, 8]}>Practise a spell while you're away:</Text>
+        <TextField at={[8, 16, 174, 13]} value={search} onChange={setSearch} maxLength={40} placeholder="Search spells" autoFocus />
         <ListBox
-          at={[8, 16, 174, 70]}
+          at={[8, 32, 174, 54]}
           label="Spells"
-          items={spells.map((s) => ({ key: s.key, label: s.label }))}
-          selected={spell}
+          items={shown.map((s) => ({ key: s.key, label: s.label }))}
+          selected={chosen?.key ?? null}
           onSelect={setSpell}
-          autoFocus
         />
         <Text at={[8, 93, 40, 8]}>Cast it</Text>
         <TextField at={[40, 91, 30, 14]} value={count} onChange={(v) => setCount(v.replace(/\D/g, ""))} maxLength={5} disabled={untilOut} />

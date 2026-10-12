@@ -10,7 +10,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { ANIMATE, DF, type ObjectInfo } from "@shards/protocol";
 import { DRAWFX } from "@shards/render";
-import { isNumberItem, type LookResult } from "@shards/world";
+import { isNumberItem, type AmbientPersonInfo, type LookResult } from "@shards/world";
 import type { IconRenderer } from "../icons.ts";
 import { Button, Window } from "./kit.tsx";
 import { ObjIcon } from "./Sidebar.tsx";
@@ -72,8 +72,10 @@ function FittedName({ text, color }: { text: string; color?: string }) {
  * a player's web page, and the buttons for what we can do with it.
  */
 export function DescriptionDialog({
-  look, buttons, icons, onAction, onSave, onClose,
+  look, buttons, icons, onAction, onSave, onClose, extra,
 }: {
+  /** Ours: one more button, on another player's description: Add or Remove friend (docs/adr/0005-friends.md) */
+  extra?: { label: string; title?: string; disabled?: boolean; onClick: () => void };
   look: LookResult;
   /** DESC_* flags */
   buttons: number;
@@ -172,6 +174,11 @@ export function DescriptionDialog({
           {buttons & DESC.APPLY ? <Button className="slot-c" onClick={run("apply")}>Use</Button> : null}
           {buttons & DESC.UNUSE ? <Button className="slot-c" onClick={run("unuse")}>Unuse</Button> : null}
           {buttons & DESC.USE ? <Button className="slot-c" onClick={run("use")}>Use</Button> : null}
+          {extra && (
+            <Button className="slot-friend" title={extra.title} disabled={extra.disabled} onClick={extra.onClick}>
+              {extra.label}
+            </Button>
+          )}
         </div>
       </Window>
     </div>
@@ -301,6 +308,62 @@ export function LookListDialog({
             <Button onClick={onClose}>Cancel</Button>
             {multiple && <Button onClick={() => setChosen(items.map((i) => i.object.id))}>All</Button>}
           </div>
+        </div>
+      </Window>
+    </div>
+  );
+}
+
+/**
+ * Ours: one of the townsfolk examined (packages/world ambient: AmbientLife.describe), in the
+ * description dialog's frame: their figure, a name made up for them, what they are and are doing,
+ * where they came from and are going, and their mood. They're only ours (and our friends'):
+ * nothing here comes from the server.
+ */
+export function AmbientPersonDialog({
+  person, icons, roomName, onClose,
+}: {
+  person: AmbientPersonInfo;
+  icons: IconRenderer;
+  /** A room's name, from its file */
+  roomName: (file: string) => string;
+  onClose: () => void;
+}) {
+  const okRef = useRef<HTMLDivElement>(null);
+  useEffect(() => okRef.current?.querySelector("button")?.focus(), []);
+  const rows: [string, string][] = [
+    ["Doing", person.doing],
+    ...(person.errand ? ([["Errand at", roomName(person.errand)]] as [string, string][]) : []),
+    ...(person.from ? ([["Came from", roomName(person.from)]] as [string, string][]) : []),
+    ...(person.to ? ([["Going to", roomName(person.to)]] as [string, string][]) : []),
+    ["Mood", person.mood],
+  ];
+  return (
+    <div className="mk-modal look-modal desc-modal">
+      <Window title="" onClose={onClose} className="desc-dialog ambient-person">
+        <div className="desc-layout">
+          <div className="desc-picture">
+            <ObjIcon icons={icons} object={person.object.info} opts={{ group: 0 }} />
+          </div>
+          <div className="desc-main">
+            <FittedName text={person.name} />
+            <div className="desc-fixed">
+              {person.role} ({person.female ? "woman" : "man"})
+            </div>
+            <dl className="ambient-facts">
+              {rows.map(([k, v]) => (
+                <div key={k}>
+                  <dt>{k}</dt>
+                  <dd>{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </div>
+        <div className="desc-buttons" ref={okRef}>
+          <Button isDefault onClick={onClose}>
+            OK
+          </Button>
         </div>
       </Window>
     </div>

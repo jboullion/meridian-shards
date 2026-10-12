@@ -11,7 +11,7 @@ To hear one cue by itself in dev: `window.shards.gameScene.ambientSoundBoard.aud
 | Cue (audition name) | When | File(s) | Volume | Notes |
 |---|---|---|---|---|
 | Town chatter (`town`) | Townsfolk within 14 squares (towns, castle courtyards) | `amb_town_talk.ogg` | 0.18 (0.15 in castles), less with fewer people | Loops from a random point; muffled and quieter in the rain outdoors |
-| Inn chatter (`inn`) | Patrons about | `amb_inn_talk.ogg` | 0.28 | |
+| Inn chatter (`inn`) | Patrons about | `amb_inn_talk.ogg` | 0.45 | |
 | Hall and arena crowd (`hall`) | Courtiers under a roof; the arena | `amb_hall_talk.ogg` | 0.15 castles, 0.29 arena | |
 | Weapon swing (`swing`) | An arena fighter's swing | `swswish1`-`5.ogg` | 0.45 | |
 | Weapon hit (`hit`) | Half the swings land | metal: `mhit1b`-`3b`, `swrdmtl1`-`3`; leather: `lhit1b`-`3b`; flesh: `fhit1b`-`3b` | 0.55 | By the struck fighter's armour; a pain cry (`ouchm`/`ouchf`) one time in five |

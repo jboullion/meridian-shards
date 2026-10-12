@@ -43,7 +43,7 @@ It would do for the static sites, not for the game files or the installers.
    - The Android update check and the browser's Download button (`host.ts` `LATEST_RELEASE`, the GitHub API today) read a `latest.json` there, as does the website's download page (`meridian-shards-website` `app/lib/releases.ts`).
    - CI uploads to R2 (its S3 API, with keys as GitHub secrets) instead of making a GitHub release.
    - Installed apps look at GitHub for updates, so one last GitHub release carries the switch.
-8. **During the move, both names work:** `SITE_ADDRESS` takes both hostnames (comma-separated), `GATEWAY_ORIGINS` lists `https://<domain>` next to the sslip.io one, and the apps' server lists (`apps/desktop/src/settings.ts`, `ShardsHost.java`) gain the domain before the old entry goes.
+8. **During the move, both names work:** `SITE_ADDRESS` takes both hostnames (`SITE_ADDRESS="35-206-75-121.sslip.io, m59-shards.com"`: Caddy refuses a comma without a space after it, and won't start), `GATEWAY_ORIGINS` lists `https://<domain>` next to the sslip.io one, and the apps' server lists (`apps/desktop/src/settings.ts`, `ShardsHost.java`) gain the domain before the old entry goes.
 
 ## Consequences
 

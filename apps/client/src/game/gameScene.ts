@@ -402,6 +402,8 @@ export class GameScene {
   onSelecting?: (on: boolean) => void;
   /** A line for the chat window from the client itself */
   onMessage?: (text: string) => void;
+  /** Ours: one of the townsfolk examined (the inspect window), by their ambient id */
+  onLookAmbient?: (id: number) => void;
   /**
    * Ours (docs/adr/0005-friends.md): the friends feature, for friends' health bars over their heads
    * (5) and following (4)
@@ -1154,6 +1156,24 @@ export class GameScene {
   }
 
   /** A live critter under the cursor, not behind a wall and not far off, or null */
+  /** Ours: someone of the townsfolk under the cursor, not behind a wall, or null */
+  private ambientUnderCursor(): number | null {
+    const life = this.ambient;
+    const self = this.session.world.self;
+    if (!life || !this.objects || !this.cursorRay()) return null;
+    for (const h of this.objects.pickAll(this.raycaster, self?.id)) {
+      if (!life.has(h.id)) continue;
+      if (this.roomView) {
+        this.raycaster.far = h.distance - LABEL_OCCLUSION_SLACK;
+        const hidden = this.raycaster.far > 0 && this.roomView.occludes(this.raycaster);
+        this.raycaster.far = 40;
+        if (hidden) continue;
+      }
+      return h.id;
+    }
+    return null;
+  }
+
   private critterUnderCursor(): number | null {
     const critters = this.critters;
     const self = this.session.world.self;
@@ -1838,7 +1858,7 @@ export class GameScene {
     this.pets.update(dt, owners.slice(0, MAX_PETS), this.social?.relayNow() ?? Date.now());
   }
 
-  /** Pets' names, under them, smaller and dimmer than players' (Show Pet Names), hidden by walls */
+  /** Pets' names over their heads, as players' are but smaller (Show Pet Names), hidden by walls */
   private drawPetNames(): void {
     const named = this.settings.showPetNames ? (this.pets?.named() ?? []) : [];
     const w = this.canvas.clientWidth,
@@ -1848,8 +1868,9 @@ export class GameScene {
     const dir = new THREE.Vector3();
     let n = 0;
     for (const { obj, name } of named) {
-      const floor = this.mover.floorBase(obj.x, obj.y) ?? this.mover.z;
-      v.set(obj.x / FINENESS, floor / FINENESS, obj.y / FINENESS);
+      const top = this.objects?.topOf(obj.id);
+      if (!top) continue;
+      v.copy(top);
       dir.subVectors(v, eye);
       const d = dir.length();
       if (d > PET_NAME_RANGE) continue;
@@ -1861,11 +1882,11 @@ export class GameScene {
       v.project(this.camera);
       if (v.z > 1 || v.z < -1) continue;
       const el = this.petNamePool[n] ?? this.labelsEl.appendChild(document.createElement("div"));
-      if (!this.petNamePool[n]) el.className = "pet-name";
+      if (!this.petNamePool[n]) el.className = "name-label pet-name";
       this.petNamePool[n++] = el;
       const shown = this.session.textFilter ? this.session.textFilter(name) : name;
       if (el.textContent !== shown) el.textContent = shown;
-      el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, 4px)`;
+      el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -110%)`;
       el.style.display = "";
     }
     for (let i = n; i < this.petNamePool.length; i++) this.petNamePool[i].style.display = "none";
@@ -2606,6 +2627,13 @@ export class GameScene {
         // with nothing there, the sun or moon (client3d.c GetObjects3D's background overlays)
         const ids = this.objectsUnderCursor();
         if (!ids.length) {
+          // Ours: one of the townsfolk (real objects come first), shown in our own window
+          const person = this.ambientUnderCursor();
+          if (person !== null) {
+            if (this.locked) document.exitPointerLock();
+            this.onLookAmbient?.(person);
+            break;
+          }
           const sky = this.skyUnderCursor();
           if (sky !== null) this.onLook?.(sky);
           break;

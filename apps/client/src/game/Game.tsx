@@ -9,7 +9,7 @@ import type { AssetStore } from "../assets.ts";
 import { allowPortrait, desktop, gameSocketUrl, onAndroidAway } from "../host.ts";
 import { hideFriendTells } from "./social.ts";
 import { GameAudio } from "./audio.ts";
-import { Intro } from "./Intro.tsx";
+import { SplashPicture } from "./Intro.tsx";
 import { CharacterCreator } from "./CharacterCreator.tsx";
 import { AssetDownload } from "./AssetDownload.tsx";
 import { CharacterSelect } from "./CharacterSelect.tsx";
@@ -18,7 +18,7 @@ import { Framed } from "./TitleBar.tsx";
 import { getSettings } from "./settings.ts";
 import { filterIncoming, loadProfanity } from "./profanity.ts";
 import { IconRenderer } from "./icons.ts";
-import { ConnectingScreen, LoginScreen } from "./LoginScreen.tsx";
+import { ConnectingScreen, LoginScreen, rememberName } from "./LoginScreen.tsx";
 
 /** A tiny event relay: session events that arrive before (or without) a listener are dropped. */
 class Relay<T> {
@@ -97,7 +97,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   const [launch] = useState(() => desktop?.launch ?? null);
   /** /Q (config.quickstart): until the game starts, an error, or logging off */
   const quickstart = useRef(launch?.quickstart === true);
-  /** The intro's splash (module/intro), at startup (unless /Q) and after logging off */
+  /** The intro's splash (module/intro) behind the login dialog, at startup (unless /Q) and after logging off */
   const [intro, setIntro] = useState(() => launch?.quickstart !== true);
   /** Plays the splash's music (main.ogg) until logging on, as the intro module does until it unloads */
   const [introAudio, setIntroAudio] = useState<GameAudio | null>(() => new GameAudio(assets));
@@ -126,11 +126,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     setError(null);
     introAudio?.dispose();
     setIntroAudio(null);
-    try {
-      localStorage.setItem("shards.username", username);
-    } catch {
-      // storage unavailable: fine
-    }
+    rememberName(username);
     // Created on the login click, so the browser lets the page play sound.
     const audio = new GameAudio(assets);
     // A server updated since this page loaded has new files (rsc0000.rsb, rooms) that the
@@ -256,12 +252,6 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, at startup
   }, []);
 
-  if ((!live || !session || phase === "offline" || phase === "closed") && intro && introAudio)
-    return (
-      <Framed assets={assets}>
-        <Intro assets={assets} audio={introAudio} onDone={() => setIntro(false)} />
-      </Framed>
-    );
   if (!live || !session || phase === "offline" || phase === "closed")
     return (
       <Framed assets={assets}>
@@ -272,6 +262,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
           onClearError={() => setError(null)}
           initialUsername={launch?.username}
           initialPassword={launch?.password}
+          behind={intro ? <SplashPicture assets={assets} audio={introAudio} /> : undefined}
         />
         <AssetDownload />
       </Framed>

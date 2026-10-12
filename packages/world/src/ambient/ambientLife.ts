@@ -26,6 +26,7 @@ import type { Look, WorldObject } from "../state.ts";
 import { ambientId, localRes } from "./ambientIds.ts";
 import { busyAt, isErrandRoom, torchHours, weatherScale, type AmbientRoomSpec } from "./ambientRooms.ts";
 import { chatterLine, scatterLine, type ChatterContext, type Role, type Weather } from "./chatter.ts";
+import { personName } from "./names.ts";
 import {
   C, fighterAppearance, guardAppearance, knightAppearance, ladyAppearance, lookFor, mageAppearance, makePerson, nobleAppearance, randomAppearance, setTorch,
   type Appearance, type Pose,
@@ -118,6 +119,19 @@ export function boltArt(): string[] {
 }
 
 const SQ = FINENESS;
+/** The inspect window's words for each role */
+const ROLE_LABELS: Record<Role, string> = {
+  folk: "Townsperson", patron: "Patron", customer: "Customer", guard: "Guard", knight: "Knight", lady: "Lady of the court", noble: "Noble",
+  fighter: "Arena fighter", mage: "Arena mage", spectator: "Spectator",
+};
+/** Moods for when nothing in particular is going on, one per person (by their name) */
+const MOODS = ["Content", "Cheerful", "Thoughtful", "Weary", "Busy", "Bored", "Curious", "Grumpy", "Hopeful", "Distracted"] as const;
+const nameHash = (s: string) => [...s].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 0x01000193) >>> 0, 0x811c9dc5);
+/** A walker stopping steps aside this far (fine units), so sprites don't share a spot */
+const NUDGE_MIN = 24;
+const NUDGE_MAX = 56;
+/** How clear of walls that step must be */
+const REACH_CLEARANCE_NUDGE = 64;
 /** proto.h DRAWFX_TRANSLUCENT75/50/25: fading in and out */
 const FADE_FX = [1, 2, 3, 0];
 const FADE_MS = 600;
@@ -280,6 +294,27 @@ interface Walker {
   waveBackMs: number;
   /** Beaten in the arena and sent to the stands (not counted as one of them) */
   beaten: boolean;
+  /** Ours (the inspect window): their name, the room they came in from, are going to, and run an errand to */
+  name: string;
+  fromRoom: string | null;
+  toRoom: string | null;
+  errandRoom: string | null;
+}
+
+/** What the inspect window shows of someone in the crowd (AmbientLife.describe) */
+export interface AmbientPersonInfo {
+  object: WorldObject;
+  name: string;
+  female: boolean;
+  /** What they are: "Townsperson", "Patron", "Guard"... */
+  role: string;
+  /** What they're doing now */
+  doing: string;
+  mood: string;
+  /** Room files (lower case): where they came in from, are going, and the shop they're visiting */
+  from: string | null;
+  to: string | null;
+  errand: string | null;
 }
 
 interface ExitPoint {
@@ -291,6 +326,8 @@ interface ExitPoint {
   door: boolean;
   /** A shop, smithy, bank and the like: somewhere to run an errand */
   errand: boolean;
+  /** The room it leads to (lower case), when known */
+  to: string | null;
 }
 
 /** mulberry32 */
@@ -312,6 +349,7 @@ export class AmbientLife {
   readonly spec: AmbientRoomSpec;
   private readonly exits: AmbientExits | undefined;
   private readonly rand: () => number;
+  private readonly nameRand: () => number;
   private builder: Generator<void, NavGrid> | null;
   private grid: NavGrid | null = null;
   private points: ExitPoint[] = [];
@@ -371,6 +409,8 @@ export class AmbientLife {
     this.spec = spec;
     this.exits = exits;
     this.rand = seededRandom(seed);
+    // Names from a stream of their own: naming somebody changes nothing the crowd does
+    this.nameRand = seededRandom((seed ^ 0x5bd1e995) >>> 0);
     this.floorCount = this.pickCount();
     if (grid) {
       grid.closed.fill(0);
@@ -414,6 +454,44 @@ export class AmbientLife {
   /** What's being said, over whose head */
   speech(): AmbientSpeech[] {
     return this.walkers.filter((w) => w.say && w.fadeDir >= 0).map((w) => ({ obj: w.obj, text: w.say!.text }));
+  }
+
+  /** Whether an id is someone in the crowd (the inspect window) */
+  has(id: number): boolean {
+    return this.walkers.some((w) => w.obj.id === id && w.fadeDir >= 0);
+  }
+
+  /** Someone in the crowd, as the inspect window shows them; null if they've gone */
+  describe(id: number): AmbientPersonInfo | null {
+    const w = this.walkers.find((v) => v.obj.id === id);
+    if (!w) return null;
+    const kind = this.spec.kind;
+    const role = ROLE_LABELS[w.role] ?? "Townsperson";
+    let doing: string;
+    if (w.bout) doing = "Fighting a bout";
+    else if (w.beaten) doing = "Getting over a beating, in the stands";
+    else if (w.role === "spectator") doing = "Watching the bouts";
+    else if (w.fleeing) doing = "Running from danger";
+    else if (w.beat) doing = w.role === "knight" ? "Standing watch" : "Keeping the peace on their beat";
+    else if (w.mode === "walk" && w.errand) doing = "Off on an errand";
+    else if (w.mode === "walk" && w.leaving) doing = w.toRoom ? "On the way somewhere" : "Heading out";
+    else if (w.mode === "walk") doing = "Strolling about";
+    else if (w.errand) doing = "Trading at a shop's door";
+    else if (w.emoteMs > 0 && w.pose === "dance") doing = "Dancing";
+    else if (kind === "inn") doing = "Drinking and talking";
+    else if (kind === "shop") doing = "Looking over the wares";
+    else if (kind === "castle") doing = "Attending the court";
+    else doing = "Standing about";
+    let mood: string;
+    if (w.fleeing) mood = "Frightened";
+    else if (w.beaten) mood = "Sore";
+    else if (w.bout) mood = "Fierce";
+    else if (w.say && w.waveBackMs > 0) mood = "Friendly";
+    else if (this.weather === "rain" && kind === "town") mood = "Soggy";
+    else if (this.weather === "snow" && kind === "town") mood = "Chilly";
+    else if (kind === "inn" && this.hour !== null && (this.hour >= 20 || this.hour < 2)) mood = "Merry";
+    else mood = MOODS[nameHash(w.name) % MOODS.length];
+    return { object: w.obj, name: w.name, female: w.look.female, role, doing, mood, from: w.fromRoom, to: w.toRoom, errand: w.errandRoom };
   }
 
   /** The nav grid, once built (for the dev tools) */
@@ -557,11 +635,11 @@ export class AmbientLife {
   private findPoints(): void {
     const g = this.grid!;
     const points: ExitPoint[] = [];
-    const add = (at: NavPoint, door: boolean, errand = false) => {
+    const add = (at: NavPoint, door: boolean, errand = false, to: string | null = null) => {
       // The nearest cell from which the doorway can be reached in a straight line: walkers stop
       // there, then step into the doorway itself
       const cell = nearestCell(g, at.x, at.y, 3);
-      if (cell >= 0) points.push({ at, cell, area: g.area[cell], door, errand });
+      if (cell >= 0) points.push({ at, cell, area: g.area[cell], door, errand, to: to?.toLowerCase() ?? null });
     };
     const ex = this.exits;
     if (ex) {
@@ -578,7 +656,7 @@ export class AmbientLife {
       for (const d of groups) {
         const r = mean(d.rows),
           c = mean(d.cols);
-        add({ x: (c - 1) * SQ + SQ / 2, y: (r - 1) * SQ + SQ / 2 }, true, isErrandRoom(d.to));
+        add({ x: (c - 1) * SQ + SQ / 2, y: (r - 1) * SQ + SQ / 2 }, true, isErrandRoom(d.to), d.to);
       }
       // Where players come out of a door is beside it, not in it: only for doors with no way in
       // found above (people disappeared a step to the side of their door)
@@ -587,7 +665,7 @@ export class AmbientLife {
         const at = kodToClient(row, col);
         if (!points.slice(0, doors).some((p) => dist(p.at, at) < 2.5 * SQ)) add(at, false);
       }
-      for (const e of ex.edges) for (const at of this.edgePoints(e.side)) add(at, true);
+      for (const e of ex.edges) for (const at of this.edgePoints(e.side)) add(at, true, false, e.to);
     }
     this.points = points;
     this.cells.clear();
@@ -795,6 +873,7 @@ export class AmbientLife {
       torchBearer: role === "guard" || (role === "folk" && this.rand() < TORCH_BEARERS), torch: false, area, errand: null, fleeing: false,
       say: null, beat: null, beatEnd: 0, bout: null, emoteMs: 0, nextEmoteMs: 2000 + this.rand() * 8000, cheerFrame: 0, actMs: 0, stepMs: 0, webbedMs: 0,
       hp: role === "mage" ? MAGE_HP : FIGHTER_HP, beaten: false, waveBackMs: 0,
+      name: personName(this.nameRand, role, look.female), fromRoom: null, toRoom: null, errandRoom: null,
     };
     this.applyFade(w);
     this.walkers.push(w);
@@ -826,22 +905,23 @@ export class AmbientLife {
    * Towns: where someone goes from `from`: sometimes a shop's door first (an errand), else
    * another door to go in by, else (an area without doors) somewhere out of sight to fade away
    */
-  private planTown(from: NavPoint, area: number): { path: NavPoint[]; errand: NavPoint | null; leaving: boolean } | null {
+  private planTown(from: NavPoint, area: number): { path: NavPoint[]; errand: NavPoint | null; leaving: boolean; to: string | null; errandRoom: string | null } | null {
     const g = this.grid!;
     const errands = this.pointsIn(area).filter((p) => p.errand && dist(p.at, from) >= 4 * SQ);
     if (errands.length && this.rand() < ERRAND_CHANCE * (this.weather ? 0.4 : 1)) {
       const p = this.pick(errands);
       const path = findPath(g, from, cellCentre(g, p.cell));
-      if (path) return { path, errand: p.at, leaving: false };
+      if (path) return { path, errand: p.at, leaving: false, to: null, errandRoom: p.to };
     }
     const doors = this.pointsIn(area).filter((p) => dist(p.at, from) >= 8 * SQ);
     if (doors.length) {
-      const path = this.pathToPoint(from, this.pick(doors));
-      if (path) return { path, errand: null, leaving: true };
+      const door = this.pick(doors);
+      const path = this.pathToPoint(from, door);
+      if (path) return { path, errand: null, leaving: true, to: door.to, errandRoom: null };
     }
     const cell = this.hiddenCell(area);
     const path = cell >= 0 ? findPath(g, from, cellCentre(g, cell)) : null;
-    return path ? { path, errand: null, leaving: true } : null;
+    return path ? { path, errand: null, leaving: true, to: null, errandRoom: null } : null;
   }
 
   /** Towns: someone part way along their walk from one door to another */
@@ -849,7 +929,8 @@ export class AmbientLife {
     const g = this.grid!;
     const area = this.pickArea();
     const starts = this.pointsIn(area);
-    const cell = starts.length ? this.pick(starts).cell : this.openCellAwayFrom(area);
+    const start = starts.length ? this.pick(starts) : null;
+    const cell = start ? start.cell : this.openCellAwayFrom(area);
     if (cell < 0) return;
     const from = cellCentre(g, cell);
     const plan = this.planTown(from, area);
@@ -863,6 +944,9 @@ export class AmbientLife {
     const w = this.spawn(at, angleTo(pts[i + 1].x - at.x, pts[i + 1].y - at.y), false, "folk", area);
     this.walk(w, pts.slice(i + 1), plan.leaving);
     w.errand = plan.errand;
+    w.fromRoom = start?.to ?? null;
+    w.toRoom = plan.to;
+    w.errandRoom = plan.errandRoom;
   }
 
   /** Inns and castles: a few stand together in twos, facing each other */
@@ -922,10 +1006,12 @@ export class AmbientLife {
     // Those who stay come in by a door near the player, in a big room
     if (stays && player) starts = starts.filter((p) => dist(p.at, player) < NEAR_PLAYER);
     let from: NavPoint;
+    let fromRoom: string | null = null;
     const lead: NavPoint[] = [];
     if (starts.length) {
       const p = this.pick(starts);
       from = p.at;
+      fromRoom = p.to;
       lead.push(cellCentre(g, p.cell));
     } else {
       const cell = this.hiddenCell(area);
@@ -933,6 +1019,7 @@ export class AmbientLife {
       from = cellCentre(g, cell);
     }
     const w = this.spawn(from, Math.floor(this.rand() * 4096), true, role, area);
+    w.fromRoom = fromRoom;
     const start = lead[0] ?? from;
     if (stays) {
       // In from the door, and somewhere to stand
@@ -946,6 +1033,8 @@ export class AmbientLife {
     if (plan) {
       this.walk(w, [...lead, ...plan.path], plan.leaving);
       w.errand = plan.errand;
+      w.toRoom = plan.to;
+      w.errandRoom = plan.errandRoom;
     } else this.leave(w);
   }
 
@@ -1456,8 +1545,8 @@ export class AmbientLife {
     }
     const inn = this.spec.kind === "inn";
     if (inn && r < 0.1) return this.emote(w, "dance", 6000 + this.rand() * 9000);
-    // A roll of the dice (5%) or a drink (14%) now and then
-    if (inn && r > 0.81) return this.event({ type: r > 0.95 ? "dice" : "drink", x: w.obj.x, y: w.obj.y });
+    // A roll of the dice (11%) or a drink (14%) now and then
+    if (inn && r > 0.75) return this.event({ type: r > 0.89 ? "dice" : "drink", x: w.obj.x, y: w.obj.y });
     const near = this.walkers.find((v) => v !== w && v.fadeDir >= 0 && dist(v.obj, w.obj) < 2.5 * SQ);
     if (near && r < 0.3) {
       w.faceAngle = angleTo(near.obj.x - w.obj.x, near.obj.y - w.obj.y);
@@ -1558,6 +1647,22 @@ export class AmbientLife {
     w.path = [];
     w.idleMs = ms;
     this.setPose(w, "stand");
+    this.nudge(w);
+  }
+
+  /**
+   * A step aside on stopping, a few fine units in a random direction the walls allow: two figures
+   * (or a figure and a prop) standing on one spot draw at one depth and flicker through each other
+   */
+  private nudge(w: Walker): void {
+    const a = this.rand() * 2 * Math.PI,
+      r = NUDGE_MIN + this.rand() * (NUDGE_MAX - NUDGE_MIN);
+    const x = Math.round(w.obj.x + Math.cos(a) * r),
+      y = Math.round(w.obj.y + Math.sin(a) * r);
+    if (this.grid && walkable(this.grid, w.obj.x, w.obj.y, x, y, REACH_CLEARANCE_NUDGE)) {
+      w.obj.x = x;
+      w.obj.y = y;
+    }
   }
 
   /** Stop a while, then go on the way they were going */

@@ -106,7 +106,7 @@ export function StatTab({
   const right = useKeyedHalves(assets.url("ui/statbtn_right.bmp"));
   const half = (h: [string, string] | null) => (h ? { backgroundImage: `url(${h[active ? 1 : 0]})` } : undefined);
   return (
-    <button className={active ? "stat-tab active" : "stat-tab"} title={tooltip ? label : undefined} aria-label={label} onClick={onClick}>
+    <button className={`stat-tab${active ? " active" : ""}${icon ? " drawn" : ""}`} title={tooltip ? label : undefined} aria-label={label} onClick={onClick}>
       <span className="mid" style={half(mid)} />
       <span className={icon ? "glyph drawn" : "glyph"} style={half(left)}>
         {icon}
@@ -398,10 +398,33 @@ export function Sidebar({
   );
 }
 
+/**
+ * Our face, as big as its box allows (the img's max-width and max-height in the CSS) at one scale
+ * both ways: a whole number of screen pixels per pixel when it's twice or more, else smoothed.
+ * (Stretched to the box, a 26 x 38 face came out a pixel or two taller than wide, uneven.)
+ */
 export function PortraitIcon({ icons, object }: { icons: IconRenderer; object: ObjectInfo }) {
   const key = `portrait:${icons.key(object)}`;
   const url = useAsyncImage(key, () => icons.portrait(object));
-  return url ? <img src={url} alt="" draggable={false} /> : null;
+  const [size, setSize] = useState<{ w: number; h: number; crisp: boolean } | null>(null);
+  if (!url) return null;
+  return (
+    <img
+      src={url}
+      alt=""
+      draggable={false}
+      className={size?.crisp ? "crisp" : undefined}
+      style={size ? { width: size.w, height: size.h } : undefined}
+      onLoad={(e) => {
+        const img = e.currentTarget;
+        const css = getComputedStyle(img);
+        const k = Math.min(parseFloat(css.maxWidth) / img.naturalWidth, parseFloat(css.maxHeight) / img.naturalHeight);
+        if (!(k > 0)) return;
+        const s = k >= 2 ? Math.floor(k) : k;
+        setSize({ w: Math.round(img.naturalWidth * s), h: Math.round(img.naturalHeight * s), crisp: k >= 2 });
+      }}
+    />
+  );
 }
 
 /** inventry.c: a grid of 40x40 boxes; in-use items sit on the yellow sun (inuse.bmp). */

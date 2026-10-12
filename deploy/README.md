@@ -161,6 +161,8 @@ All of these run on the VM, in `~/meridian-shards`:
 
 blakserv saves every 30 minutes (`[Auto] SavePeriod`). Run "save game" before stopping the VM or redeploying.
 
+**Don't send maintenance commands while blakserv is starting** (the first minute after a deploy or restart). On 2026-10-12 a `show status` sent during startup never answered and left the server's main loop hung: the port still accepted connections, but every login waited forever (the gateway logged `down 0 B`). The way out is `sudo docker compose -f deploy/docker-compose.yml restart blakserv`. To see whether it's up, try logging in, or watch for `network worker thread started` in `channel/debug.txt`.
+
 ## Notes
 
 - **The Linux build** needed two compiler flags and the `-i` (console) option; see the comments in `blakserv/Dockerfile`. Kod names a few room files in a different case than the files on disk, which Linux minds, so `stage.ts` lists those spellings and the image links them.

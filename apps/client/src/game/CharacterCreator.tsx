@@ -31,14 +31,14 @@ const SPELL_POINTS = 45; // char.h SPELL_POINTS_INITIAL
 /**
  * charstat.c suggested_stats and CharStatsCommand; the notes are char.rc IDD_CHARSTATS's. The
  * original only sets the stats; ours also picks spells and skills to start with (English names,
- * 45 points each set), replacing any chosen.
+ * 45 points each set), replacing any chosen. The original's fourth, Trickster (a Riija fighter),
+ * is left out (2026-10-12); the three left are spread over its box.
  */
 const FIGHTER_SKILLS = ["mace fighting", "slash", "dodge"];
 const PRESETS: { label: string; note: string; stats: number[]; spells: string[]; skills: string[] }[] = [
   { label: "Mage", note: "Pure mage", stats: [40, 50, 45, 15, 45, 25], spells: ["illuminate", "mystic touch", "touch of flame"], skills: [] },
   { label: "Warrior", note: "Pure fighter", stats: [40, 10, 50, 50, 20, 50], spells: [], skills: FIGHTER_SKILLS },
   { label: "Hybrid", note: "Three school bower", stats: [35, 25, 40, 30, 45, 45], spells: [], skills: FIGHTER_SKILLS },
-  { label: "Trickster", note: "Riija pure fighter", stats: [35, 35, 40, 30, 30, 50], spells: [], skills: FIGHTER_SKILLS },
 ];
 /** char.rc IDD_CHARSTATS: each stat's description (two lines there, wrapped here) */
 const STAT_TEXT = [
@@ -305,10 +305,10 @@ export function CharacterCreator({
         <Fixed y={STAT_ROWS_END} h={209 - STAT_ROWS_END}>
           <GroupBox at={[24, 139, 269, 68]} label="Suggestions for newcomers" />
           {PRESETS.map((p, i) => [
-            <Button key={`b${p.label}`} at={[43, 150 + i * 14, 50, 11]} onClick={() => applyPreset(p)}>
+            <Button key={`b${p.label}`} at={[43, 152 + i * 17, 50, 11]} onClick={() => applyPreset(p)}>
               {p.label}
             </Button>,
-            <Text key={`t${p.label}`} at={[98, 150 + i * 14, 168, 8]}>
+            <Text key={`t${p.label}`} at={[98, 154 + i * 17, 168, 8]}>
               {p.note}
             </Text>,
           ])}
