@@ -18,6 +18,7 @@ import { WorldState, fineToKod } from "./state.ts";
 import { formatServerMessage, parseMarkup, type TextSpan } from "./text.ts";
 import { messageChannel, type ChatChannel } from "./chatChannel.ts";
 import { readDamageDealt, type DamageDealt } from "./combatHit.ts";
+import { readSpellRefusal, type SpellRefusal } from "./spellRefusal.ts";
 
 /** A line for the chat window, with the original client's default colour for its kind. */
 /**
@@ -450,6 +451,13 @@ export class GameSession {
     return () => this.castListeners.delete(fn);
   }
 
+  /** Ours: the server refused a cast (no reagents, no mana, resting), for Study mode (spellRefusal.ts) */
+  private readonly refusalListeners = new Set<(refusal: SpellRefusal) => void>();
+  onSpellRefused(fn: (refusal: SpellRefusal) => void): () => void {
+    this.refusalListeners.add(fn);
+    return () => this.refusalListeners.delete(fn);
+  }
+
   /** A line from the client itself in the chat window (system colour, like GameMessage). */
   localMessage(text: string): void {
     this.chatLine("system", text, "server");
@@ -752,6 +760,8 @@ export class GameSession {
           if (type === BP.MESSAGE) {
             const hit = readDamageDealt(formatText, params, (id) => this.resource(id));
             if (hit) this.events.damageDealt?.(hit);
+            const refusal = readSpellRefusal(formatText, new ByteReader(params.buf), (id) => this.englishResource(id));
+            if (refusal) for (const fn of this.refusalListeners) fn(refusal);
           }
           break;
         }
