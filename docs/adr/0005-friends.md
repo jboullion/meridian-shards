@@ -77,8 +77,8 @@ Location messages go only to friends, only while sharing is on: `{ room file, RI
 
 ### 5. Health bars over friends
 
-1. Friends in the same room send their health, mana and vigor as percentages (rounded to whole numbers), on change, at most 4 a second, and every 5 s regardless. It's self-reported: a liar only fools their friends.
-2. Drawn over the friend's sprite like names and speech bubbles (`gameScene.ts`, hidden by walls in front, scaled with distance): three thin bars, the name in the friends colour. It also marks them as friends at a glance.
+1. Friends in the same room send their health as a percentage (rounded to a whole number; mana and vigor are never sent), on change, at most 4 a second, and every 5 s regardless. It's self-reported: a liar only fools their friends.
+2. Drawn over the friend's sprite like names and speech bubbles (`gameScene.ts`, hidden by walls in front, scaled with distance): one thin health bar, the name in the friends colour. It also marks them as friends at a glance.
 3. Hidden with the friends window's "Show health bars over friends".
 4. Ours only; the bars mean nothing to other players and are never sent to the server.
 
