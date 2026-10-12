@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { CF, SAY, STAT_GROUP, UA, UC, objId, type ObjectInfo } from "@shards/protocol";
 import {
-  PROFANITY_WARNING, isNumberItem, OBSERVER, WHITE, BLACK, decodeBoard, type GuildEvent, type MinigameEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
+  PROFANITY_WARNING, isNumberItem, type SpellRefusal, OBSERVER, WHITE, BLACK, decodeBoard, type GuildEvent, type MinigameEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
   type TradeList,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import type { AudioPreview, GameAudio } from "./audio.ts";
 import { GameScene, type GameSceneStatus, type TouchMove, type ViewMode } from "./gameScene.ts";
 import type { IconRenderer } from "./icons.ts";
-import { bindingLabel, getSettings, onSettings, touchUi, updateSettings, type Action, type ChatTab, type Settings } from "./settings.ts";
+import { ACTION_TABS, actionsFor, bindingLabel, getSettings, onSettings, touchUi, updateSettings, type Action, type ChatTab, type Settings } from "./settings.ts";
 import {
   BAD_COMMAND, defineAlias, filterSayMessage, findSpell, groupAdd, groupDelete, groupNew, interpretLine, resolveTell, type CommandId, type GroupResult,
 } from "./commands.ts";
@@ -22,11 +22,11 @@ import { AmountDialog, GiveDialog, OfferDialog, PasswordDialog, SuicideDialog, T
 import { DESC, DescriptionDialog, LookListDialog, type DescAction, type LookListChoice } from "./ui/LookDialogs.tsx";
 import { MiniMap } from "./ui/MiniMap.tsx";
 import {
-  ActionsDialog, CommandAliasesDialog, ConfigurationDialog, GroupsDialog, HotkeyAliasesDialog, LogoutTimerDialog, PreferencesDialog, TouchConfigDialog,
+  ActionsDialog, CommandAliasesDialog, ConfigurationDialog, GroupsDialog, HotkeyAliasesDialog, LogoutTimerDialog, PreferencesDialog, StudyDialog, TouchConfigDialog,
   WhoDialog,
-  type ActionWindow,
+  type ActionWindow, type StudySpell,
 } from "./ui/OptionsDialogs.tsx";
-import { EnchantmentRow, STAT_MP, Sidebar, type Tab } from "./ui/Sidebar.tsx";
+import { EnchantmentRow, STAT_HP, STAT_MP, Sidebar, type Tab } from "./ui/Sidebar.tsx";
 import { ClassicToolbar } from "./ui/Toolbar.tsx";
 import { ActionBar, MapCluster, TargetFrame, UnitFrame } from "./ui/ModernHud.tsx";
 import { CharacterWindow } from "./ui/CharacterWindow.tsx";
@@ -45,6 +45,10 @@ import { useWorld } from "./ui/hooks.ts";
 import { TitleBar } from "./TitleBar.tsx";
 import { QUICK_SLOTS, emptySlots, loadLastSlot, loadQuickSlots, saveLastSlot, saveQuickSlots, slotItem, slotSpell, type QuickSlot, type QuickSlots } from "./quickSlots.ts";
 import { Hotbar, QuickSlotPicker } from "./ui/QuickSlots.tsx";
+import {
+  DEFAULT_REST_REGEN, StudySession, carriedCounts, castsFromReagents, formatDuration, loadStudyMemory, saveStudyMemory, studyEstimate, type StudyAction,
+  type StudyConfig, type StudyMemory, type StudyPhase, type StudySnapshot, type StudySpellInfo,
+} from "./study.ts";
 
 const MAX_LINES = 300;
 
@@ -126,6 +130,11 @@ const QUICK_EMOTES: ([command: string, label: string] | null)[] = [
   ["wave", "Wave"], ["point", "Point"], ["dance", "Dance"], null, ["happy", "Happy"], ["sad", "Sad"], ["neutral", "Neutral"], ["wry", "Wry"],
 ];
 
+/** Study mode: keys for these stop it (the player is back), as do Esc and a click in the view */
+const STUDY_STOP_ACTIONS: ReadonlySet<Action> = new Set<Action>([...ACTION_TABS.Movement, "attack", "go", "interact"]);
+/** Study mode's tick while the page is shown, ms (a worker ticks it every 5 s when hidden) */
+const STUDY_TICK_MS = 500;
+
 /** textin.c EDITBOX_HISTORY: lines the chat box remembers */
 const CHAT_HISTORY = 20;
 
@@ -139,6 +148,8 @@ type Modal =
   | { type: "preferences" }
   | { type: "configuration" }
   | { type: "logoutTimer" }
+  /** Study mode's window, with what we know as it opens (study.ts) */
+  | { type: "study"; spells: StudySpell[]; carried: Map<string, number>; mana: number; maxMana: number; memory: StudyMemory }
   | { type: "about" }
   | { type: "actions" }
   | { type: "action"; window: ActionWindow }
@@ -187,7 +198,8 @@ export function GameView({
   contents: (fn: (c: ContainerContents) => void) => () => void;
   /** Subscribe to the damage we deal (for the numbers over what we hit) */
   damage: (fn: (d: DamageDealt) => void) => () => void;
-  onLogout: () => void;
+  /** Log off; `why`, when given, is shown on the login screen */
+  onLogout: (why?: string) => void;
   /** Subscribe to shop and offer events from the session */
   trades: (fn: (t: TradeList) => void) => () => void;
   offers: (fn: (e: OfferEvent) => void) => () => void;
@@ -242,14 +254,18 @@ export function GameView({
    * doesn't drop (the server refused the cast)
    */
   const castCooldown = useRef(new CastCooldown());
+  /** spelltimes.json: each spell's post-cast delay, mana and reagents, by English name */
+  const spellTimes = useRef<Record<string, StudySpellInfo>>({});
   const [cooldown, setCooldown] = useState<Cooldown | null>(null);
   useEffect(() => {
     let live = true;
-    let times: Record<string, { postCast: number; mana: number }> = {};
+    let times: Record<string, StudySpellInfo> = {};
     assets
       .spellTimes()
       .then((t) => {
-        if (live) times = t;
+        if (!live) return;
+        times = t;
+        spellTimes.current = t;
       })
       .catch(() => {
         // Without it, no cooldowns
@@ -356,6 +372,14 @@ export function GameView({
   const [guildHalls, setGuildHalls] = useState<Extract<GuildEvent, { type: "halls" }>["halls"] | null>(null);
   /** command.c pinfo.resting: after "rest", until "stand" */
   const restingRef = useRef(false);
+  /** Study mode (study.ts): the study under way, and the banner's line about it */
+  const studyRef = useRef<StudySession | null>(null);
+  const [studying, setStudying] = useState<string | null>(null);
+  /** Mana a second while resting, this character's (study.ts), for the estimates */
+  const studyRegen = useRef<number | null>(null);
+  /** The study's tick, which reads this render's functions */
+  const studyTickRef = useRef<(refusal?: SpellRefusal) => void>(() => {});
+  const stopStudyRef = useRef<() => void>(() => {});
   /** The room's map annotations (annotate.c), by its security checksum, and the one being edited */
   const [annotations, setAnnotations] = useState<{ security: number; list: MapAnnotation[] } | null>(() => {
     const p = session.world.player;
@@ -673,6 +697,8 @@ export function GameView({
     window.addEventListener("pointerdown", alive, opts);
     const timer = setInterval(() => {
       const s = getSettings();
+      // Study mode is the player's choice to be away: it ends with its own log off
+      if (studyRef.current) last = Date.now();
       if (s.logoutTimer && s.logoutMinutes > 0 && Date.now() - last >= s.logoutMinutes * 60_000) logoutRef.current();
     }, 10_000);
     return () => {
@@ -681,6 +707,57 @@ export function GameView({
       clearInterval(timer);
     };
   }, []);
+
+  // Study mode's clock: a tick twice a second while shown, and every 5 s from a worker (timers in
+  // hidden tabs are throttled), on every change to our stats, and on the server's refusals
+  const studyActive = studying !== null;
+  useEffect(() => {
+    if (!studyActive) return;
+    const tick = () => studyTickRef.current();
+    const timer = setInterval(tick, STUDY_TICK_MS);
+    let worker: Worker | null = null;
+    try {
+      worker = new Worker(new URL("./pingWorker.ts", import.meta.url), { type: "module" });
+      worker.onmessage = tick;
+    } catch {
+      // No workers: the interval alone
+    }
+    const offStats = session.world.on((e) => e.type === "stats" && tick());
+    const offRefused = session.onSpellRefused((r) => studyTickRef.current(r));
+    // Esc, a movement key, attacking or a click in the view: the player is back
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
+      if (e.code === "Escape" || actionsFor(getSettings().keys, e.code, { alt: e.altKey, ctrl: e.ctrlKey }).some((a) => STUDY_STOP_ACTIONS.has(a)))
+        stopStudyRef.current();
+    };
+    const canvas = canvasRef.current;
+    const onPointer = () => stopStudyRef.current();
+    window.addEventListener("keydown", onKey, true);
+    canvas?.addEventListener("pointerdown", onPointer);
+    // Keep a phone's screen on: Android freezes the app soon after it's put away
+    let lock: WakeLockSentinel | null = null;
+    let live = true;
+    navigator.wakeLock
+      ?.request("screen")
+      .then((l) => {
+        if (live) lock = l;
+        else void l.release();
+      })
+      .catch(() => {
+        // Not allowed (no user gesture, a desktop without it): fine
+      });
+    return () => {
+      live = false;
+      clearInterval(timer);
+      worker?.terminate();
+      offStats();
+      offRefused();
+      window.removeEventListener("keydown", onKey, true);
+      canvas?.removeEventListener("pointerdown", onPointer);
+      void lock?.release();
+    };
+  }, [studyActive, session]);
   // map.c MapEnterRoom: the new room's annotations
   useEffect(
     () =>
@@ -917,6 +994,7 @@ export function GameView({
 
   /** mermain.c A_CASTSPELL: not while paralyzed or resting */
   const castSpell = (spell: number, numTargets: number) => {
+    stopStudy();
     if (session.world.effects.paralyzed) return session.localMessage("You can't lift your hands to cast the spell!");
     if (restingRef.current) return session.localMessage("You can't cast spells while you're resting.");
     sceneRef.current?.castSpell(spell, numTargets);
@@ -945,13 +1023,137 @@ export function GameView({
 
   /** command.c CommandRest / CommandStand: the server's resting, and ours (no moving or fighting) */
   const setResting = (on: boolean) => {
+    stopStudy();
     if (on === restingRef.current) return session.localMessage(on ? "You're already resting." : "You're not resting.");
+    restNow(on);
+  };
+  const restNow = (on: boolean) => {
+    if (on === restingRef.current) return;
     session.userCommand(on ? UC.REST : UC.STAND);
     session.localMessage(on ? "You rest." : "You stop resting.");
     restingRef.current = on;
     setRestingShown(on);
     if (sceneRef.current) sceneRef.current.resting = on;
   };
+
+  // ---- Study mode (ours; study.ts): practise a spell while away, so players needn't run bots ----
+  const englishName = (res: number) => (session.englishResource(res) ?? "").toLowerCase();
+  const studySnapshot = (): StudySnapshot => {
+    const main = session.world.stats.get(STAT_GROUP.MAIN);
+    const mp = main?.find((st) => st.num === STAT_MP)?.numeric;
+    const hp = main?.find((st) => st.num === STAT_HP)?.numeric;
+    return { mana: mp?.value ?? null, maxMana: mp?.currentMax ?? null, hp: hp?.value ?? null, resting: restingRef.current };
+  };
+  /** What we carry, by English name: number items (reagents) by their amount */
+  const carried = () =>
+    carriedCounts([...session.world.inventory.values()].map((o) => ({ name: englishName(o.nameRes), amount: isNumberItem(o.id) ? o.amount : 1 })));
+  const studyMemory = () => loadStudyMemory(localStorage, gameSocketUrl(), charName);
+  const studySpells = (): StudySpell[] =>
+    session.world.spells
+      .map((sp) => {
+        const key = englishName(sp.object.nameRes);
+        return { key, label: session.resource(sp.object.nameRes) ?? key, info: spellTimes.current[key] };
+      })
+      .filter((sp) => sp.key)
+      .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
+  const studySpell = (key: string) => session.world.spells.find((sp) => englishName(sp.object.nameRes) === key);
+
+  /** The Study window, on `spell` (an English name) or the last one studied */
+  const openStudy = (spell?: string) => {
+    if (studyRef.current) return session.localMessage("You're already studying. Stop first (Esc).");
+    const memory = spell ? { ...studyMemory(), spell } : studyMemory();
+    const snap = studySnapshot();
+    setModal({ type: "study", spells: studySpells(), carried: carried(), mana: snap.mana ?? 0, maxMana: snap.maxMana ?? 0, memory });
+  };
+
+  /** The banner's line: the spell, the casts, what we're doing and the time left */
+  const studyLine = (st: StudySession) => {
+    const sp = studySpell(st.config.spell);
+    const name = sp ? (session.resource(sp.object.nameRes) ?? st.config.spell) : st.config.spell;
+    const snap = studySnapshot();
+    const left = st.config.count === null ? null : Math.max(st.config.count - st.casts, 0);
+    const est = studyEstimate(
+      st.info, left, castsFromReagents(st.info, (n) => carried().get(n) ?? 0), snap.mana ?? 0, snap.maxMana ?? 0, st.regen ?? studyRegen.current ?? DEFAULT_REST_REGEN,
+    );
+    const doing: Record<StudyPhase, string> = {
+      cast: "Casting", confirm: "Casting", cooldown: "Casting", done: "Done",
+      rest: `Resting (mana ${snap.mana ?? "?"}/${snap.maxMana ?? "?"})`,
+    };
+    const count = st.config.count === null ? "" : ` / ${st.config.count}`;
+    const time = est.seconds === null ? "" : ` · ${formatDuration(est.seconds)} left`;
+    return `Studying ${name}: ${st.casts}${count} · ${doing[st.phase]}${time}`;
+  };
+
+  const endStudy = (st: StudySession, reason: string, logOff: boolean) => {
+    studyRef.current = null;
+    setStudying(null);
+    // Keep this character's resting rate for the next estimate
+    if (st.regen !== null) {
+      studyRegen.current = st.regen;
+      saveStudyMemory(localStorage, gameSocketUrl(), charName, { ...studyMemory(), regen: st.regen });
+    }
+    session.localMessage(`${reason} (${st.casts} cast${st.casts === 1 ? "" : "s"})`);
+    if (logOff) onLogout(`${reason} You studied ${st.casts} cast${st.casts === 1 ? "" : "s"} and were logged off.`);
+  };
+
+  /** Do what the study says: cast (on ourselves, for a spell that wants a target), rest, stand, end */
+  const runStudy = (actions: StudyAction[]) => {
+    const st = studyRef.current;
+    if (!st) return;
+    for (const a of actions) {
+      switch (a.type) {
+        case "cast": {
+          const sp = studySpell(st.config.spell);
+          if (!sp) return runStudy(st.cancel(`You don't know ${st.config.spell} any more.`));
+          const self = session.world.player?.id;
+          // Paralyzed: the cast goes unconfirmed, and enough of those end the study
+          if (!session.world.effects.paralyzed) session.cast(sp.object.id, sp.numTargets && self !== undefined ? [{ id: self, amount: 1 }] : []);
+          break;
+        }
+        case "rest":
+          restNow(true);
+          break;
+        case "stand":
+          restNow(false);
+          break;
+        case "finish":
+          return endStudy(st, a.reason, a.logOff);
+      }
+    }
+    setStudying(studyLine(st));
+  };
+
+  const startStudy = (config: StudyConfig) => {
+    setModal(null);
+    const info = spellTimes.current[config.spell];
+    const sp = studySpell(config.spell);
+    if (!info || !sp) return;
+    const memory = studyMemory();
+    studyRegen.current = memory.regen;
+    saveStudyMemory(localStorage, gameSocketUrl(), charName, { ...memory, spell: config.spell, count: config.count, logOff: config.logOff });
+    const st = new StudySession(config, info);
+    studyRef.current = st;
+    session.localMessage(`You begin studying ${session.resource(sp.object.nameRes) ?? config.spell}. Esc, a movement key or a click in the view stops it.`);
+    setStudying(studyLine(st));
+    studyTickRef.current();
+  };
+
+  /** The player is back (or chose to stop): no log off */
+  const stopStudy = () => {
+    const st = studyRef.current;
+    if (st) runStudy(st.cancel());
+  };
+
+  useEffect(() => {
+    stopStudyRef.current = stopStudy;
+    studyTickRef.current = (refusal?: SpellRefusal) => {
+      const st = studyRef.current;
+      if (!st) return;
+      const now = performance.now();
+      const snap = studySnapshot();
+      runStudy(refusal ? st.refused(refusal.reason, refusal.spell, now, snap) : st.step(now, snap));
+    };
+  });
 
   /** groups.c results: save the groups, tell the player */
   const applyGroups = (r: GroupResult) => {
@@ -1072,6 +1274,13 @@ export function GameView({
       }
       case "quit":
         return onLogout();
+      case "study": {
+        if (!args.trim()) return openStudy();
+        const sp = findSpell(world.spells.map((x) => ({ ...x, name: session.resource(x.object.nameRes) ?? "" })), args);
+        if (sp === "none") return session.localMessage("There is no spell with that name.");
+        if (sp === "ambiguous") return session.localMessage("That spell name is ambiguous.");
+        return openStudy(englishName(sp.object.nameRes));
+      }
       case "hel":
         return session.localMessage('Type the entire word "help" to open help.');
       case "help":
@@ -1415,8 +1624,9 @@ export function GameView({
           { label: "Mail…", onSelect: openMail },
           { label: "Change password…", onSelect: () => setModal({ type: "password" }) },
           { label: "Logout timer…", onSelect: () => setModal({ type: "logoutTimer" }) },
+          { label: studying ? "Stop studying" : "Study…", onSelect: () => (studying ? stopStudy() : openStudy()) },
           { label: "About Meridian…", onSelect: () => setModal({ type: "about" }) },
-          { label: "Log off", onSelect: onLogout },
+          { label: "Log off", onSelect: () => onLogout() },
         ]}
         // The Classic interface has the meter after the toolbar, as the original's lag box
         latency={settings.latencyMeter && !classic ? latency : undefined}
@@ -1620,6 +1830,14 @@ export function GameView({
             {hideNote.hidden ? `Interface hidden (${hideKeyLabel} shows it)` : "Interface shown"}
           </div>
         )}
+        {studying && (
+          <div className="study-banner" role="status">
+            <span>{studying}</span>
+            <button type="button" onClick={() => stopStudy()}>
+              Stop
+            </button>
+          </div>
+        )}
         {selecting && !touch && <div className="select-hint">Choose a target, or your face or bars for yourself (Esc or right click cancels)</div>}
         {(phase === "entering" || status?.loading) && <div className="loading">Entering…</div>}
         {desc && (
@@ -1734,6 +1952,17 @@ export function GameView({
           />
         )}
         {modal?.type === "about" && <AboutDialog assets={assets} session={session} icons={icons} audio={audio} onClose={() => setModal(null)} />}
+        {modal?.type === "study" && (
+          <StudyDialog
+            spells={modal.spells}
+            carried={modal.carried}
+            mana={modal.mana}
+            maxMana={modal.maxMana}
+            memory={modal.memory}
+            onStart={startStudy}
+            onClose={() => setModal(null)}
+          />
+        )}
         {modal?.type === "logoutTimer" && (
           <LogoutTimerDialog settings={settings} iconUrl={assets.url("ui/clock.ico")} onApply={updateSettings} onClose={() => setModal(null)} />
         )}

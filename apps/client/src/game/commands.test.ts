@@ -91,6 +91,12 @@ describe("names, groups, tells and spells", () => {
     expect(resolveTell("Bob", players, groups)).toBeNull();
   });
 
+  test("study (ours) takes a spell's name, and leaves the original's starts alone", () => {
+    expect(parseCommand("study blink")).toEqual({ id: "study", args: "blink" });
+    expect(parseCommand("stu")).toEqual({ id: "study", args: "" });
+    expect(parseCommand("st")).toEqual({ id: "stand", args: "" });
+  });
+
   test("spells by whole name or a unique start", () => {
     const spells = [{ name: "Minor Heal" }, { name: "Major Heal" }, { name: "Blink" }];
     expect(findSpell(spells, "blink")).toEqual({ name: "Blink" });

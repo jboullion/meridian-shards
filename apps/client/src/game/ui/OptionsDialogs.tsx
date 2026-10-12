@@ -19,6 +19,7 @@ import type { AudioPreview } from "../audio.ts";
 import { MAX_PROFANE_TERM } from "@shards/world";
 import { profanity, saveProfanity } from "../profanity.ts";
 import { Button, Check, GroupBox, ListBox, Select, Tabs, Text, TextField, Trackbar, Window, at, type Rect } from "./kit.tsx";
+import { DEFAULT_REST_REGEN, castsFromReagents, formatDuration, studyEstimate, type StudyConfig, type StudyMemory, type StudySpellInfo } from "../study.ts";
 
 type Patch = Partial<Settings>;
 
@@ -295,6 +296,93 @@ export function LogoutTimerDialog({ settings, iconUrl, onApply, onClose }: { set
           OK
         </Button>
         <Button at={[82, 61, 45, 14]} onClick={onClose}>
+          Cancel
+        </Button>
+      </form>
+    </DluDialog>
+  );
+}
+
+/** A spell Study can practise: its English name (spelltimes.json's key), the name shown, its data */
+export interface StudySpell {
+  key: string;
+  label: string;
+  info: StudySpellInfo | undefined;
+}
+
+/**
+ * Study (ours; study.ts): practise a spell while away. Pick the spell and how many times; the
+ * window says how many casts the reagents we carry are enough for, and about how long it takes.
+ */
+export function StudyDialog({
+  spells, carried, mana, maxMana, memory, onStart, onClose,
+}: {
+  spells: StudySpell[];
+  /** How much of each item we carry, by English name in lower case */
+  carried: ReadonlyMap<string, number>;
+  mana: number;
+  maxMana: number;
+  /** The last choices, and the rate this character's mana comes back resting */
+  memory: StudyMemory;
+  onStart: (config: StudyConfig) => void;
+  onClose: () => void;
+}) {
+  const [spell, setSpell] = useState<string | null>(() => spells.find((s) => s.key === memory.spell)?.key ?? spells[0]?.key ?? null);
+  const [untilOut, setUntilOut] = useState(memory.count === null);
+  const [count, setCount] = useState(String(memory.count ?? 10));
+  const [logOff, setLogOff] = useState(memory.logOff);
+  const chosen = spells.find((s) => s.key === spell);
+  const wanted = untilOut ? null : Math.max(Number.parseInt(count, 10) || 0, 0);
+  let note: string;
+  let ready = false;
+  if (!chosen) note = "You don't know any spells yet.";
+  else if (!chosen.info) note = "There's no data for this spell in the game files: rebuild the assets.";
+  else if (maxMana > 0 && maxMana < chosen.info.mana) note = `${chosen.label} needs ${chosen.info.mana} mana, more than you can hold.`;
+  else if (wanted === 0) note = "Cast it how many times?";
+  else {
+    const info = chosen.info;
+    const known = info.reagents !== undefined;
+    const reagentCasts = castsFromReagents(info, (n) => carried.get(n) ?? 0);
+    const est = studyEstimate(info, wanted, reagentCasts, mana, maxMana, memory.regen ?? DEFAULT_REST_REGEN);
+    const reagents = !known ? "Reagents unknown (rebuild the assets)." : reagentCasts === null ? "Needs no reagents." : `Reagents for ${reagentCasts} cast${reagentCasts === 1 ? "" : "s"}.`;
+    const then = logOff ? "then log off" : "then stop";
+    if (reagentCasts === 0) note = `${reagents} You have none for ${chosen.label}.`;
+    else if (est.casts === null) note = `${reagents} Casts it until you stop it.`;
+    else {
+      const guess = memory.regen === null && est.casts * info.mana > mana ? " (a guess until you've rested once)" : "";
+      note = `${reagents} ${est.casts} cast${est.casts === 1 ? "" : "s"}, ${formatDuration(est.seconds ?? 0)}${guess}, ${then}.`;
+    }
+    ready = reagentCasts !== 0;
+  }
+  return (
+    <DluDialog title="Study" size={[190, 168]} onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (ready && chosen) onStart({ spell: chosen.key, count: wanted, logOff });
+        }}
+      >
+        <Text at={[8, 6, 174, 8]}>Practise a spell while you're away:</Text>
+        <ListBox
+          at={[8, 16, 174, 70]}
+          label="Spells"
+          items={spells.map((s) => ({ key: s.key, label: s.label }))}
+          selected={spell}
+          onSelect={setSpell}
+          autoFocus
+        />
+        <Text at={[8, 93, 40, 8]}>Cast it</Text>
+        <TextField at={[40, 91, 30, 14]} value={count} onChange={(v) => setCount(v.replace(/\D/g, ""))} maxLength={5} disabled={untilOut} />
+        <Text at={[74, 93, 20, 8]}>times</Text>
+        <Check at={[100, 93, 82, 10]} label="Until out of reagents" checked={untilOut} onChange={setUntilOut} />
+        <Check at={[8, 108, 174, 10]} label="Log off when done" checked={logOff} onChange={setLogOff} />
+        <Text at={[8, 121, 174, 24]} wrap className="study-note">
+          {note}
+        </Text>
+        <Button at={[38, 148, 50, 14]} type="submit" isDefault disabled={!ready}>
+          Start
+        </Button>
+        <Button at={[102, 148, 50, 14]} onClick={onClose}>
           Cancel
         </Button>
       </form>

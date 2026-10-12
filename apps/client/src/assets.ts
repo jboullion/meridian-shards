@@ -12,6 +12,13 @@ interface Manifest {
   files: Record<string, { size: number; hash: string }>;
 }
 
+/** A spell's entry in spelltimes.json (tools/assets/spellTimes.ts) */
+export interface SpellTimes {
+  postCast: number;
+  mana: number;
+  reagents?: { name: string; plural?: string; amount: number }[];
+}
+
 export class AssetStore {
   private manifest: Manifest | null = null;
   private bytes = new Map<string, Promise<Uint8Array>>();
@@ -136,10 +143,13 @@ export class AssetStore {
     return JSON.parse(new TextDecoder().decode(await this.download("itemslots.json"))) as Record<string, string>;
   }
 
-  /** Spell name (lower case) -> its post-cast delay and mana (spelltimes.json from the asset build); empty without one. */
-  async spellTimes(): Promise<Record<string, { postCast: number; mana: number }>> {
+  /**
+   * Spell name (lower case) -> its post-cast delay, mana and reagents (spelltimes.json from the asset
+   * build; reagents missing in builds before Study mode); empty without one.
+   */
+  async spellTimes(): Promise<Record<string, SpellTimes>> {
     if (!this.has("spelltimes.json")) return {};
-    return JSON.parse(new TextDecoder().decode(await this.download("spelltimes.json"))) as Record<string, { postCast: number; mana: number }>;
+    return JSON.parse(new TextDecoder().decode(await this.download("spelltimes.json"))) as Record<string, SpellTimes>;
   }
 
   async palette(): Promise<Palette> {

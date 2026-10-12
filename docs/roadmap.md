@@ -308,6 +308,21 @@ Towns and inns that feel lived in, with no help from the server: each client mak
 - [x] **The arena's fights** (2026-10-11): 4-8 fighters and mages on the floor (two mages at least), closed from 10 pm to 6 am. Fighters chase their opponent and swing in reach; mages back away and cast: fireballs, lightning bolts, fire walls, bramble walls, poison fog, rings of flames and webs that hold their victim. They fight in rounds: blows and spells take health, the beaten go to the stands (as beaten players do), and the last one standing wins to applause before the next lot comes in. Cheers half as often.
 - [x] **Ambient sounds** (2026-10-11, first pass, to be tuned by ear; [ambient-sounds.md](ambient-sounds.md)): chatter under the townsfolk, inn patrons, courtiers and the arena crowd, as loud as how many are about and muffled in the rain; the arena's weapons, spells, cheers and applause; dice and drinks in the inns; thunder after each lightning strike; birdsong under flocks, wings as bats pass, critters squeaking, fish splashing, splashing steps in puddles. The game's own sounds where they fit, CC0 recordings (BigSoundBank) for the chatter, crowd and thunder. The Ambient Sounds option and its volume in the Bind Editor's Options and the phone's Configuration.
 
+### 16. Study mode (ours, 2026-10-12)
+
+Players of the original ran bots to cast spells while away, to raise them. Study mode does it inside the client, so nobody needs a bot. The server sees only what a player at the keys would send. It can't grant training points or skill: each cast improves the spell or not by the server's own roll.
+
+- [x] **Study…** in the ☰ menu, or typed `study [spell]`, opens the Study window (`OptionsDialogs.tsx StudyDialog`). You pick a spell and how many casts, or "until out of reagents", and whether to log off when done. The window shows how many casts the reagents you carry are enough for, and about how long the study will take.
+- [x] **The study** (`apps/client/src/game/study.ts`):
+  - It casts the spell, on yourself if it wants a target, and waits the spell's post-cast delay plus a little jitter between casts.
+  - It rests when your mana runs short and stands when the mana is back.
+  - It stops when the reagents run out (the server's "You don't have the reagents to cast…") or the count is reached, and logs off if chosen, saying why on the login screen.
+  - It also stops, and logs off, if you're hurt, and it stops on its own after three casts in a row that don't go ahead.
+- [x] **Stopping it:** a banner over the view shows the casts, what it's doing and the time left, with Stop. Esc, a movement key, attacking, a click in the view or casting by hand also stop it, and the Logout timer waits while it runs.
+- [x] **Reagents** come from the Kod spells' `ResetReagents` (`spelltimes.json`, `tools/assets/spellTimes.ts`), named by each item's English name and plural.
+- [x] **Mana** comes back at a guessed rate until a rest has measured this character's, which is then kept for the next estimate.
+- [ ] **Try it on our server:** confirm that Server 104's refusal messages match `spellRefusal.ts`, and that a reagent bag or ring counts as the client expects.
+
 ## What the slice must prove
 
 - [x] An unmodified Server 104 `blakserv` (plus config changes only) serves browser players through the gateway (the protocol side; proven with the headless client).
@@ -358,3 +373,5 @@ Towns and inns that feel lived in, with no help from the server: each client mak
 - **2026-10-11:**
   - A new icon and logo: five red roses after the original client's icon, with the yellow shard standing among them where its sword was (an AI painting from the original icon, cut out as `tools/icons/emblem.png`). It's the logo everywhere: `npm run icons` makes the desktop and Android icons and the browser's favicons from it, and the website will use it too.
   - Ambient life (milestone 15): townsfolk walk the towns from door to door and patrons gather in the inns, seen by each player alone.
+- **2026-10-12:**
+  - Study mode (milestone 16): practise a spell while away, with the casts the reagents allow and the time it will take shown first.

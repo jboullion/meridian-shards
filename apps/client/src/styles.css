@@ -898,6 +898,57 @@ button.link {
   color: rgb(240, 208, 25);
 }
 
+/* Study mode (GameView studying): what it's doing, and Stop, over the top of the view */
+.view .study-banner {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  z-index: 6;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  padding: 4px 6px 4px 12px;
+  border: 1px solid rgba(240, 208, 25, 0.6);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.6);
+  font: bold 13px Georgia, "Times New Roman", serif;
+  color: rgb(240, 208, 25);
+  text-shadow: 1px 1px 0 #000;
+}
+
+.view .study-banner span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.view .study-banner button {
+  flex: none;
+  padding: 2px 10px;
+  border: 1px solid rgb(240, 208, 25);
+  border-radius: 2px;
+  background: #2a1d10;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.game.modern-ui .view .study-banner {
+  top: calc(96px * var(--hud-scale, 1));
+}
+
+.game.touch-ui .view .study-banner {
+  top: 48px;
+  font-size: 12px;
+}
+
+/* The Study window's estimate */
+.mk-text.study-note {
+  white-space: normal;
+}
+
 .portrait {
   position: relative;
 }

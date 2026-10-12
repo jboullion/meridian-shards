@@ -9,7 +9,14 @@
 //
 // spell.kod CanPayCosts starts the caster's attack timer (player.kod IsOkayAttackTime) for
 // viPostCast_time seconds when a cast goes ahead, and no spell or attack works until it runs out.
-// Output: { "blink": { postCast: 1, mana: 8 }, ... } by the spell's English name in lower case.
+// Its reagents, for Study mode's count of casts left (apps/client study.ts), are its ResetReagents:
+//
+//   ResetReagents() { plReagents = $; plReagents = Cons([&Mushroom,2],plReagents); ... }
+//
+// named by each item class's English vrName ("mushroom"), as the inventory shows them, and its
+// vrName_plural ("mushrooms"), which numbitem.kod GetName gives for a stack of more than one.
+// Output: { "blink": { postCast: 1, mana: 8, reagents: [{ name: "emerald", amount: 1 }] }, ... }
+// by the spell's English name in lower case.
 
 import type { KodFile } from "./roomLinks.ts";
 
@@ -18,14 +25,19 @@ export interface SpellTimes {
   postCast: number;
   /** Its base mana cost (viMana), so a cast that went ahead can be told by our mana dropping */
   mana: number;
+  /** What one cast uses up, by item name in lower case (empty: none) */
+  reagents: { name: string; plural?: string; amount: number }[];
 }
 
 interface SpellClass {
   name: string;
   parent: string;
   nameRef: string | null;
+  pluralRef: string | null;
   postCast: number | null;
   mana: number | null;
+  /** [item class, amount] from its own ResetReagents, or null to inherit */
+  reagents: [string, number][] | null;
 }
 
 const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
@@ -43,12 +55,23 @@ function parseClass(file: KodFile, strings: Map<string, string>): SpellClass | n
     name: head[1],
     parent: head[2],
     nameRef: /\bvrName\s*=\s*(\w+)/.exec(src)?.[1] ?? null,
+    pluralRef: /\bvrName_plural\s*=\s*(\w+)/.exec(src)?.[1] ?? null,
     postCast: int("viPostCast_time"),
     mana: int("viMana"),
+    reagents: parseReagents(src),
   };
 }
 
-/** Spell name (lower case) -> its post-cast delay and mana, sorted by name. */
+function parseReagents(src: string): [string, number][] | null {
+  const head = /^\s*ResetReagents\s*\(\s*\)\s*\{/m.exec(src);
+  if (!head) return null;
+  // The message runs to its first closing brace: ResetReagents holds no blocks
+  const start = head.index + head[0].length;
+  const body = src.slice(start, src.indexOf("}", start));
+  return [...body.matchAll(/\[\s*&(\w+)\s*,\s*(\d+)\s*\]/g)].map((m) => [m[1], Number(m[2])]);
+}
+
+/** Spell name (lower case) -> its post-cast delay, mana and reagents, sorted by name. */
 export function buildSpellTimes(kodFiles: KodFile[]): Record<string, SpellTimes> {
   // Kod resource names are global: a class's vrName may name a parent's resource
   const strings = new Map<string, string>();
@@ -63,18 +86,40 @@ export function buildSpellTimes(kodFiles: KodFile[]): Record<string, SpellTimes>
     const seen = new Set<string>();
     let postCast: number | null = null,
       mana: number | null = null,
-      nameRef: string | null = null;
+      nameRef: string | null = null,
+      reagents: [string, number][] | null = null;
     for (let k: SpellClass | undefined = c; k && !seen.has(k.name.toLowerCase()); k = classes.get(k.parent.toLowerCase())) {
       seen.add(k.name.toLowerCase());
       postCast ??= k.postCast;
       mana ??= k.mana;
       nameRef ??= k.nameRef;
+      reagents ??= k.reagents;
     }
     if (!seen.has("spell") || c.name.toLowerCase() === "spell") continue;
     const name = nameRef ? strings.get(nameRef) : undefined;
     // Abstract classes inherit a parent's name ("spell", "teleportation spell"): only a class's own counts
     if (!name || !c.nameRef) continue;
-    out.set(name.toLowerCase(), { postCast: postCast ?? 1, mana: mana ?? 0 });
+    out.set(name.toLowerCase(), {
+      postCast: postCast ?? 1,
+      mana: mana ?? 0,
+      reagents: (reagents ?? []).flatMap(([cls, amount]) => {
+        const name = itemName(classes, strings, cls, "nameRef");
+        if (!name) return [];
+        const plural = itemName(classes, strings, cls, "pluralRef");
+        return [plural && plural.toLowerCase() !== name.toLowerCase() ? { name: name.toLowerCase(), plural: plural.toLowerCase(), amount } : { name: name.toLowerCase(), amount }];
+      }),
+    });
   }
   return Object.fromEntries([...out.entries()].sort(([a], [b]) => a.localeCompare(b)));
+}
+
+/** An item class's English name (or plural), its own or inherited; `$` (none) ends the search. */
+function itemName(classes: Map<string, SpellClass>, strings: Map<string, string>, cls: string, field: "nameRef" | "pluralRef"): string | undefined {
+  const seen = new Set<string>();
+  for (let k = classes.get(cls.toLowerCase()); k && !seen.has(k.name.toLowerCase()); k = classes.get(k.parent.toLowerCase())) {
+    seen.add(k.name.toLowerCase());
+    const ref = k[field];
+    if (ref) return strings.get(ref);
+  }
+  return undefined;
 }

@@ -339,7 +339,11 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       minigame={live.minigame.on}
       modules={live.modules.on}
       admin={live.admin.on}
-      onLogout={logout}
+      onLogout={(why?: string) => {
+        logout();
+        // Study mode logging off by itself: say why on the login screen
+        if (why) setError(why);
+      }}
       serverPrefs={serverPrefs}
       latency={latency}
     />

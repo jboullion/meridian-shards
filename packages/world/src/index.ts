@@ -5,6 +5,7 @@ export * from "./movement.ts";
 export * from "./text.ts";
 export * from "./chatChannel.ts";
 export * from "./combatHit.ts";
+export * from "./spellRefusal.ts";
 export * from "./roomAnim.ts";
 export * from "./profanity.ts";
 export * from "./chess.ts";
