@@ -66,27 +66,6 @@ export function saveQuickSlots(store: SlotStore, server: string, character: stri
   }
 }
 
-const lastKey = (server: string, character: string) => `shards.quickslots.last.${server}.${character.toLowerCase()}`;
-
-/** The slot used last (the phone's Cast button uses it again), or null. */
-export function loadLastSlot(store: SlotStore, server: string, character: string): number | null {
-  try {
-    const raw = store.getItem(lastKey(server, character));
-    const n = raw === null ? NaN : Number(raw);
-    return Number.isInteger(n) && n >= 0 && n < ALL_QUICK_SLOTS ? n : null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveLastSlot(store: SlotStore, server: string, character: string, slot: number): void {
-  try {
-    store.setItem(lastKey(server, character), String(slot));
-  } catch {
-    // storage unavailable: kept for this session
-  }
-}
-
 /** A slot for a spell or an inventory item, named with `name`. */
 export function slotFor(kind: QuickSlot["kind"], o: ObjectInfo, name: string): QuickSlot {
   return { kind, nameRes: o.nameRes, name, icon: o.iconRes };

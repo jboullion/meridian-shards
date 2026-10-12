@@ -345,7 +345,16 @@ async function runClient(browser: Browser, client: Client, shots: Shot[]): Promi
       }
       await place(page, m, shot);
       await settle(page);
-      await runSteps(page, client, shot);
+      try {
+        await runSteps(page, client, shot);
+      } catch (e) {
+        // what the page showed when a step failed, beside where the shot would go
+        const failed = join(opt.out!, shot.id, `${client}-failed.png`);
+        mkdirSync(dirname(failed), { recursive: true });
+        await page.screenshot({ path: failed }).catch(() => {});
+        const first = (e as Error).message.split(/\r?\n/)[0];
+        throw new Error(`${shot.id} (${client}): ${first} (the page: ${failed})`, { cause: e });
+      }
       await sleep(shot.steps.length ? 1500 : 0);
       const dir = join(opt.out!, shot.id);
       mkdirSync(dir, { recursive: true });

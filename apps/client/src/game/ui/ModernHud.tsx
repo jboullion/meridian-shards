@@ -1,16 +1,17 @@
 // The Modern interface's HUD over the view (ours; settings.ts interfaceStyle, desktop only):
-//   - UnitFrame, top left: our face, name and enchantments, and the toolbar's Rest/Stand and mailbox
+//   - UnitFrame, top left: our face, the three green bars beside it (health, mana, vigor:
+//     Sidebar.tsx HudBars) and our enchantments under them. The phone has it too (TouchControls.tsx).
 //   - TargetFrame, top centre: what's targeted, and a button to clear it
-//   - MapCluster, top right: the minimap in a round frame (a click opens the full map), its zoom
-//     buttons, and the room's name and enchantments. The character window and the rest have keys.
-//   - ActionBar, bottom centre: health and mana, vigor, the quick slots (Hotbar) and experience.
+//   - MapCluster, top right: the minimap in a round frame (a click opens the full map), the
+//     toolbar's Rest/Stand and mailbox at its top corners and its zoom buttons at the bottom, and
+//     the room's name and enchantments. The character window and the rest have keys.
+//   - ActionBar, bottom centre: the quick slots (Hotbar) alone, as on the phone.
 //     The hands stay in the view's corners, as in Classic: their art is cut off along the outer
 //     edge (it's meant to run off the screen), so anywhere else the swing shows a straight cut.
 // The Classic interface draws the same things in the original's column (Sidebar.tsx).
 
 import type { ReactNode } from "react";
 import type { Room } from "@shards/formats";
-import { STAT_GROUP, STAT_TAG, STATS, type Statistic } from "@shards/protocol";
 import type { GameSession } from "@shards/world";
 import type { AssetStore } from "../../assets.ts";
 import type { MapAnnotation } from "../annotations.ts";
@@ -21,7 +22,7 @@ import type { Settings } from "../settings.ts";
 import { useWorld } from "./hooks.ts";
 import { MiniMap } from "./MiniMap.tsx";
 import { Hotbar } from "./QuickSlots.tsx";
-import { ObjIcon, PortraitIcon, STAT_HP, STAT_MP, STAT_VIGOR, STAT_XP, barValues } from "./Sidebar.tsx";
+import { HudBars, HudEnchantments, ObjIcon, PortraitIcon } from "./Sidebar.tsx";
 import { ToolbarButtonView, type ToolbarButton } from "./Toolbar.tsx";
 
 /** include/proto.h OF_ATTACKABLE */
@@ -53,15 +54,14 @@ function Enchantments({ session, icons, kind, tooltips, onLook }: { session: Gam
 }
 
 export function UnitFrame({
-  session, icons, settings, buttons, assets, selecting, onSelectSelf, onLook,
+  session, icons, settings, selecting, onSelectSelf, onLook, touch = false,
 }: {
   session: GameSession;
   icons: IconRenderer;
-  assets: AssetStore;
   settings: Settings;
-  /** Rest/Stand and the mailbox (none with Show toolbar off) */
-  buttons?: ToolbarButton[];
-  /** Picking a spell target: a click on our face picks us */
+  /** The phone's: its enchantments bigger, a tap looking at one */
+  touch?: boolean;
+  /** Picking a spell target: a click on our face or our bars picks us */
   selecting: boolean;
   onSelectSelf: () => void;
   onLook: (id: number) => void;
@@ -83,18 +83,16 @@ export function UnitFrame({
         >
           {self && <PortraitIcon icons={icons} object={self.info} />}
         </div>
+        {/* The green bars, our enchantments under them */}
         <div className="unit-side">
-          <div className="unit-name">{self ? (session.resource(self.info.nameRes) ?? "") : ""}</div>
-          {buttons && (
-            <div className="unit-buttons" role="toolbar" aria-label="Toolbar">
-              {buttons.map((b) => (
-                <ToolbarButtonView key={b.bitmap} assets={assets} button={b} tooltips={settings.tooltips} />
-              ))}
-            </div>
+          <HudBars session={session} icons={icons} onSelectSelf={selecting ? onSelectSelf : undefined} />
+          {touch ? (
+            <HudEnchantments session={session} icons={icons} kind="player" onLook={onLook} />
+          ) : (
+            <Enchantments session={session} icons={icons} kind="player" tooltips={settings.tooltips} onLook={onLook} />
           )}
         </div>
       </div>
-      <Enchantments session={session} icons={icons} kind="player" tooltips={settings.tooltips} onLook={onLook} />
     </div>
   );
 }
@@ -150,8 +148,10 @@ function MapButton({ label, className, onClick, children }: {
 }
 
 export function MapCluster({
-  session, icons, assets, settings, getRoom, roomName, annotations, onAnnotate, onLook, onZoom, onMap,
+  session, icons, assets, settings, buttons, getRoom, roomName, annotations, onAnnotate, onLook, onZoom, onMap,
 }: {
+  /** The toolbar's Rest/Stand and mailbox, at the map's top corners (none with Show toolbar off) */
+  buttons?: ToolbarButton[];
   session: GameSession;
   icons: IconRenderer;
   assets: AssetStore;
@@ -192,6 +192,9 @@ export function MapCluster({
         <MapButton label="Zoom in" className="zoom-in" onClick={() => onZoom(1)}>
           +
         </MapButton>
+        {buttons?.map((b, i) => (
+          <ToolbarButtonView key={b.bitmap} assets={assets} button={b} tooltips={settings.tooltips} className={`map-tool ${i ? "top-right" : "top-left"}`} />
+        ))}
       </div>
       {roomName && <div className="map-room-name">{roomName}</div>}
       <Enchantments session={session} icons={icons} kind="room" tooltips={settings.tooltips} onLook={onLook} />
@@ -199,23 +202,8 @@ export function MapCluster({
   );
 }
 
-/** One of the action bar's bars: the fill, the limit bar, and "value / max" (or XP). */
-function HudBar({ stat, kind, xpAsPercent = false }: { stat: Statistic; kind: string; xpAsPercent?: boolean }) {
-  const n = stat.numeric!;
-  const { value, limit, max, low, xp } = barValues(stat, true);
-  const text = xp ? (xpAsPercent ? `${Math.floor(value)}% XP` : `${n.value} / ${n.max} XP`) : `${n.value} / ${max}`;
-  return (
-    <div className={`hud-bar ${kind}${low ? " low" : ""}`} title={xp ? text : undefined}>
-      <div className="fill" style={{ width: `${value}%` }} />
-      {limit > value && <div className="limit" style={{ left: `${value}%`, width: `${limit - value}%` }} />}
-      {/* The XP bar is a thin line: its numbers on hover */}
-      {!xp && <span className="hud-bar-text">{text}</span>}
-    </div>
-  );
-}
-
 export function ActionBar({
-  session, icons, settings, slots, selecting, onSelectSelf, onUse, onEdit, onSet, onSwap, cooldown,
+  session, icons, settings, slots, onUse, onEdit, onSet, onSwap, cooldown,
 }: {
   /** The spell cooldown, on the spell slots (cooldowns.ts) */
   cooldown: Cooldown | null;
@@ -223,38 +211,19 @@ export function ActionBar({
   icons: IconRenderer;
   settings: Settings;
   slots: QuickSlots;
-  selecting: boolean;
-  onSelectSelf: () => void;
   onUse: (i: number) => void;
   onEdit: (i: number) => void;
   onSet: (i: number, slot: QuickSlot) => void;
   onSwap: (a: number, b: number) => void;
 }) {
-  const world = session.world;
-  useWorld(world, ["stats"]);
-  const main = new Map(
-    (world.stats.get(STAT_GROUP.MAIN) ?? []).filter((s) => s.type === STATS.NUMERIC && s.numeric?.tag === STAT_TAG.INT).map((s) => [s.num, s]),
-  );
-  const bar = (num: number, kind: string) => {
-    const s = main.get(num);
-    return s ? <HudBar stat={s} kind={kind} xpAsPercent={settings.xpAsPercent} /> : <div className={`hud-bar ${kind} empty`} />;
-  };
+  // Our bars are top left (UnitFrame): just the quick slots here, as on the phone
   return (
     <div className="action-bar">
-      {/* Picking a spell target: a click on our bars picks us, as on our face */}
-      <div className={selecting ? "action-bar-stats selecting" : "action-bar-stats"} onClick={() => selecting && onSelectSelf()}>
-        <div className="hud-bar-row">
-          {bar(STAT_HP, "health")}
-          {bar(STAT_MP, "mana")}
-        </div>
-        {bar(STAT_VIGOR, "vigor")}
-      </div>
       {/* The second row above the first (the numpad's keys; Second Hotbar, off by default), then the first (1-0) */}
       {settings.secondHotbar && (
         <Hotbar session={session} icons={icons} slots={slots} settings={settings} onUse={onUse} onEdit={onEdit} onSet={onSet} onSwap={onSwap} cooldown={cooldown} row={1} />
       )}
       <Hotbar session={session} icons={icons} slots={slots} settings={settings} onUse={onUse} onEdit={onEdit} onSet={onSet} onSwap={onSwap} cooldown={cooldown} />
-      {bar(STAT_XP, "xp")}
     </div>
   );
 }

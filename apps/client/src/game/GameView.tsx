@@ -43,7 +43,7 @@ import { languageName } from "./languages.ts";
 import { MAX_ANNOTATIONS, annotationAt, loadAnnotations, saveAnnotations, type MapAnnotation } from "./annotations.ts";
 import { useWorld } from "./ui/hooks.ts";
 import { TitleBar } from "./TitleBar.tsx";
-import { QUICK_SLOTS, emptySlots, loadLastSlot, loadQuickSlots, saveLastSlot, saveQuickSlots, slotItem, slotSpell, type QuickSlot, type QuickSlots } from "./quickSlots.ts";
+import { QUICK_SLOTS, emptySlots, loadQuickSlots, saveQuickSlots, slotItem, slotSpell, type QuickSlot, type QuickSlots } from "./quickSlots.ts";
 import { Hotbar, QuickSlotPicker } from "./ui/QuickSlots.tsx";
 import {
   DEFAULT_REST_REGEN, StudySession, carriedCounts, castsFromReagents, formatDuration, loadStudyMemory, saveStudyMemory, studyEstimate, type StudyAction,
@@ -434,18 +434,8 @@ export function GameView({
   // The quick slots (quickSlots.ts), kept per character: loaded once we know who we are
   const selfInfo = session.world.self;
   const charName = selfInfo ? (session.resource(selfInfo.info.nameRes) ?? "") : "";
-  // `last`: the slot used last, which a tap on the phone's Cast button uses again
-  const [quick, setQuick] = useState<{ name: string; slots: QuickSlots; last: number | null }>({ name: "", slots: emptySlots(), last: null });
-  if (charName && quick.name !== charName)
-    setQuick({
-      name: charName,
-      slots: loadQuickSlots(localStorage, gameSocketUrl(), charName),
-      last: loadLastSlot(localStorage, gameSocketUrl(), charName),
-    });
-  const setLastSlot = (i: number) => {
-    if (quick.name) saveLastSlot(localStorage, gameSocketUrl(), quick.name, i);
-    setQuick((q) => ({ ...q, last: i }));
-  };
+  const [quick, setQuick] = useState<{ name: string; slots: QuickSlots }>({ name: "", slots: emptySlots() });
+  if (charName && quick.name !== charName) setQuick({ name: charName, slots: loadQuickSlots(localStorage, gameSocketUrl(), charName) });
   const changeSlots = (change: (slots: QuickSlots) => QuickSlots) =>
     setQuick((q) => {
       const slots = change([...q.slots]);
@@ -1007,7 +997,6 @@ export function GameView({
   const activateSlot = (i: number) => {
     const slot = quick.slots[i];
     if (!slot) return setModal({ type: "quickSlot", index: i });
-    setLastSlot(i);
     const rs = (id: number) => session.resource(id) ?? "";
     if (slot.kind === "spell") {
       const s = slotSpell(slot, session.world.spells, rs);
@@ -1707,7 +1696,6 @@ export function GameView({
             session={session}
             icons={icons}
             settings={settings}
-            chat={chat}
             chatUnread={!chatOpen && chat.some((l) => l.time > chatSeenAt)}
             onMove={touchMove}
             onPress={touchPress}
@@ -1720,9 +1708,10 @@ export function GameView({
             // enchant.c WM_RBUTTONDOWN: look at the enchantment, as the interface's do
             onLook={(id) => lookAt(id, DESC.NONE)}
             quickSlots={quick.slots}
-            lastSlot={quick.last}
             onUseSlot={activateSlot}
             onEditSlot={(i) => setModal({ type: "quickSlot", index: i })}
+            onSetSlot={setSlot}
+            onSwapSlots={swapSlots}
             selecting={selecting}
             onSelectSelf={() => selfInfo && selectObject(selfInfo.id)}
             onCancelSelect={() => sceneRef.current?.select(null)}
@@ -1745,9 +1734,7 @@ export function GameView({
             <UnitFrame
               session={session}
               icons={icons}
-              assets={assets}
               settings={settings}
-              buttons={toolbarButtons}
               selecting={selecting}
               onSelectSelf={() => selfInfo && selectObject(selfInfo.id)}
               onLook={(id) => lookAt(id, DESC.NONE)}
@@ -1758,6 +1745,7 @@ export function GameView({
               icons={icons}
               assets={assets}
               settings={settings}
+              buttons={toolbarButtons}
               getRoom={() => sceneRef.current?.currentRoom ?? null}
               roomName={roomName}
               annotations={annotations?.list ?? []}
@@ -1772,8 +1760,6 @@ export function GameView({
               icons={icons}
               settings={settings}
               slots={quick.slots}
-              selecting={selecting}
-              onSelectSelf={() => selfInfo && selectObject(selfInfo.id)}
               onUse={activateSlot}
               onEdit={(i) => setModal({ type: "quickSlot", index: i })}
               onSet={setSlot}
@@ -2080,7 +2066,7 @@ export function GameView({
                     // Show colored text off (config.colorcodes): plain text, no colour codes
                     settings.coloredText
                       ? {
-                          // Over the view (Modern), dark colours lifted as the phone's ticker does
+                          // Over the view (Modern), dark colours lifted to read over it (tickerColor)
                           color: modern ? tickerColor(s.color) : s.color,
                           fontWeight: s.bold ? "bold" : undefined,
                           fontStyle: s.italic ? "italic" : undefined,

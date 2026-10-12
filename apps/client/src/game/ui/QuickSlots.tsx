@@ -1,16 +1,12 @@
 // The quick slots' faces (ours; quickSlots.ts holds the slots):
-//   - Hotbar: the desktop's row of ten along the bottom of the view. A click or the slot's
-//     key (Quick Slot 1-10: 1-9 and 0 by default) casts or uses it; an empty slot, or a right click,
-//     opens the picker. Drop a spell from the Spells list or an item from the inventory on a
-//     slot to fill it, or another slot to swap them.
-//   - QuickWheel: the phone layout's Cast button. Hold it and the slots open in a ring in the
-//     middle of the screen; slide (in that slot's direction, from where the finger went down)
-//     toward one and let go to cast it (let go in the middle to cancel), or keep the finger on
-//     one to change it. A tap casts the last slot again, whose icon the button shows (the first
-//     time, it opens the ring to tap a slot instead).
+//   - Hotbar: the row of ten along the bottom of the view, on the desktop and the phone. A click
+//     or tap, or the slot's key (Quick Slot 1-10: 1-9 and 0 by default), casts or uses it; an
+//     empty slot, or a right click (a long press on the phone), opens the picker. Drop a spell
+//     from the Spells list or an item from the inventory on a slot to fill it, or another slot
+//     to swap them.
 //   - QuickSlotPicker: a slot's spell or item, from the ones we know and carry.
 
-import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { isNumberItem, type GameSession } from "@shards/world";
 import type { ObjectInfo } from "@shards/protocol";
 import { bareIcon, type Drawable, type IconRenderer } from "../icons.ts";
@@ -89,9 +85,14 @@ export function CooldownMask({ cooldown }: { cooldown: Cooldown }) {
 const slotTitle = (view: SlotView | null, key: string) =>
   `${view ? view.slot.name + (view.available ? "" : view.slot.kind === "spell" ? " (not known)" : " (none carried)") : "Empty"}${key ? ` (${key})` : ""}`;
 
+/** The phone's hotbar: holding a slot this long changes it (as a right click does), ms */
+const SLOT_HOLD_MS = 500;
+
 export function Hotbar({
-  session, icons, slots, settings, onUse, onEdit, onSet, onSwap, cooldown, row = 0,
+  session, icons, slots, settings, onUse, onEdit, onSet, onSwap, cooldown, row = 0, touch = false,
 }: {
+  /** The phone's: no keys to show, no dragging, and a long press changes a slot */
+  touch?: boolean;
   /** Which row of ten: 0 the first (keys 1-0), 1 the Modern interface's second (the numpad) */
   row?: number;
   /** Ours: the spell cooldown to show on spell slots (the Modern interface's) */
@@ -108,6 +109,12 @@ export function Hotbar({
 }) {
   const world = session.world;
   const views = useSlotViews(session, slots);
+  // A long press (the phone): its slot, to change, and the tap after it isn't a use
+  const hold = useRef<{ timer: number; fired: boolean } | null>(null);
+  const endHold = () => {
+    if (hold.current) clearTimeout(hold.current.timer);
+  };
+  useEffect(() => endHold, []);
   const rs = (id: number) => session.resource(id) ?? "";
   const accepts = (e: DragEvent) => [DRAG_ITEM, DRAG_SPELL, DRAG_SLOT].some((t) => e.dataTransfer.types.includes(t));
   const drop = (i: number, e: DragEvent) => {
@@ -127,7 +134,7 @@ export function Hotbar({
       {views.slice(row * QUICK_SLOTS, (row + 1) * QUICK_SLOTS).map((v, j) => {
         const i = row * QUICK_SLOTS + j;
         const bound = settings.keys[`quickSlot${i + 1}` as Action][0];
-        const key = bound ? bindingLabel(bound) : "";
+        const key = bound && !touch ? bindingLabel(bound) : "";
         return (
           <button
             key={i}
@@ -135,18 +142,36 @@ export function Hotbar({
             className={`hotbar-slot${v ? "" : " empty"}${v?.inUse ? " in-use" : ""}`}
             title={settings.tooltips ? slotTitle(v, key) : undefined}
             aria-label={slotTitle(v, key)}
-            draggable={!!v}
+            draggable={!!v && !touch}
+            onPointerDown={(e) => {
+              if (!touch || e.pointerType === "mouse") return;
+              endHold();
+              const h = { timer: 0, fired: false };
+              h.timer = window.setTimeout(() => {
+                h.fired = true;
+                onEdit(i);
+              }, SLOT_HOLD_MS);
+              hold.current = h;
+            }}
+            onPointerUp={endHold}
+            onPointerLeave={endHold}
+            onPointerCancel={endHold}
             onDragStart={(e) => e.dataTransfer.setData(DRAG_SLOT, String(i))}
             onDragOver={(e) => accepts(e) && e.preventDefault()}
             onDrop={(e) => drop(i, e)}
             onClick={(e) => {
               // Don't leave the keyboard focus on the slot: the game's keys go on working
               e.currentTarget.blur();
+              if (hold.current?.fired) {
+                hold.current = null;
+                return;
+              }
               onUse(i);
             }}
             onContextMenu={(e) => {
               e.preventDefault();
-              onEdit(i);
+              // The phone's long press does it (a long press can fire this too)
+              if (!touch) onEdit(i);
             }}
           >
             <SlotFace icons={icons} view={v} cooldown={cooldown} />
@@ -155,211 +180,6 @@ export function Hotbar({
         );
       })}
     </div>
-  );
-}
-
-/** The ring's radius and the dead zone in its middle, px */
-const RING = 112;
-const DEAD = 28;
-/** A press longer than this (or a slide) opens the ring; resting on a slot this long changes it, ms */
-const HOLD_MS = 180;
-const EDIT_MS = 700;
-
-/** The slot a slide from the press points at: 0 straight up, then clockwise. */
-function slotAt(dx: number, dy: number): number | null {
-  if (Math.hypot(dx, dy) < DEAD) return null;
-  const a = Math.atan2(dx, -dy);
-  return (((Math.round(a / ((2 * Math.PI) / QUICK_SLOTS)) % QUICK_SLOTS) + QUICK_SLOTS) % QUICK_SLOTS);
-}
-
-const ringPos = (i: number) => {
-  const a = (i * 2 * Math.PI) / QUICK_SLOTS;
-  return { transform: `translate(${Math.round(Math.sin(a) * RING)}px, ${Math.round(-Math.cos(a) * RING)}px)` };
-};
-
-export function QuickWheel({
-  session, icons, slots, last, onUse, onEdit, cooldown,
-}: {
-  /** The spell cooldown, on the Cast button (when its last slot is a spell) and the ring's spell slots */
-  cooldown?: Cooldown | null;
-  session: GameSession;
-  icons: IconRenderer;
-  slots: QuickSlots;
-  /** The slot used last, which a tap casts again */
-  last: number | null;
-  onUse: (i: number) => void;
-  onEdit: (i: number) => void;
-}) {
-  const views = useSlotViews(session, slots);
-  const lastView = last !== null ? views[last] : null;
-  // "hold": the finger is down and slides to a slot; "tap": opened by a tap, slots are tapped
-  const [open, setOpen] = useState<"hold" | "tap" | null>(null);
-  const [hot, setHot] = useState<number | null>(null);
-  const press = useRef<{ id: number; x: number; y: number; open: boolean; hot: number | null; done: boolean } | null>(null);
-  const timers = useRef({ open: 0, edit: 0 });
-  const clear = () => {
-    clearTimeout(timers.current.open);
-    clearTimeout(timers.current.edit);
-  };
-  useEffect(() => clear, []);
-  const close = () => {
-    clear();
-    press.current = null;
-    setOpen(null);
-    setHot(null);
-  };
-  const openHold = () => {
-    const p = press.current;
-    if (!p || p.open) return;
-    p.open = true;
-    setOpen("hold");
-  };
-  const aim = (i: number | null) => {
-    const p = press.current;
-    if (!p || p.hot === i) return;
-    p.hot = i;
-    setHot(i);
-    clearTimeout(timers.current.edit);
-    if (i === null) return;
-    // Resting on a slot: change it instead
-    timers.current.edit = window.setTimeout(() => {
-      if (press.current) press.current.done = true;
-      setOpen(null);
-      setHot(null);
-      onEdit(i);
-    }, EDIT_MS);
-  };
-
-  const down = (e: ReactPointerEvent) => {
-    e.preventDefault();
-    if (open === "tap") return close();
-    if (press.current) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    press.current = { id: e.pointerId, x: e.clientX, y: e.clientY, open: false, hot: null, done: false };
-    timers.current.open = window.setTimeout(openHold, HOLD_MS);
-  };
-  const move = (e: ReactPointerEvent) => {
-    const p = press.current;
-    if (!p || p.id !== e.pointerId || p.done) return;
-    const dx = e.clientX - p.x,
-      dy = e.clientY - p.y;
-    if (!p.open && Math.hypot(dx, dy) > 12) openHold();
-    if (p.open) aim(slotAt(dx, dy));
-  };
-  const up = (e: ReactPointerEvent) => {
-    const p = press.current;
-    if (!p || p.id !== e.pointerId) return;
-    const { open: wasOpen, hot: i, done } = p;
-    close();
-    if (done) return;
-    if (wasOpen) {
-      if (i !== null) onUse(i);
-      return;
-    }
-    // A tap: the last slot again, or the ring to tap one
-    if (last !== null && slots[last]) onUse(last);
-    else setOpen("tap");
-  };
-
-  return (
-    <>
-      <button
-        type="button"
-        className={`touch-button cast${open ? " pressed" : ""}${lastView ? " has-last" : ""}`}
-        onPointerDown={down}
-        onPointerMove={move}
-        onPointerUp={up}
-        onPointerCancel={close}
-        aria-label="Cast: tap for the last quick slot, hold and slide for the others"
-      >
-        {/* The last slot used, which a tap uses again */}
-        {lastView ? <ObjIcon icons={icons} object={lastView.object} className={lastView.available ? "qs-icon" : "qs-icon unavailable"} /> : "Cast"}
-        {cooldown && lastView?.slot.kind === "spell" && lastView.available && <CooldownMask cooldown={cooldown} />}
-      </button>
-      {open && (
-        <div
-          className={`quick-wheel ${open}`}
-          // The tap ring: a tap on its backdrop, between the slots, closes it
-          onPointerDown={(e) => {
-            if (open !== "tap" || e.target !== e.currentTarget) return;
-            e.preventDefault();
-            close();
-          }}
-        >
-          {views.slice(0, QUICK_SLOTS).map((v, i) => (
-            <SlotButton
-              key={i}
-              className={`quick-wheel-slot${hot === i ? " hot" : ""}${v ? "" : " empty"}${v?.inUse ? " in-use" : ""}`}
-              style={ringPos(i)}
-              label={slotTitle(v, "")}
-              tappable={open === "tap"}
-              onTap={() => {
-                close();
-                onUse(i);
-              }}
-              onLongPress={() => {
-                close();
-                onEdit(i);
-              }}
-            >
-              <SlotFace icons={icons} view={v} cooldown={cooldown} />
-            </SlotButton>
-          ))}
-          <div className="quick-wheel-name">
-            {hot !== null ? (views[hot]?.slot.name ?? "Empty: let go to choose") : open === "hold" ? "Slide to a slot" : "Tap a slot"}
-          </div>
-          {open === "tap" && (
-            <button type="button" className="quick-wheel-close" aria-label="Close" onPointerDown={(e) => {
-                e.preventDefault();
-                close();
-              }}>
-              ✕
-            </button>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
-/** A ring slot: in the tap ring, a tap uses it and a long press changes it. */
-function SlotButton({
-  className, style, label, tappable, onTap, onLongPress, children,
-}: {
-  className: string;
-  style: CSSProperties;
-  label: string;
-  tappable: boolean;
-  onTap: () => void;
-  onLongPress: () => void;
-  children: ReactNode;
-}) {
-  const timer = useRef(0);
-  const long = useRef(false);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  return (
-    <button
-      type="button"
-      className={className}
-      style={{ ...style, pointerEvents: tappable ? "auto" : "none" }}
-      aria-label={label}
-      onPointerDown={(e) => {
-        e.preventDefault();
-        long.current = false;
-        timer.current = window.setTimeout(() => {
-          long.current = true;
-          onLongPress();
-        }, EDIT_MS);
-      }}
-      onPointerUp={() => {
-        clearTimeout(timer.current);
-        if (!long.current) onTap();
-      }}
-      onPointerCancel={() => clearTimeout(timer.current)}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      {children}
-    </button>
   );
 }
 

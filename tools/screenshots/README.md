@@ -70,11 +70,11 @@ For each shot whose `clients` include `original`, stand where it says and take a
 | Shot | Room | Square (row, col) | Facing | Then |
 |---|---|---|---|---|
 | `raza-pond` | Raza | 17, 19 | east-south-east, a little south of east (190): the shops across the pond on the left, the temple's clock tower on the right | |
-| `raza-wide` | Raza | 22, 46 | north-west (2620): the pond, the Inn and the north gate | |
 | `inn-room` | The Inn of Raza | 3, 8 (where a new character arrives) | west-south-west (1792): the Welcome sign and Marcus | |
 | `inn-inventory` | The Inn of Raza | 3, 8 | west-south-west | the Inventory tab |
+| `tos-arena` | The Arena of Kraanan (from Tos's East Ende, through the Arena foyer) | 22, 11 (in the south stands) | north-east (3300): the spectators and the Watcher's box | |
 
-- **Getting there:** an admin character gets there quickly with the admin console. Use `send object <you> TeleportTo rid int 300` (Raza) or `301` (the Inn), then `send object 0 UtilGoNearSquare what object <you> where object <the room> new_row int <row> new_col int <col> new_angle int <angle>`. `dm get coords` shows where you are.
+- **Getting there:** an admin character gets there quickly with the admin console. Use `send object <you> TeleportTo rid int 300` (Raza), `301` (the Inn) or `60` (the Arena), then `send object 0 UtilGoNearSquare what object <you> where object <the room> new_row int <row> new_col int <col> new_angle int <angle>`. `dm get coords` shows where you are.
 - **The character:** wield a mace and wear a shield, as the other clients do.
 - **The time:** use `dm afternoon` when you can.
 - **The window size:** use a size close to 16:9, so the pictures line up with the others.

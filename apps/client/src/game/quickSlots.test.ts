@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ObjectInfo, Spell } from "@shards/protocol";
-import { ALL_QUICK_SLOTS, loadLastSlot, loadQuickSlots, saveLastSlot, saveQuickSlots, slotFor, slotItem, slotSpell, type QuickSlot } from "./quickSlots.ts";
+import { ALL_QUICK_SLOTS, loadQuickSlots, saveQuickSlots, slotFor, slotItem, slotSpell, type QuickSlot } from "./quickSlots.ts";
 
 const obj = (id: number, nameRes: number, iconRes = 500 + nameRes): ObjectInfo =>
   ({ id, nameRes, iconRes, amount: 1, flags: 0, translation: 0, overlays: [], animation: { type: 0, group: 1 } }) as unknown as ObjectInfo;
@@ -41,19 +41,6 @@ describe("quick slots", () => {
     expect(slots[7]?.name).toBe("Healing potion");
     // The rest of the first row and the whole second row (saves from before it) come empty
     expect(slots.slice(8)).toEqual(Array.from({ length: ALL_QUICK_SLOTS - 8 }, () => null));
-  });
-
-  it("keeps the last slot used per character", () => {
-    const store = new MapStore();
-    expect(loadLastSlot(store, "ws://a", "Bob")).toBeNull();
-    saveLastSlot(store, "ws://a", "Bob", 9);
-    expect(loadLastSlot(store, "ws://a", "bob")).toBe(9);
-    expect(loadLastSlot(store, "ws://a", "Alice")).toBeNull();
-    // The second row's slots count (11-20); past them, nothing
-    store.setItem("shards.quickslots.last.ws://a.bob", "12");
-    expect(loadLastSlot(store, "ws://a", "Bob")).toBe(12);
-    store.setItem("shards.quickslots.last.ws://a.bob", "20");
-    expect(loadLastSlot(store, "ws://a", "Bob")).toBeNull();
   });
 
   it("ignores broken saved slots", () => {

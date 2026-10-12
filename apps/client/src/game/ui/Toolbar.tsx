@@ -21,7 +21,7 @@ export interface ToolbarButton {
   pressed?: boolean;
 }
 
-export function ToolbarButtonView({ assets, button, tooltips }: { assets: AssetStore; button: ToolbarButton; tooltips: boolean }) {
+export function ToolbarButtonView({ assets, button, tooltips, className }: { assets: AssetStore; button: ToolbarButton; tooltips: boolean; className?: string }) {
   const halves = useKeyedHalves(assets.url(`ui/${button.bitmap}`));
   // ToolbarDrawButton: the right half while held down (ODS_SELECTED) or toggled in
   const [down, setDown] = useState(false);
@@ -29,7 +29,7 @@ export function ToolbarButtonView({ assets, button, tooltips }: { assets: AssetS
   return (
     <button
       type="button"
-      className="toolbar-button"
+      className={`toolbar-button${className ? ` ${className}` : ""}`}
       title={tooltips ? button.name : undefined}
       aria-label={button.name}
       aria-pressed={button.pressed}

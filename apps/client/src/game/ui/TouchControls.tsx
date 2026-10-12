@@ -1,25 +1,27 @@
 // The phone layout's controls over the view (ours, ADR 0003; on a touch screen, settings.ts touchUi):
-//   - health, mana and vigor bars at the top left, our enchantments and the last few chat lines
-//     under them
+//   - the Modern interface's UnitFrame at the top left (our face, the health, mana and vigor bars,
+//     our enchantments under them). The chat shows only when opened (its button marks new lines).
+//   - the quick slots' first row (Hotbar) along the bottom between the joystick and the buttons,
+//     bigger for fingers; a long press changes a slot
 //   - Rest/Stand, Map, Chat and the interface drawer (inventory, spells...) at the top right, the
 //     room's enchantments under them
 //   - a joystick at the bottom left: forward, back and sliding, digital like the keys (move.c),
 //     running when pushed to the edge; with the map open it moves by the map's directions
-//   - Attack (held, it keeps attacking; it shows the weapon we wield), Open, Get, Cast (the quick
-//     slots' wheel, QuickSlots.tsx, showing the last slot used) and Target (Target Next) at the
-//     bottom right
+//   - Attack (held, it keeps attacking; it shows the weapon we wield), Open, Get and Target
+//     (Target Next) at the bottom right
 // Turning and looking up or down is a drag on the view, tap targets, double tap activates and a
 // long press examines (gameScene.ts, onPointerDown...).
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import type { ChatLine, GameSession } from "@shards/world";
+import type { GameSession } from "@shards/world";
 import type { TouchMove } from "../gameScene.ts";
 import type { IconRenderer } from "../icons.ts";
 import type { Action, Settings } from "../settings.ts";
-import { HudBars, HudEnchantments, ObjIcon } from "./Sidebar.tsx";
+import { HudEnchantments, ObjIcon } from "./Sidebar.tsx";
 import { useWorld } from "./hooks.ts";
-import { QuickWheel } from "./QuickSlots.tsx";
-import type { QuickSlots } from "../quickSlots.ts";
+import { UnitFrame } from "./ModernHud.tsx";
+import { Hotbar } from "./QuickSlots.tsx";
+import type { QuickSlot, QuickSlots } from "../quickSlots.ts";
 import type { Cooldown } from "../cooldowns.ts";
 import { wieldedWeapon } from "../equipment.ts";
 
@@ -27,9 +29,6 @@ import { wieldedWeapon } from "../equipment.ts";
 const RADIUS = 37;
 const DEAD = 0.35;
 const RUN = 0.85;
-/** Chat lines stay over the view this long, ms */
-const TICKER_MS = 8000;
-const TICKER_LINES = 3;
 
 /** A held button with `repeat` acts again this often; the game rate-limits attacks itself (gameuser.c: one per 250 ms) */
 const REPEAT_MS = 100;
@@ -159,7 +158,7 @@ function AttackFace({ session, icons }: { session: GameSession; icons: IconRende
 }
 
 /**
- * How bright the ticker's colours are at least: relative luminance (WCAG, 0-1), so a blue gets
+ * How bright chat colours over the view are at least (the Modern chat): relative luminance (WCAG, 0-1), so a blue gets
  * as light as a red to the eye, not only by HSL lightness. It's over the 3D view.
  */
 const TICKER_LUMINANCE = 0.5;
@@ -176,8 +175,9 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
 }
 
 /**
- * A server text colour (rgb(), as text.ts and session.ts give them) lifted for the ticker: the
- * same hue, made lighter until it's TICKER_LUMINANCE bright. The chat window keeps the originals.
+ * A server text colour (rgb(), as text.ts and session.ts give them) lifted for chat over the view
+ * (the Modern chat; the phone once had a ticker of its last lines): the same hue, made lighter until
+ * it's TICKER_LUMINANCE bright. The chat window elsewhere keeps the originals.
  */
 export function tickerColor(color: string | undefined): string | undefined {
   const m = color && /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(color);
@@ -194,40 +194,15 @@ export function tickerColor(color: string | undefined): string | undefined {
   return `hsl(${Math.round(h)}, ${Math.round(s * 100)}%, ${Math.round(Math.min(1, l) * 100)}%)`;
 }
 
-/** The last few chat lines, for a few seconds, while the chat is put away. */
-function ChatTicker({ chat, colored }: { chat: ChatLine[]; colored: boolean }) {
-  // A clock ticking once a second; a line newer than it shows until it's TICKER_MS old
-  const [now, setNow] = useState(() => Date.now());
-  const recent = chat.slice(-TICKER_LINES).filter((l) => now - l.time < TICKER_MS);
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  if (!recent.length) return null;
-  return (
-    <div className="touch-ticker" aria-hidden>
-      {recent.map((l, i) => (
-        <div key={`${l.time}-${i}`} className="touch-ticker-line">
-          {l.spans.map((s, j) => (
-            <span key={j} style={colored ? { color: tickerColor(s.color), fontWeight: s.bold ? "bold" : undefined } : undefined}>
-              {s.text}
-            </span>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function TouchControls({
-  session, icons, settings, chat, chatUnread, onMove, onPress, onChat, onDrawer, onMap, mapOpen, onLook, resting, onRest,
-  quickSlots, lastSlot, onUseSlot, onEditSlot, selecting, onSelectSelf, onCancelSelect, cooldown,
+  session, icons, settings, chatUnread, onMove, onPress, onChat, onDrawer, onMap, mapOpen, onLook, resting, onRest,
+  quickSlots, onUseSlot, onEditSlot, onSetSlot, onSwapSlots, selecting, onSelectSelf, onCancelSelect, cooldown,
 }: {
-  /** The spell cooldown (cooldowns.ts), on the Cast button and its ring */
+  onSetSlot: (i: number, slot: QuickSlot) => void;
+  onSwapSlots: (a: number, b: number) => void;
+  /** The spell cooldown (cooldowns.ts), on the hotbar's spell slots */
   cooldown: Cooldown | null;
   quickSlots: QuickSlots;
-  /** The quick slot used last: a tap on Cast uses it again */
-  lastSlot: number | null;
   onUseSlot: (i: number) => void;
   onEditSlot: (i: number) => void;
   /** Picking a spell target: our bars pick us, and the hint can cancel */
@@ -237,7 +212,6 @@ export function TouchControls({
   session: GameSession;
   icons: IconRenderer;
   settings: Settings;
-  chat: ChatLine[];
   /** New lines since the chat was last open */
   chatUnread: boolean;
   onMove: (m: TouchMove) => void;
@@ -247,7 +221,7 @@ export function TouchControls({
   onMap: () => void;
   /** The map is over the view: its button closes it */
   mapOpen: boolean;
-  /** An enchantment tapped: its description */
+  /** An enchantment tapped, or our face held: its description */
   onLook: (id: number) => void;
   /** command.c pinfo.resting, for the Rest / Stand button (the toolbar's rest.bmp) */
   resting: boolean;
@@ -256,9 +230,11 @@ export function TouchControls({
   return (
     <div className="touch-controls">
       <div className="touch-hud">
-        <HudBars session={session} icons={icons} onSelectSelf={selecting ? onSelectSelf : undefined} />
-        <HudEnchantments session={session} icons={icons} kind="player" onLook={onLook} />
-        <ChatTicker chat={chat} colored={settings.coloredText} />
+        <UnitFrame session={session} icons={icons} settings={settings} selecting={selecting} onSelectSelf={onSelectSelf} onLook={onLook} touch />
+      </div>
+      {/* The first row of quick slots, as the desktop's hotbar */}
+      <div className="touch-hotbar">
+        <Hotbar session={session} icons={icons} slots={quickSlots} settings={settings} onUse={onUseSlot} onEdit={onEditSlot} onSet={onSetSlot} onSwap={onSwapSlots} cooldown={cooldown} touch />
       </div>
       <HudEnchantments session={session} icons={icons} kind="room" onLook={onLook} />
       <div className="touch-top-buttons">
@@ -283,7 +259,6 @@ export function TouchControls({
             {b.action === "attack" ? <AttackFace session={session} icons={icons} /> : undefined}
           </ActionButton>
         ))}
-        <QuickWheel session={session} icons={icons} slots={quickSlots} last={lastSlot} onUse={onUseSlot} onEdit={onEditSlot} cooldown={cooldown} />
       </div>
       {selecting && (
         <div className="touch-select-hint">

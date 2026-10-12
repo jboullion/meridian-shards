@@ -13,14 +13,6 @@
       "steps": []
     },
     {
-      "id": "raza-wide",
-      "title": "The town of Raza",
-      "note": "South-east of the pond by the shops, facing north-west: the pond, the Inn and the north gate.",
-      "rid": 300, "row": 22, "col": 46, "angle": 2620,
-      "clients": ["classic", "modern", "mobile", "unreal", "original"],
-      "steps": []
-    },
-    {
       "id": "inn-room",
       "title": "The Inn of Raza",
       "note": "Where a new character arrives: the Inn's teleport square, facing west-south-west towards the Welcome sign and Marcus.",
@@ -57,7 +49,7 @@
       "title": "The Arena of Kraanan",
       "note": "In the south stands, facing north-east across the arena to the spectators and the Watcher's box.",
       "rid": 60, "row": 22, "col": 11, "angle": 3300,
-      "clients": ["modern", "mobile"],
+      "clients": ["classic", "modern", "mobile", "unreal", "original"],
       "steps": []
     },
     {
