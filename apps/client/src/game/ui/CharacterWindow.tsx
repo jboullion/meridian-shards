@@ -256,7 +256,7 @@ export function CharacterWindow({
       <Window title={self ? rs(self.info.nameRes) : "Character"} onClose={onClose} className="character-window">
         <div className="cw-tabs" role="tablist">
           {TABS.map((t) => (
-            <StatTab key={t.tab} assets={assets} bitmap={t.bitmap} tab={t.tab} label={t.label} tooltip={settings.tooltips} active={tab === t.tab} onClick={() => onTab(t.tab)} />
+            <StatTab key={t.tab} assets={assets} icons={icons} bitmap={t.bitmap} tab={t.tab} label={t.label} tooltip={settings.tooltips} active={tab === t.tab} onClick={() => onTab(t.tab)} />
           ))}
         </div>
         {tab === "inventory" ? (

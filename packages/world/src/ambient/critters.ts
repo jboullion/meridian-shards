@@ -106,6 +106,22 @@ export function habitatOf(roomFile: string, terrain: readonly string[] | undefin
   return null;
 }
 
+/** Prisons (no terrain of their own): the old jailhouse of Barloque and Bouldergate's */
+const PRISONS = new Set(["barjail.roo", "berg_jail.roo"]);
+
+/**
+ * Ours (Birds and Bats, flyers.ts): whether bats live in a room, only caves, dungeons (Castle
+ * Victoria), crypts and Brax (NECROPOLIS: Brax's every room, the crypts and the mazes) and prisons.
+ * "covered" are the cave and dungeon habitats: bats about head height under the ceiling. The rest
+ * fly that way too where there's no sky, and at night only under one (2026-10-12: nowhere else).
+ */
+export function batsOf(roomFile: string, terrain: readonly string[] | undefined): "covered" | "necropolis" | null {
+  const h = habitatOf(roomFile, terrain)?.name;
+  if (h === "cave" || h === "dungeon") return "covered";
+  if (has(terrain ?? [], "NECROPOLIS") || PRISONS.has(roomFile)) return "necropolis";
+  return null;
+}
+
 /** The art every species needs, to load ahead */
 export function critterArt(h: Habitat): string[] {
   return [...new Set(h.mix.flatMap(([n]) => [SPECIES[n].icon, SPECIES[n].dead]))];

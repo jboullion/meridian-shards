@@ -8,7 +8,7 @@
 import { useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { Room } from "@shards/formats";
 import { STAT_GROUP, STAT_TAG, STATS, type ObjectInfo, type Statistic } from "@shards/protocol";
-import { isNumberItem, type GameSession } from "@shards/world";
+import { isNumberItem, localRes, type GameSession } from "@shards/world";
 import type { AssetStore } from "../../assets.ts";
 import { bareIcon, type Drawable, type IconOptions, type IconRenderer } from "../icons.ts";
 import { useAsyncImage, useWorld } from "./hooks.ts";
@@ -41,25 +41,14 @@ export const TABS: { tab: Tab; group: number | null; bitmap: string | null; labe
   { tab: "pets", group: null, bitmap: null, label: "Pets" },
 ];
 
-/** Our tabs' icons, drawn where the original's tabs have their glyph bitmap */
-const TAB_ICONS: Partial<Record<Tab, ReactNode>> = {
-  friends: (
-    <svg viewBox="0 0 26 20" aria-hidden>
-      <circle cx="9" cy="7" r="3.2" />
-      <path d="M3 17c0-3.6 2.7-5.8 6-5.8s6 2.2 6 5.8z" />
-      <circle cx="17.5" cy="6.5" r="2.7" />
-      <path d="M14.8 11.6c.8-.5 1.8-.8 2.7-.8 2.8 0 5 1.9 5 5h-6.1c-.2-1.7-.8-3.1-1.6-4.2z" />
-    </svg>
-  ),
-  pets: (
-    <svg viewBox="0 0 26 20" aria-hidden>
-      <ellipse cx="13" cy="13.5" rx="4.2" ry="3.6" />
-      <ellipse cx="7.6" cy="9" rx="1.8" ry="2.3" />
-      <ellipse cx="10.9" cy="5.6" rx="1.8" ry="2.3" />
-      <ellipse cx="15.1" cy="5.6" rx="1.8" ry="2.3" />
-      <ellipse cx="18.4" cy="9" rx="1.8" ry="2.3" />
-    </svg>
-  ),
+/**
+ * Our tabs' pictures, drawn where the original's tabs have their glyph bitmap: the game's own art,
+ * as an item's in the inventory (group 1). Friends: the knight's shield (knhtshld.kod
+ * knightshield_icon_rsc); Pets: the baby spider (spdrbaby.kod), the first pet there is.
+ */
+const TAB_ART: Partial<Record<Tab, string>> = {
+  friends: "mtlshld.bgf",
+  pets: "spdrby.bgf",
 };
 
 export function ObjIcon({
@@ -87,9 +76,11 @@ export function ObjIcon({
  * the right piece, each from the up or down half of its bitmap, drawn transparently.
  */
 export function StatTab({
-  assets, bitmap, tab, label, tooltip, active, onClick,
+  assets, icons, bitmap, tab, label, tooltip, active, onClick,
 }: {
   assets: AssetStore;
+  /** Draws our tabs' pictures (TAB_ART) */
+  icons: IconRenderer;
   /** The glyph's bitmap; null for our own tabs, drawn with their icon */
   bitmap: string | null;
   tab?: Tab;
@@ -102,7 +93,8 @@ export function StatTab({
   const mid = useKeyedHalves(assets.url("ui/statbtn_mid.bmp"));
   // Our tabs: the middle piece's stone under our icon
   const left = useKeyedHalves(assets.url(`ui/${bitmap ?? "statbtn_mid.bmp"}`));
-  const icon = !bitmap && tab ? TAB_ICONS[tab] : null;
+  const art = !bitmap && tab ? TAB_ART[tab] : undefined;
+  const icon = art ? <ObjIcon icons={icons} object={bareIcon(localRes(art))} /> : null;
   const right = useKeyedHalves(assets.url("ui/statbtn_right.bmp"));
   const half = (h: [string, string] | null) => (h ? { backgroundImage: `url(${h[active ? 1 : 0]})` } : undefined);
   return (
@@ -356,7 +348,7 @@ export function Sidebar({
       </div>
       <div className="stat-tabs">
         {TABS.map((t) => (
-          <StatTab key={t.tab} assets={assets} bitmap={t.bitmap} tab={t.tab} label={t.label} tooltip={settings.tooltips} active={tab === t.tab} onClick={() => pick(t.tab, t.group)} />
+          <StatTab key={t.tab} assets={assets} icons={icons} bitmap={t.bitmap} tab={t.tab} label={t.label} tooltip={settings.tooltips} active={tab === t.tab} onClick={() => pick(t.tab, t.group)} />
         ))}
       </div>
       {/* "inventory-panel": where dragging an object from the view picks it up (mermain.c A_ENDDRAG) */}

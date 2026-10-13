@@ -98,7 +98,8 @@ export function petForKarma(group: string, karma: number | null): string | undef
   return Object.entries(PET_KINDS as Record<string, PetKind>).find(([, k]) => k.group?.name === group && k.group.karma === want)?.[0];
 }
 
-export const petKind = (name: string): PetKind | undefined => (PET_KINDS as Record<string, PetKind>)[name];
+/** (Own keys only: a kind comes from other players through the relay, and "constructor" isn't one) */
+export const petKind = (name: string): PetKind | undefined => (Object.hasOwn(PET_KINDS, name) ? (PET_KINDS as Record<string, PetKind>)[name] : undefined);
 
 /** A character's pet: its kind, colour (an index into the kind's) and name, "" for none */
 export interface PetChoice {
@@ -114,14 +115,21 @@ export function cleanPetName(s: string): string {
   return [...s.replace(/\s+/g, " ").trim()].filter((c) => c.charCodeAt(0) >= 0x20 && c.charCodeAt(0) <= 0xff && c.charCodeAt(0) !== 0x7f).join("").slice(0, PET_NAME_MAX).trim();
 }
 
+/**
+ * Kinds taken out (the bunnies, 2026-10-12) and what a pet saved as one becomes, so nobody who had
+ * one is left without a pet: the rat, the nearest of what's left
+ */
+const RETIRED_KINDS: Record<string, string> = { bunny: "rat", greyBunny: "rat" };
+
 /** A pet from storage or the relay, checked: null when it isn't one we know (an unknown kind isn't drawn) */
 export function readPetChoice(v: unknown): PetChoice | null {
   if (!v || typeof v !== "object") return null;
   const p = v as Record<string, unknown>;
-  const kind = typeof p.kind === "string" ? petKind(p.kind) : undefined;
-  if (!kind) return null;
+  const name = typeof p.kind === "string" ? (Object.hasOwn(RETIRED_KINDS, p.kind) ? RETIRED_KINDS[p.kind] : p.kind) : undefined;
+  const kind = name !== undefined ? petKind(name) : undefined;
+  if (!name || !kind) return null;
   const colour = Number.isInteger(p.colour) && (p.colour as number) >= 0 && (p.colour as number) < kind.colours.length ? (p.colour as number) : 0;
-  return { kind: p.kind as string, colour, name: typeof p.name === "string" ? cleanPetName(p.name) : "" };
+  return { kind: name, colour, name: typeof p.name === "string" ? cleanPetName(p.name) : "" };
 }
 
 /** 2.1: whether a kind (and colour) is open to someone with this maximum health */

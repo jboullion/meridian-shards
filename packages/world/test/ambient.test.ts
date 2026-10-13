@@ -9,7 +9,7 @@ import { AMBIENT_ID_BASE, isAmbientId, localRes, localResName } from "../src/amb
 import { AmbientLife, seededRandom, type AmbientExits } from "../src/ambient/ambientLife.ts";
 import { AMBIENT_ROOMS, busyAt, hourFromSun, isErrandRoom, torchHours, weatherScale } from "../src/ambient/ambientRooms.ts";
 import { chatterLine } from "../src/ambient/chatter.ts";
-import { Critters, habitatOf } from "../src/ambient/critters.ts";
+import { Critters, batsOf, habitatOf } from "../src/ambient/critters.ts";
 import { SF, floorHeightAt, leafAt } from "@shards/formats";
 import {
   FACTIONS, TORCH_LIGHT, fighterAppearance, guardAppearance, isImpressiveBody, knightAppearance, ladyAppearance, lookFor, makePerson, randomAppearance,
@@ -376,6 +376,16 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
     const life = new AmbientLife(room("razainn.roo"), AMBIENT_ROOMS["razainn.roo"], exits()["razainn.roo"], 1);
     for (let t = 0; t < 5000; t += 33) life.update(33, { player: null, scale: 0 });
     expect(life.objects()).toHaveLength(0);
+  });
+
+  test("bats: caves, dungeons, crypts and Brax, prisons; nowhere else", () => {
+    expect(batsOf("ratcave1.roo", ["CAVES"])).toBe("covered");
+    expect(batsOf("castle1.roo", undefined)).toBe("covered");
+    expect(batsOf("necarea3.roo", ["NECROPOLIS"])).toBe("necropolis");
+    expect(batsOf("toscrypt.roo", ["CITY", "NECROPOLIS"])).toBe("necropolis");
+    expect(batsOf("berg_jail.roo", undefined)).toBe("necropolis");
+    for (const [f, t] of [["tos.roo", ["CITY"]], ["b6.roo", ["HILLS", "MOUNTAIN"]], ["forest1.roo", ["FOREST"]], ["barlsew.roo", ["SEWERS"]]] as const)
+      expect(batsOf(f, t)).toBeNull();
   });
 
   test("critters by terrain: what lives where", () => {

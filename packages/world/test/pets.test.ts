@@ -42,7 +42,11 @@ describe("pet kinds and choices", () => {
     expect(readPetChoice({ kind: "rat", colour: 0, name: "Squeak" })).toEqual({ kind: "rat", colour: 0, name: "Squeak" });
     expect(readPetChoice({ kind: "rat", colour: 9 })).toEqual({ kind: "rat", colour: 0, name: "" });
     expect(readPetChoice({ kind: "dragon" })).toBeNull();
+    // Kinds taken out come back as one still here
+    expect(readPetChoice({ kind: "bunny", colour: 0, name: "Thumper" })).toEqual({ kind: "rat", colour: 0, name: "Thumper" });
+    expect(readPetChoice({ kind: "greyBunny", colour: 3 })).toEqual({ kind: "rat", colour: 0, name: "" });
     expect(readPetChoice(null)).toBeNull();
+    expect(readPetChoice({ kind: "constructor" })).toBeNull();
   });
 });
 

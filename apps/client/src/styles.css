@@ -2454,7 +2454,9 @@ canvas.server-wait {
   right: 0;
   bottom: 0;
   z-index: 25;
-  width: 264px;
+  /* Room for the seven tabs at their full size (39 px glyph and 6 px cap each, statbtn.c's
+     pieces 1.5 times), but never more than about half a small phone */
+  width: min(340px, 55vw);
   max-height: none;
   padding-right: max(8px, env(safe-area-inset-right));
   transform: translateX(100%);
@@ -3899,19 +3901,19 @@ canvas.server-wait {
   justify-content: center;
 }
 
-.stat-tab .glyph.drawn svg {
-  width: 20px;
-  height: 16px;
-  fill: rgb(214, 200, 160);
+/* The game's art (Sidebar.tsx TAB_ART), 3 px clear of the tab's edges, centred (not placed
+   like the tab's own pieces, .stat-tab span) */
+.stat-tab .glyph.drawn .obj-icon {
+  position: static;
+  width: calc(100% - 6px);
+  height: calc(100% - 6px);
 }
 
-/* Our tabs: the middle piece the whole width, our icon over it */
-.stat-tab.drawn .mid {
+/* Our tabs: the middle piece the whole width, our icon over it (the phone's drawer too, whose
+   tabs place the middle piece after a wider glyph) */
+.stat-tab.drawn .mid,
+.game.touch-ui .stat-tab.drawn .mid {
   left: 0;
-}
-
-.stat-tab.active .glyph.drawn svg {
-  fill: rgb(255, 230, 140);
 }
 
 .friends-panel,

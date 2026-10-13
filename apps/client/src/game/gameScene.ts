@@ -18,7 +18,7 @@ import {
 } from "@shards/render";
 import {
   AMBIENT_ROOMS, AMBIENT_SCALE, AmbientLife, LiveRoom, MOVEON, PlayerMover, REMOTE_VIEW, animStep, isAmbientId, localRes, localResName, townsfolkArt,
-  Critters, critterArt, decodeNavGrid, habitatOf, hourFromSun, isImpressiveBody, type AmbientExits, type DamageDealt, type NavGrid, type NavPoint, type RemoteView, type GameSession, type WorldObject,
+  Critters, batsOf, critterArt, decodeNavGrid, habitatOf, hourFromSun, isImpressiveBody, type AmbientExits, type DamageDealt, type NavGrid, type NavPoint, type RemoteView, type GameSession, type WorldObject,
   FollowPlanner, navGridBuilder, AmbientStepper, type AmbientFrame, type AmbientSeed, Pets, petArt, type PetChoice, type PetOwner,
   ARENA_SEND_EVERY, ARENA_TICK_MS, ArenaSim, ArenaView, arenaArt, arenaHourAt, buildNavGrid, hashText, makeRoster, readArenaConfig, seasonAt,
   type AmbientPersonInfo, type ArenaMessage,
@@ -1364,17 +1364,16 @@ export class GameScene {
       flyers.clear();
     }
     const scale = this.settings.flyers ? AMBIENT_SCALE[level] : 0;
-    // Caves, and dungeons (Castle Victoria): bats
-    const habitat = habitatOf(this.roomFile, this.roomTerrain?.[this.roomFile])?.name;
-    const cave = habitat === "cave" || habitat === "dungeon";
+    // Bats only in caves, dungeons, crypts and Brax, and prisons (batsOf): under the roof always,
+    // under the sky (Brax's graveyard and ruins) at night
+    const bats = batsOf(this.roomFile, this.roomTerrain?.[this.roomFile]);
+    const cave = bats === "covered" || (bats === "necropolis" && !this.roomHasSky);
     const hour = this.gameHour();
     const night = hour !== null && (hour >= 20 || hour < 5);
     const sky = this.roomHasSky && !cave;
-    // Night bats under the sky only in the wilds: not over towns, castles and the arena
-    const settled = AMBIENT_ROOMS[this.roomFile] !== undefined || (this.roomTerrain?.[this.roomFile] ?? []).some((n) => SETTLED.has(n));
     const opts = {
       flocks: sky && !night ? Math.round(2 * scale) : 0,
-      bats: cave ? Math.round(9 * scale) : sky && night && !settled ? Math.round(3 * scale) : 0,
+      bats: cave ? Math.round(9 * scale) : bats && night ? Math.round(3 * scale) : 0,
       cave,
     };
     const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
