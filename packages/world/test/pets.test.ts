@@ -64,7 +64,10 @@ describe.skipIf(!have)("pets following their owners", () => {
     const start = sq(8, 8);
     run(pets, owner(start), 600, now);
     const [p] = pets.objects();
+    // Beside its owner: behind them (they face east) and to their right (south)
     expect(Math.hypot(p.x - start.x, p.y - start.y)).toBeLessThan(1.5 * 1024);
+    expect(p.x - start.x).toBeLessThan(0);
+    expect(p.y - start.y).toBeGreaterThan(0);
     expect(pets.named()).toEqual([{ obj: p, name: "Squeak" }]);
     // Walking three squares east: the pet keeps up
     let at = start;

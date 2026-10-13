@@ -78,6 +78,49 @@ function slotFor(bits: number, ancestors: Set<string>, c: Map<string, number>): 
   return null;
 }
 
+/**
+ * What kind of item a class is, for sorting the inventory (ours): its nearest ancestor among the
+ * Kod's item families. Torches and mugs are Shields in Kod, and wands that hit are Weapons.
+ */
+export type ItemType =
+  | "weapon" | "ammo" | "shield" | "armour" | "jewelry" | "wand" | "rod" | "potion" | "scroll" | "reagent" | "food" | "gem" | "key" | "instrument" | "book" | "money";
+
+const TYPE_OF_CLASS: Record<string, ItemType> = {
+  weapon: "weapon", ammo: "ammo", shield: "shield",
+  armor: "armour", helmet: "armour", pants: "armour", shirtbase: "armour", gauntlet: "armour", defensemodifier: "armour", attackmodifier: "armour",
+  ring: "jewelry", necklace: "jewelry", wand: "wand", rod: "rod", potion: "potion", scroll: "scroll",
+  reagent: "reagent", food: "food", gem: "gem", key: "key", instrument: "instrument", lorebook: "book", money: "money",
+};
+
+/** Picture file -> its item's type (itemtypes.json), sorted by file name; a picture two types claim is left out. */
+export function buildItemTypes(kodFiles: KodFile[]): Record<string, ItemType> {
+  const resources = new Map<string, string>();
+  const classes = new Map<string, ItemClass>();
+  for (const f of kodFiles) {
+    const c = parseClass(f, resources);
+    if (c) classes.set(c.name.toLowerCase(), c);
+  }
+  const out = new Map<string, ItemType | null>();
+  for (const c of classes.values()) {
+    const seen = new Set<string>();
+    let type: ItemType | null = null;
+    for (let k: ItemClass | undefined = c; k && !seen.has(k.name.toLowerCase()); k = k.parent ? classes.get(k.parent.toLowerCase()) : undefined) {
+      seen.add(k.name.toLowerCase());
+      type ??= TYPE_OF_CLASS[k.name.toLowerCase()] ?? null;
+    }
+    if (!seen.has("item") || !type) continue;
+    for (const ref of c.iconRefs) {
+      const bgf = resources.get(ref);
+      if (!bgf) continue;
+      const had = out.get(bgf);
+      out.set(bgf, had === undefined || had === type ? type : null);
+    }
+  }
+  return Object.fromEntries(
+    [...out.entries()].filter((e): e is [string, ItemType] => e[1] !== null).sort(([a], [b]) => a.localeCompare(b)),
+  );
+}
+
 /** Picture file -> the slot its item is worn in, sorted by file name. */
 export function buildItemSlots(kodFiles: KodFile[], khd: string): Record<string, ItemSlot> {
   const consts = parseConstants(khd);

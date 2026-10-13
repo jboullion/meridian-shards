@@ -4,9 +4,11 @@
 // (the page's own), so the Server field is left out and the box moves up; the desktop app has
 // the template's Server field as a drop-down of the servers it knows.
 //
-// Ours: the splash picture (Intro.tsx) behind the dialog, and the login names used before in a
-// list under the name field (▾), newest first, each with × to forget it. Only names: never
-// passwords (the browser's own password manager can keep those).
+// Ours: the backgrounds (Intro.tsx) behind it all, with the game's name over them and a Log in
+// button near the bottom; the dialog opens from the button (or Enter) and closes back to it, so
+// the pictures can be seen. And the login names used before in a list under the name field (▾),
+// newest first, each with × to forget it. Only names: never passwords (the browser's own
+// password manager can keep those).
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { AssetStore } from "../assets.ts";
@@ -102,47 +104,71 @@ export function LoginScreen({
   const [password, setPassword] = useState(initialPassword ?? "");
   const [update, setUpdate] = useState<DesktopUpdate | null>(null);
   useEffect(() => desktop?.onUpdate(setUpdate), []);
+  // Ours: the dialog waits behind the Log in button, so the backgrounds show; open at once after
+  // a failed login (to try again) or with the desktop app's /U and /W (to log on)
+  const [open, setOpen] = useState(() => !!error || (!!initialUsername && !!initialPassword));
+  // Enter opens it too (the button has the focus anyway, unless something else was clicked)
+  useEffect(() => {
+    if (open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || e.repeat || document.querySelector(".mk-modal")) return;
+      e.preventDefault();
+      setOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (username.trim() && password) onLogin(username.trim(), password);
   };
   return (
-    <Backdrop behind={behind}>
-      <Window title="Login" dlu={LAYOUT.size}>
-        <form onSubmit={submit}>
-          <img className="mk-login-icon" src={assets.url("ui/icon1.ico")} alt="" style={at([6, 6, 20, 20])} />
-          <Text at={LAYOUT.intro} wrap>
-            Meridian Shards is a game played over the Internet. To play, you must have an account with the central server.
-          </Text>
-          <GroupBox at={LAYOUT.newBox} label="New to Meridian Shards" />
-          <Text at={LAYOUT.newText} wrap>
-            If you don't have an account simply enter your desired account info and it will be made automatically!
-          </Text>
-          <GroupBox at={LAYOUT.accountBox} label="Enter Your Account Information" />
-          <Text at={LAYOUT.nameLabel}>Login name:</Text>
-          <NameField at={LAYOUT.name} value={username} onChange={setUsername} names={names} onForget={(n) => setNames(forgetName(n))} />
-          <Text at={LAYOUT.passLabel}>Password:</Text>
-          <TextField
-            at={LAYOUT.pass}
-            value={password}
-            onChange={setPassword}
-            password
-            autoFocus={!!username}
-            autoComplete="current-password"
-          />
-          {desktop && LAYOUT.serverLabel && LAYOUT.server && (
-            <ServerField desktop={desktop} label={LAYOUT.serverLabel} field={LAYOUT.server} />
-          )}
-          <Button at={LAYOUT.ok} type="submit" isDefault disabled={!username.trim() || !password || !!required}>
-            Log In
-          </Button>
-        </form>
-      </Window>
-      <p className="mk-footnote">
-        {devPagesEnabled && <a href="?viewer">Room viewer</a>}
-        {desktop && !update && <span>Version {desktop.version}</span>}
-        {desktop && update && <UpdateNotice update={update} install={() => desktop?.installUpdate()} />}
-      </p>
+    <Backdrop behind={behind} className={open ? "login login-open" : "login"}>
+      <h1 className="mk-shard-title">Meridian 59: Shards</h1>
+      {open && (
+        <Window title="Login" dlu={LAYOUT.size} onClose={() => setOpen(false)}>
+          <form onSubmit={submit}>
+            <img className="mk-login-icon" src={assets.url("ui/icon1.ico")} alt="" style={at([6, 6, 20, 20])} />
+            <Text at={LAYOUT.intro} wrap>
+              Meridian Shards is a game played over the Internet. To play, you must have an account with the central server.
+            </Text>
+            <GroupBox at={LAYOUT.newBox} label="New to Meridian Shards" />
+            <Text at={LAYOUT.newText} wrap>
+              If you don't have an account simply enter your desired account info and it will be made automatically!
+            </Text>
+            <GroupBox at={LAYOUT.accountBox} label="Enter Your Account Information" />
+            <Text at={LAYOUT.nameLabel}>Login name:</Text>
+            <NameField at={LAYOUT.name} value={username} onChange={setUsername} names={names} onForget={(n) => setNames(forgetName(n))} />
+            <Text at={LAYOUT.passLabel}>Password:</Text>
+            <TextField
+              at={LAYOUT.pass}
+              value={password}
+              onChange={setPassword}
+              password
+              autoFocus={!!username}
+              autoComplete="current-password"
+            />
+            {desktop && LAYOUT.serverLabel && LAYOUT.server && (
+              <ServerField desktop={desktop} label={LAYOUT.serverLabel} field={LAYOUT.server} />
+            )}
+            <Button at={LAYOUT.ok} type="submit" isDefault disabled={!username.trim() || !password || !!required}>
+              Log In
+            </Button>
+          </form>
+        </Window>
+      )}
+      <div className="login-bottom">
+        {!open && (
+          <button type="button" className="mk-btn default login-button" autoFocus onClick={() => setOpen(true)}>
+            Log in
+          </button>
+        )}
+        <p className="mk-footnote">
+          {devPagesEnabled && <a href="?viewer">Room viewer</a>}
+          {desktop && !update && <span>Version {desktop.version}</span>}
+          {desktop && update && <UpdateNotice update={update} install={() => desktop?.installUpdate()} />}
+        </p>
+      </div>
       {error && !required && <MessageBox text={error} onResult={onClearError} />}
       {required && <UpdateRequired required={required} update={update} />}
     </Backdrop>

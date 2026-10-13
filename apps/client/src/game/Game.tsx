@@ -9,7 +9,7 @@ import type { AssetStore } from "../assets.ts";
 import { allowPortrait, desktop, gameSocketUrl, onAndroidAway, requiredUpdate, type RequiredUpdate } from "../host.ts";
 import { hideFriendTells } from "./social.ts";
 import { GameAudio } from "./audio.ts";
-import { SplashPicture } from "./Intro.tsx";
+import { IntroBackdrop } from "./Intro.tsx";
 import { CharacterCreator } from "./CharacterCreator.tsx";
 import { AssetDownload } from "./AssetDownload.tsx";
 import { CharacterSelect } from "./CharacterSelect.tsx";
@@ -97,7 +97,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   const [launch] = useState(() => desktop?.launch ?? null);
   /** /Q (config.quickstart): until the game starts, an error, or logging off */
   const quickstart = useRef(launch?.quickstart === true);
-  /** The intro's splash (module/intro) behind the login dialog, at startup (unless /Q) and after logging off */
+  /** The intro (module/intro): its picture behind the login dialog, at startup (unless /Q) and after logging off */
   const [intro, setIntro] = useState(() => launch?.quickstart !== true);
   /** Plays the splash's music (main.ogg) until logging on, as the intro module does until it unloads */
   const [introAudio, setIntroAudio] = useState<GameAudio | null>(() => new GameAudio(assets));
@@ -284,7 +284,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
           onClearError={() => setError(null)}
           initialUsername={launch?.username}
           initialPassword={launch?.password}
-          behind={intro ? <SplashPicture assets={assets} audio={introAudio} /> : undefined}
+          behind={intro ? <IntroBackdrop assets={assets} audio={introAudio} /> : undefined}
         />
         <AssetDownload />
       </Framed>

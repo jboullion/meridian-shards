@@ -1808,10 +1808,7 @@ export function GameView({
             label: "Actions",
             items: [
               ...ACTIONS_MENU.map((a) => (a ? { label: a[1], onSelect: () => runCommand(a[0]) } : { label: "", separator: true })),
-              // Ours (docs/adr/0005-friends.md 3)
-              { label: "", separator: true },
-              { label: "Friends…", onSelect: () => openTab("friends") },
-              { label: "Pets…", onSelect: () => openTab("pets") },
+              // (Ours: no Friends… or Pets…: they're tabs beside the inventory, on P and N)
             ],
           },
           // (Ours: no Spells menu, spells.c's: the Spells tab has them, with a search)
@@ -1826,8 +1823,7 @@ export function GameView({
                 },
               ]
             : []),
-          // mailnews.c's toolbar button, until the toolbar
-          { label: "Mail…", onSelect: openMail },
+          // (No Mail…: the mailbox at the map's corner, the Classic toolbar's, its hotkey alias and typed mail open it)
           { label: "Change password…", onSelect: () => setModal({ type: "password" }) },
           // Not on a phone, which logs off on its own when put away (host.ts onAndroidAway)
           ...(touch ? [] : [{ label: "Logout timer…", onSelect: () => setModal({ type: "logoutTimer" }) }]),

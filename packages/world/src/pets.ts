@@ -142,18 +142,23 @@ export function petUnlocked(kind: string, colour: number, maxHealth: number): bo
 // ---- moving (5) ----
 
 const SQ = FINENESS;
-/** 5.1: about a square behind the owner, to one side */
-const BEHIND = 1.1 * SQ;
-const SIDE_ANGLE = 0.6;
+/**
+ * 5.1: a square behind the owner and to their right (45 degrees round from straight behind), the
+ * same side for every pet (2026-10-13; it was a side by the owner's name)
+ */
+const BEHIND = 1 * SQ;
+const SIDE_ANGLE = Math.PI / 4;
+/** Their right, as the client's angles go (x east, y south: a quarter turn up is to the right) */
+const RIGHT = 1;
 /** Close enough to the spot to stop */
 const THERE = 0.35 * SQ;
-/** 5.3: farther behind than this, it vanishes and comes back beside its owner */
+/** 5.3: farther than this, it vanishes and comes back beside its owner */
 const TOO_FAR = 5 * SQ;
 /** Stuck (no way to its owner) this long: likewise */
 const STUCK_MS = 3000;
-/** 5.2: the owner standing this long, the pet wanders within this far of them */
+/** 5.2: the owner standing this long, the pet potters about its spot behind them, this far from it */
 const IDLE_AFTER_MS = 1500;
-const WANDER = 2 * SQ;
+const WANDER = 0.6 * SQ;
 const FADE_MS = 400;
 /** proto.h DRAWFX_TRANSLUCENT75/50/25, for fading */
 const FADE_FX = [1, 2, 3, 0];
@@ -182,7 +187,7 @@ interface Pet {
   key: string;
   kind: PetKind;
   name: string;
-  /** -1 or 1: which side of its owner it keeps to */
+  /** 1: its owner's right, which it keeps to */
   side: number;
   mode: "follow" | "wander" | "rest";
   to: NavPoint | null;
@@ -305,9 +310,9 @@ export class Pets {
     return leaf?.sector ? floorHeightAt(this.room.sectors[leaf.sector - 1], x, y) : null;
   }
 
-  /** A spot beside the owner (behind, to its side) that the room allows */
+  /** A spot beside the owner (behind, to their right) that the room allows */
   private besideOwner(o: PetOwner, side: number, extra = 0): NavPoint {
-    const a = (o.angle * 2 * Math.PI) / 4096 + Math.PI + side * SIDE_ANGLE + extra;
+    const a = (o.angle * 2 * Math.PI) / 4096 + Math.PI - side * SIDE_ANGLE + extra;
     for (const r of [BEHIND, 0.7 * SQ, 0.4 * SQ]) {
       const p = { x: Math.round(o.x + Math.cos(a) * r), y: Math.round(o.y + Math.sin(a) * r) };
       if (walkable(this.walls, o.x, o.y, p.x, p.y, 64)) return p;
@@ -316,7 +321,7 @@ export class Pets {
   }
 
   private spawn(o: PetOwner, kind: PetKind, key: string): Pet {
-    const side = hash(o.name) & 1 ? 1 : -1;
+    const side = RIGHT;
     const at = this.besideOwner(o, side);
     const id = ambientId();
     const colour = kind.colours[readPetChoice(o.pet)?.colour ?? 0] ?? kind.colours[0];
@@ -404,10 +409,11 @@ export class Pets {
       if ((p.timer -= dt) > 0) return;
       // Seeded by the owner and the second, so other clients pick much the same
       const rand = seededRandom(hash(`${o.name}|${Math.floor(now / 1000)}`));
+      const home = this.besideOwner(o, p.side);
       for (let k = 0; k < 6; k++) {
         const a = rand() * 2 * Math.PI,
-          r = (0.5 + rand() * 0.5) * WANDER;
-        const t = { x: Math.round(o.x + Math.cos(a) * r), y: Math.round(o.y + Math.sin(a) * r) };
+          r = (0.3 + rand() * 0.7) * WANDER;
+        const t = { x: Math.round(home.x + Math.cos(a) * r), y: Math.round(home.y + Math.sin(a) * r) };
         if (walkable(this.walls, obj.x, obj.y, t.x, t.y, 64)) {
           p.mode = "wander";
           p.to = t;

@@ -1,0 +1,317 @@
+{
+  "_doc": "The login screen's backgrounds, shared by every client (tools/screenshots/README.md, Login screen backgrounds). The same format as shots.json: positions are server (Kod) squares in the room `rid`, standing at the square's centre; `angle` is Kod's 0-4095 (0 east, 1024 south, 2048 west, 3072 north); `pitch` tilts the look in degrees (negative down); `time` is a DM time of day. NPCs' squares come from the Kod (each shot's note), so aim at them from a few squares off. Found with shards.pose() and scouted in the game.",
+  "account": { "user": "shardshots", "password": "shardshots", "character": "Shardshots" },
+  "time": "afternoon",
+  "out": "ReferenceImages/login-backgrounds",
+  "hud": false,
+  "_viewports": "32 CSS pixels taller than the picture: the browser keeps its title bar (TitleBar.tsx) above the view, so the view is 1920x1080 (3840x2160) and 915x412 (a landscape phone)",
+  "viewports": {
+    "modern": { "width": 1920, "height": 1112, "deviceScaleFactor": 2 },
+    "mobile": { "width": 915, "height": 444, "deviceScaleFactor": 2.625 }
+  },
+  "_web": "The copies the login screen shows (npm run assets copies them into the game files as login/*.webp): WebP, desktop ones scaled to 2560x1440, the phone's as taken",
+  "web": { "quality": 0.82, "width": { "modern": 2560 } },
+  "shots": [
+    {
+      "id": "arena-watcher",
+      "title": "The Arena of Kraanan",
+      "note": "Across the arena floor from the west, to the Watcher's box and its banners; waits for a bout (the relay's arena, ADR 0007).",
+      "rid": 60, "row": 13, "col": 4, "angle": 0, "pitch": -8,
+      "tags": ["arena"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": ["arenaFight"]
+    },
+    {
+      "id": "arena-stands",
+      "title": "The arena's stands",
+      "note": "From the north side, south across the floor to the spectators in the stands.",
+      "rid": 60, "row": 4, "col": 13, "angle": 1024,
+      "tags": ["arena"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": ["arenaFight"]
+    },
+    {
+      "id": "arena-evening",
+      "title": "The arena in the evening",
+      "note": "arena-watcher at 18 o'clock (the arena shuts from 22 to 6, so no later).",
+      "rid": 60, "row": 13, "col": 4, "angle": 0, "pitch": -8,
+      "time": "evening",
+      "tags": ["arena", "evening"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": ["arenaFight"]
+    },
+    {
+      "id": "arena-trophies",
+      "title": "The arena's trophies",
+      "note": "In the Arena foyer, facing the trophy case on the east wall.",
+      "rid": 73, "row": 26, "col": 28, "angle": 0,
+      "tags": ["arena"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "tos-fountain",
+      "title": "The fountain of Tos",
+      "note": "East of the fountain, facing west across it to the guards and the houses.",
+      "rid": 50, "row": 57, "col": 25, "angle": 2048,
+      "tags": ["city"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "tos-street",
+      "title": "The streets of Tos",
+      "note": "In the long street north of the fountain, looking south down it to the fountain and the square.",
+      "rid": 50, "row": 30, "col": 18, "angle": 1024,
+      "tags": ["city"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "tos-night",
+      "title": "Tos by night",
+      "note": "tos-fountain at 23 o'clock: townsfolk carry torches.",
+      "rid": 50, "row": 57, "col": 25, "angle": 2048,
+      "time": "night",
+      "tags": ["city", "night"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "raza-pond",
+      "title": "Raza across the pond",
+      "note": "Inside the gap in the wall west of the pond, facing east-south-east: the shops across the pond on the left, the temple's clock tower on the right (the comparison shot).",
+      "rid": 300, "row": 17, "col": 19, "angle": 190,
+      "tags": ["city"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "raza-overview",
+      "title": "Raza from the rooftops",
+      "note": "UtilGoNearSquare puts us on the roof west of the pond: east over the whole village.",
+      "rid": 300, "row": 15, "col": 10, "angle": 0,
+      "tags": ["city"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "raza-clock",
+      "title": "Raza's clock tower",
+      "note": "North of the pond by the signpost, facing south to the temple's clock tower.",
+      "rid": 300, "row": 8, "col": 27, "angle": 1024,
+      "tags": ["city"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "barloque",
+      "title": "The streets of Barloque",
+      "note": "South Barloque, at the south end of the street, facing north up it.",
+      "rid": 102, "row": 44, "col": 30, "angle": 3072,
+      "tags": ["city"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "barloque-steps",
+      "title": "Barloque's marble steps",
+      "note": "South Barloque's west side, facing east along the street past the steps.",
+      "rid": 102, "row": 37, "col": 13, "angle": 0,
+      "tags": ["city"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "barloque-night",
+      "title": "Barloque by night",
+      "note": "barloque at 23 o'clock.",
+      "rid": 102, "row": 44, "col": 30, "angle": 3072,
+      "time": "night",
+      "tags": ["city", "night"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "marion",
+      "title": "Marion",
+      "note": "On the path west of the well, facing east to it and the cottages.",
+      "rid": 200, "row": 50, "col": 22, "angle": 0,
+      "tags": ["city"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "marion-elder",
+      "title": "Marion's Elder",
+      "note": "South of Ran er'Hoth (marion.kod:200, 80,37), facing north past him across the village.",
+      "rid": 200, "row": 85, "col": 37, "angle": 3072,
+      "tags": ["city"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "marion-night",
+      "title": "Marion by night",
+      "note": "marion at 23 o'clock: fireflies.",
+      "rid": 200, "row": 50, "col": 22, "angle": 0,
+      "time": "night",
+      "tags": ["city", "night"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "cornoth",
+      "title": "Cor Noth",
+      "note": "On the road west of the lake, facing east to the clock tower over the water.",
+      "rid": 150, "row": 24, "col": 10, "angle": 0,
+      "tags": ["city"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "jasper",
+      "title": "Jasper",
+      "note": "East Jasper's south street, facing north between the timber houses into the canyon.",
+      "rid": 350, "row": 64, "col": 37, "angle": 3072,
+      "tags": ["city"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "kocatan",
+      "title": "Ko'catan",
+      "note": "South of the pool, facing north up the pyramid's stairs.",
+      "rid": 2000, "row": 50, "col": 30, "angle": 3072,
+      "tags": ["city"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "berg",
+      "title": "Bergensdorf",
+      "note": "On the boardwalk, facing south over the river and its island.",
+      "rid": 2800, "row": 13, "col": 33, "angle": 1024,
+      "tags": ["city"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "jixa",
+      "title": "The hidden village of Jixa",
+      "note": "North end of the path, facing south down it to the fountain among the great trees.",
+      "rid": 2903, "row": 11, "col": 18, "angle": 1024,
+      "tags": ["city"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "victoria-hall",
+      "title": "Castle Victoria",
+      "note": "In the great hall, facing north to the golden lion doors (its skeletons and bats wander).",
+      "rid": 38, "row": 15, "col": 17, "angle": 3072,
+      "tags": ["castle"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "victoria-gate",
+      "title": "Castle Victoria's halls",
+      "note": "Below the stairs to the antechamber, facing south down the hall to the door.",
+      "rid": 38, "row": 7, "col": 18, "angle": 1024,
+      "tags": ["castle"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "victoria-throne",
+      "title": "The Throne Room of Castle Victoria",
+      "note": "Halfway up the red carpet, facing north to the throne between the braziers.",
+      "rid": 41, "row": 16, "col": 8, "angle": 3072,
+      "tags": ["castle"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "teacher-shalille",
+      "title": "Priestess Xiana, Shal'ille",
+      "note": "The Temple of Shal'ille; Xiana stands behind the altar (temple.kod:148, 17,2), so from her north side.",
+      "rid": 48, "row": 14, "col": 4, "angle": 1407,
+      "tags": ["teacher"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "teacher-qor",
+      "title": "Priestess Zuxana, Qor",
+      "note": "The Temple of Qor; Zuxana sits at her desk up on the dais (tempqor.kod:138, 16,15), so from the floor below, looking up.",
+      "rid": 802, "row": 22, "col": 15, "angle": 3072, "pitch": 3,
+      "tags": ["teacher"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "teacher-kraanan",
+      "title": "Priestess Qerti'nya, Kraanan",
+      "note": "The Temple of Kraanan; Qerti'nya stands behind the altar (tempkra.kod:160, 13,20), so from the west side.",
+      "rid": 801, "row": 13, "col": 16, "angle": 0,
+      "tags": ["teacher"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "teacher-faren",
+      "title": "Priestess Tenuv'vyal, Faren",
+      "note": "In the Badlands' hollow, by her campfire (badland1.kod:61, 44,59).",
+      "rid": 45, "row": 42, "col": 55, "angle": 302,
+      "tags": ["teacher"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "teacher-riija",
+      "title": "The Monk of Riija",
+      "note": "The Temple of Riija; down the corridor to the Monk (temprii.kod:515, 10,31).",
+      "rid": 2151, "row": 18, "col": 31, "angle": 3072,
+      "tags": ["teacher"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "teacher-jala",
+      "title": "Priestess Themala, Jala",
+      "note": "The Temple of Jala's rooftop; Themala on her dais (berg_jala.kod:72, 39,11).",
+      "rid": 2814, "row": 37, "col": 14, "angle": 1665,
+      "tags": ["teacher"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "leader-duke",
+      "title": "Duke Akardius",
+      "note": "The Chambers of Duke Akardius; on his carpet below the windows (factions/duke.kod, 27,34).",
+      "rid": 952, "row": 31, "col": 34, "angle": 3072,
+      "tags": ["leader"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "leader-princess",
+      "title": "Princess Kateriina",
+      "note": "The Assembly Chamber; on her throne between the banners (factions/princess.kod, 33,23).",
+      "rid": 852, "row": 27, "col": 23, "angle": 1024,
+      "tags": ["leader"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    },
+    {
+      "id": "leader-jonas",
+      "title": "Jonas D'Accor",
+      "note": "The Jasper tavern, where the rebels' leader keeps (factions/rebel.kod, 7,5).",
+      "rid": 371, "row": 3, "col": 5, "angle": 1024,
+      "tags": ["leader"],
+      "clients": ["modern", "mobile", "unreal"],
+      "steps": []
+    }
+  ]
+}

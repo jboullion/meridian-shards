@@ -29,7 +29,7 @@ interface Flyer {
   x: number;
   y: number;
   z: number;
-  /** Which way it's flying (fine units a second; drawn heading that way) */
+  /** Which way it's flying (fine units a second) */
   vx: number;
   vy: number;
   /** Wingspan, fine units */
@@ -193,22 +193,15 @@ const vertex = /* glsl */ `
 in float aFrame;
 in float aKind;
 in float aSize;
-in vec3 aDir;
 out float vFrame;
 out float vKind;
-out vec2 vTurn;
 uniform float uScale;
-uniform float uAspect;
 void main() {
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   gl_PointSize = aSize * uScale / -mv.z;
   gl_Position = projectionMatrix * mv;
   vFrame = aFrame;
   vKind = aKind;
-  // Which way it heads on screen (pixels, y up), from a step along its flight; none: as drawn
-  vec4 ahead = projectionMatrix * modelViewMatrix * vec4(position + aDir, 1.0);
-  vec2 d = (ahead.xy / ahead.w - gl_Position.xy / gl_Position.w) * vec2(uAspect, 1.0);
-  vTurn = length(d) > 1e-5 && length(aDir) > 0.0 ? normalize(d) : vec2(0.0, 1.0);
 }
 `;
 
@@ -216,16 +209,13 @@ const fragment = /* glsl */ `
 precision highp float;
 in float vFrame;
 in float vKind;
-in vec2 vTurn;
 out vec4 fragColor;
 uniform sampler2D uAtlas;
 uniform vec3 uBird;
 uniform vec3 uBat;
 void main() {
-  // Turn the picture (head up) to face its heading: the point's y runs down, the screen's up
-  vec2 p = gl_PointCoord - 0.5;
-  vec2 q = vec2(p.x * vTurn.y + p.y * vTurn.x, p.y * vTurn.y - p.x * vTurn.x) + 0.5;
-  if (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0) discard;
+  // As drawn, wings level (2026-10-13: turned to their heading on screen, they leaned)
+  vec2 q = gl_PointCoord;
   // The atlas's rows run down each picture, as the point's y does (the data's first row is v = 0)
   vec2 uv = vec2((vFrame + q.x) / ${FRAMES}.0, (vKind + q.y) / 2.0);
   vec4 t = texture(uAtlas, uv);
@@ -241,7 +231,6 @@ export class Flyers {
   private readonly frame = new Float32Array(MAX_FLYERS);
   private readonly kind = new Float32Array(MAX_FLYERS);
   private readonly size = new Float32Array(MAX_FLYERS);
-  private readonly dir = new Float32Array(MAX_FLYERS * 3);
   private flocks: Flock[] = [];
   private bats: Bat[] = [];
   /** The player's floor this frame: cave bats keep to floors about that level */
@@ -254,7 +243,6 @@ export class Flyers {
     g.setAttribute("aFrame", new THREE.BufferAttribute(this.frame, 1));
     g.setAttribute("aKind", new THREE.BufferAttribute(this.kind, 1));
     g.setAttribute("aSize", new THREE.BufferAttribute(this.size, 1));
-    g.setAttribute("aDir", new THREE.BufferAttribute(this.dir, 3));
     g.setDrawRange(0, 0);
     const material = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
@@ -263,7 +251,6 @@ export class Flyers {
       uniforms: {
         uAtlas: { value: atlas() },
         uScale: { value: 1 },
-        uAspect: { value: 1 },
         uBird: { value: new THREE.Vector3(0.1, 0.1, 0.12) },
         uBat: { value: new THREE.Vector3(0.29, 0.23, 0.19) },
       },
@@ -280,9 +267,8 @@ export class Flyers {
    * The camera's projection, for sizing: half the drawing buffer's height over tan(fov / 2)
    * (three.js sizes points the same way)
    */
-  setProjection(bufferHeight: number, fovYDegrees: number, aspect = 1): void {
+  setProjection(bufferHeight: number, fovYDegrees: number): void {
     this.points.material.uniforms.uScale.value = bufferHeight / 2 / Math.tan((fovYDegrees * Math.PI) / 360);
-    this.points.material.uniforms.uAspect.value = aspect;
   }
 
   /** How light it is where the player is (0..1): bats' wings catch a little of it */
@@ -460,18 +446,12 @@ export class Flyers {
       this.frame[n] = f.glide > 0 ? 1 : BEAT[Math.floor(f.phase * BEAT.length) % BEAT.length];
       this.kind[n] = f.kind;
       this.size[n] = f.size / FINENESS;
-      // A second's flight, in the scene's axes. Birds turn to it (seen from below, overhead);
-      // bats stay upright, ears up, as seen beside us
-      const turn = f.kind === BIRD ? 1 : 0;
-      this.dir[n * 3] = (f.vx / FINENESS) * turn;
-      this.dir[n * 3 + 1] = 0;
-      this.dir[n * 3 + 2] = (f.vy / FINENESS) * turn;
       n++;
     };
     for (const f of this.flocks) for (const b of f.birds) put(b.flyer);
     for (const b of this.bats) put(b.flyer);
     const g = this.points.geometry;
-    for (const name of ["position", "aFrame", "aKind", "aSize", "aDir"]) g.getAttribute(name).needsUpdate = true;
+    for (const name of ["position", "aFrame", "aKind", "aSize"]) g.getAttribute(name).needsUpdate = true;
     g.setDrawRange(0, n);
   }
 

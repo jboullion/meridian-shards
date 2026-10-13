@@ -558,7 +558,8 @@ export class GameScene {
     canvas.addEventListener("pointerup", this.onPointerUp);
     canvas.addEventListener("pointercancel", this.onPointerCancel);
     void this.init();
-    if (import.meta.env.DEV) (window as unknown as { shards: unknown }).shards = { gameScene: this, session, audio: this.audio, THREE };
+    if (import.meta.env.DEV)
+      (window as unknown as { shards: unknown }).shards = { gameScene: this, session, audio: this.audio, THREE, pose: () => this.pose() };
   }
 
   private async init(): Promise<void> {
@@ -995,6 +996,27 @@ export class GameScene {
     return new Promise((resolve) => this.captures.push(resolve));
   }
 
+  /**
+   * Ours, for scouting screenshot tours (tools/screenshots): where we stand, as a shot in their
+   * manifests: the room's number (rooms.json; several rooms can share a file, so the one with the
+   * room's name), its Kod square, our facing (0-4095, 0 east) and the look's pitch in degrees.
+   */
+  async pose(): Promise<{ rid: number | null; room: string; row: number; col: number; angle: number; pitch: number }> {
+    const p = this.session.world.player;
+    const file = p ? (this.session.resource(p.roomRes) ?? "").toLowerCase() : "";
+    const room = p ? (this.session.resource(p.roomNameRes) ?? "") : "";
+    const rooms = (await this.assets.roomList()).filter((r) => r.roo.toLowerCase() === file);
+    const rid = (rooms.find((r) => r.name === room) ?? rooms[0])?.rid ?? null;
+    return {
+      rid,
+      room,
+      row: Math.floor(this.mover.y / FINENESS) + 1,
+      col: Math.floor(this.mover.x / FINENESS) + 1,
+      angle: this.mover.angle,
+      pitch: Math.round((this.pitch * 180) / Math.PI),
+    };
+  }
+
   private takeCaptures(): void {
     if (!this.captures.length) return;
     const src = this.renderer.domElement;
@@ -1377,7 +1399,7 @@ export class GameScene {
       cave,
     };
     const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
-    flyers.setProjection(buffer.y, this.camera.fov, this.camera.aspect);
+    flyers.setProjection(buffer.y, this.camera.fov);
     // The bats take the light where we stand
     flyers.setLight(this.lightHere(room));
     const floor = this.mover.floorBase(this.mover.x, this.mover.y) ?? this.mover.z;

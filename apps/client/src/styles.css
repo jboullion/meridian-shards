@@ -2198,6 +2198,13 @@ canvas.server-wait {
   inset: 0;
   overflow: hidden;
   pointer-events: none;
+  /* One layer, so the backgrounds' own stacking (.intro-slide.front) stays under the dialogs */
+  isolation: isolate;
+}
+
+/* The shading over the pictures, above them all */
+.mk-backdrop-picture::after {
+  z-index: 2;
 }
 
 .mk-backdrop-picture::after {
@@ -2223,6 +2230,27 @@ canvas.server-wait {
 
 .intro-picture.ready {
   opacity: 1;
+}
+
+/* Ours: the login screen's backgrounds (Intro.tsx Slideshow), each faded in over the last (FADE_MS),
+   which stays shown under it until it's covered */
+.intro-slide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 1.5s ease-in-out;
+  user-select: none;
+}
+
+.intro-slide.shown {
+  opacity: 1;
+}
+
+.intro-slide.front {
+  z-index: 1;
 }
 
 /* cursor.c GameWindowSetCursor: the original's cursors over the view (kit.tsx installUiTheme) */

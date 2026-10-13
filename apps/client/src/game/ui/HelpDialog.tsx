@@ -267,7 +267,7 @@ interface HudPart {
 
 /** The parts of the screen, as GameView, ModernHud, Sidebar, Toolbar and TouchControls draw them */
 const HUD_PARTS: HudPart[] = [
-  { sel: [".game-title .menu-button"], title: "The ☰ menu", text: "Preferences, Configuration (keys), Actions, Spells, Mail, Help and logging off." },
+  { sel: [".game-title .menu-button"], title: "The ☰ menu", text: "Preferences, Configuration (keys), Actions, Help and logging off." },
   { sel: [".game-title .title-text"], title: "Where you are", text: "The room's name." },
   { sel: [".game-title .latency", ".classic-toolbar .latency"], title: "Connection", text: "Green is quick, yellow slow, red very slow. The FPS beside it is frames a second." },
   { sel: [".unit-portrait", ".user-area .portrait"], title: "You", text: "Your face. Click it for the emotes, or to cast a spell on yourself; right click to look at yourself." },
@@ -436,11 +436,9 @@ function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }
             </>
           )}
           <dt>Actions</dt>
-          <dd>Who is logged on (and ignoring players), groups to talk to, hotkey aliases (what F1 to F12 type), command aliases, your guild, Friends and Pets.</dd>
+          <dd>Who is logged on (and ignoring players), groups to talk to, hotkey aliases (what F1 to F12 type), command aliases and your guild.</dd>
           <dt>Language</dt>
           <dd>The language of the game's text, where the server has it.</dd>
-          <dt>Mail…</dt>
-          <dd>Read and write letters to other players.</dd>
           <dt>Change password…</dt>
           <dd>Your account's password.</dd>
           {layout !== "touch" && (

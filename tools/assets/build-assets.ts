@@ -26,7 +26,9 @@
 // textures that are water even where the sector has no depth (waterTextures.ts), and
 // floortextures.json, which floors are grass, earth or rock, for Ground Detail (floorTextures.ts),
 // and rooms.json, every room by number and name, for the admin console's Travel list.
-// And our ambient sounds that aren't the game's (dist/sounds/amb_*.ogg, from fetch-sounds.ts).
+// And our ambient sounds that aren't the game's (dist/sounds/amb_*.ogg, from fetch-sounds.ts),
+// and the login screen's backgrounds (login/*.webp and login/backgrounds.json, from the
+// screenshot tour's ReferenceImages/login-backgrounds).
 //
 // Output: dist/assets/<name> and dist/assets/manifest.json:
 //   { generated, rsbHash, files: { name: { size, hash } } }
@@ -37,7 +39,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSyn
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { buildItemSlots } from "./itemSlots.ts";
+import { buildItemSlots, buildItemTypes } from "./itemSlots.ts";
 import { buildSpellTimes } from "./spellTimes.ts";
 import { buildRoomExits, buildRoomLinks, buildRoomList, buildRoomTerrain } from "./roomLinks.ts";
 import { parseRoo } from "../../packages/formats/src/index.ts";
@@ -218,6 +220,11 @@ if (existsSync(join(KOD, "object")) && existsSync(join(KOD, "include"))) {
   writeFileSync(join(OUT, "itemslots.json"), slots);
   files["itemslots.json"] = { size: slots.length, hash: createHash("sha1").update(slots).digest("hex").slice(0, 16), mtime: 0 };
   console.log(`itemslots.json: ${Object.keys(JSON.parse(slots.toString()) as object).length} pictures`);
+  // What kind each item is, for sorting the inventory (ours)
+  const types = Buffer.from(JSON.stringify(buildItemTypes(kodFiles)));
+  writeFileSync(join(OUT, "itemtypes.json"), types);
+  files["itemtypes.json"] = { size: types.length, hash: createHash("sha1").update(types).digest("hex").slice(0, 16), mtime: 0 };
+  console.log(`itemtypes.json: ${Object.keys(JSON.parse(types.toString()) as object).length} pictures`);
   // How long each spell keeps us from casting again, for the quick slots' cooldowns
   const times = Buffer.from(JSON.stringify(buildSpellTimes(kodFiles)));
   writeFileSync(join(OUT, "spelltimes.json"), times);
@@ -270,6 +277,38 @@ for (const roo of Object.keys(AMBIENT_ROOMS)) {
   navRooms++;
 }
 console.log(`nav/*.nav: ${navRooms} rooms`);
+
+// The login screen's backgrounds (ours): the web copies of the screenshot tour's pictures
+// (tools/screenshots/backgrounds.json, npm run shots:backgrounds), as login/<id>.<layout>.webp,
+// and login/backgrounds.json listing them. Without the tour's pictures, the login screen keeps
+// the original's splash.
+const BACKGROUNDS = join(ROOT, "ReferenceImages", "login-backgrounds");
+const backgroundIndex = join(BACKGROUNDS, "index.json");
+if (existsSync(backgroundIndex)) {
+  type Shot = { id: string; title: string; tags: string[]; time: string; web?: Record<string, string> };
+  mkdirSync(join(OUT, "login"), { recursive: true });
+  const list: { id: string; title: string; tags: string[]; time: string; files: Record<string, string> }[] = [];
+  for (const shot of JSON.parse(readFileSync(backgroundIndex, "utf8")) as Shot[]) {
+    const picked: Record<string, string> = {};
+    for (const layout of ["modern", "mobile"]) {
+      const from = shot.web?.[layout];
+      if (!from || !existsSync(join(BACKGROUNDS, from))) continue;
+      const name = `login/${shot.id}.${layout}.webp`;
+      const data = readFileSync(join(BACKGROUNDS, from));
+      writeFileSync(join(OUT, name), data);
+      files[name] = { size: data.length, hash: createHash("sha1").update(data).digest("hex").slice(0, 16), mtime: 0 };
+      bytes += data.length;
+      picked[layout] = name;
+    }
+    if (Object.keys(picked).length) list.push({ id: shot.id, title: shot.title, tags: shot.tags, time: shot.time, files: picked });
+  }
+  const json = Buffer.from(JSON.stringify(list));
+  writeFileSync(join(OUT, "login", "backgrounds.json"), json);
+  files["login/backgrounds.json"] = { size: json.length, hash: createHash("sha1").update(json).digest("hex").slice(0, 16), mtime: 0 };
+  console.log(`login/backgrounds.json: ${list.length} backgrounds`);
+} else {
+  console.warn(`!! no login backgrounds (npm run shots:backgrounds): ${backgroundIndex}`);
+}
 
 writeFileSync(
   manifestPath,

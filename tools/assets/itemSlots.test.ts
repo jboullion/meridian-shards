@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildItemSlots, parseConstants } from "./itemSlots.ts";
+import { buildItemSlots, buildItemTypes, parseConstants } from "./itemSlots.ts";
 
 const KHD = `
    ITEM_SINGLE_USE = 0x0001
@@ -54,6 +54,29 @@ describe("item slots", () => {
       "ornhelma.bgf": "head",
       "ornhelmb.bgf": "head",
       "ring3.bgf": "finger",
+      "torch.bgf": "shield",
+    });
+  });
+});
+
+describe("item types, for sorting the inventory", () => {
+  it("each picture's type, from the nearest Kod item family above it", () => {
+    const files = [
+      ...FILES,
+      file("numbitem.kod", "NumberItem is PassiveItem\n"),
+      file("money.kod", "Money is NumberItem\n"),
+      file("shillings.kod", "Shillings is Money\nresources:\n   shillings_icon_rsc = money.bgf\nclassvars:\n   vrIcon = shillings_icon_rsc\n"),
+      file("reagent.kod", "Reagent is NumberItem\n"),
+      file("herbs.kod", "Herbs is Reagent\nresources:\n   herbs_icon_rsc = herbs.bgf\nclassvars:\n   vrIcon = herbs_icon_rsc\n"),
+    ];
+    expect(buildItemTypes(files)).toEqual({
+      "herbs.bgf": "reagent",
+      "lute.bgf": "instrument",
+      "mace.bgf": "weapon",
+      "money.bgf": "money",
+      "potion.bgf": "potion",
+      "ring3.bgf": "jewelry",
+      // Torches are Shields in Kod
       "torch.bgf": "shield",
     });
   });

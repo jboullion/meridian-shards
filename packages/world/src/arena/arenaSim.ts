@@ -119,6 +119,12 @@ interface Person {
   area: number;
   say: string | null;
   sayMs: number;
+  /**
+   * Spectators: the fighter they're cheering for this round (a contestant when picked), and the
+   * round they picked in (once theirs falls, they don't pick another until the next)
+   */
+  fav: Person | null;
+  favRound: number;
   /** For the ticks: what was last sent, and whether they're new */
   sent: string;
   fresh: boolean;
@@ -201,6 +207,8 @@ export class ArenaSim {
   private phaseMs = 1500;
   private roundMs = 0;
   private beatenThisRound = 0;
+  /** Counts the rounds, for the spectators' favourites */
+  private round = 0;
   private winner: Person | null = null;
   private pit: NavPoint = { x: 0, y: 0 };
   private galleries: number[] = [];
@@ -357,13 +365,13 @@ export class ArenaSim {
   }
 
   private moveOf(p: Person): ArenaMove {
-    return [p.id, Math.round(p.x), Math.round(p.y), p.angle, p.pose, p.ps, p.cf, Math.ceil(p.hp), this.st(p), Math.round(p.fade * 100), p.fadeDir];
+    return [p.id, Math.round(p.x), Math.round(p.y), p.angle, p.pose, p.ps, p.cf, Math.ceil(p.hp), this.st(p), Math.round(p.fade * 100), p.fadeDir, p.fav?.id ?? -1];
   }
 
   private personWire(p: Person): ArenaPersonWire {
     return {
       id: p.id, rid: p.rid, name: p.name, arch: p.arch, role: p.role, look: p.look, x: Math.round(p.x), y: Math.round(p.y), a: p.angle, pose: p.pose,
-      ps: p.ps, cf: p.cf, hp: Math.ceil(p.hp), mhp: p.mhp, st: this.st(p), fade: Math.round(p.fade * 100), fd: p.fadeDir,
+      ps: p.ps, cf: p.cf, hp: Math.ceil(p.hp), mhp: p.mhp, st: this.st(p), fade: Math.round(p.fade * 100), fd: p.fadeDir, fav: p.fav?.id ?? -1,
     };
   }
 
@@ -444,6 +452,7 @@ export class ArenaSim {
       }
       this.phase = "rest";
       this.phaseMs = this.between(this.config.restMs);
+      for (const p of this.people) p.fav = null;
       return;
     }
     if (this.phase !== "rest") return;
@@ -475,6 +484,7 @@ export class ArenaSim {
     }
     this.beatenThisRound = 0;
     this.roundMs = 0;
+    this.round++;
     this.phase = "fight";
   }
 
@@ -493,8 +503,18 @@ export class ArenaSim {
     this.speak(w, { won: true });
     this.event({ type: "victory", x: w.x, y: w.y });
     if (w.rid >= 0) this.record(w.rid, "wins");
-    for (const f of this.people)
-      if (f.role === "spectator" && f.fadeDir >= 0 && !f.walking && this.rand() < 0.6) this.emote(f, this.rand() < 0.75 ? "cheer" : "wave", 2000 + this.rand() * 2500);
+    // Their fans cheer loudest, and a couple say so; the rest of the stands cheer too
+    let said = 0;
+    for (const f of this.people) {
+      if (f.role !== "spectator" || f.fadeDir < 0 || f.walking) continue;
+      if (f.fav === w) {
+        this.emote(f, "cheer", 3500 + this.rand() * 2500);
+        if (said < 2 && !f.say) {
+          said++;
+          this.speak(f, { fan: { name: w.name, outcome: "won" } });
+        }
+      } else if (this.rand() < 0.6) this.emote(f, this.rand() < 0.75 ? "cheer" : "wave", 2000 + this.rand() * 2500);
+    }
     this.endRound();
   }
 
@@ -543,7 +563,7 @@ export class ArenaSim {
       hp: 1, mhp: 1, mana: 0, mmana: 0, webMs: 0, blindMs: 0, dazzleMs: 0, poisonBy: null, winner: false, beaten: false,
       fade: fadeIn ? 0 : 1, fadeDir: fadeIn ? 1 : 0, path: [], walking: false, pace: PACE_MIN + this.rand() * (PACE_MAX - PACE_MIN), idleMs: 0, faceAngle: -1,
       leaving: false, stayMs: FOREVER, emoteMs: 0, nextEmoteMs: 1500 + this.rand() * 4500, target: null, swingMs: 0, castMs: 0, cooldownMs: 0, stepMs: 0,
-      retargetMs: 0, lastSquare: -1, moved: false, lastHitBy: null, hacking: null, area, say: null, sayMs: 0, sent: "", fresh: true,
+      retargetMs: 0, lastSquare: -1, moved: false, lastHitBy: null, hacking: null, area, say: null, sayMs: 0, fav: null, favRound: -1, sent: "", fresh: true,
     };
     this.people.push(p);
     return p;
@@ -633,6 +653,7 @@ export class ArenaSim {
     p.say = null;
     p.target = null;
     for (const o of this.people) if (o.target === p) o.target = null;
+    this.booFall(p);
     this.cheer(p);
     if (!this.galleries.length) return;
     const area = this.galleryArea();
@@ -648,6 +669,29 @@ export class ArenaSim {
     this.facePit(fan);
     fan.angle = fan.faceAngle;
     if (this.rand() < 0.5) this.speak(fan, { lost: true });
+  }
+
+  /** A fighter falls: their fans boo (pointing at the floor), a couple of them aloud, and they've no one to cheer this round */
+  private booFall(p: Person): void {
+    let said = 0;
+    for (const f of this.people) {
+      if (f.fav !== p) continue;
+      f.fav = null;
+      if (f.fadeDir < 0 || f.walking) continue;
+      this.emote(f, "point", 0);
+      if (said < 2 && !f.say) {
+        said++;
+        this.speak(f, { fan: { name: p.name, outcome: "lost" } });
+      }
+    }
+  }
+
+  /** A spectator picks a fighter to cheer for, once a round, from those still standing */
+  private pickFavourite(p: Person): void {
+    if (p.beaten || p.favRound === this.round || this.phase !== "fight") return;
+    p.favRound = this.round;
+    const on = this.people.filter((o) => this.contestant(o));
+    p.fav = on.length ? on[Math.floor(this.rand() * on.length) % on.length] : null;
   }
 
   /** A spectator near a fight cheers it on */
@@ -791,6 +835,7 @@ export class ArenaSim {
     if (p.emoteMs > 0 && (p.emoteMs -= dt) <= 0) this.setPose(p, "stand");
     if (p.role !== "spectator" || p.fadeDir < 0) return;
     this.facePit(p);
+    this.pickFavourite(p);
     if (p.emoteMs <= 0 && (p.nextEmoteMs -= dt) <= 0) {
       p.nextEmoteMs = 1500 + this.rand() * 4500;
       const r = this.rand();
@@ -798,6 +843,8 @@ export class ArenaSim {
       else if (r < 0.55) this.emote(p, "wave", 0);
       else if (r < 0.72) this.emote(p, "point", 0);
       else if (r < 0.82) this.emote(p, "dance", 4000 + this.rand() * 5000);
+      // Now and then, a word for their fighter
+      if (p.fav && this.contestant(p.fav) && !p.say && this.speakers() < MAX_SPEAKING && this.rand() < 0.05) this.speak(p, { fan: { name: p.fav.name } });
     }
   }
 

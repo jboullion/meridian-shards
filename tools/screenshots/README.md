@@ -52,6 +52,55 @@ It is `Shardshots` on the local admin account `shardshots` (password = name). If
 
 The mace and shield are given on every run, if they're missing.
 
+## Login screen backgrounds
+
+The login screen fades between pictures of the game's places. Modern uses the desktop pictures and the phone uses the mobile ones. [`backgrounds.json`](backgrounds.json) lists them: the arena, the cities, Castle Victoria, the six schools' teachers and the three faction leaders. It uses the same format as `shots.json`, with a few more fields, and `capture.ts` takes it:
+
+```bash
+npm run dev                                             # the local stack, in another terminal
+npm run shots:backgrounds                               # every background, modern and mobile
+npm run shots:backgrounds -- --only tos-fountain        # some
+npm run shots:backgrounds -- --client modern --headed   # one client, watching
+```
+
+They land in `ReferenceImages/login-backgrounds/<id>/{modern,mobile}.png`, each with a WebP copy beside it for the game (`modern.webp` scaled to 2560×1440, `mobile.webp` as taken, about 350 KB each). `index.json` beside them lists every shot taken so far: id, title, tags, time, files and the web copies.
+
+To put them on the login screen, run `npm run assets`. It copies the WebP copies into the game files as `login/<id>.<layout>.webp`, with `login/backgrounds.json` listing them (`tools/assets/build-assets.ts`). The login screen fades between them (`apps/client/src/game/Intro.tsx`). Deploy the server so the hosted client gets them; new releases of the apps carry them too. `npm run shots:backgrounds -- --web-only` makes the copies again from the pictures already taken, without the local stack (for a new size or quality in `web`). Modern pictures are 3840×2160 (1920×1080 at 2×). Mobile pictures are a landscape Pixel 7's 2401×1081. The windows (`viewports`) are 32 pixels taller than that, because the browser's title bar sits above the view.
+
+### What's different from the comparison shots
+
+| Manifest field | What it does |
+|---|---|
+| `"hud": false` | Saves the 3D view alone (`gameScene.captureView`), so nothing over it appears in either layout: no interface, touch controls, title bar, names, speech bubbles or first-person hands |
+| `"out"` | Where the shots go, from the repository's root (`--out` overrides it) |
+| `"viewports"` | Each client's window: `{ "width", "height", "deviceScaleFactor" }` |
+| no `"equipment"` | The character isn't given anything (the hands aren't in the picture anyway) |
+| `"web"` | `{ "quality", "width": { "<client>": <max width> } }`: a WebP copy of each picture for the game, made after the shots in the same browser (no image library) |
+
+| Shot field | What it does |
+|---|---|
+| `pitch` | The first-person look in degrees: negative looks down, positive up |
+| `time` | `morning`, `afternoon`, `evening` or `night` (the DM commands: 6, 13, 18 and 23 o'clock), instead of the manifest's `time`. The run takes one time of day after another. Townsfolk carry torches from 19 to 6, and the arena is shut from 22 to 6, so an arena shot at `night` would be empty. |
+| `tags` | `arena`, `city`, `castle`, `teacher`, `leader`, `evening`, `night`, for the login screen to choose by |
+
+### Finding a spot
+
+1. In development, log in as `Shardshots` in the browser. Go to the room with the admin console's Travel tab, then walk and look to the view you want (PgUp/PgDn tilts the look).
+2. Run `await shards.pose()` in the console. It gives the room's number, the square, the facing and the pitch, ready to copy into a shot.
+3. Take that shot alone with `--only <id> --headed` and look at it.
+
+`UtilGoNearSquare` puts the character at the square's centre, as near as it can. On some squares that's a rooftop, which can make a good overview (`raza-overview`). An NPC stands at its Kod square, which is in the room's or faction's Kod file (`backgrounds.json` notes which). Aim at it from a few squares away.
+
+### Unreal (meridian-unreal, still to do)
+
+`run_comparison_shots.ps1` already takes `-Manifest` and `-Out`. To take these, it also needs to:
+
+- Leave out `-MRLookDevUI` and the wielded mace when the manifest says `"hud": false`.
+- Use the shot's `pitch` as the camera's (`rotation[0]`, degrees, negative down).
+- Use the shot's `time` as `-GameHour`: morning 6, afternoon 13, evening 18, night 23 (the server's hours; the comparison shots use 17 for the afternoon mood).
+- Skip shots whose room isn't in `data/zone_layout.json` yet, rather than failing the run.
+- Write `unreal.png` beside the others (it does already). `index.json` lists it on the next browser run.
+
 ## Steps
 
 | Step | What it does |
@@ -61,6 +110,7 @@ The mace and shield are given on every run, if they're missing.
 | `view:<first\|chase\|behind\|front>` | The Modern camera view |
 | `chase:<heading>:<pitch>:<arm>` | The chase camera at a heading (0-4095, like `angle`), a pitch in radians (negative looks down) and an arm length in squares |
 | `wheel` | Holds the phone's Cast button down until its wheel of quick slots opens |
+| `arenaFight[:<s>]` | Waits up to 4 minutes for a bout in the arena (ADR 0007), then `s` seconds more (4 by default) for it to get going |
 | `login` | Unreal only: its login screen |
 
 ## The original client (by hand)

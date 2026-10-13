@@ -27,6 +27,8 @@ export interface ChatterContext {
   blinded?: boolean;
   /** Stuck in a web in an arena fight */
   webbed?: boolean;
+  /** An arena spectator's favourite fighter: cheering them on, their win, or their fall */
+  fan?: { name: string; outcome?: "won" | "lost" };
 }
 
 const ANY = [
@@ -57,6 +59,10 @@ const LOST = ["Next time.", "I'll be back.", "Well fought.", "Ow.", "I slipped!"
 const IMPRESSED = ["Fine armour, that.", "Must weigh a ton.", "Look at that gear!", "You've seen a fight or two.", "Wish I could afford that."];
 const BLINDED = ["I can't see!", "My eyes!", "Where are you?", "Cheap trick!", "Curse you!"];
 const WEBBED = ["I'm stuck!", "Webs! Ugh!", "Get this off me!", "Can't move!"];
+/** A fan for their fighter ({name}): cheering them on, when they win, and booing their fall */
+const FAN_CHEER = ["Come on, {name}!", "{name}! {name}!", "Get up, {name}!", "That's it, {name}!", "Show them, {name}!", "My money's on {name}!", "Go on, {name}!", "Kraanan guide you, {name}!"];
+const FAN_WON = ["{name} wins! I knew it!", "That's my {name}!", "Huzzah for {name}!", "{name}! Champion!", "Pay up, I said {name}!"];
+const FAN_LOST = ["Boo!", "Get up, {name}!", "Rubbish, {name}!", "Boo! Fixed, it was!", "There goes my wager.", "Pathetic!"];
 const SCATTER = ["Run!", "Magic! Get back!", "Mind the fire!", "Not again!", "Help!", "Watch it!"];
 
 const BY_PLACE: Partial<Record<Place, string[]>> = {
@@ -89,6 +95,10 @@ const BY_ROLE: Partial<Record<Role, string[]>> = {
 export function chatterLine(rand: () => number, ctx: ChatterContext): string {
   const pick = (l: string[]) => l[Math.floor(rand() * l.length) % l.length];
   const night = ctx.hour !== null && (ctx.hour >= 21 || ctx.hour < 5);
+  if (ctx.fan) {
+    const lines = ctx.fan.outcome === "won" ? FAN_WON : ctx.fan.outcome === "lost" ? FAN_LOST : FAN_CHEER;
+    return pick(lines).replaceAll("{name}", ctx.fan.name);
+  }
   if (ctx.won) return pick(WON);
   if (ctx.lost) return pick(LOST);
   if (ctx.blinded) return pick(BLINDED);

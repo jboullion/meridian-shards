@@ -29,6 +29,8 @@ const ROLLOFF = 0.00016;
 const MAX_DIST = FINENESS * 32;
 /** Ours: at most this many ambient sounds at once */
 const MAX_AMBIENT = 16;
+/** The gestures that let a page play sound (GameAudio.unlock): a key, a mouse press, or a touch ending */
+const UNLOCK_EVENTS = ["keydown", "pointerdown", "pointerup", "touchend", "click"] as const;
 /** Ours: how far an ambient sound carries unless told (fine units) */
 const AMBIENT_RANGE = FINENESS * 20;
 
@@ -178,11 +180,15 @@ export class GameAudio {
       this.saved = s;
       this.setSettings({ ...s, ...this.previewing });
     });
-    window.addEventListener("pointerdown", this.unlock);
-    window.addEventListener("keydown", this.unlock);
+    for (const type of UNLOCK_EVENTS) window.addEventListener(type, this.unlock, true);
   }
 
-  /** Browsers start audio suspended until the page gets a click or key press. */
+  /**
+   * Browsers start audio suspended until the page gets a click or key press (the apps don't:
+   * Electron's autoplayPolicy, the Android WebView's setMediaPlaybackRequiresUserGesture), so the
+   * login screen's music starts with the player's first one. A touch only counts once the finger
+   * lifts (pointerup, touchend, click), so those are listened for as well as a mouse's press.
+   */
   private readonly unlock = () => {
     if (this.ctx?.state === "suspended") void this.ctx.resume();
   };
@@ -478,8 +484,7 @@ export class GameAudio {
 
   dispose(): void {
     this.offSettings();
-    window.removeEventListener("pointerdown", this.unlock);
-    window.removeEventListener("keydown", this.unlock);
+    for (const type of UNLOCK_EVENTS) window.removeEventListener(type, this.unlock, true);
     this.stopMusic();
     this.stopWhere(() => true);
     this.stopAmbient();

@@ -12,7 +12,7 @@ import { STAT_GROUP, type ObjectInfo } from "@shards/protocol";
 import type { GameSession } from "@shards/world";
 import type { AssetStore } from "../../assets.ts";
 import { EQUIP_COLUMNS, layoutEquipment, wieldedWeapon, wornSlot, type EquipKey } from "../equipment.ts";
-import { sortByNameAndNumber, sortMoves } from "../inventoryOrder.ts";
+import { sortByType, sortMoves } from "../inventoryOrder.ts";
 import type { IconRenderer } from "../icons.ts";
 import { DRAG_ITEM } from "../quickSlots.ts";
 import { updateSettings, type Settings } from "../settings.ts";
@@ -236,10 +236,20 @@ export function CharacterWindow({
       }
     : undefined;
 
-  /** Sort: the bag in object.c CompareObjectNameAndNumber's order, by the server's own moves */
-  const sortBag = () => {
+  /**
+   * Sort (ours): the bag by type (itemtypes.json: weapons, armour, magic, reagents, food...), then by
+   * name, shillings always last, by the server's own moves. Without the table (an older asset
+   * build), shillings are known by their English name.
+   */
+  const sortBag = async () => {
+    const types = await assets.itemTypes().catch(() => ({}) as Record<string, string>);
+    const typeOf = (o: ObjectInfo) => {
+      const pic = o.iconRes ? session.resource(o.iconRes)?.toLowerCase() : undefined;
+      const t = pic ? types[pic] : undefined;
+      return t ?? (/^shillings?$/i.test(session.englishResource(o.nameRes) ?? "") ? "money" : undefined);
+    };
     const items = [...world.inventory.values()];
-    const wanted = sortByNameAndNumber(items, rs).map((o) => o.id);
+    const wanted = sortByType(items, rs, typeOf).map((o) => o.id);
     for (const [what, where] of sortMoves(items.map((o) => o.id), wanted)) {
       if (world.moveInventoryItem(what, where)) session.inventoryMove(what, where);
     }
@@ -283,7 +293,7 @@ export function CharacterWindow({
                     <StatBar stat={bulk} />
                   </div>
                 )}
-                <Button className="cw-sort" title="Shillings and other amounts first, then by name" onClick={sortBag}>
+                <Button className="cw-sort" title="By type (weapons, armour, magic, reagents, food...), then by name; shillings last" onClick={() => void sortBag()}>
                   Sort
                 </Button>
               </div>

@@ -182,6 +182,38 @@ describe.skipIf(!have)("the arena's fights on the real room", () => {
     expect(all.reduce((t, r) => t + r.kills, 0)).toBeGreaterThan(0);
   }, 60_000);
 
+  test("spectators cheer for a fighter each round: by name, loudest when they win, booing when they fall", () => {
+    const s = sim(9);
+    const lines: string[] = [];
+    let checked = 0;
+    let cheered = 0,
+      booed = 0;
+    run(s, 6 * 60_000, (m) => {
+      const people = new Map(s.everyone.map((p) => [p.id, p]));
+      const fighters = s.everyone.filter((p) => p.role !== "spectator" && p.fd >= 0);
+      const names = fighters.map((p) => p.name);
+      for (const [id, text] of m.say ?? []) {
+        const who = people.get(id);
+        if (who?.role !== "spectator" || who.rid >= 0) continue;
+        lines.push(text);
+        if (names.some((n) => text.includes(n))) cheered++;
+        if (/Boo|Rubbish|Pathetic|wager/.test(text)) booed++;
+      }
+      if (s.phase !== "fight") return;
+      // A favourite is always someone on the floor and still standing
+      for (const p of s.everyone) {
+        if (p.role !== "spectator" || p.fav === undefined || p.fav < 0) continue;
+        const fav = people.get(p.fav)!;
+        expect(fav.role).not.toBe("spectator");
+        expect(fav.st & ARENA_STATUS.BEATEN).toBeFalsy();
+        checked++;
+      }
+    });
+    expect(checked).toBeGreaterThan(100);
+    expect(cheered).toBeGreaterThan(0);
+    expect(booed).toBeGreaterThan(0);
+  }, 60_000);
+
   test("shut from 22 to 6: everyone goes", () => {
     const s = sim(3);
     run(s, 20_000);
@@ -325,5 +357,21 @@ describe("the arena as drawn (ArenaView)", () => {
     expect(info.role).toBe("Warrior");
     expect(info.arena).toMatchObject({ archetype: "Warrior", weapon: "long sword", wins: 4, losses: 1, kills: 6, season: 2, champion: [1], hp: 50, maxHp: 100 });
     expect(info.doing).toBe("Fighting a bout");
+  });
+
+  test("the inspect window: whom a spectator cheers for, as the ticks say", () => {
+    const v = new ArenaView();
+    const fan = person({ id: 2, rid: -1, name: "Wenna", arch: "", role: "spectator", fav: -1 });
+    v.receive(state([person({}), fan]));
+    v.update(0, 16);
+    const id = v.objects()[1].id;
+    expect(v.describe(id)!.cheering).toBeUndefined();
+    v.receive({ t: "arenaTick", now: 5100, phase: "fight", mv: [[2, 10 * SQ, 10 * SQ, 0, "stand", 0, 0, 1, 0, 100, 0, 1]] });
+    v.update(1000, 16);
+    expect(v.describe(id)!.cheering).toBe("Bram the Bold");
+    // A relay from before favourites sends none: nothing changes
+    v.receive({ t: "arenaTick", now: 5200, phase: "fight", mv: [[2, 10 * SQ, 10 * SQ, 0, "stand", 0, 0, 1, 0, 100, 0]] });
+    v.update(2000, 16);
+    expect(v.describe(id)!.cheering).toBe("Bram the Bold");
   });
 });

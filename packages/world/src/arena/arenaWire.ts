@@ -35,10 +35,15 @@ export interface ArenaPersonWire {
   /** How visible (0-100), and whether fading in (1), out (-1) or not (0) */
   fade: number;
   fd: number;
+  /** A spectator's favourite fighter this round (their id), or -1 (absent from relays before 2026-10-13) */
+  fav?: number;
 }
 
-/** What may change about someone tick to tick: [id, x, y, a, pose, ps, cf, hp, st, fade, fd] */
-export type ArenaMove = [number, number, number, number, Pose, number, number, number, number, number, number];
+/**
+ * What may change about someone tick to tick: [id, x, y, a, pose, ps, cf, hp, st, fade, fd, fav]
+ * (fav last, absent from older relays, and ignored by older clients)
+ */
+export type ArenaMove = [number, number, number, number, Pose, number, number, number, number, number, number, number?];
 
 /** A wall spell's element */
 export interface ArenaFieldWire {

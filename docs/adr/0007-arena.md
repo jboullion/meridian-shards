@@ -81,6 +81,13 @@ Examine (right click, long press) on a fighter shows:
 - what they're doing (fighting, stuck in a web, stumbling about blinded, in the stands, savouring a victory)
 - their mood
 
+### 5a. The stands take sides (added 2026-10-13)
+
+1. **Each spectator cheers for one fighter a round**, picked from those on the floor when the bout starts (or still standing, for one who arrives later). The beaten watching from the stands don't pick. Their inspect window says "Cheering for" and the fighter's name.
+2. **Now and then a fan calls out for them by name** ("Come on, Bram the Bold!"), as the stands' other lines are said: over their heads, never in the chat, two speaking at most.
+3. **Their fighter wins:** the fans cheer longest, and a couple of them say so. **Their fighter falls:** the fans boo (pointing at the floor), a couple aloud, and they've no one to cheer until the next round.
+4. **On the wire:** `ArenaPersonWire.fav` and the last element of an `ArenaMove`, the fighter's id or -1. Relays from before send neither and clients from before ignore both, so a relay and its clients needn't update together.
+
 ### 6. Settings without code
 
 `arena.json` (the path in `ARENA_CONFIG`) is merged over the defaults (`arenaConfig.ts readArenaConfig`) when the gateway starts. Anything it doesn't understand is logged and dropped. Every field:

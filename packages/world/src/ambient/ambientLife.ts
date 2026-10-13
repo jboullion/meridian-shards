@@ -198,6 +198,8 @@ export interface AmbientPersonInfo {
   errand: string | null;
   /** An arena fighter's archetype, favourites and season (arena/arenaView.ts) */
   arena?: ArenaFighterInfo;
+  /** An arena spectator's fighter this round */
+  cheering?: string;
 }
 
 interface ExitPoint {

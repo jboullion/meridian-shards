@@ -19,6 +19,16 @@ export interface SpellTimes {
   reagents?: { name: string; plural?: string; amount: number }[];
 }
 
+/** A login screen background (login/backgrounds.json): a place, and its pictures by layout */
+export interface LoginBackground {
+  id: string;
+  title: string;
+  tags: string[];
+  time: string;
+  /** Asset names by layout: "modern" (the desktop's), "mobile" (the phone's) */
+  files: Partial<Record<"modern" | "mobile", string>>;
+}
+
 export class AssetStore {
   private manifest: Manifest | null = null;
   private bytes = new Map<string, Promise<Uint8Array>>();
@@ -118,6 +128,16 @@ export class AssetStore {
     return JSON.parse(new TextDecoder().decode(await this.download("rooms.json"))) as { rid: number; name: string; roo: string }[];
   }
 
+  /**
+   * Ours: the login screen's backgrounds (login/backgrounds.json from the asset build, made by the
+   * screenshot tour): each with its pictures by layout ("modern" for the desktop, "mobile" for
+   * the phone). Empty without one.
+   */
+  async loginBackgrounds(): Promise<LoginBackground[]> {
+    if (!this.has("login/backgrounds.json")) return [];
+    return JSON.parse(new TextDecoder().decode(await this.download("login/backgrounds.json"))) as LoginBackground[];
+  }
+
   /** Floor textures that are water even on a dry floor (watertextures.json from the asset build); empty without one */
   async waterTextures(): Promise<Set<number>> {
     if (!this.has("watertextures.json")) return new Set();
@@ -141,6 +161,12 @@ export class AssetStore {
   async itemSlots(): Promise<Record<string, string>> {
     if (!this.has("itemslots.json")) return {};
     return JSON.parse(new TextDecoder().decode(await this.download("itemslots.json"))) as Record<string, string>;
+  }
+
+  /** itemtypes.json: picture file (lower case) -> what kind of item it is, for sorting; empty without one */
+  async itemTypes(): Promise<Record<string, string>> {
+    if (!this.has("itemtypes.json")) return {};
+    return JSON.parse(new TextDecoder().decode(await this.download("itemtypes.json"))) as Record<string, string>;
   }
 
   /**

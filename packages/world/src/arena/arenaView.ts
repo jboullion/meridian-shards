@@ -240,11 +240,12 @@ export class ArenaView {
   private move(mv: ArenaMove, now: number): void {
     const f = this.figures.get(mv[0]);
     if (!f) return;
-    const [, x, y, a, pose, ps, cf, hp, st, fade, fd] = mv;
+    const [, x, y, a, pose, ps, cf, hp, st, fade, fd, fav] = mv;
     f.from = { x: f.obj.x, y: f.obj.y };
     f.to = { x, y };
     f.at = now;
     Object.assign(f.wire, { x, y, a, pose, ps, cf, hp, st, fade, fd });
+    if (fav !== undefined) f.wire.fav = fav;
     f.obj.angle = a;
     this.dress(f);
   }
@@ -390,6 +391,9 @@ export class ArenaView {
     const info: AmbientPersonInfo = {
       object: f.obj, name: w.name || "Spectator", female: w.look.female, role, doing, mood, from: null, to: null, errand: null,
     };
+    // A spectator's fighter this round
+    const fav = w.fav !== undefined && w.fav >= 0 ? this.figures.get(w.fav)?.wire.name : undefined;
+    if (fav) info.cheering = fav;
     if (r)
       info.arena = {
         archetype: archLabel,

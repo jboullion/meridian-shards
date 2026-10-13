@@ -345,6 +345,7 @@ export function AmbientPersonDialog({
     : [];
   const rows: [string, string][] = [
     ...fighter,
+    ...(person.cheering ? ([["Cheering for", person.cheering]] as [string, string][]) : []),
     ["Doing", person.doing],
     ...(person.errand ? ([["Errand at", roomName(person.errand)]] as [string, string][]) : []),
     ...(person.from ? ([["Came from", roomName(person.from)]] as [string, string][]) : []),

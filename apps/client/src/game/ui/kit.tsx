@@ -152,9 +152,16 @@ globalThis.window?.addEventListener("keydown", (e) => {
 // ---- frames and windows ----
 
 /** The full page behind the pre-game dialogs: bkgnd.bmp tiled on black (color.c COLOR_BGD). */
-export function Backdrop({ children, behind }: { children: ReactNode; /** Ours: a picture behind it all (the login's splash) */ behind?: ReactNode }) {
+export function Backdrop({
+  children, behind, className,
+}: {
+  children: ReactNode;
+  /** Ours: a picture behind it all (the login's backgrounds) */
+  behind?: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className={behind ? "mk-backdrop with-picture" : "mk-backdrop"}>
+    <div className={`mk-backdrop${behind ? " with-picture" : ""}${className ? ` ${className}` : ""}`}>
       {behind && <div className="mk-backdrop-picture">{behind}</div>}
       {children}
     </div>
