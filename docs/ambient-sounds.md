@@ -10,17 +10,21 @@ To hear one cue by itself in dev: `window.shards.gameScene.ambientSoundBoard.aud
 
 | Cue (audition name) | When | File(s) | Volume | Notes |
 |---|---|---|---|---|
-| Town chatter (`town`) | Townsfolk within 14 squares (towns, castle courtyards) | `amb_town_talk.ogg` | 0.18 (0.15 in castles), less with fewer people | Loops from a random point; muffled and quieter in the rain outdoors |
+| Town chatter (`town`) | Townsfolk within 14 squares (towns, castle courtyards); none in towns from 20 to 5 | `amb_town_talk.ogg` | 0.18 (0.15 in castles), less with fewer people | Loops from a random point; muffled and quieter in the rain outdoors |
 | Inn chatter (`inn`) | Patrons about | `amb_inn_talk.ogg` | 0.45 | |
 | Hall and arena crowd (`hall`) | Courtiers under a roof; the arena | `amb_hall_talk.ogg` | 0.15 castles, 0.29 arena | |
-| Weapon swing (`swing`) | An arena fighter's swing | `swswish1`-`5.ogg` | 0.45 | |
-| Weapon hit (`hit`) | Half the swings land | metal: `mhit1b`-`3b`, `swrdmtl1`-`3`; leather: `lhit1b`-`3b`; flesh: `fhit1b`-`3b` | 0.55 | By the struck fighter's armour; a pain cry (`ouchm`/`ouchf`) one time in five |
-| Spell cast (`cast-fire`, `cast-lightning`) | An arena mage casts (every 6-14 s in a fight) | fireball `ffirebal.ogg`, lightning bolt `fbolt.ogg`, fire wall and web `farenwala822m.ogg`, bramble wall `faren.ogg`, poison fog `qor.ogg`, ring of flames `frngfir.ogg` | 0.5 | The spells' own cast sounds |
-| Lightning lands (`zap`) | A lightning bolt arrives | `zaphit1`-`3.ogg` | 0.35 | Fireballs land silently for now |
+| Weapon swing (`swing`) | An arena fighter's swing ([ADR 0007](adr/0007-arena.md)) | `swswish1`-`3.ogg` (stroke.kod's) | 0.45 | |
+| Weapon miss (`miss`) | The swing misses | `swordmis.ogg` | 0.3 | |
+| Weapon hit (`hit`) | The swing lands | flesh `fhit1b`-`3b` (up to 3 health), leather `lhit1b`-`3b` (up to 6), metal `mhit1b`-`3b` (more) | 0.55 | By how hard, as player.kod `DoHitMessageSound` |
+| Cry of pain (`ouch`) | Whoever's hurt by a blow, a bolt, fire or brambles | `ouchm1`-`4`, `ouchf1`-`4.ogg` | 0.35 | By how hurt (player.kod `GetOuchSound`: 1 hale to 4 nearly done) |
+| Spell cast (`cast-fire`, `cast-lightning`, `blind`, `dazzle`) | An arena caster casts | each spell's `sound` in `arenaData.ts`: fireball `ffirebal`, lightning bolt `fbolt`, fire wall and web `farenwala822m`, bramble wall `faren`, poison fog `qor`, blind `qblind`, dazzle `sdazzle` | 0.5 | The spells' own sounds (vrSucceed_wav) |
+| Lightning lands (`zap`) | A lightning bolt arrives | `zaphit1`-`3.ogg` | 0.35 | Then the victim's cry if it hit |
+| Frying (`frying`) | Stuck in a web, scratched by brambles, burned by a wall of fire | `frying.ogg` | 0.4 | web.kod, bramble.kod and wallfire.kod's own |
+| Cough (`cough`) | Poisoned by the fog | `psncough.ogg` | 0.4 | poisfogc.kod's |
 | Cheer (`cheer`) | Someone in the stands cheers (arms up) | `huzzah.ogg`, `arena.ogg`, `amb_cheer1`/`2.ogg` | 0.32-0.5 | At most one every 2.4-6 s |
 | Applause (`applause`) | A round won: the last one standing in the arena | `amb_applause.ogg` (3-5 s of it), `huzzah.ogg` | 0.32 | |
 | Death cry (`death`) | An arena fighter is beaten | `pdeath.ogg`, `pdeathf.ogg` (player.kod's) | 0.5 | |
-| Running from a spell (`ouch`) | Townsfolk scatter | `ouchm1`-`4`, `ouchf1`-`4.ogg` | 0.35 | Pitched up a little |
+| Running from a spell | Townsfolk scatter | `ouchm1`-`4`, `ouchf1`-`4.ogg` | 0.35 | Pitched up a little |
 | Dice, drink (`dice`, `drink`) | An inn patron, now and then | `dice.ogg`, `drink.ogg` | 0.45, 0.175 | |
 | Thunder (`thunder`) | After each lightning strike | `thunderclap.ogg`, `amb_thunder1`-`4.ogg` | 0.45-0.95 | 1.5-2.7 s after the flash, quieter and duller the further off, panned toward it |
 | Critters (`critter`) | A critter within 8 squares, every 5-14 s; never a rat (they only squeal dying) | its Kod "aware" sound (`bsp_awr`, `cnt_awr`, `ant_awr`, `scp_awr`, `bunny_awr`) | 0.28 | Pitched up, as they're small |

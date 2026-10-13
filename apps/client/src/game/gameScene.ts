@@ -17,11 +17,14 @@ import {
   type NameLabel, type ViewObject,
 } from "@shards/render";
 import {
-  AMBIENT_ROOMS, AMBIENT_SCALE, AmbientLife, boltArt, LiveRoom, MOVEON, PlayerMover, REMOTE_VIEW, animStep, isAmbientId, localRes, localResName, townsfolkArt,
+  AMBIENT_ROOMS, AMBIENT_SCALE, AmbientLife, LiveRoom, MOVEON, PlayerMover, REMOTE_VIEW, animStep, isAmbientId, localRes, localResName, townsfolkArt,
   Critters, critterArt, decodeNavGrid, habitatOf, hourFromSun, isImpressiveBody, type AmbientExits, type DamageDealt, type NavGrid, type NavPoint, type RemoteView, type GameSession, type WorldObject,
   FollowPlanner, navGridBuilder, AmbientStepper, type AmbientFrame, type AmbientSeed, Pets, petArt, type PetChoice, type PetOwner,
+  ARENA_SEND_EVERY, ARENA_TICK_MS, ArenaSim, ArenaView, arenaArt, arenaHourAt, buildNavGrid, hashText, makeRoster, readArenaConfig, seasonAt,
+  type AmbientPersonInfo, type ArenaMessage,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
+import { gameSocketUrl } from "../host.ts";
 import { RoomCache } from "../render/roomCache.ts";
 import { loadSkybox, type LoadedRoom } from "../render/roomLoader.ts";
 import { ORIGINAL_FOV } from "../viewer/roomScene.ts";
@@ -61,6 +64,8 @@ const NAV_GRIDS_KEPT = 8;
  * the scene starts for it before making a crowd of our own (ms)
  */
 const SOCIAL_START_WAIT_MS = 3000;
+/** The arena: how long to wait for the relay's fights before running our own (docs/adr/0007-arena.md) */
+const ARENA_WAIT_MS = 4000;
 /** Ours (pets, docs/adr/0006-pets.md 3.5): at most this many drawn, ours and the nearest */
 const MAX_PETS = 12;
 /** Players have this many overlays at least (icons.ts): fewer is a disguise or shadow form, which shows no pet (3.3) */
@@ -229,8 +234,16 @@ export class GameScene {
   /** The crowd to make for a room: asked of the friends feature, "pending" until it says */
   private ambientSeed: { file: string; seed: AmbientSeed | null | "pending" } | null = null;
   private readonly startedAt = performance.now();
-  /** The crowd steps alike on every client (the arena, shared): it doesn't react to us */
-  private ambientLockstep = false;
+  /**
+   * Ours (docs/adr/0007-arena.md): the arena's fights as we draw them, and the room they're in.
+   * They come from the relay, which runs one arena for everyone on our server; with no relay (or
+   * none answering in time), from a sim of our own (`arenaLocal`).
+   */
+  private arena: ArenaView | null = null;
+  private arenaRoom = "";
+  private arenaFeed: "waiting" | "relay" | "local" = "waiting";
+  private arenaWaitUntil = 0;
+  private arenaLocal: { sim: ArenaSim; due: number; ticks: number } | null = null;
   /** The room BP_PLAYER last put us in (file, lower case) */
   private playerRoomFile = "";
   /** roomexits.json, once loaded (empty without one) */
@@ -898,7 +911,7 @@ export class GameScene {
     const selfLook = walking ? self.moving : self.normal;
     if (self.look !== selfLook) self.look = selfLook;
 
-    const ambient = [...(this.ambient?.objects() ?? []), ...(this.critters?.objects() ?? []), ...(this.pets?.objects() ?? [])];
+    const ambient = [...(this.ambient?.objects() ?? []), ...(this.arena?.objects() ?? []), ...(this.critters?.objects() ?? []), ...(this.pets?.objects() ?? [])];
     this.animate([...world.objects.values(), ...ambient], dt);
     const lighting = world.lighting;
     // Enhanced Lighting (the Bind Editor's Options), or the original's
@@ -916,8 +929,8 @@ export class GameScene {
       flicker: enhanced,
       timeMs: now,
     };
-    // The arena's spell walls animate themselves (AmbientLife.burnFields)
-    const drawn = [...world.objects.values(), ...ambient, ...(this.ambient?.fields() ?? []), ...this.projectileViews()];
+    // The arena's spell walls animate themselves (ArenaView.update)
+    const drawn = [...world.objects.values(), ...ambient, ...(this.arena?.fields() ?? []), ...this.projectileViews()];
     // Dynamic Lighting off: no light maps from torches and lamps, nor the targeting light
     this.lights = this.settings.dynamicLighting ? this.objects.lights(drawn, ctx) : [];
     const targeted = this.target !== null && this.target !== self.id ? world.objects.get(this.target) : undefined;
@@ -999,7 +1012,8 @@ export class GameScene {
   private updateAmbient(dt: number): void {
     const level = this.settings.ambientLife;
     const spec = AMBIENT_ROOMS[this.roomFile];
-    if (!spec || level === "off" || !this.ambientExits || !this.loaded) {
+    this.updateArena(dt, spec?.arena && level !== "off" ? this.roomFile : null);
+    if (!spec || spec.arena || level === "off" || !this.ambientExits || !this.loaded) {
       this.ambient = null;
       this.ambientStep = null;
       this.ambientRoom = "";
@@ -1020,14 +1034,11 @@ export class GameScene {
       const life = new AmbientLife(this.loaded.room, spec, this.ambientExits[file], seed?.seed, grid === "build" ? undefined : grid, this.waterTextures);
       this.ambientStep = new AmbientStepper(life, seed);
       this.social?.setAmbient(file, seed);
-      for (const f of [...townsfolkArt(), ...boltArt()]) void this.loadBgf(localRes(f));
+      for (const f of townsfolkArt()) void this.loadBgf(localRes(f));
     }
     const world = this.session.world;
     const self = world.self;
     const fx = world.effects;
-    // The arena's mock bouts stop for real fights: friends (who see the same bouts) don't count
-    let others = 0;
-    for (const o of world.objects.values()) if (o.info.flags & OF.PLAYER && o.id !== self?.id && !this.social?.friendIds.has(o.id)) others++;
     const frame: AmbientFrame = {
       player: self ? { x: self.x, y: self.y } : null,
       facing: this.mover.angle,
@@ -1036,28 +1047,106 @@ export class GameScene {
       hour: this.gameHour(),
       weather: fx.raining ? "rain" : fx.snowing ? "snow" : null,
       impressive: !!self && isImpressiveBody(this.session.resource(self.info.iconRes) ?? ""),
-      others,
     };
-    // What every client gives the shared crowd alike: nobody of ours to react to, and no players in
-    // the way (the server's other objects are the same for all). Catching up, it's that; in the arena
-    // (spec.bouts) always, so friends watching see the same bouts. Elsewhere the crowd reacts to us
-    // as before, and each copy drifts its own way.
+    // What every client gives the shared crowd alike while it catches up: nobody of ours to react
+    // to, and no players in the way (the server's other objects are the same for all). After that
+    // the crowd reacts to us, and each copy drifts its own way.
     const step = this.ambientStep;
     // (Obstacles as a list: a tick may read them more than once a frame)
-    const lockstep = step.shared !== null && !!spec.bouts;
     const neutral: AmbientFrame = { ...frame, player: null, facing: undefined, impressive: false, obstacles: [...this.blockers(true)] };
-    // The arena's keeps the hour it was made in and pays the weather no mind (a late arrival can't
-    // know either as they were), never stops for players (a friend's name can come a moment after
-    // their figure, so they'd count as a stranger on one client only), and is the usual size
-    // whatever each player's Ambient Life setting: the same fight for everyone
-    if (lockstep) Object.assign(neutral, { hour: step.shared!.hour ?? null, weather: null, others: 0, scale: AMBIENT_SCALE.normal });
-    step.advance(this.social?.relayNow() ?? Date.now(), dt, lockstep ? neutral : frame, neutral);
+    step.advance(this.social?.relayNow() ?? Date.now(), dt, frame, neutral);
     this.ambient = step.catchingUp ? null : step.life;
-    this.ambientLockstep = lockstep;
     if (!this.ambient) return;
-    if (!lockstep) this.scatterAmbient();
+    this.scatterAmbient();
     // Built here: keep it for the next visit
     if (this.navGrids.get(file) === "build" && this.ambient.nav) this.keepNavGrid(file, this.ambient.nav);
+  }
+
+  /**
+   * Ours (docs/adr/0007-arena.md): the arena's fights while we're in its room (`file`; null when
+   * not, or Ambient Life is off). Watched on the relay, so everyone on our server sees the same; if
+   * the relay has none or doesn't answer within ARENA_WAIT_MS, a sim of our own (the defaults, this
+   * season's roster) runs here instead, much the same to look at.
+   */
+  private updateArena(dt: number, file: string | null): void {
+    if (file !== (this.arenaRoom || null)) {
+      this.arenaRoom = file ?? "";
+      this.arena?.clear();
+      this.arena = null;
+      this.arenaLocal = null;
+      this.social?.watchArena(null, null);
+      if (!file) return;
+      const view = new ArenaView();
+      this.arena = view;
+      this.arenaFeed = "waiting";
+      this.arenaWaitUntil = performance.now() + ARENA_WAIT_MS;
+      for (const f of [...townsfolkArt(), ...arenaArt()]) void this.loadBgf(localRes(f));
+      this.social?.watchArena(file, (m: ArenaMessage | null) => {
+        if (this.arena !== view) return;
+        if (!m) return this.startLocalArena(view);
+        if (this.arenaFeed === "local") {
+          // The relay came back: its arena from now on
+          if (m.t !== "arenaState") return;
+          this.arenaLocal = null;
+        }
+        this.arenaFeed = "relay";
+        view.receive(m);
+      }, this.gameHour());
+    }
+    const view = this.arena;
+    if (!view) return;
+    // The relay keeps the arena's hours by our sun (an admin's time change too)
+    this.social?.arenaHour(this.gameHour());
+    if (this.arenaFeed === "waiting" && performance.now() > this.arenaWaitUntil) this.startLocalArena(view);
+    const local = this.arenaLocal;
+    if (local) {
+      // Fixed ticks, as the relay runs them, and a message every other one
+      local.due += Math.min(dt, 1000);
+      while (local.due >= ARENA_TICK_MS) {
+        local.due -= ARENA_TICK_MS;
+        local.sim.update(ARENA_TICK_MS, this.gameHour() ?? arenaHourAt(Date.now()));
+        if (++local.ticks % ARENA_SEND_EVERY === 0) view.receive(local.sim.tick());
+      }
+    }
+    view.update(performance.now(), dt);
+  }
+
+  /** No arena from the relay: our own, on the room's nav grid once it's there */
+  private startLocalArena(view: ArenaView): void {
+    if (this.arenaLocal || !this.loaded) return;
+    const file = this.arenaRoom;
+    const grid = this.navGrids.get(file);
+    if (grid === undefined) return void this.loadNavGrid(file, this.loaded.room);
+    if (grid === "loading") return;
+    const config = readArenaConfig(undefined).config;
+    const server = gameSocketUrl();
+    const season = seasonAt(Date.now());
+    const nav = grid === "build" ? buildNavGrid(this.loaded.room, this.waterTextures) : grid;
+    if (grid === "build") this.keepNavGrid(file, nav);
+    const now = Date.now();
+    const sim = new ArenaSim(nav, { config, roster: makeRoster(server, season, config), records: {}, champions: [], season, seed: hashText(`${server}|${now}`), now });
+    this.arenaLocal = { sim, due: 0, ticks: 0 };
+    this.arenaFeed = "local";
+    view.receive(sim.state());
+  }
+
+  /** Someone in the room's crowd or the arena, as the inspect window shows them (null if gone) */
+  describeAmbient(id: number): AmbientPersonInfo | null {
+    return this.arena?.describe(id) ?? this.ambient?.describe(id) ?? null;
+  }
+
+  /** The arena as drawn (dev tools: window.shards.gameScene.arenaView), and its own sim when it runs one */
+  get arenaView(): ArenaView | null {
+    return this.arena;
+  }
+
+  get arenaSim(): ArenaSim | null {
+    return this.arenaLocal?.sim ?? null;
+  }
+
+  /** Where the arena's fights come from now: the relay, our own sim, or neither yet */
+  get arenaSource(): "waiting" | "relay" | "local" | null {
+    return this.arena ? this.arenaFeed : null;
   }
 
   /**
@@ -1083,8 +1172,6 @@ export class GameScene {
    */
   /** We waved (UA_WAVE): someone close by in front of us waves back (ambient life) */
   waveAtAmbient(): void {
-    // The arena's shared crowd doesn't answer one player alone (docs/adr/0005-friends.md 6)
-    if (this.ambientLockstep) return;
     this.ambient?.wavedAt({ x: this.mover.x, y: this.mover.y }, this.mover.angle);
   }
 
@@ -1107,7 +1194,7 @@ export class GameScene {
 
   /** Ours: lines the townsfolk say, over their heads (never in the chat), hidden by walls as names are */
   private drawSpeech(): void {
-    const said = this.ambient?.speech() ?? [];
+    const said = [...(this.ambient?.speech() ?? []), ...(this.arena?.speech() ?? [])];
     const w = this.canvas.clientWidth,
       h = this.canvas.clientHeight;
     const eye = this.camera.position;
@@ -1181,10 +1268,11 @@ export class GameScene {
   /** Ours: someone of the townsfolk under the cursor, not behind a wall, or null */
   private ambientUnderCursor(): number | null {
     const life = this.ambient;
+    const arena = this.arena;
     const self = this.session.world.self;
-    if (!life || !this.objects || !this.cursorRay()) return null;
+    if ((!life && !arena) || !this.objects || !this.cursorRay()) return null;
     for (const h of this.objects.pickAll(this.raycaster, self?.id)) {
-      if (!life.has(h.id)) continue;
+      if (!life?.has(h.id) && !arena?.has(h.id)) continue;
       if (this.roomView) {
         this.raycaster.far = h.distance - LABEL_OCCLUSION_SLACK;
         const hidden = this.raycaster.far > 0 && this.roomView.occludes(this.raycaster);
@@ -1282,10 +1370,11 @@ export class GameScene {
     const hour = this.gameHour();
     const night = hour !== null && (hour >= 20 || hour < 5);
     const sky = this.roomHasSky && !cave;
+    // Night bats under the sky only in the wilds: not over towns, castles and the arena
+    const settled = AMBIENT_ROOMS[this.roomFile] !== undefined || (this.roomTerrain?.[this.roomFile] ?? []).some((n) => SETTLED.has(n));
     const opts = {
       flocks: sky && !night ? Math.round(2 * scale) : 0,
-      // Not over the arena: its crowd is enough
-      bats: cave ? Math.round(9 * scale) : sky && night && AMBIENT_ROOMS[this.roomFile]?.kind !== "arena" ? Math.round(3 * scale) : 0,
+      bats: cave ? Math.round(9 * scale) : sky && night && !settled ? Math.round(3 * scale) : 0,
       cave,
     };
     const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
@@ -1419,6 +1508,7 @@ export class GameScene {
    */
   private updateAmbientSounds(dt: number): void {
     const events = this.ambient?.takeEvents() ?? [];
+    const arenaEvents = this.arena?.takeEvents() ?? [];
     const strike = this.lightning?.takeStrike() ?? null;
     const splashes = this.nature?.takeSplashes() ?? [];
     const sounds = (this.ambientSounds ??= new AmbientSounds(this.audio));
@@ -1426,7 +1516,7 @@ export class GameScene {
     const moved = this.soundAt ? Math.hypot(me.x - this.soundAt.x, me.y - this.soundAt.y) : 0;
     this.soundAt = { x: me.x, y: me.y };
     const near = HEARING * HEARING;
-    const people = (this.ambient?.objects() ?? []).filter((o) => (o.x - me.x) ** 2 + (o.y - me.y) ** 2 < near).length;
+    const people = [...(this.ambient?.objects() ?? []), ...(this.arena?.objects() ?? [])].filter((o) => (o.x - me.x) ** 2 + (o.y - me.y) ** 2 < near).length;
     const life = this.settings.ambientLife !== "off";
     sounds.update({
       dt,
@@ -1435,9 +1525,11 @@ export class GameScene {
       kind: life ? (AMBIENT_ROOMS[this.roomFile]?.kind ?? null) : null,
       indoors: this.underRoof(me.x, me.y),
       populated: AMBIENT_ROOMS[this.roomFile] !== undefined || (this.roomTerrain?.[this.roomFile] ?? []).some((n) => SETTLED.has(n)),
+      hour: this.gameHour(),
       people,
       raining: this.session.world.effects.raining,
       events,
+      arenaEvents,
       strike,
       splashes,
       critterVoice: () => this.critters?.voice(me, CRITTER_VOICE_RANGE) ?? null,
@@ -1661,8 +1753,8 @@ export class GameScene {
       const leaf = room ? leafAt(room, x, y) : null;
       return room && leaf?.sector ? floorHeightAt(room.sectors[leaf.sector - 1], x, y) : -1;
     };
-    // Ours: the arena mages' spells (ambient life), drawn the same way
-    const shots = this.ambient?.shots() ?? [];
+    // Ours: the arena's spells (ArenaView), drawn the same way
+    const shots = this.arena?.shots() ?? [];
     return [...this.session.world.projectiles.values(), ...shots].map((p) => ({
       id: p.id, x: Math.round(p.x), y: Math.round(p.y), angle: p.angle, version: 0, fullBright: true,
       // project.c: from the source's height to the target's, or along the ground (PROJ_FLAG_FOLLOWGROUND)
@@ -2779,6 +2871,7 @@ export class GameScene {
     this.groundCover?.dispose();
     this.puddles?.dispose();
     this.ambientSounds?.stop(0);
+    this.social?.watchArena(null, null);
     this.lightning?.dispose();
     this.flashEl?.remove();
     if (this.sky) disposeSkybox(this.sky);

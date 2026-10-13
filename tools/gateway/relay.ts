@@ -12,6 +12,11 @@
 // Pets (docs/adr/0006-pets.md 3): each connection may say which pet its character has; a client
 // asks about the players it sees in its room by name, gets their pets, and hears of changes to
 // those names until it asks about others. A name's pet is the first connection's to claim the name.
+//
+// The arena (docs/adr/0007-arena.md): a connection in the arena's room asks to watch it, and gets
+// the fights of its game server's one arena (arena.ts, given by the gateway) until it stops.
+
+import type { ArenaHost, ArenaWatcher } from "./arena.ts";
 
 /** The longest message (bytes), and the most a connection may send a second (a burst of twice that) */
 export const RELAY_MAX_MESSAGE = 4096;
@@ -51,6 +56,8 @@ interface Conn {
   pet: Json | null;
   /** The names (lower case) whose pets it wants to hear about */
   petNames: Set<string>;
+  /** Watching its server's arena, as this */
+  arena: ArenaWatcher | null;
   tokens: number;
   refilled: number;
   timer: ReturnType<typeof setTimeout> | null;
@@ -68,10 +75,12 @@ export class SocialRelay {
   private readonly names = new Map<string, Map<string, Conn>>();
   private readonly now: () => number;
   private readonly log: (...a: unknown[]) => void;
+  private readonly arena: ArenaHost | null;
 
-  constructor(opts: { now?: () => number; log?: (...a: unknown[]) => void } = {}) {
+  constructor(opts: { now?: () => number; log?: (...a: unknown[]) => void; arena?: ArenaHost | null } = {}) {
     this.now = opts.now ?? Date.now;
     this.log = opts.log ?? (() => {});
+    this.arena = opts.arena ?? null;
   }
 
   /** How many have said who they are (for the log) */
@@ -85,7 +94,7 @@ export class SocialRelay {
   connect(peer: RelayPeer): { receive: (text: string) => Promise<void>; closed: () => void } {
     const nonce = b64url(crypto.getRandomValues(new Uint8Array(18)));
     const c: Conn = {
-      peer, nonce, key: null, server: "", name: "", visible: true, watch: new Set(), told: new Map(), pet: null, petNames: new Set(),
+      peer, nonce, key: null, server: "", name: "", visible: true, watch: new Set(), told: new Map(), pet: null, petNames: new Set(), arena: null,
       tokens: 2 * RELAY_RATE, refilled: this.now(), timer: null, closed: false,
     };
     c.timer = setTimeout(() => this.drop(c, 4001, "no hello"), HELLO_TIMEOUT_MS);
@@ -107,6 +116,7 @@ export class SocialRelay {
     if (c.closed) return;
     c.closed = true;
     if (c.timer) clearTimeout(c.timer);
+    this.leaveArena(c);
     const peers = c.key ? this.servers.get(c.server) : undefined;
     if (!peers || !c.key || peers.get(c.key) !== c) return;
     peers.delete(c.key);
@@ -168,7 +178,34 @@ export class SocialRelay {
         return this.setPet(c, m.pet);
       case "petQuery":
         return this.petQuery(c, m);
+      case "arenaWatch":
+        return this.watchArena(c, m);
+      case "arenaLeave":
+        return this.leaveArena(c);
+      case "arenaHour":
+        if (c.arena) this.arena?.setHour(c.server, SocialRelay.readHour(m.hour));
+        return;
     }
+  }
+
+  /** Watch the server's arena: everything now, then the ticks; "arenaOff" when there's none here */
+  private watchArena(c: Conn, m: Json): void {
+    if (c.arena) return;
+    if (!this.arena || m.room !== this.arena.room) return this.send(c, { t: "arenaOff" });
+    const w: ArenaWatcher = { send: (text) => void (!c.closed && c.peer.send(text)) };
+    if (!this.arena.watch(c.server, w, SocialRelay.readHour(m.hour))) return this.send(c, { t: "arenaOff" });
+    c.arena = w;
+  }
+
+  /** A game hour (0-23) a watcher says its sun shows, or null */
+  private static readHour(v: unknown): number | null {
+    return Number.isInteger(v) && (v as number) >= 0 && (v as number) < 24 ? (v as number) : null;
+  }
+
+  private leaveArena(c: Conn): void {
+    if (!c.arena) return;
+    this.arena?.leave(c.server, c.arena);
+    c.arena = null;
   }
 
   private async hello(c: Conn, m: Json): Promise<void> {

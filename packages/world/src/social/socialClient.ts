@@ -3,6 +3,7 @@
 // relay nothing breaks, friends just show offline. Transport-agnostic like GameSession: any
 // WebSocket-like socket (Node 24 has one).
 
+import type { ArenaMessage } from "../arena/arenaWire.ts";
 import { publicKeyString, signHello, type FriendBody, type RelayMessage, type RelayPlayer } from "./socialProtocol.ts";
 
 export type SocialStatus = "connecting" | "online" | "offline" | "replaced";
@@ -44,6 +45,8 @@ export interface SocialClientEvents {
   undeliverable?: (to: string) => void;
   /** Pets of the names asked about (docs/adr/0006-pets.md 3), now and as they change */
   pets?: (pets: { name: string; key: string | null; pet: unknown }[]) => void;
+  /** The arena we watch (docs/adr/0007-arena.md), or null when the relay has none */
+  arena?: (m: ArenaMessage | null) => void;
 }
 
 export class SocialClient implements RelayLink {
@@ -59,6 +62,10 @@ export class SocialClient implements RelayLink {
   /** Our character's pet, and the names whose pets we asked about (both sent again on reconnecting) */
   private pet: unknown = null;
   private petNames: string[] = [];
+  /** The arena's room we watch (asked again on reconnecting), or null */
+  private arenaRoom: string | null = null;
+  /** The game hour we last told the relay */
+  private hour: number | null = null;
   private visible: boolean;
   private nextId = 1;
   private readonly pending = new Map<number, { resolve: (v: RelayPlayer[]) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -126,6 +133,25 @@ export class SocialClient implements RelayLink {
   queryPets(names: readonly string[]): void {
     this.petNames = [...names];
     this.raw({ t: "petQuery", names: this.petNames });
+  }
+
+  /**
+   * docs/adr/0007-arena.md: watch the arena in this room (null: stop), telling the relay the game
+   * hour our sun shows (null: not known), which the arena keeps its opening hours by
+   */
+  watchArena(room: string | null, hour: number | null = null): void {
+    if (room === this.arenaRoom) return this.arenaHour(hour);
+    if (this.arenaRoom) this.raw({ t: "arenaLeave" });
+    this.arenaRoom = room;
+    this.hour = hour;
+    if (room) this.raw({ t: "arenaWatch", room, hour });
+  }
+
+  /** The game hour changed while we watch (the sun moved, or an admin set the time) */
+  arenaHour(hour: number | null): void {
+    if (hour === this.hour) return;
+    this.hour = hour;
+    if (this.arenaRoom && hour !== null) this.raw({ t: "arenaHour", hour });
   }
 
   search(q: string): Promise<RelayPlayer[]> {
@@ -215,6 +241,7 @@ export class SocialClient implements RelayLink {
         this.setStatus("online");
         // The welcome's time is a first guess; a round trip measures it (1.5)
         if (this.petNames.length) this.raw({ t: "petQuery", names: this.petNames });
+        if (this.arenaRoom) this.raw({ t: "arenaWatch", room: this.arenaRoom, hour: this.hour });
         const id = this.nextId++;
         this.timeAsked.set(id, Date.now());
         this.raw({ t: "time", id });
@@ -249,6 +276,13 @@ export class SocialClient implements RelayLink {
         break;
       case "pets":
         if (Array.isArray(m.pets)) this.events.pets?.(m.pets);
+        break;
+      case "arenaState":
+      case "arenaTick":
+        if (this.arenaRoom) this.events.arena?.(m);
+        break;
+      case "arenaOff":
+        this.events.arena?.(null);
         break;
     }
   }

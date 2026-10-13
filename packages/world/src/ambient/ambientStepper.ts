@@ -1,12 +1,12 @@
 // Ours (docs/adr/0005-friends.md section 6): the same crowd for friends in a room. Everyone in a
 // room gets the same seed (from the room and the relay's clock, or from a friend already there),
 // and the crowd steps in fixed ticks counted from a shared start, so two clients step it the same
-// number of times and see much the same play out (the arena's bouts above all). Someone arriving
-// late runs the ticks they missed at once (a few dozen ms for ten minutes of the arena), then
-// carries on alone. It needn't stay exact: the player's own presence (sidestepping, waving) still
+// number of times and see much the same play out. Someone arriving late runs the ticks they
+// missed at once (a few dozen ms for ten minutes of a town), then carries on alone. (The arena's
+// fights are another matter: one sim on the relay that everyone watches, arena/.) It needn't stay exact: the player's own presence (sidestepping, waving) still
 // changes their copy a little.
 //
-// Between ticks, walkers and bolts are drawn where they'd be, so the fixed step doesn't show.
+// Between ticks, walkers are drawn where they'd be, so the fixed step doesn't show.
 
 import type { AmbientFrame, AmbientLife } from "./ambientLife.ts";
 
@@ -19,8 +19,7 @@ const MAX_LIVE_TICKS = 40;
 
 /**
  * A room's shared crowd: its seed, the relay time (ms) its ticks count from, and the game hour it
- * keeps (a late arrival can't know the hours that went by, so the crowd that must stay in step, the
- * arena's, keeps the one it was made in)
+ * was made in (a late arrival can't know the hours that went by)
  */
 export interface AmbientSeed {
   seed: number;
@@ -48,7 +47,7 @@ export class AmbientStepper {
   private ticks = 0;
   /** Still running the ticks missed before we came (nothing to draw yet) */
   catchingUp: boolean;
-  /** Where each walker and bolt was at the tick before and at the last tick */
+  /** Where each walker was at the tick before and at the last tick */
   private prev = new Map<Pos, Pos>();
   private cur = new Map<Pos, Pos>();
 
@@ -61,7 +60,7 @@ export class AmbientStepper {
   /**
    * One frame. Unshared, the crowd steps by the frame's time as before. Shared, it runs the ticks
    * due by `now` (the relay's time), at most `budgetMs` of work while catching up, then places
-   * walkers and bolts between the last two ticks.
+   * walkers between the last two ticks.
    */
   advance(now: number, dt: number, frame: AmbientFrame, catchUpFrame: AmbientFrame, budgetMs = 6): void {
     const life = this.life;
@@ -99,9 +98,9 @@ export class AmbientStepper {
     this.ticks++;
   }
 
-  /** The walkers and bolts there are now */
+  /** The walkers there are now */
   private movers(): Pos[] {
-    return [...this.life.objects(), ...this.life.shots()];
+    return this.life.objects();
   }
 
   private positions(): Map<Pos, Pos> {

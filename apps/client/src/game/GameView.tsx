@@ -685,7 +685,7 @@ export function GameView({
     scene.onSelecting = setSelecting;
     scene.onMessage = (t) => session.localMessage(t);
     scene.onLook = (id) => lookRef.current(id);
-    scene.onLookAmbient = (id) => setAmbientLook(scene.ambientLife?.describe(id) ?? null);
+    scene.onLookAmbient = (id) => setAmbientLook(scene.describeAmbient(id));
     const roomObjects = (ids: number[]) => ids.flatMap((id) => session.world.objects.get(id)?.info ?? []);
     // gameuser.c UserPickup: LD_MULTIPLESEL | LD_SINGLEAUTO
     scene.onPickup = (ids) =>
@@ -2304,8 +2304,9 @@ export function GameView({
           }}
         >
           {shown.map((l, i) => (
-            // The Modern chat fades its lines once they're CHAT_FRESH_MS old, until it's hovered
-            <div key={i} className={modern && chatNow - l.time < CHAT_FRESH_MS ? "chat-line fresh" : "chat-line"}>
+            // The Modern chat fades its lines once they're CHAT_FRESH_MS old, until it's hovered; the
+            // logon's flood of server messages is faded from the start
+            <div key={i} className={modern && !l.logon && chatNow - l.time < CHAT_FRESH_MS ? "chat-line fresh" : "chat-line"}>
               {/* Add chat timestamps (config.chat_time_stamps) */}
               {settings.chatTimestamps && <span className="chat-time">[{new Date(l.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}] </span>}
               {l.spans.map((s, j) => (

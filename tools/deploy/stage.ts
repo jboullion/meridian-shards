@@ -9,7 +9,9 @@
 //   deploy/.stage/site/           the website (landing page, downloads, wiki) from the
 //                                 meridian-shards-website repository next to this one
 //   deploy/.stage/assets/         the asset build (dist/assets)
-//   deploy/.stage/gateway/        the gateway script, the friends relay and their one dependency (ws)
+//   deploy/.stage/gateway/        the gateway script, the friends relay and the arena, their one
+//                                 dependency (ws), our packages the arena runs on, and the arena's
+//                                 room from the asset build (arena-assets/)
 //
 //   node tools/deploy/stage.ts [--skip-client] [--skip-assets] [--skip-site] [--client-only] [--web-only]
 //
@@ -131,9 +133,18 @@ copy(join(ROOT, "deploy", "blakserv", "blakserv.cfg"), join(STAGE, "blakserv.cfg
 copy(join(ROOT, "deploy", "blakserv", "maint.sh"), join(STAGE, "maint.sh"));
 
 // Gateway: the script plus ws (pure JS, no dependencies of its own)
-copy(join(ROOT, "tools", "gateway", "gateway.ts"), join(STAGE, "gateway", "gateway.ts"));
-copy(join(ROOT, "tools", "gateway", "relay.ts"), join(STAGE, "gateway", "relay.ts"));
+for (const f of ["gateway.ts", "relay.ts", "arena.ts"]) copy(join(ROOT, "tools", "gateway", f), join(STAGE, "gateway", f));
 copy(join(ROOT, "node_modules", "ws"), join(STAGE, "gateway", "node_modules", "ws"));
+// The arena (docs/adr/0007-arena.md) runs on our packages: their sources beside it, found through
+// register.mjs (Node won't run TypeScript from node_modules), and the arena's room and nav grid
+for (const p of ["protocol", "formats", "world"]) {
+  copy(join(ROOT, "packages", p, "src"), join(STAGE, "gateway", "packages", p, "src"));
+  copy(join(ROOT, "packages", p, "package.json"), join(STAGE, "gateway", "packages", p, "package.json"));
+}
+for (const f of ["register.mjs", "resolve.mjs"]) copy(join(ROOT, "deploy", "gateway", f), join(STAGE, "gateway", f));
+need(join(ROOT, "dist", "assets", "nav", "tosarena.nav"), "build the assets first: npm run assets");
+copy(join(ROOT, "dist", "assets", "tosarena.roo"), join(STAGE, "gateway", "arena-assets", "tosarena.roo"));
+copy(join(ROOT, "dist", "assets", "nav", "tosarena.nav"), join(STAGE, "gateway", "arena-assets", "nav", "tosarena.nav"));
 
 if (!opt["skip-client"]) stageClient();
 if (!opt["skip-site"]) stageSite();

@@ -68,7 +68,7 @@ The Modern layout (`ui/ModernHud.tsx`, `ui/CharacterWindow.tsx`) has no counterp
 
 ## Ambient life (ours)
 
-Townsfolk, inn patrons, the castles' people and the arena's fighters (`packages/world/src/ambient/`, roadmap milestone 15) have no counterpart in the original. What they don't do yet:
+Townsfolk, inn patrons, the castles' people and the arena's fighters (`packages/world/src/ambient/`, `packages/world/src/arena/`, roadmap milestone 15) have no counterpart in the original. What they don't do yet:
 
 | What | What it needs |
 |---|---|
@@ -76,7 +76,10 @@ Townsfolk, inn patrons, the castles' people and the arena's fighters (`packages/
 | More places | Only the rooms in `ambientRooms.ts` have anyone: the main towns and their inns. Smaller villages, shops, halls and the guild halls have none. |
 | Hats and things to carry in town | Townsfolk wear shirts, jerkins, royal shirts, leather, robes, trousers and skirts. Armour, helms, shields and weapons go only to guards, knights and fighters; nobody carries baskets or tools. |
 | Someone sweeping outside the inn | The game has no broom to hold (`isweep.bgf` is a spell's icon), so no sweeper. |
-| Footsteps and voices | Townsfolk walk silently and their speech bubbles have no voice; the chatter under them is a recording. Fireballs land without a sound. |
+| Footsteps and voices | Townsfolk walk silently and their speech bubbles have no voice; the chatter under them is a recording. A fireball landing is heard only in its victim's cry. |
+| More of the arena's spells | [ADR 0007](adr/0007-arena.md): bolts, fire walls, poison fog, webs, brambles, blind and dazzle. Hold (`debuff/hold.kod`), heals and shields, and the other schools' spells aren't cast there yet; a new one needs its effect in `arenaSim.ts`, not just a row in `arenaData.ts`. |
+| Players in the arena's fights | The sim never sees real players: they can't join a bout, bet, or get hit by a stray bolt. |
+| The arena's champions in the game | A season's champion shows only in the inspect window; there's no notice, statue or board. |
 | Real reflections in puddles | The puddles take a sheen of the sky's colour, brighter at a glancing look; they don't mirror the scene. |
 | Walking round each other | They wait for us, but walk through one another. |
 | Talking back | Their lines are canned and over their heads only; they don't answer what's said in the chat. |

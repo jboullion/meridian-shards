@@ -23,6 +23,10 @@ export interface ChatterContext {
   won?: boolean;
   /** Beaten in the arena, and watching from the stands */
   lost?: boolean;
+  /** Blinded or dazzled in an arena fight */
+  blinded?: boolean;
+  /** Stuck in a web in an arena fight */
+  webbed?: boolean;
 }
 
 const ANY = [
@@ -51,6 +55,8 @@ const GREET_NIGHT = ["Evening.", "Late to be about.", "Good evening to you."];
 const WON = ["Victory!", "Is there no one else?", "Kraanan smiles on me!", "Who's next?", "Too easy!", "Ha! Undefeated!"];
 const LOST = ["Next time.", "I'll be back.", "Well fought.", "Ow.", "I slipped!", "Lucky blow."];
 const IMPRESSED = ["Fine armour, that.", "Must weigh a ton.", "Look at that gear!", "You've seen a fight or two.", "Wish I could afford that."];
+const BLINDED = ["I can't see!", "My eyes!", "Where are you?", "Cheap trick!", "Curse you!"];
+const WEBBED = ["I'm stuck!", "Webs! Ugh!", "Get this off me!", "Can't move!"];
 const SCATTER = ["Run!", "Magic! Get back!", "Mind the fire!", "Not again!", "Help!", "Watch it!"];
 
 const BY_PLACE: Partial<Record<Place, string[]>> = {
@@ -85,6 +91,8 @@ export function chatterLine(rand: () => number, ctx: ChatterContext): string {
   const night = ctx.hour !== null && (ctx.hour >= 21 || ctx.hour < 5);
   if (ctx.won) return pick(WON);
   if (ctx.lost) return pick(LOST);
+  if (ctx.blinded) return pick(BLINDED);
+  if (ctx.webbed) return pick(WEBBED);
   if (ctx.impressed) return pick(IMPRESSED);
   if (ctx.greeting) return pick(night ? GREET_NIGHT : GREET);
   const pools: [string[], number][] = [];

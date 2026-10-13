@@ -5,7 +5,7 @@ import { parseRoo } from "@shards/formats";
 import { AMBIENT_ROOMS, AMBIENT_SLOT_MS, AMBIENT_TICK_MS, AmbientLife, AmbientStepper, buildNavGrid, slotSeed, type AmbientExits } from "../src/index.ts";
 
 const ASSETS = join(import.meta.dirname, "../../../dist/assets");
-const have = existsSync(join(ASSETS, "tosarena.roo")) && existsSync(join(ASSETS, "roomexits.json"));
+const have = existsSync(join(ASSETS, "tosinn.roo")) && existsSync(join(ASSETS, "roomexits.json"));
 
 describe("slotSeed", () => {
   test("the same for a room within a slot, another in the next or another room", () => {
@@ -21,11 +21,11 @@ describe("slotSeed", () => {
 
 describe.skipIf(!have)("the same crowd for friends (ADR 0005 section 6)", () => {
   test("someone arriving late catches up to the crowd someone there all along sees", () => {
-    const room = parseRoo(new Uint8Array(readFileSync(join(ASSETS, "tosarena.roo"))));
+    const room = parseRoo(new Uint8Array(readFileSync(join(ASSETS, "tosinn.roo"))));
     const exits = JSON.parse(readFileSync(join(ASSETS, "roomexits.json"), "utf8")) as Record<string, AmbientExits>;
     const grid = buildNavGrid(room);
     const shared = { seed: 99, since: 1_000_000 };
-    const make = () => new AmbientStepper(new AmbientLife(room, AMBIENT_ROOMS["tosarena.roo"], exits["tosarena.roo"], shared.seed, grid), shared);
+    const make = () => new AmbientStepper(new AmbientLife(room, AMBIENT_ROOMS["tosinn.roo"], exits["tosinn.roo"], shared.seed, grid), shared);
     const frame = { player: null, scale: 1, hour: 14 };
     // Alice is there from the start, at an uneven frame rate
     const alice = make();
@@ -44,7 +44,7 @@ describe.skipIf(!have)("the same crowd for friends (ADR 0005 section 6)", () => 
     expect(bob.catchingUp).toBe(false);
     // Ids come from one counter for every crowd made, so they differ; where everyone stands doesn't
     const where = (s: AmbientStepper) => s.life.objects().map((o) => [o.info.iconRes, Math.round(o.x), Math.round(o.y)]);
-    expect(where(bob).length).toBeGreaterThan(5);
+    expect(where(bob).length).toBeGreaterThan(2);
     expect(where(bob)).toEqual(where(alice));
   });
 });

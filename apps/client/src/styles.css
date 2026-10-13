@@ -4080,20 +4080,20 @@ canvas.server-wait {
 }
 
 /* Ours: the townsfolk's inspect window (LookDialogs.tsx AmbientPersonDialog) */
+/* Labels as wide as the longest ("Favourite weapon", an arena fighter's), each on one line */
 .ambient-facts {
   margin: 6px 0 0;
   display: grid;
-  gap: 2px;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 10px;
 }
 
 .ambient-facts > div {
-  display: flex;
-  gap: 8px;
+  display: contents;
 }
 
 .ambient-facts dt {
-  flex: none;
-  width: 72px;
+  white-space: nowrap;
   color: rgb(240, 208, 25);
 }
 

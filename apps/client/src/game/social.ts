@@ -8,7 +8,7 @@ import { STAT_GROUP } from "@shards/protocol";
 import { OF } from "@shards/render";
 import {
   FriendsService, SocialClient, exitTaken, friendsStorageKey, isFriendRequestTell, readPetChoice, slotSeed, squareOf,
-  type AmbientExits, type PetChoice, type AmbientSeed, type Friend, type GameSession, type SocialStatus,
+  type AmbientExits, type ArenaMessage, type PetChoice, type AmbientSeed, type Friend, type GameSession, type SocialStatus,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import { gameSocketUrl, socialSocketUrl } from "../host.ts";
@@ -61,6 +61,8 @@ export class SocialLink {
   private pets = new Map<string, { key: string | null; pet: PetChoice }>();
   private petQuery = "";
   private readonly versionListeners = new Set<() => void>();
+  /** docs/adr/0007-arena.md: who hears the arena's messages (the scene), while it watches */
+  private arenaListener: ((m: ArenaMessage | null) => void) | null = null;
 
   private constructor(session: GameSession, character: string, keys: CryptoKeyPair) {
     this.session = session;
@@ -74,6 +76,7 @@ export class SocialLink {
         presence: (key, online) => this.friends.relayPresence(key, online),
         undeliverable: (to) => this.friends.relayUndeliverable(to),
         pets: (list) => this.petsHeard(list),
+        arena: (m) => this.arenaListener?.(m),
       },
     );
     const byName = (name: string) => [...world.players.values()].find((p) => p.name.toLowerCase() === name.toLowerCase());
@@ -205,6 +208,25 @@ export class SocialLink {
       if (theirs) return theirs;
     }
     return { ...slotSeed(room, this.client.now()), hour };
+  }
+
+  /**
+   * docs/adr/0007-arena.md: watch the arena of our game server, in this room (null: stop). The
+   * listener hears everything, then what changed; null when the relay has no arena (or none yet).
+   */
+  watchArena(room: string | null, listener: ((m: ArenaMessage | null) => void) | null, hour: number | null = null): void {
+    this.arenaListener = room ? listener : null;
+    this.client.watchArena(room, hour);
+  }
+
+  /** The game hour our sun shows, for the arena's opening hours (sent only when it changes) */
+  arenaHour(hour: number | null): void {
+    this.client.arenaHour(hour);
+  }
+
+  /** Whether the relay's connection is up (the arena falls back to our own without it) */
+  get relayOnline(): boolean {
+    return this.client.status === "online";
   }
 
   /** The relay's time (ms), for the shared crowd's ticks */

@@ -1,8 +1,8 @@
 // Ours: which rooms get ambient life, and how much (before the Ambient Life setting scales it).
 // Towns get townsfolk walking from door to door, and guards pacing a beat; inns and taverns get
 // patrons who stand about, chat and now and then leave; the castles get knights and courtiers,
-// the arena fighters, who spar when no one's fighting for real, and the city's shops customers
-// who come in, look about a while and go. Rooms not listed get nothing.
+// the arena its fights (its own sim: arena/), and the city's shops customers who come in, look
+// about a while and go. Rooms not listed get nothing.
 
 import type { Place } from "./chatter.ts";
 import { C, type Faction } from "./townsfolk.ts";
@@ -21,12 +21,8 @@ export interface AmbientRoomSpec {
   livery?: number;
   /** Castles: whose (the knights' shields) */
   faction?: Faction;
-  /** The arena: mock bouts and spell duels on its floor */
-  bouts?: boolean;
-  /** The arena: people in the stands, always there while it's open (besides `count`) */
-  spectators?: number;
-  /** The arena's floor: how many fight there, picked anew each visit (instead of `count`) */
-  countRange?: [number, number];
+  /** The arena's floor: its fights are the arena sim's (arena/arenaSim.ts), watched by everyone alike */
+  arena?: boolean;
 }
 
 /**
@@ -51,7 +47,7 @@ export const AMBIENT_ROOMS: Record<string, AmbientRoomSpec> = {
   "tosinn.roo": inn(5, "tos"),
   "tostavern.roo": inn(4, "tos"),
   // The Arena of Kraanan and its foyer
-  "tosarena.roo": { kind: "arena", count: 6, countRange: [4, 8], place: "arena", bouts: true, spectators: 14 },
+  "tosarena.roo": { kind: "arena", count: 0, place: "arena", arena: true },
   "tosaren2.roo": { kind: "arena", count: 6, place: "arena" },
   // Barloque
   "barln.roo": town(14, "barloque", 2, C.PURPLE),

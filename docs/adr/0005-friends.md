@@ -1,6 +1,6 @@
 # ADR 0005: Friends, a relay of our own, and shared ambient life
 
-- **Status:** accepted, 2026-10-12. Parts 1-5 (the relay, keys, the Friends window, follow, health bars: section 7 steps 1-4) built 2026-10-12, and shared ambient life (6) the same day, simplified as below. See "As built" at the end.
+- **Status:** accepted, 2026-10-12. Parts 1-5 (the relay, keys, the Friends window, follow, health bars: section 7 steps 1-4) built 2026-10-12, and shared ambient life (6) the same day, simplified as below. See "As built" at the end. The arena's fights are no longer shared by seed (6): since [ADR 0007](0007-arena.md) the relay runs one arena for everyone on a server.
 
 ## Context
 

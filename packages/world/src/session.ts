@@ -45,6 +45,8 @@ export interface ChatLine {
   sender?: { id: number; name: string };
   /** BP_SAID's say type (SAY_*), e.g. SAY_EVERYONE for broadcasts */
   sayType?: number;
+  /** One of the logon's messages (LOGON_SERVER_TAB_MS): the Modern chat shows it faded from the start */
+  logon?: boolean;
 }
 
 /**
@@ -687,7 +689,8 @@ export class GameSession {
 
   private chatLine(kind: ChatLine["kind"], text: string, channel: ChatChannel, extra: Pick<ChatLine, "sender" | "sayType"> = {}): void {
     const shown = this.textFilter ? this.textFilter(text) : text;
-    this.events.chat?.({ kind, channel, spans: parseMarkup(shown, DEFAULT_COLORS[kind]), time: Date.now(), ...extra });
+    const logon = Date.now() < this.logonUntil || undefined;
+    this.events.chat?.({ kind, channel, spans: parseMarkup(shown, DEFAULT_COLORS[kind]), time: Date.now(), logon, ...extra });
   }
 
   private setPhase(p: SessionPhase): void {

@@ -2,6 +2,8 @@
 // friends relay (tools/gateway/relay.ts), and the keys they're known by. JSON text frames, a few
 // hundred bytes each. WebCrypto only, so it runs in Node and the browser alike.
 
+import type { ArenaMessage } from "../arena/arenaWire.ts";
+
 /** What the challenge signature covers, before the nonce, server and name (relay.ts HELLO_PREFIX) */
 const HELLO_PREFIX = "meridian-shards-social";
 
@@ -19,7 +21,10 @@ export type RelayMessage =
   | { t: "lookup"; id: number; found: RelayPlayer[] }
   | { t: "time"; id: number; time: number }
   /** docs/adr/0006-pets.md 3: pets of names we asked about (a null pet: none, or gone) */
-  | { t: "pets"; pets: { name: string; key: string | null; pet: unknown }[] };
+  | { t: "pets"; pets: { name: string; key: string | null; pet: unknown }[] }
+  /** docs/adr/0007-arena.md: the arena we watch (everything, then what changed), or that the relay has none */
+  | ArenaMessage
+  | { t: "arenaOff" };
 
 /** Someone on the relay: a character name (only a claim) and the key that's proven */
 export interface RelayPlayer {

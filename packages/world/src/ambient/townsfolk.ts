@@ -436,27 +436,35 @@ export function nobleAppearance(rand: () => number): Appearance {
   };
 }
 
-/** A fighter at the arena: any armour, a helm or not, a weapon, often a shield */
-export function fighterAppearance(rand: () => number): Appearance {
-  const p = person(rand, rand() < 0.4);
+/**
+ * A fighter at the arena: any armour, a helm or not, a weapon, often a shield. The arena's roster
+ * (arena/arenaRoster.ts) says which armour (a key of ARMOUR, or "" for a plain shirt), which
+ * weapon's overlay, and how likely a shield and a helm are.
+ */
+export function fighterAppearance(
+  rand: () => number, opts: { armour?: string; weapon?: string; shield?: number; helm?: number; female?: boolean } = {},
+): Appearance {
+  const p = person(rand, opts.female ?? rand() < 0.4);
   const sex = p.female ? 1 : 0;
-  const armour = weighted<keyof typeof ARMOUR>(rand, [["leather", 3], ["chain", 3], ["scale", 2], ["plate", 2], ["nerudite", 1]]);
+  const armour = opts.armour ?? weighted<keyof typeof ARMOUR>(rand, [["leather", 3], ["chain", 3], ["scale", 2], ["plate", 2], ["nerudite", 1]]);
+  const body = (ARMOUR as Record<string, Art>)[armour] ?? SHIRT_BODY;
   const shirt = twoColorXlat(weighted(rand, SHIRT_COLORS), p.skin);
   const kind = weighted<Helm | null>(rand, [["simple", 1.5], ["war", 1], ["knight", 1], ["ornate", 0.5], ["dark", 0.5], ["legion", 0.5], [null, 2]]);
+  const helmed = opts.helm === undefined ? kind : rand() < opts.helm ? (kind ?? "simple") : null;
   return {
-    ...p, body: ARMOUR[armour][sex], bodyXlat: shirt, arms: (rand() < 0.5 ? GAUNTLET_ARMS : SHIRT_ARMS)[sex], armsXlat: shirt,
+    ...p, body: body[sex], bodyXlat: shirt, arms: (rand() < 0.5 ? GAUNTLET_ARMS : SHIRT_ARMS)[sex], armsXlat: shirt,
     legs: (rand() < 0.65 ? PANTS : PLAIN_LEGS)[sex], legsXlat: twoColorXlat(weighted(rand, PANTS_COLORS), p.skin),
     gear: {
-      hat: kind ? helm(p.female, kind) : undefined,
-      weapon: pick(rand, Object.values(WEAPONS)),
-      shield: rand() < 0.6 ? { file: pick(rand, SHIELDS), xlat: 0 } : undefined,
+      hat: helmed ? helm(p.female, helmed) : undefined,
+      weapon: opts.weapon ?? pick(rand, Object.values(WEAPONS)),
+      shield: rand() < (opts.shield ?? 0.6) ? { file: pick(rand, SHIELDS), xlat: 0 } : undefined,
     },
   };
 }
 
 /** A battle mage at the arena: a robe in a deep colour, no weapon, hands free for casting */
-export function mageAppearance(rand: () => number): Appearance {
-  const p = person(rand, rand() < 0.45);
+export function mageAppearance(rand: () => number, female?: boolean): Appearance {
+  const p = person(rand, female ?? rand() < 0.45);
   const sex = p.female ? 1 : 0;
   const robe = twoColorXlat(weighted(rand, [[C.BLUE, 2], [C.PURPLE, 2], [C.RED, 1], [C.BLACK, 1.5], [C.DGREEN, 1], [C.SKY, 0.5]]), p.skin);
   return {

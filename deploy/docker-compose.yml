@@ -35,6 +35,9 @@ services:
     environment:
       GATEWAY_MAX_PER_IP: "${GATEWAY_MAX_PER_IP:-4}"
       GATEWAY_ORIGINS: "${GATEWAY_ORIGINS:-}"
+    volumes:
+      # The arena's season (arena-state.json) and its settings (arena.json, if put there)
+      - arena:/srv/gateway/state
     depends_on:
       - blakserv
 
@@ -60,5 +63,6 @@ services:
 volumes:
   savegame:
   channel:
+  arena:
   caddy-data:
   caddy-config:

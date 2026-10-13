@@ -12,11 +12,19 @@
 // The path /social is the friends relay instead (relay.ts, docs/adr/0005-friends.md): JSON text
 // frames between players of this client, never reaching blakserv. It has its own per-IP limit,
 // the same number, so a player's two connections don't crowd each other out.
+//
+// The relay also runs the arena's fights (arena.ts, docs/adr/0007-arena.md):
+// ARENA_ASSETS (the asset build with tosarena.roo, default dist/assets), ARENA_STATE (the season
+// file, default dist/arena-state.json; "none" keeps nothing) and ARENA_CONFIG (an arena.json to
+// change the fights, read at start).
 
+import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { connect } from "node:net";
 import { parseArgs } from "node:util";
 import { WebSocketServer } from "ws";
+import { readArenaConfig } from "@shards/world";
+import { ArenaHost } from "./arena.ts";
 import { RELAY_MAX_MESSAGE, SocialRelay } from "./relay.ts";
 
 const { values: args } = parseArgs({
@@ -53,7 +61,30 @@ const wss = new WebSocketServer({
   handleProtocols: (protocols) => (protocols.has("binary") ? "binary" : false),
 });
 
-const social = new SocialRelay({ log });
+/** The arena's settings: the defaults, with arena.json's changes */
+function arenaConfig() {
+  const path = process.env.ARENA_CONFIG;
+  if (!path) return readArenaConfig(undefined).config;
+  let json: unknown;
+  try {
+    json = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : undefined;
+    if (json === undefined) log(`arena: no config at ${path}; the defaults`);
+  } catch (e) {
+    log(`arena: ${path} isn't JSON (${(e as Error).message}); the defaults`);
+  }
+  const { config, errors } = readArenaConfig(json);
+  for (const e of errors) log(`arena: ${path}: ${e}`);
+  return config;
+}
+
+const statePath = process.env.ARENA_STATE ?? "dist/arena-state.json";
+const arena = new ArenaHost({
+  config: arenaConfig(),
+  assetsDir: process.env.ARENA_ASSETS ?? "dist/assets",
+  statePath: statePath === "none" ? null : statePath,
+  log,
+});
+const social = new SocialRelay({ log, arena });
 const socialWss = new WebSocketServer({ noServer: true, maxPayload: RELAY_MAX_MESSAGE, perMessageDeflate: false });
 
 /** One fewer connection from this address */
@@ -157,3 +188,9 @@ http.on("upgrade", (req, socket, head) => {
 http.listen(PORT, () => {
   log(`gateway listening on ws://localhost:${PORT} -> ${SERVER_HOST}:${SERVER_PORT} (max ${MAX_PER_IP}/IP), friends relay on /social`);
 });
+
+// The arena's season is saved before going (docker stop sends SIGTERM)
+for (const sig of ["SIGINT", "SIGTERM"] as const)
+  process.once(sig, () => {
+    void arena.stop().finally(() => process.exit(0));
+  });

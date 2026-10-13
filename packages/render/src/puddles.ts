@@ -17,8 +17,8 @@ const MAX_PUDDLES = 400;
 /** Rebuilt when the player has moved this far, and relit this often */
 const MOVE = FINENESS;
 const RELIGHT_MS = 2000;
-/** How likely a square is to hold a puddle, by the ground */
-const CHANCE = { paved: 0.14, earth: 0.18, grass: 0.05 } as const;
+/** How likely a square is to hold a puddle, by the ground (30% fewer since 2026-10-12) */
+const CHANCE = { paved: 0.098, earth: 0.126, grass: 0.035 } as const;
 
 export type PuddleGround = keyof typeof CHANCE;
 

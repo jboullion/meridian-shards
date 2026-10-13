@@ -317,8 +317,9 @@ export function LookListDialog({
 /**
  * Ours: one of the townsfolk examined (packages/world ambient: AmbientLife.describe), in the
  * description dialog's frame: their figure, a name made up for them, what they are and are doing,
- * where they came from and are going, and their mood. They're only ours (and our friends'):
- * nothing here comes from the server.
+ * where they came from and are going, and their mood. An arena fighter (ArenaView.describe) shows
+ * their favourite weapon and spell, their health on the floor, their season's record and the
+ * seasons they were champion of. Nothing here comes from the server.
  */
 export function AmbientPersonDialog({
   person, icons, roomName, onClose,
@@ -331,7 +332,19 @@ export function AmbientPersonDialog({
 }) {
   const okRef = useRef<HTMLDivElement>(null);
   useEffect(() => okRef.current?.querySelector("button")?.focus(), []);
+  const a = person.arena;
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const fighter: [string, string][] = a
+    ? [
+        ...(a.weapon ? ([["Favourite weapon", cap(a.weapon)]] as [string, string][]) : []),
+        ...(a.spell ? ([["Favourite spell", a.spell]] as [string, string][]) : []),
+        ...(a.maxHp ? ([["Health", `${Math.max(0, a.hp)} / ${a.maxHp}`]] as [string, string][]) : []),
+        [`Season ${a.season}`, `${a.wins} ${a.wins === 1 ? "win" : "wins"}, ${a.losses} ${a.losses === 1 ? "loss" : "losses"}, ${a.kills} beaten`],
+        ...(a.champion.length ? ([["Champion", `Season ${a.champion.join(", ")}`]] as [string, string][]) : []),
+      ]
+    : [];
   const rows: [string, string][] = [
+    ...fighter,
     ["Doing", person.doing],
     ...(person.errand ? ([["Errand at", roomName(person.errand)]] as [string, string][]) : []),
     ...(person.from ? ([["Came from", roomName(person.from)]] as [string, string][]) : []),

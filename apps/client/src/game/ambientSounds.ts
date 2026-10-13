@@ -3,8 +3,10 @@
 // rain) and what happened (a swing, a cheer, a strike), and this plays it:
 //   - a bed of chatter under the townsfolk, inn patrons, courtiers and the arena's crowd, as loud
 //     as how many are about, muffled in the rain;
-//   - the arena: weapons swinging and striking armour, spells cast and landing, cheers and
-//     applause from the stands;
+//   - the arena (arena/, docs/adr/0007-arena.md): what the game plays for a fight: weapons
+//     swinging and striking by how hard (player.kod DoHitMessageSound), the hurt crying out by how
+//     hurt (GetOuchSound), each spell's own sound, webs, brambles and fire frying whoever they
+//     catch, the fog's cough; and the stands' cheers and applause;
 //   - inns: dice and drinks now and then;
 //   - thunder after each lightning strike, later and duller the further off;
 //   - critters squeaking now and then, fish splashing;
@@ -16,7 +18,7 @@
 // (tools/assets/fetch-sounds.ts). docs/ambient-sounds.md lists every cue.
 
 import { FINENESS } from "@shards/formats";
-import type { AmbientEvent, AmbientKind, ArenaSpell } from "@shards/world";
+import { ARENA_SPELLS, type AmbientEvent, type AmbientKind, type ArenaEvent } from "@shards/world";
 import type { AmbientSound, GameAudio } from "./audio.ts";
 
 const SQ = FINENESS;
@@ -37,8 +39,12 @@ export interface AmbientSoundFrame {
   populated: boolean;
   /** Ambient people within earshot */
   people: number;
+  /** The game hour (null: not known): the streets fall quiet at night */
+  hour: number | null;
   raining: boolean;
   events: AmbientEvent[];
+  /** What the arena's fights did (ArenaView.takeEvents) */
+  arenaEvents: ArenaEvent[];
   /** A lightning strike just now (which way from the eye, radians from east toward south, and how far, squares) */
   strike: { yaw: number; distance: number } | null;
   /** A fish leaping (small) or landing (big) */
@@ -64,24 +70,23 @@ const BEDS: Partial<Record<AmbientKind, { file: string; indoorFile?: string; vol
 const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length) % list.length];
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
-const SWISH = ["swswish1.ogg", "swswish2.ogg", "swswish3.ogg", "swswish4.ogg", "swswish5.ogg"];
+/** A weapon swung (stroke.kod: swswish1-3) and missing (swordmis.ogg) */
+const SWISH = ["swswish1.ogg", "swswish2.ogg", "swswish3.ogg"];
+const MISS = "swordmis.ogg";
+/** player.kod DoHitMessageSound (:754-764): flesh up to 3 health, leather up to 6, metal beyond */
 const HITS = {
-  metal: ["mhit1b.ogg", "mhit2b.ogg", "mhit3b.ogg", "swrdmtl1.ogg", "swrdmtl2.ogg", "swrdmtl3.ogg"],
+  metal: ["mhit1b.ogg", "mhit2b.ogg", "mhit3b.ogg"],
   leather: ["lhit1b.ogg", "lhit2b.ogg", "lhit3b.ogg"],
   flesh: ["fhit1b.ogg", "fhit2b.ogg", "fhit3b.ogg"],
 } as const;
+/** player.kod GetOuchSound (:767-775): "in increasing order of agony" */
 const OUCH = { male: ["ouchm1.ogg", "ouchm2.ogg", "ouchm3.ogg", "ouchm4.ogg"], female: ["ouchf1.ogg", "ouchf2.ogg", "ouchf3.ogg", "ouchf4.ogg"] };
 const CHEERS: [string, number][] = [["huzzah.ogg", 0.5], ["arena.ogg", 0.45], ["amb_cheer1.ogg", 0.32], ["amb_cheer2.ogg", 0.32]];
-/** Each spell's own sound (its vrSucceed_wav: boltspel/*.kod, walspell/*.kod) */
-const SPELL_SOUNDS: Record<ArenaSpell, string> = {
-  fireball: "ffirebal.ogg",
-  lightning: "fbolt.ogg",
-  firewall: "farenwala822m.ogg",
-  bramble: "faren.ogg",
-  poisonfog: "qor.ogg",
-  ring: "frngfir.ogg",
-  web: "farenwala822m.ogg",
-};
+/** web.kod web_stick_snd, bramble.kod Brambles_scratch_snd, wallfire.kod firewall_burn_snd: all frying.ogg */
+const FRYING = "frying.ogg";
+/** poisfogc.kod PoisonFogCloud_poison_snd */
+const COUGH = "psncough.ogg";
+const ZAP = ["zaphit1.ogg", "zaphit2.ogg", "zaphit3.ogg"];
 const THUNDER = ["thunderclap.ogg", "amb_thunder1.ogg", "amb_thunder2.ogg", "amb_thunder3.ogg", "amb_thunder4.ogg"];
 
 export class AmbientSounds {
@@ -110,6 +115,7 @@ export class AmbientSounds {
     }
     this.updateBed(f);
     for (const e of f.events) this.event(e);
+    for (const e of f.arenaEvents) this.arenaEvent(e);
     for (const s of f.splashes) this.audio.playAmbient("splash.ogg", { at: s, range: 22 * SQ, volume: s.big ? 0.45 : 0.25, rate: s.big ? 1 : 1.3 });
     this.updateCritters(f);
     this.updatePets(f);
@@ -118,8 +124,9 @@ export class AmbientSounds {
 
   /**
    * Dev tools: hear one cue by itself, about us (window.shards.gameScene.ambientSoundBoard.audition("thunder")).
-   * Cues: town, inn, hall (5 s of each chatter), swing, hit, cast-fire, cast-lightning, zap, cheer,
-   * applause, thunder, critter, splash, step, dice, drink, ouch, death
+   * Cues: town, inn, hall (5 s of each chatter), swing, miss, hit, cast-fire, cast-lightning, zap,
+   * blind, dazzle, frying, cough, cheer, applause, thunder, critter, splash, step, dice, drink,
+   * ouch, death
    */
   audition(cue: string): string[] {
     const a = this.audio;
@@ -133,7 +140,12 @@ export class AmbientSounds {
       case "inn": taste(BEDS.inn!.file, BEDS.inn!.volume); break;
       case "hall": taste(BEDS.arena!.file, BEDS.arena!.volume); break;
       case "swing": once(pick(SWISH), 0.45); break;
+      case "miss": once(MISS, 0.4); break;
       case "hit": once(pick(HITS.metal), 0.55); break;
+      case "blind": once("qblind.ogg", 0.5); break;
+      case "dazzle": once("sdazzle.ogg", 0.5); break;
+      case "frying": once(FRYING, 0.45); break;
+      case "cough": once(COUGH, 0.45); break;
       case "cast-fire": once("ffirebal.ogg", 0.5); break;
       case "cast-lightning": once("fbolt.ogg", 0.5); break;
       case "zap": once("zaphit1.ogg", 0.35); break;
@@ -148,7 +160,10 @@ export class AmbientSounds {
       case "ouch": once(pick(OUCH.male), 0.35); break;
       case "death": once("pdeath.ogg", 0.5); break;
     }
-    return ["town", "inn", "hall", "swing", "hit", "cast-fire", "cast-lightning", "zap", "cheer", "applause", "thunder", "critter", "splash", "step", "dice", "drink", "ouch", "death"];
+    return [
+      "town", "inn", "hall", "swing", "miss", "hit", "cast-fire", "cast-lightning", "zap", "blind", "dazzle", "frying", "cough", "cheer", "applause",
+      "thunder", "critter", "splash", "step", "dice", "drink", "ouch", "death",
+    ];
   }
 
   /** Everything stops: another room's sounds start from nothing */
@@ -161,7 +176,9 @@ export class AmbientSounds {
 
   private updateBed(f: AmbientSoundFrame): void {
     // (A shop's one or two customers make no crowd)
-    const spec = f.kind ? (BEDS[f.kind] ?? null) : null;
+    // The towns' streets fall quiet at night (20 to 5): no talk under the few still out
+    const night = f.hour !== null && (f.hour >= 20 || f.hour < 5);
+    const spec = f.kind && !(night && f.kind === "town") ? (BEDS[f.kind] ?? null) : null;
     const file = spec ? (f.indoors && spec.indoorFile) || spec.file : null;
     let volume = spec && f.people > 0 ? spec.volume * Math.min(1, 0.25 + (0.75 * f.people) / spec.full) : 0;
     // The rain drowns out the street, and muffles it
@@ -189,18 +206,59 @@ export class AmbientSounds {
     const at = { x: e.x, y: e.y };
     const a = this.audio;
     switch (e.type) {
+      case "flee":
+        a.playAmbient(pick(e.female ? OUCH.female : OUCH.male), { at, range: 18 * SQ, volume: 0.35, rate: rnd(1.05, 1.2) });
+        break;
+      case "dice":
+        a.playAmbient("dice.ogg", { at, range: 12 * SQ, volume: 0.45 });
+        break;
+      case "drink":
+        a.playAmbient("drink.ogg", { at, range: 10 * SQ, volume: 0.175 });
+        break;
+    }
+  }
+
+  /** The hurt's cry, by how hurt (ArenaEvent's ouch, 1-4; 0 for none) */
+  private ouch(at: { x: number; y: number }, level: number, female: boolean, delay = 0): void {
+    if (level < 1) return;
+    const list = female ? OUCH.female : OUCH.male;
+    this.audio.playAmbient(list[Math.min(4, level) - 1], { at, range: 16 * SQ, volume: 0.35, delay });
+  }
+
+  /** What an arena fight did (the sim's events, arenaWire.ts) */
+  private arenaEvent(e: ArenaEvent): void {
+    const at = { x: e.x, y: e.y };
+    const a = this.audio;
+    switch (e.type) {
       case "swing":
         a.playAmbient(pick(SWISH), { at, range: 16 * SQ, volume: 0.45, rate: rnd(0.95, 1.1) });
-        if (e.hit) {
-          a.playAmbient(pick(HITS[e.hit]), { at, range: 16 * SQ, volume: 0.55, delay: 180, rate: rnd(0.95, 1.05) });
-          if (Math.random() < 0.2) a.playAmbient(pick(e.female ? OUCH.female : OUCH.male), { at, range: 16 * SQ, volume: 0.35, delay: 260 });
+        if (!e.hit) {
+          a.playAmbient(MISS, { at, range: 14 * SQ, volume: 0.3, delay: 150, rate: rnd(0.95, 1.05) });
+          break;
         }
+        a.playAmbient(pick(HITS[e.hit]), { at, range: 16 * SQ, volume: 0.55, delay: 180, rate: rnd(0.95, 1.05) });
+        this.ouch(at, e.ouch, e.female, 260);
         break;
-      case "cast":
-        a.playAmbient(SPELL_SOUNDS[e.spell ?? "fireball"], { at, range: 22 * SQ, volume: 0.5 });
+      case "cast": {
+        const sound = ARENA_SPELLS[e.spell as keyof typeof ARENA_SPELLS]?.sound;
+        if (sound) a.playAmbient(sound, { at, range: 22 * SQ, volume: 0.5 });
         break;
+      }
       case "impact":
-        if (e.bolt === "lightning") a.playAmbient(pick(["zaphit1.ogg", "zaphit2.ogg", "zaphit3.ogg"]), { at, range: 18 * SQ, volume: 0.35 });
+        if (e.spell === "lightning") a.playAmbient(pick(ZAP), { at, range: 18 * SQ, volume: 0.35 });
+        // player.kod DoHitMessageSound: an attack spell's victim cries out
+        this.ouch(at, e.ouch, e.female, 120);
+        break;
+      case "stuck":
+      case "scratch":
+      case "burn":
+        a.playAmbient(FRYING, { at, range: 14 * SQ, volume: 0.4, rate: rnd(0.95, 1.05) });
+        this.ouch(at, e.ouch, e.female, 200);
+        break;
+      case "poisoned":
+        a.playAmbient(COUGH, { at, range: 14 * SQ, volume: 0.4 });
+        break;
+      case "chop":
         break;
       case "cheer":
         if (this.cheerMs > 0) return;
@@ -221,15 +279,6 @@ export class AmbientSounds {
         a.playAmbient("huzzah.ogg", { at, range: 40 * SQ, volume: 0.45, delay: 200 });
         break;
       }
-      case "flee":
-        a.playAmbient(pick(e.female ? OUCH.female : OUCH.male), { at, range: 18 * SQ, volume: 0.35, rate: rnd(1.05, 1.2) });
-        break;
-      case "dice":
-        a.playAmbient("dice.ogg", { at, range: 12 * SQ, volume: 0.45 });
-        break;
-      case "drink":
-        a.playAmbient("drink.ogg", { at, range: 10 * SQ, volume: 0.175 });
-        break;
     }
   }
 
