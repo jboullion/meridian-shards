@@ -54,8 +54,10 @@ function Enchantments({ session, icons, kind, tooltips, onLook }: { session: Gam
 }
 
 export function UnitFrame({
-  session, icons, settings, selecting, onSelectSelf, onLook, touch = false,
+  session, icons, settings, selecting, onSelectSelf, onLook, onEmotes, touch = false,
 }: {
+  /** Ours: a click (a tap) on our face, when not picking a target, shows the Quick Emotes (Q) */
+  onEmotes?: () => void;
   session: GameSession;
   icons: IconRenderer;
   settings: Settings;
@@ -74,8 +76,9 @@ export function UnitFrame({
       <div className="unit-top">
         <div
           className={selecting ? "unit-portrait selecting" : "unit-portrait"}
-          // userarea.c UserAreaProc: a click picks us as a spell target; a right click looks at us
-          onClick={() => selecting && onSelectSelf()}
+          // userarea.c UserAreaProc: a click picks us as a spell target; a right click looks at us.
+          // Ours: otherwise a click shows the emotes
+          onClick={() => (selecting ? onSelectSelf() : onEmotes?.())}
           onContextMenu={(e) => {
             e.preventDefault();
             if (self) onLook(self.id);

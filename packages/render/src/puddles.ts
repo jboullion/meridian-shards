@@ -3,7 +3,8 @@
 // fall, and they shrink away after it stops. Where each one lies is a hash of the room and the
 // square, so everyone sees the same puddles. Flat shapes on the floor, drawn after the room,
 // with a wobbly edge, a darker wet rim and a sheen that brightens at a glancing angle (no real
-// reflection). Never picked, and left out of the glow pass.
+// reflection). Never picked, and left out of the glow pass. The same rings fall on open water
+// (lakes, rivers, the sea, painted pools) while it rains: a ring layer a square at a time.
 //
 // Positions are client fine units (x east, y south, z up).
 
@@ -31,6 +32,8 @@ export interface PuddleSpot {
 export interface PuddleRoom {
   /** Open ground under the sky at a point (not water, not a cave), or null */
   spot(x: number, y: number): PuddleSpot | null;
+  /** Water under the sky at a point: its surface's height, or null */
+  water(x: number, y: number): number | null;
   /** How lit a point is, 0..1 each */
   light(x: number, y: number, z: number): [number, number, number];
 }
@@ -101,6 +104,52 @@ void main() {
   outColor = vec4(color, alpha);
 }`;
 
+/** Rain rings on open water: squares this far about the player, fading from the first */
+const WATER_RADIUS = 12 * FINENESS;
+const WATER_FADE_FROM = 8 * FINENESS;
+const MAX_WATER = 700;
+
+/**
+ * The puddles' rings alone, over a square of water (vUv -1..1 across it), more of them and
+ * brighter, since open water is darker than a puddle's sheen: centres kept far enough in that a
+ * ring never reaches the square's edge, where it would be cut off
+ */
+const rippleFragment = /* glsl */ `
+uniform float uRain;
+uniform float uTime;
+in vec2 vUv;
+in float vSeed;
+in vec3 vLight;
+in float vFade;
+in float vGrazing;
+out vec4 outColor;
+float hash(float n) { return fract(sin(n) * 43758.5453); }
+void main() {
+  float ripple = 0.0;
+  for (int i = 0; i < 6; i++) {
+    float fi = float(i);
+    float t = uTime * (0.0011 + 0.0005 * hash(vSeed + fi)) + hash(vSeed * 7.0 + fi);
+    float cycle = floor(t);
+    float phase = fract(t);
+    vec2 c = (vec2(hash(vSeed + fi * 3.1 + cycle), hash(vSeed + fi * 5.7 + cycle * 1.3)) - 0.5) * 1.2;
+    float ring = 1.0 - smoothstep(0.0, 0.035, abs(length(vUv - c) - phase * 0.32));
+    ripple += ring * (1.0 - phase);
+  }
+  float a = ripple * uRain * vFade;
+  if (a <= 0.004) discard;
+  // The sky's sheen in the rings, as on the puddles
+  vec3 color = vec3(0.7, 0.78, 0.9) * mix(0.6, 1.1, pow(vGrazing, 2.0)) * (0.35 + 0.65 * vLight);
+  outColor = vec4(color, min(1.0, a * 0.7));
+}`;
+
+/** A square of open water under the sky */
+interface WaterSquare {
+  x: number;
+  y: number;
+  z: number;
+  seed: number;
+}
+
 interface Puddle {
   x: number;
   y: number;
@@ -134,6 +183,10 @@ export class Puddles {
   private room: PuddleRoom | null = null;
   private roomHash = 0;
   private puddles: Puddle[] = [];
+  private readonly waterMesh: THREE.Mesh;
+  private readonly waterMaterial: THREE.ShaderMaterial;
+  private readonly waterGeometry = new THREE.BufferGeometry();
+  private water: WaterSquare[] = [];
   private at: { x: number; y: number } | null = null;
   private relightMs = 0;
   private time = 0;
@@ -156,12 +209,35 @@ export class Puddles {
     this.mesh = new THREE.Mesh(this.geometry, this.material);
     this.mesh.frustumCulled = false;
     this.group.add(this.mesh);
+    // The rings on open water share the puddles' time and rain
+    this.waterMaterial = new THREE.ShaderMaterial({
+      glslVersion: THREE.GLSL3,
+      vertexShader: vertex,
+      fragmentShader: rippleFragment,
+      uniforms: { uRain: this.material.uniforms.uRain, uTime: this.material.uniforms.uTime },
+      transparent: true,
+      // Added to the water (often brighter than a puddle): the rings only ever lighten it
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+    this.waterMesh = new THREE.Mesh(this.waterGeometry, this.waterMaterial);
+    this.waterMesh.frustumCulled = false;
+    this.group.add(this.waterMesh);
     this.group.visible = false;
   }
 
   /** How many are drawn */
   get count(): number {
-    return this.group.visible ? this.puddles.length : 0;
+    return this.group.visible && this.mesh.visible ? this.puddles.length : 0;
+  }
+
+  /** How many squares of open water have the rain's rings on them now */
+  get ringSquares(): number {
+    return this.group.visible && this.waterMesh.visible ? this.water.length : 0;
   }
 
   /** Whether a point is in a puddle (as far as they've spread) */
@@ -186,6 +262,7 @@ export class Puddles {
     this.roomHash = nameHash(name.toLowerCase());
     this.at = null;
     this.puddles = [];
+    this.water = [];
   }
 
   /** Nothing to draw (no rain for a while, or another room) */
@@ -204,11 +281,16 @@ export class Puddles {
     u.uWet.value = wet;
     u.uTime.value = this.time;
     u.uRain.value += ((raining ? 1 : 0) - u.uRain.value) * Math.min(1, dt / 1500);
-    if (!this.room || wet <= 0.01) {
+    // Puddles while the ground is wet; rings on open water while drops fall
+    const puddles = wet > 0.01;
+    const rings = u.uRain.value > 0.01;
+    if (!this.room || (!puddles && !rings)) {
       this.group.visible = false;
       return;
     }
     this.group.visible = true;
+    this.mesh.visible = puddles;
+    this.waterMesh.visible = rings;
     const moved = !this.at || Math.hypot(viewer.x - this.at.x, viewer.y - this.at.y) > MOVE;
     if (moved) {
       this.at = { ...viewer };
@@ -251,6 +333,24 @@ export class Puddles {
         if (flat) out.push({ x, y, z: spot.floor, rx, ry, turn, seed: hash(this.roomHash, c, r, 6) * 100 });
       }
     this.puddles = out;
+    // Squares of open water, whole: every corner on water at the same height (no rings on the shore)
+    const water: WaterSquare[] = [];
+    const m = Math.ceil(WATER_RADIUS / FINENESS);
+    for (let r = r0 - m; r <= r0 + m && water.length < MAX_WATER; r++)
+      for (let c = c0 - m; c <= c0 + m && water.length < MAX_WATER; c++) {
+        const x = (c + 0.5) * FINENESS,
+          y = (r + 0.5) * FINENESS;
+        if (Math.hypot(x - v.x, y - v.y) > WATER_RADIUS) continue;
+        const z = room.water(x, y);
+        if (z === null) continue;
+        let whole = true;
+        for (let k = 0; k < 4 && whole; k++) {
+          const w = room.water(x + (k & 1 ? 0.45 : -0.45) * FINENESS, y + (k & 2 ? 0.45 : -0.45) * FINENESS);
+          whole = w !== null && Math.abs(w - z) < 4;
+        }
+        if (whole) water.push({ x, y, z, seed: hash(this.roomHash, c, r, 7) * 100 });
+      }
+    this.water = water;
   }
 
   /** One quad a puddle, lit where it lies and fading toward the edge of the area */
@@ -289,10 +389,46 @@ export class Puddles {
     g.setAttribute("aLight", new THREE.BufferAttribute(light, 3));
     g.setAttribute("aFade", new THREE.BufferAttribute(fade, 1));
     g.setDrawRange(0, n * 6);
+    this.buildWater(v);
+  }
+
+  /** One quad a square of water, lit where it lies and fading toward the edge of the area */
+  private buildWater(v: { x: number; y: number }): void {
+    const room = this.room!;
+    const n = this.water.length;
+    const pos = new Float32Array(n * 18),
+      uv = new Float32Array(n * 12),
+      seed = new Float32Array(n * 6),
+      light = new Float32Array(n * 18),
+      fade = new Float32Array(n * 6);
+    const corners = [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]];
+    const half = FINENESS / 2;
+    this.water.forEach((q, i) => {
+      const [lr, lg, lb] = room.light(q.x, q.y, q.z);
+      const d = Math.hypot(q.x - v.x, q.y - v.y);
+      const f = d < WATER_FADE_FROM ? 1 : Math.max(0, 1 - (d - WATER_FADE_FROM) / (WATER_RADIUS - WATER_FADE_FROM));
+      corners.forEach(([u, w], k) => {
+        const j = i * 6 + k;
+        pos.set([(q.x + u * half) / FINENESS, q.z / FINENESS, (q.y + w * half) / FINENESS], j * 3);
+        uv.set([u, w], j * 2);
+        seed[j] = q.seed;
+        light.set([lr, lg, lb], j * 3);
+        fade[j] = f;
+      });
+    });
+    const g = this.waterGeometry;
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    g.setAttribute("aUv", new THREE.BufferAttribute(uv, 2));
+    g.setAttribute("aSeed", new THREE.BufferAttribute(seed, 1));
+    g.setAttribute("aLight", new THREE.BufferAttribute(light, 3));
+    g.setAttribute("aFade", new THREE.BufferAttribute(fade, 1));
+    g.setDrawRange(0, n * 6);
   }
 
   dispose(): void {
     this.geometry.dispose();
     this.material.dispose();
+    this.waterGeometry.dispose();
+    this.waterMaterial.dispose();
   }
 }

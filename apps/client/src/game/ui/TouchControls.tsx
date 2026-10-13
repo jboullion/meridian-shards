@@ -196,7 +196,7 @@ export function tickerColor(color: string | undefined): string | undefined {
 
 export function TouchControls({
   session, icons, settings, chatUnread, onMove, onPress, onChat, onDrawer, onMap, mapOpen, onLook, resting, onRest,
-  quickSlots, onUseSlot, onEditSlot, onSetSlot, onSwapSlots, selecting, onSelectSelf, onCancelSelect, cooldown,
+  quickSlots, onUseSlot, onEditSlot, onSetSlot, onSwapSlots, selecting, onSelectSelf, onCancelSelect, cooldown, onEmotes,
 }: {
   onSetSlot: (i: number, slot: QuickSlot) => void;
   onSwapSlots: (a: number, b: number) => void;
@@ -208,6 +208,8 @@ export function TouchControls({
   /** Picking a spell target: our bars pick us, and the hint can cancel */
   selecting: boolean;
   onSelectSelf: () => void;
+  /** A tap on our face: the Quick Emotes */
+  onEmotes: () => void;
   onCancelSelect: () => void;
   session: GameSession;
   icons: IconRenderer;
@@ -230,7 +232,7 @@ export function TouchControls({
   return (
     <div className="touch-controls">
       <div className="touch-hud">
-        <UnitFrame session={session} icons={icons} settings={settings} selecting={selecting} onSelectSelf={onSelectSelf} onLook={onLook} touch />
+        <UnitFrame session={session} icons={icons} settings={settings} selecting={selecting} onSelectSelf={onSelectSelf} onLook={onLook} onEmotes={onEmotes} touch />
       </div>
       {/* The first row of quick slots, as the desktop's hotbar */}
       <div className="touch-hotbar">

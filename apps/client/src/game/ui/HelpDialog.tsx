@@ -270,7 +270,7 @@ const HUD_PARTS: HudPart[] = [
   { sel: [".game-title .menu-button"], title: "The ☰ menu", text: "Preferences, Configuration (keys), Actions, Spells, Mail, Help and logging off." },
   { sel: [".game-title .title-text"], title: "Where you are", text: "The room's name." },
   { sel: [".game-title .latency", ".classic-toolbar .latency"], title: "Connection", text: "Green is quick, yellow slow, red very slow. The FPS beside it is frames a second." },
-  { sel: [".unit-portrait", ".user-area .portrait"], title: "You", text: "Your face. Click it to cast a spell on yourself; right click to look at yourself." },
+  { sel: [".unit-portrait", ".user-area .portrait"], title: "You", text: "Your face. Click it for the emotes, or to cast a spell on yourself; right click to look at yourself." },
   { sel: [".unit-side .hud-bars", ".user-area .main-stats"], title: "Health, mana and vigor", text: "Vigor runs down as you run and fight; rest to get it back. Classic shows your experience too." },
   { sel: [".modern-enchantments.player", ".touch-hud .hud-enchantments.player", ".user-area .enchantments.player"], title: "Your enchantments", text: "Spells on you. Right click (long press) one to read about it." },
   { sel: [".target-frame"], title: "Your target", text: "Who you've targeted: red if you can attack them. E attacks; Esc lets go." },
@@ -436,19 +436,19 @@ function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }
             </>
           )}
           <dt>Actions</dt>
-          <dd>Who is logged on (and ignoring players), groups to talk to, hotkey aliases (what F1 to F12 type), command aliases, your guild, the emotes and moods, Friends and Pets.</dd>
-          <dt>Spells</dt>
-          <dd>Every spell you know, by school, to cast.</dd>
+          <dd>Who is logged on (and ignoring players), groups to talk to, hotkey aliases (what F1 to F12 type), command aliases, your guild, Friends and Pets.</dd>
           <dt>Language</dt>
           <dd>The language of the game's text, where the server has it.</dd>
           <dt>Mail…</dt>
           <dd>Read and write letters to other players.</dd>
           <dt>Change password…</dt>
           <dd>Your account's password.</dd>
-          <dt>Logout timer…</dt>
-          <dd>Log off by yourself after some minutes away.</dd>
-          <dt>Study…</dt>
-          <dd>Practise a spell while you're away: it rests when your mana's low, and can log off when done.</dd>
+          {layout !== "touch" && (
+            <>
+              <dt>Logout timer…</dt>
+              <dd>Log off by yourself after some minutes away.</dd>
+            </>
+          )}
           <dt>Help… (F1)</dt>
           <dd>This window.</dd>
           <dt>About Meridian…</dt>
@@ -468,7 +468,7 @@ function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }
           <dt>Statistics</dt>
           <dd>Your stats, karma, weight and bulk carried, and more.</dd>
           <dt>Spells and Skills</dt>
-          <dd>What you know and how well. Double click a spell to cast it; drag it to the hotbar.</dd>
+          <dd>What you know and how well. Double click a spell to cast it; drag it to the hotbar. Search spells by name; Study practises one while you're away (it rests when your mana's low, and can log off when done).</dd>
           <dt>Quests</dt>
           <dd>The quests you're on.</dd>
           <dt>Friends (P)</dt>
@@ -490,7 +490,7 @@ function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }
           <dd>Double click a box to see inside and take things out; put stores things in one.</dd>
           <dt>The full map</dt>
           <dd>Click the map. Notes you write on it stay.</dd>
-          <dt>Quick Emotes (Q)</dt>
+          <dt>Quick Emotes (Q, or click your face)</dt>
           <dd>Wave, point, dance and your mood in one click.</dd>
           <dt>Hotbar slots</dt>
           <dd>Right click (long press) a slot to choose a spell or item for it.</dd>

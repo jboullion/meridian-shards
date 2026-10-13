@@ -6,7 +6,7 @@ import {
   type MailNewsEvent, type GuildEvent, type MinigameEvent, localResName } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
-import { allowPortrait, desktop, gameSocketUrl, onAndroidAway } from "../host.ts";
+import { allowPortrait, desktop, gameSocketUrl, onAndroidAway, requiredUpdate, type RequiredUpdate } from "../host.ts";
 import { hideFriendTells } from "./social.ts";
 import { GameAudio } from "./audio.ts";
 import { SplashPicture } from "./Intro.tsx";
@@ -102,6 +102,18 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   /** Plays the splash's music (main.ogg) until logging on, as the intro module does until it unloads */
   const [introAudio, setIntroAudio] = useState<GameAudio | null>(() => new GameAudio(assets));
 
+  /** Ours: a newer version that must be installed before logging in (host.ts requiredUpdate) */
+  const [required, setRequired] = useState<RequiredUpdate | null>(null);
+  const onLoginScreen = !live || !session || phase === "offline" || phase === "closed";
+  useEffect(() => {
+    if (!onLoginScreen) return;
+    let on = true;
+    void requiredUpdate().then((r) => on && setRequired(r));
+    return () => {
+      on = false;
+    };
+  }, [onLoginScreen]);
+
   // The desktop app asks before closing the window mid-game
   useEffect(() => desktop?.setPhase(phase), [phase]);
   // On a phone, the screens before the game may turn upright (easier for typing); the game is landscape
@@ -124,26 +136,35 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
 
   const login = (username: string, password: string) => {
     setError(null);
-    introAudio?.dispose();
-    setIntroAudio(null);
-    rememberName(username);
     // Created on the login click, so the browser lets the page play sound.
     const audio = new GameAudio(assets);
-    // A server updated since this page loaded has new files (rsc0000.rsb, rooms) that the
-    // login depends on: reload to get them, and the client that goes with them
-    void assets
-      .changedOnServer()
-      .catch(() => false)
-      .then((changed) => {
-        if (!changed) return connect(username, password, audio);
+    // Ours: nobody plays on an old version (host.ts requiredUpdate); the login screen says how to update
+    void requiredUpdate().then((needed) => {
+      if (needed) {
         audio.dispose();
-        try {
-          sessionStorage.setItem(UPDATED_KEY, "1");
-        } catch {
-          // no notice then
-        }
-        location.reload();
-      });
+        quickstart.current = false;
+        setRequired(needed);
+        return;
+      }
+      introAudio?.dispose();
+      setIntroAudio(null);
+      rememberName(username);
+      // A server updated since this page loaded has new files (rsc0000.rsb, rooms) that the
+      // login depends on: reload to get them, and the client that goes with them
+      void assets
+        .changedOnServer()
+        .catch(() => false)
+        .then((changed) => {
+          if (!changed) return connect(username, password, audio);
+          audio.dispose();
+          try {
+            sessionStorage.setItem(UPDATED_KEY, "1");
+          } catch {
+            // no notice then
+          }
+          location.reload();
+        });
+    });
   };
 
   const connect = (username: string, password: string, audio: GameAudio) => {
@@ -257,6 +278,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       <Framed assets={assets}>
         <LoginScreen
           assets={assets}
+          required={required}
           onLogin={login}
           error={error}
           onClearError={() => setError(null)}

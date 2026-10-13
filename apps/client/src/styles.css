@@ -670,6 +670,39 @@ button.link {
   padding-bottom: 4px;
 }
 
+/* Ours: the Spells tab's search, most of the row, and Study beside it; it stays as the list scrolls */
+.spell-search {
+  position: sticky;
+  top: -2px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -2px -2px 0;
+  padding: 3px 2px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.spell-search .mk-edit {
+  flex: 1;
+  min-width: 0;
+}
+
+.spell-search input {
+  width: 100%;
+  font-size: 13px;
+}
+
+.spell-search button {
+  flex: none;
+  min-width: 56px;
+}
+
+.game.touch-ui .spell-search input {
+  font-size: 16px;
+  padding: 4px;
+}
+
 .stat-list-row {
   display: flex;
   align-items: center;
@@ -1079,6 +1112,7 @@ button.link {
 }
 
 .title-text {
+  font-weight: normal;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -2173,7 +2207,8 @@ canvas.server-wait {
   background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.55));
 }
 
-.mk-backdrop.with-picture > :not(.mk-backdrop-picture) {
+/* In front of the picture; message boxes (.mk-modal) stay fixed over the whole screen */
+.mk-backdrop.with-picture > :not(.mk-backdrop-picture, .mk-modal) {
   position: relative;
 }
 

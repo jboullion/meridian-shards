@@ -10,7 +10,7 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { AssetStore } from "../assets.ts";
-import { desktop, devPagesEnabled, isAndroid, type DesktopBridge, type DesktopUpdate } from "../host.ts";
+import { desktop, devPagesEnabled, isAndroid, type DesktopBridge, type DesktopUpdate, type RequiredUpdate } from "../host.ts";
 import { Backdrop, Button, GroupBox, MessageBox, Select, Text, TextField, Window, at, type Rect } from "./ui/kit.tsx";
 
 /** Control rectangles: client.rc IDD_LOGIN (251 x 175, a little roomier) for the desktop, the same less the Server row for the browser. */
@@ -83,9 +83,11 @@ function forgetName(name: string): string[] {
 }
 
 export function LoginScreen({
-  assets, onLogin, error, onClearError, initialUsername, initialPassword, behind,
+  assets, required, onLogin, error, onClearError, initialUsername, initialPassword, behind,
 }: {
   assets: AssetStore;
+  /** Ours: a newer version to install before anyone can log in (host.ts requiredUpdate) */
+  required: RequiredUpdate | null;
   /** Ours: drawn behind the dialog (the splash picture) */
   behind?: ReactNode;
   /** The desktop app's /U and /W (the original fills its login dialog from them) */
@@ -131,7 +133,7 @@ export function LoginScreen({
           {desktop && LAYOUT.serverLabel && LAYOUT.server && (
             <ServerField desktop={desktop} label={LAYOUT.serverLabel} field={LAYOUT.server} />
           )}
-          <Button at={LAYOUT.ok} type="submit" isDefault disabled={!username.trim() || !password}>
+          <Button at={LAYOUT.ok} type="submit" isDefault disabled={!username.trim() || !password || !!required}>
             Log In
           </Button>
         </form>
@@ -141,7 +143,8 @@ export function LoginScreen({
         {desktop && !update && <span>Version {desktop.version}</span>}
         {desktop && update && <UpdateNotice update={update} install={() => desktop?.installUpdate()} />}
       </p>
-      {error && <MessageBox text={error} onResult={onClearError} />}
+      {error && !required && <MessageBox text={error} onResult={onClearError} />}
+      {required && <UpdateRequired required={required} update={update} />}
     </Backdrop>
   );
 }
@@ -272,6 +275,66 @@ export function ConnectingScreen() {
 }
 
 /**
+ * Ours: a newer version is out, and nobody plays on an old one. It can't be closed: the desktop
+ * app downloads it (electron-updater) and restarts into it, or, where it can't update itself
+ * (macOS, unsigned), the installer is downloaded; the Android app restarts into the new page or
+ * installs the new APK; the browser reloads.
+ */
+function UpdateRequired({ required, update }: { required: RequiredUpdate; update: DesktopUpdate | null }) {
+  const v = required.version ?? update?.version;
+  const install = () => desktop?.installUpdate();
+  const download = required.download && (
+    <Button isDefault={!update || update.state === "error"} onClick={() => window.open(required.download!, "_blank")}>
+      {isAndroid ? "Download" : "Download installer"}
+    </Button>
+  );
+  let status: ReactNode = null;
+  let action: ReactNode = null;
+  const a = update?.android;
+  if (required.reload) {
+    status = "A new version of Meridian Shards is out.";
+    action = (
+      <Button isDefault onClick={() => location.reload()}>
+        Reload
+      </Button>
+    );
+  } else if (a) {
+    if (a.kind === "web" && a.state === "ready") action = <Button isDefault onClick={install}>Restart to update</Button>;
+    else if (a.state === "downloading") status = `Downloading${a.progress != null ? ` (${Math.floor(a.progress * 100)}%)` : ""}...`;
+    else if (a.state === "permission") {
+      status = "Allow Meridian Shards to install apps, then install it.";
+      action = <Button isDefault onClick={install}>Install</Button>;
+    } else if (a.state === "downloaded" || a.state === "installing") action = <Button isDefault onClick={install}>Install</Button>;
+    else if (a.state === "error") {
+      status = "It didn't download.";
+      action = <Button isDefault onClick={install}>Try again</Button>;
+    } else action = <Button isDefault onClick={install}>Install</Button>;
+  } else if (update && (update.state ?? "ready") === "ready") action = <Button isDefault onClick={install}>Restart to update</Button>;
+  else if (update?.state === "downloading")
+    status = `Downloading${update.progress != null ? ` (${Math.floor(update.progress * 100)}%)` : ""}... It installs when you restart.`;
+  else if (update?.state === "error") status = "It couldn't install itself: download the installer and run it.";
+  return (
+    <div className="mk-modal">
+      <Window title="Update required" closeButton={false} className="mk-message update-required">
+        <p className="mk-message-text">
+          {v ? `Version ${v} of Meridian Shards is out.` : null} Please update to keep playing.
+          {status && (
+            <>
+              <br />
+              {status}
+            </>
+          )}
+        </p>
+        <div className="mk-buttons center">
+          {action}
+          {!isAndroid || !a ? download : null}
+        </div>
+      </Window>
+    </div>
+  );
+}
+
+/**
  * A newer version: the desktop's, downloaded and installed on restart; on Android, the page by
  * itself (ready, restart) or a new APK, downloaded and handed to Android's installer as the player
  * asks (host.ts androidBridge).
@@ -285,7 +348,10 @@ function UpdateNotice({ update, install }: { update: DesktopUpdate; install: () 
   const v = update.version;
   const a = update.android;
   let body;
-  if (!a || a.kind === "web") body = <>Version {v} is ready. {link("Restart to update")}</>;
+  if (!a && update.state === "downloading") body = <>Downloading version {v}{update.progress != null ? ` (${Math.floor(update.progress * 100)}%)` : ""}...</>;
+  else if (!a && update.state === "error") body = <>Version {v} didn't install itself.</>;
+  else if (a?.kind === "web" && a.state === "downloading") body = <>Downloading version {v}...</>;
+  else if (!a || a.kind === "web") body = <>Version {v} is ready. {link("Restart to update")}</>;
   else if (a.state === "downloading")
     body = <>Downloading version {v}{a.progress != null ? ` (${Math.floor(a.progress * 100)}%)` : ""}...</>;
   else if (a.state === "permission") body = <>Allow Meridian Shards to install apps, then {link("install it")}</>;

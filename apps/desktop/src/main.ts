@@ -327,6 +327,7 @@ function setupIpc(): void {
     win?.webContents.reload();
   });
   ipcMain.on("shards:install-update", () => {
+    if (update?.state && update.state !== "ready") return;
     if (!update) return;
     closeConfirmed = true;
     electronUpdater.autoUpdater.quitAndInstall();
@@ -343,9 +344,19 @@ function setupUpdates(): void {
   // First lines only: electron-updater's errors carry whole HTTP responses
   const line = (m: unknown) => log(`update: ${String(m).split("\n")[0]}`);
   autoUpdater.logger = { info: line, warn: line, error: () => {}, debug: () => {} };
-  autoUpdater.on("update-downloaded", (info) => {
-    update = { version: info.version };
-    win?.webContents.send("shards:update", update);
+  // Every step goes to the page: players must update before they can log in (LoginScreen.tsx)
+  const send = (u: DesktopUpdate) => {
+    update = u;
+    win?.webContents.send("shards:update", u);
+  };
+  autoUpdater.on("update-available", (info) => send({ version: info.version, state: "downloading", progress: 0 }));
+  autoUpdater.on("download-progress", (p) => {
+    if (update) send({ ...update, state: "downloading", progress: p.percent / 100 });
+  });
+  autoUpdater.on("update-downloaded", (info) => send({ version: info.version, state: "ready" }));
+  autoUpdater.on("error", (e) => {
+    log(`update failed: ${String(e).split(/\r?\n/)[0]}`);
+    if (update) send({ ...update, state: "error" });
   });
   autoUpdater.checkForUpdates().catch((e: Error) => log(`update check failed: ${e.message.split("\n")[0]}`));
 }

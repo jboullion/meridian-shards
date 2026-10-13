@@ -21,6 +21,13 @@ export interface DesktopUpdate {
   /** The version that's downloaded and installs on restart */
   version: string;
   /**
+   * The desktop's (electron-updater): downloading (0..1 `progress`), ready to install on restart,
+   * or failed (unsigned macOS builds can't update themselves: the installer is downloaded instead).
+   * Absent from older apps, which only said when it was ready.
+   */
+  state?: "downloading" | "ready" | "error";
+  progress?: number | null;
+  /**
    * The Android app (ours; updates.ts): `web`, the page by itself, downloaded and ready (restart);
    * `apk`, a new app to download and install (state and progress as it goes).
    */
@@ -204,8 +211,11 @@ function androidBridge(a: AndroidHost): DesktopBridge {
       apkUrl = apkOf(release)?.browser_download_url ?? null;
       const web = webBundleOf(release);
       const shell = a.shell?.() ?? 0;
-      if (web && a.downloadWebUpdate && web.shell <= shell) a.downloadWebUpdate(web.url, release.version, web.sha256);
-      else offerApk(release.version);
+      if (web && a.downloadWebUpdate && web.shell <= shell) {
+        // Said at once, so the login screen knows an update is coming while it downloads
+        announce({ version: release.version, android: { kind: "web", state: "downloading", progress: null } });
+        a.downloadWebUpdate(web.url, release.version, web.sha256);
+      } else offerApk(release.version);
     });
   // An updated page that gets this far works: keep it
   setTimeout(() => a.confirmWebBundle?.(), CONFIRM_AFTER_MS);
@@ -248,6 +258,7 @@ function androidBridge(a: AndroidHost): DesktopBridge {
       const u = update?.android;
       if (!update || !u) return;
       if (u.kind === "web") {
+        if (u.state !== "ready") return;
         if (!a.applyWebUpdate?.()) location.reload();
         return;
       }
@@ -359,6 +370,55 @@ export function gameSocketUrl(): string {
 /** The friends relay's WebSocket URL (docs/adr/0005-friends.md), beside the gateway's */
 export function socialSocketUrl(): string {
   return gameSocketUrl().replace(/\/ws$/, "/social");
+}
+
+/**
+ * A newer version players must update to before they can log in (ours): the apps' from the
+ * latest GitHub release; the browser's when the server serves a newer page than this one.
+ */
+export interface RequiredUpdate {
+  /** The version that's out; null in the browser, which only knows the page changed */
+  version: string | null;
+  /** The installer for this system (the desktop) or the APK (Android), for when the app can't update itself */
+  download: string | null;
+  /** The browser: a reload gets it */
+  reload: boolean;
+}
+
+/** How long one answer is kept (GitHub allows 60 unauthenticated requests an hour per address), ms */
+const REQUIRED_CHECK_MS = 10 * 60_000;
+let requiredCheck: { at: number; result: Promise<RequiredUpdate | null> } | null = null;
+
+/**
+ * Whether this client must update before playing; asked when the login screen shows and on
+ * logging in. Null when it's current, in development (unless `shards.updateFeed` names a feed to
+ * try), or when the answer can't be had: nobody is locked out because GitHub didn't answer.
+ */
+export function requiredUpdate(): Promise<RequiredUpdate | null> {
+  if (requiredCheck && performance.now() - requiredCheck.at < REQUIRED_CHECK_MS) return requiredCheck.result;
+  const result = (async (): Promise<RequiredUpdate | null> => {
+    if (desktop) {
+      const feed = desktop.dev ? devUpdateFeed() : LATEST_RELEASE;
+      const release = feed ? await latestRelease(feed) : null;
+      if (!release || !newerVersion(release.version, desktop.version)) return null;
+      const platform: Platform | null = isAndroid ? "android" : detectPlatform(navigator.userAgent);
+      const file = platform ? installerOf(release, platform) : null;
+      return { version: release.version, download: file?.browser_download_url ?? null, reload: false };
+    }
+    if (devPagesEnabled) return null;
+    // The browser: the page the server serves now, against the one running (Vite names its entry by content hash)
+    try {
+      const ours = document.querySelector<HTMLScriptElement>("script[type=module][src]")?.getAttribute("src");
+      const res = await fetch(location.pathname, { cache: "no-store" });
+      if (!ours || !res.ok) return null;
+      const served = /<script[^>]*type="module"[^>]*src="([^"]+)"/.exec(await res.text())?.[1];
+      return served && served !== ours ? { version: null, download: null, reload: true } : null;
+    } catch {
+      return null;
+    }
+  })();
+  requiredCheck = { at: performance.now(), result };
+  return result;
 }
 
 /** Where the browser's Download button goes (TitleBar.tsx) */

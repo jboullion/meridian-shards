@@ -126,8 +126,7 @@ const OPTION_COMMANDS: Partial<Record<CommandId, [flag: number, on: boolean]>> =
 /** actions.c `actions`: the Actions menu, null for a separator */
 const ACTIONS_MENU: ([command: string, label: string] | null)[] = [
   ["who", "Who is logged on"], ["group", "Modify groups"], ["alias", "Hotkey aliases"], ["cmdalias", "Command aliases"], ["guild", "Guild configuration"],
-  null, ["wave", "Wave"], ["point", "Point"], ["dance", "Dance"],
-  null, ["happy", "Happy"], ["sad", "Sad"], ["neutral", "Neutral"], ["wry", "Wry"],
+  // (Ours: the emotes and moods aren't here: a click on our face shows them, as Q does)
 ];
 
 /** Ours: the Quick Emotes menu (Q): the emotes and the moods, each its typed command, null between them */
@@ -463,7 +462,6 @@ export function GameView({
   /** The same, for the toolbar's Rest/Stand toggle */
   const [resting, setRestingShown] = useState(false);
   useWorld(session.world, ["spells", "player", "roomContents"]);
-  const spells = session.world.spells;
   // The quick slots (quickSlots.ts), kept per character: loaded once we know who we are
   const selfInfo = session.world.self;
   const charName = selfInfo ? (session.resource(selfInfo.info.nameRes) ?? "") : "";
@@ -629,7 +627,6 @@ export function GameView({
     social?.setPet(ourPet);
     // (status: the scene is made after this effect first runs; its first status means it's there)
   }, [ourPet, pet.name, social, status]);
-  const spellSchools = session.world.spellSchools;
   // Ours: the Friends and Pets tabs' pages, for the character window and the interface column
   const friendsPanel = (
     <FriendsPanel
@@ -1764,15 +1761,14 @@ export function GameView({
     handle.addEventListener("pointercancel", up);
   };
 
-  // spells.c MenuAddSpell: a submenu per school (UC_SPELL_SCHOOLS), its spells sorted by name
-  const spellsMenu = spellSchools.flatMap((nameRes, school) => {
-    const items = spells
-      .filter((sp) => sp.school === school)
-      .map((sp) => ({ name: session.resource(sp.object.nameRes) ?? "", sp }))
-      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
-      .map(({ name, sp }) => ({ label: name, onSelect: () => castSpell(sp.object.id, sp.numTargets) }));
-    return items.length ? [{ label: session.resource(nameRes) ?? `School ${school + 1}`, items }] : [];
-  });
+  /** Ours: a click on our face shows (or puts away) the Quick Emotes, as Q does */
+  const toggleEmotes = () => setEmoteMenu((v) => !v);
+  /** The Spells tab's Study button: Study mode's window, or stopping it; the phone's drawer goes away for it */
+  const studyButton = () => {
+    setDrawerOpen(false);
+    if (studying) stopStudy();
+    else openStudy();
+  };
 
   // Ours: of mermain.c default_buttons and mailnews.c mail_buttons, only Rest/Stand and the
   // mailbox, beside the portrait instead of a toolbar over the view
@@ -1818,7 +1814,7 @@ export function GameView({
               { label: "Pets…", onSelect: () => openTab("pets") },
             ],
           },
-          ...(spellsMenu.length ? [{ label: "Spells", items: spellsMenu }] : []),
+          // (Ours: no Spells menu, spells.c's: the Spells tab has them, with a search)
           // language.c: the Language menu, sorted by name, the chosen one checked
           ...(languages.length > 1
             ? [
@@ -1833,8 +1829,9 @@ export function GameView({
           // mailnews.c's toolbar button, until the toolbar
           { label: "Mail…", onSelect: openMail },
           { label: "Change password…", onSelect: () => setModal({ type: "password" }) },
-          { label: "Logout timer…", onSelect: () => setModal({ type: "logoutTimer" }) },
-          { label: studying ? "Stop studying" : "Study…", onSelect: () => (studying ? stopStudy() : openStudy()) },
+          // Not on a phone, which logs off on its own when put away (host.ts onAndroidAway)
+          ...(touch ? [] : [{ label: "Logout timer…", onSelect: () => setModal({ type: "logoutTimer" }) }]),
+          // (Study… is the Spells tab's button)
           { label: "Help…", onSelect: () => setModal({ type: "help" }) },
           { label: "About Meridian…", onSelect: () => setModal({ type: "about" }) },
           // Ours: back to Select character, still logged in
@@ -1940,6 +1937,7 @@ export function GameView({
             selecting={selecting}
             onSelectSelf={() => selfInfo && selectObject(selfInfo.id)}
             onCancelSelect={() => sceneRef.current?.select(null)}
+            onEmotes={toggleEmotes}
           />
         )}
         {!touch && !modern && (
@@ -1963,6 +1961,7 @@ export function GameView({
               selecting={selecting}
               onSelectSelf={() => selfInfo && selectObject(selfInfo.id)}
               onLook={(id) => lookAt(id, DESC.NONE)}
+              onEmotes={toggleEmotes}
             />
             <TargetFrame session={session} icons={icons} target={target} onLook={(id) => lookAt(id, DESC.NONE)} onClear={() => sceneRef.current?.press("targetClear")} />
             <MapCluster
@@ -2011,6 +2010,8 @@ export function GameView({
                 onCast={castSpell}
                 friendsPanel={friendsPanel}
                 petsPanel={petsPanel}
+                onStudy={studyButton}
+                studying={!!studying}
               />
             )}
           </>
@@ -2391,6 +2392,9 @@ export function GameView({
           onAnnotate={annotateAt}
           friendsPanel={friendsPanel}
           petsPanel={petsPanel}
+          onStudy={studyButton}
+          studying={!!studying}
+          onEmotes={toggleEmotes}
         />
       )}
       {touch && drawerOpen && <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} />}

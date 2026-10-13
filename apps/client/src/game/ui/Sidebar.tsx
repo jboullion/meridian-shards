@@ -17,6 +17,7 @@ import type { Settings } from "../settings.ts";
 import { MiniMap } from "./MiniMap.tsx";
 import type { MapAnnotation } from "../annotations.ts";
 import { DRAG_SPELL } from "../quickSlots.ts";
+import { Button } from "./kit.tsx";
 
 /** include/proto.h OF_APPLYABLE: used on something else */
 const OF_APPLYABLE = 0x1000;
@@ -233,8 +234,13 @@ export function HudEnchantments({
 
 export function Sidebar({
   session, icons, assets, getRoom, tab, onTab, settings, onLookItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, target, selecting, onSelectObject, onCast,
-  annotations, onAnnotate, friendsPanel, petsPanel,
+  annotations, onAnnotate, friendsPanel, petsPanel, onStudy, studying, onEmotes,
 }: {
+  /** Ours: a click on our face, when not picking a target, shows the Quick Emotes (Q) */
+  onEmotes?: () => void;
+  /** Ours: the Spells tab's Study button (StatList) */
+  onStudy?: () => void;
+  studying?: boolean;
   /** Ours: the Friends and Pets tabs' pages (GameView makes them) */
   friendsPanel: ReactNode;
   petsPanel: ReactNode;
@@ -291,8 +297,9 @@ export function Sidebar({
         <div
           className={selecting ? "portrait selecting" : "portrait"}
           title={self ? tip(rs(self.info.nameRes)) : undefined}
-          // userarea.c UserAreaProc: a click picks us as a spell target; a right click looks at us
-          onClick={() => self && selecting && onSelectObject(self.id)}
+          // userarea.c UserAreaProc: a click picks us as a spell target; a right click looks at us.
+          // Ours: otherwise a click shows the emotes
+          onClick={() => (self && selecting ? onSelectObject(self.id) : onEmotes?.())}
           onContextMenu={(e) => {
             e.preventDefault();
             if (self) onLook(self.id);
@@ -382,6 +389,8 @@ export function Sidebar({
             group={tab === "spells" ? STAT_GROUP.SPELLS : tab === "skills" ? STAT_GROUP.SKILLS : STAT_GROUP.QUESTS}
             onLook={onLook}
             onCast={onCast}
+            onStudy={onStudy}
+            studying={studying}
           />
         )}
       </div>
@@ -568,23 +577,31 @@ export function NumericStats({ stats, rs }: { stats: Statistic[]; rs: (id: numbe
 
 /** statlist.c: icon and "name NN%" (quests: name only; headers green). */
 export function StatList({
-  session, icons, group, onLook, onCast,
+  session, icons, group, onLook, onCast, onStudy, studying,
 }: {
   session: GameSession;
   icons: IconRenderer;
   group: number;
   onLook: (id: number) => void;
   onCast: (spell: number, numTargets: number) => void;
+  /** Ours, the Spells tab only: Study mode's window (or stopping it, while `studying`) */
+  onStudy?: () => void;
+  studying?: boolean;
 }) {
   const world = session.world;
   const [selected, setSelected] = useState<number | null>(null);
+  // Ours: the Spells tab's search, by name as shown
+  const [search, setSearch] = useState("");
   const stats = world.stats.get(group) ?? [];
   const quests = group === STAT_GROUP.QUESTS;
+  const spells = group === STAT_GROUP.SPELLS;
   const rs = (id: number) => session.resource(id) ?? "";
   const spellFor = (id: number) => world.spells.find((s) => s.object.id === id);
+  const wanted = spells ? search.trim().toLowerCase() : "";
   const rows: ReactNode[] = stats.map((s, i) => {
     const l = s.list!;
     if (!l) return null;
+    if (wanted && !rs(s.nameRes).toLowerCase().includes(wanted)) return null;
     const header = quests && l.value === 0;
     return (
       <div
@@ -614,5 +631,36 @@ export function StatList({
       </div>
     );
   });
-  return <div className="stat-list">{rows.length ? rows : <div className="stat-list-row muted">—</div>}</div>;
+  const shown = rows.filter(Boolean);
+  return (
+    <div className="stat-list">
+      {spells && (
+        <div className="spell-search">
+          <span className="mk-edit">
+            <input
+              type="search"
+              value={search}
+              placeholder="Search spells"
+              spellCheck={false}
+              aria-label="Search spells"
+              onChange={(e) => setSearch(e.target.value)}
+              // Esc empties it, then gives the keys back to the game
+              onKeyDown={(e) => {
+                if (e.key !== "Escape") return;
+                e.stopPropagation();
+                if (search) setSearch("");
+                else e.currentTarget.blur();
+              }}
+            />
+          </span>
+          {onStudy && (
+            <Button onClick={onStudy} title={studying ? "Stop practising" : "Practise a spell while you're away"}>
+              {studying ? "Stop" : "Study"}
+            </Button>
+          )}
+        </div>
+      )}
+      {shown.length ? shown : <div className="stat-list-row muted">{wanted ? "No spells match" : "—"}</div>}
+    </div>
+  );
 }

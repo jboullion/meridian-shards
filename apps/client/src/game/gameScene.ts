@@ -1556,6 +1556,12 @@ export class GameScene {
         const kind = this.floorTextures.get(s.floorType)?.kind;
         return { floor: floorHeightAt(s, x, y), ground: kind === "grass" ? "grass" : kind === "earth" ? "earth" : "paved" };
       },
+      // Open water for the rain's rings, as the fish find it (natureQueries)
+      water: (x, y) => {
+        const leaf = leafAt(room, x, y);
+        const s = leaf?.sector ? room.sectors[leaf.sector - 1] : null;
+        return s && (s.flags & SF.DEPTH_MASK || this.waterTextures.has(s.floorType)) && s.ceilingType === 0 ? floorHeightAt(s, x, y) : null;
+      },
       light: ground.light,
     };
   }
