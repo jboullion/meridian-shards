@@ -271,7 +271,7 @@ const HUD_PARTS: HudPart[] = [
   { sel: [".game-title .title-text"], title: "Where you are", text: "The room's name." },
   { sel: [".game-title .latency", ".classic-toolbar .latency"], title: "Connection", text: "Green is quick, yellow slow, red very slow. The FPS beside it is frames a second." },
   { sel: [".unit-portrait", ".user-area .portrait"], title: "You", text: "Your face. Click it for the emotes, or to cast a spell on yourself; right click to look at yourself." },
-  { sel: [".unit-side .hud-bars", ".user-area .main-stats"], title: "Health, mana and vigor", text: "Vigor runs down as you run and fight; rest to get it back. Classic shows your experience too." },
+  { sel: [".unit-side .hud-bars", ".user-area .main-stats"], title: "Health, mana, vigor and experience", text: "Vigor runs down as you run and fight; rest to get it back. The last bar is your experience." },
   { sel: [".modern-enchantments.player", ".touch-hud .hud-enchantments.player", ".user-area .enchantments.player"], title: "Your enchantments", text: "Spells on you. Right click (long press) one to read about it." },
   { sel: [".target-frame"], title: "Your target", text: "Who you've targeted: red if you can attack them. E attacks; Esc lets go." },
   { sel: [".map-ring .minimap", ".map-frame .minimap", ".touch-controls ~ .minimap"], title: "The map", text: "You're the arrow; dots are players (blue), monsters (red) and the like. Click it for the full map; + and - zoom; right click to write a note." },

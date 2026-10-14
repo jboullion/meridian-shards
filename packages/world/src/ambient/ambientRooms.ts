@@ -27,9 +27,10 @@ export interface AmbientRoomSpec {
 
 /**
  * Rooms much bigger than others of their kind (the Bhrama & Falcon is a hall of an inn): their
- * crowd is the kind's times this, so they don't look empty
+ * crowd is the kind's times this, so they don't look empty (2 still left the Bhrama & Falcon's
+ * hall feeling empty by day: 2026-10-14)
  */
-export const BIG_ROOM = 2;
+export const BIG_ROOM = 4;
 
 const town = (count: number, place: Place, guards: number, livery: number): AmbientRoomSpec => ({ kind: "town", count, place, guards, livery });
 /** `size`: 1, or BIG_ROOM for a big one */

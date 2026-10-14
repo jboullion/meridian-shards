@@ -5,7 +5,7 @@
 //   stat groups (stats.c, statbtn.c): Inventory, Stats, Spells, Skills, Quests tabs
 // drawn on the original's background bitmaps from the asset build (ui/*.bmp).
 
-import { useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { Room } from "@shards/formats";
 import { STAT_GROUP, STAT_TAG, STATS, type ObjectInfo, type Statistic } from "@shards/protocol";
 import { isNumberItem, localRes, type GameSession } from "@shards/world";
@@ -142,6 +142,27 @@ export function StatBar({ stat, main = false, xpAsPercent = false }: { stat: Sta
 }
 
 /**
+ * TESTING ONLY: shows TEST_ENCHANTMENTS made-up enchantments on us and on the room besides the real
+ * ones, to see how the rows look when full. They borrow our spells', skills' and items' pictures and
+ * names (so a right click looks at that spell or item). Set to 0 to turn it off.
+ */
+const TEST_ENCHANTMENTS = 0;
+
+/** The enchantments to draw: the real ones, plus the made-up ones while testing (TEST_ENCHANTMENTS). */
+export function shownEnchantments(world: GameSession["world"], kind: "player" | "room"): ObjectInfo[] {
+  const real = [...world.enchantments[kind].values()];
+  if (!TEST_ENCHANTMENTS) return real;
+  const seen = new Set(real.map((e) => e.id));
+  const pool = [...world.spells.map((s) => s.object), ...world.skills, ...world.inventory.values()].filter((o) => !seen.has(o.id));
+  // The room's from the other end, so the two rows differ
+  if (kind === "room") pool.reverse();
+  return [...real, ...pool.slice(0, TEST_ENCHANTMENTS)];
+}
+
+/** What a list of enchantments redraws on: TEST_ENCHANTMENTS borrows spells, skills and items. */
+export const ENCHANTMENT_EVENTS: Parameters<typeof useWorld>[1] = TEST_ENCHANTMENTS ? ["enchantments", "spells", "skills", "inventory"] : ["enchantments"];
+
+/**
  * Enchantments in a row (enchant.c): ours or the room's, each named on hover with Show tooltips, a
  * right click looking at it (WM_RBUTTONDOWN). The Classic interface's room enchantments sit in the
  * toolbar row (Toolbar.tsx ClassicToolbar); ours are under our face.
@@ -157,10 +178,10 @@ export function EnchantmentRow({
   className?: string;
 }) {
   const world = session.world;
-  useWorld(world, ["enchantments"]);
+  useWorld(world, ENCHANTMENT_EVENTS);
   return (
     <div className={`enchantments ${kind} ${className ?? ""}`}>
-      {[...world.enchantments[kind].values()].map((e) => (
+      {shownEnchantments(world, kind).map((e) => (
         <ObjIcon
           key={e.id}
           icons={icons}
@@ -177,12 +198,20 @@ export function EnchantmentRow({
   );
 }
 
-/** Health, mana and vigor over the view, for the phone layout (ours; TouchControls.tsx): the interface's bars without XP. */
-export function HudBars({ session, icons, onSelectSelf }: { session: GameSession; icons: IconRenderer; onSelectSelf?: () => void }) {
+/** Health, mana, vigor and experience over the view, for the Modern and phone layouts (ours; ModernHud.tsx UnitFrame): the interface's bars. */
+export function HudBars({
+  session, icons, onSelectSelf, xpAsPercent = false,
+}: {
+  session: GameSession;
+  icons: IconRenderer;
+  onSelectSelf?: () => void;
+  /** Display XP as percent (config.xp_display_percent) */
+  xpAsPercent?: boolean;
+}) {
   const world = session.world;
   useWorld(world, ["stats"]);
   const bars = (world.stats.get(STAT_GROUP.MAIN) ?? [])
-    .filter((s) => s.type === STATS.NUMERIC && s.numeric?.tag === STAT_TAG.INT && s.num !== STAT_XP)
+    .filter((s) => s.type === STATS.NUMERIC && s.numeric?.tag === STAT_TAG.INT)
     .sort((a, b) => a.num - b.num);
   return (
     // Picking a spell target: a tap on our bars picks us (the interface's face does on the desktop)
@@ -190,7 +219,7 @@ export function HudBars({ session, icons, onSelectSelf }: { session: GameSession
       {bars.map((s) => (
         <div className="main-stat" key={s.num}>
           <ObjIcon icons={icons} object={bareIcon(s.nameRes)} className="stat-icon" />
-          <StatBar stat={s} main />
+          <StatBar stat={s} main xpAsPercent={xpAsPercent} />
         </div>
       ))}
     </div>
@@ -210,8 +239,8 @@ export function HudEnchantments({
   onLook: (id: number) => void;
 }) {
   const world = session.world;
-  useWorld(world, ["enchantments"]);
-  const list = [...world.enchantments[kind].values()];
+  useWorld(world, ENCHANTMENT_EVENTS);
+  const list = shownEnchantments(world, kind);
   if (!list.length) return null;
   return (
     <div className={`hud-enchantments ${kind}`}>
@@ -321,7 +350,7 @@ export function Sidebar({
         </div>
       </div>
       <div className="enchantments player">
-        {[...world.enchantments.player.values()].map((e) => (
+        {shownEnchantments(world, "player").map((e) => (
           <ObjIcon
             key={e.id}
             icons={icons}
@@ -401,29 +430,67 @@ export function Sidebar({
 
 /**
  * Our face, as big as its box allows (the img's max-width and max-height in the CSS) at one scale
- * both ways: a whole number of screen pixels per pixel when it's twice or more, else smoothed.
- * (Stretched to the box, a 26 x 38 face came out a pixel or two taller than wide, uneven.)
+ * both ways: a whole number of *device* pixels per pixel when it's twice or more, else smoothed.
+ * Device pixels are CSS pixels times the display scaling (devicePixelRatio, browser zoom included)
+ * and the HUD Size zoom, so at 125% a face meant to be 2x is drawn 2 device pixels a pixel, not 2.5.
+ * (Stretched to the box, a 30 x 45 face came out x1.73, uneven and blurred.)
  */
 export function PortraitIcon({ icons, object }: { icons: IconRenderer; object: ObjectInfo }) {
   const key = `portrait:${icons.key(object)}`;
   const url = useAsyncImage(key, () => icons.portrait(object));
   const [size, setSize] = useState<{ w: number; h: number; crisp: boolean } | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const fit = () => {
+    const img = imgRef.current;
+    if (!img || !img.naturalWidth) return;
+    const css = getComputedStyle(img);
+    const k = Math.min(parseFloat(css.maxWidth) / img.naturalWidth, parseFloat(css.maxHeight) / img.naturalHeight);
+    if (!(k > 0)) return;
+    // Device pixels per CSS pixel here: the screen's, times the cluster's CSS zoom (HUD Size)
+    const zoom = (img as HTMLImageElement & { currentCSSZoom?: number }).currentCSSZoom ?? 1;
+    const device = devicePixelRatio * zoom;
+    const kd = k * device;
+    const next = kd >= 2
+      ? { w: (img.naturalWidth * Math.floor(kd)) / device, h: (img.naturalHeight * Math.floor(kd)) / device, crisp: true }
+      : { w: Math.round(img.naturalWidth * k), h: Math.round(img.naturalHeight * k), crisp: false };
+    setSize((s) => (s && s.w === next.w && s.h === next.h && s.crisp === next.crisp ? s : next));
+  };
+  // The display scaling changes with browser zoom (a resize) or a move to another screen
+  // (the resolution query); HUD Size changes with a resize of the window or the settings
+  useEffect(() => {
+    let mq: MediaQueryList | null = null;
+    const watch = () => {
+      mq?.removeEventListener("change", onDpr);
+      mq = matchMedia(`(resolution: ${devicePixelRatio}dppx)`);
+      mq.addEventListener("change", onDpr);
+    };
+    const onDpr = () => {
+      watch();
+      fit();
+    };
+    watch();
+    window.addEventListener("resize", fit);
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => fit());
+    // device-pixel-content-box: the box's size in device pixels, which HUD Size's zoom changes
+    if (imgRef.current?.parentElement) ro?.observe(imgRef.current.parentElement, { box: "device-pixel-content-box" });
+    return () => {
+      mq?.removeEventListener("change", onDpr);
+      window.removeEventListener("resize", fit);
+      ro?.disconnect();
+    };
+  }, [url]);
+  // And on every render: changing HUD Size redraws the HUD (setSize keeps the same state, no loop)
+  useEffect(fit);
   if (!url) return null;
   return (
     <img
+      ref={imgRef}
       src={url}
       alt=""
       draggable={false}
       className={size?.crisp ? "crisp" : undefined}
       style={size ? { width: size.w, height: size.h } : undefined}
-      onLoad={(e) => {
-        const img = e.currentTarget;
-        const css = getComputedStyle(img);
-        const k = Math.min(parseFloat(css.maxWidth) / img.naturalWidth, parseFloat(css.maxHeight) / img.naturalHeight);
-        if (!(k > 0)) return;
-        const s = k >= 2 ? Math.floor(k) : k;
-        setSize({ w: Math.round(img.naturalWidth * s), h: Math.round(img.naturalHeight * s), crisp: k >= 2 });
-      }}
+      onLoad={fit}
     />
   );
 }

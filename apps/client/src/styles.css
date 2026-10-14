@@ -2628,15 +2628,16 @@ canvas.server-wait {
   max-width: none;
 }
 
+/* The phone's face: up to 48 x 72, which on a 2.625x phone is 4 device pixels a pixel (about 46 x 69;
+   PortraitIcon rounds down to whole device pixels), as tall as the four bars */
 .touch-hud .unit-portrait {
-  width: 44px;
-  height: 62px;
+  padding: 1px;
   pointer-events: auto;
 }
 
 .touch-hud .unit-portrait img {
-  max-width: 40px;
-  max-height: 58px;
+  max-width: 48px;
+  max-height: 72px;
 }
 
 .touch-hud .unit-side {
@@ -3016,8 +3017,8 @@ canvas.server-wait {
   flex: none;
   display: grid;
   place-items: center;
-  width: 60px;
-  height: 84px;
+  /* Hugs the face (Sidebar.tsx PortraitIcon): 2x, a whole number of device pixels a pixel */
+  padding: 4px;
   background: var(--hud-panel);
   border: 1px solid var(--hud-edge);
   border-radius: 4px;
@@ -3026,8 +3027,8 @@ canvas.server-wait {
 }
 
 .unit-portrait img {
-  max-width: 52px;
-  max-height: 78px;
+  max-width: 60px;
+  max-height: 90px;
 }
 
 .unit-portrait.selecting {

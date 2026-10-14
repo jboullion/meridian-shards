@@ -1582,7 +1582,7 @@ export class GameScene {
       water: (x, y) => {
         const leaf = leafAt(room, x, y);
         const s = leaf?.sector ? room.sectors[leaf.sector - 1] : null;
-        return s && (s.flags & SF.DEPTH_MASK || this.waterTextures.has(s.floorType)) && s.ceilingType === 0 ? floorHeightAt(s, x, y) : null;
+        return s && this.waterTextures.has(s.floorType) && s.ceilingType === 0 ? floorHeightAt(s, x, y) : null;
       },
       light: ground.light,
     };
@@ -1625,8 +1625,10 @@ export class GameScene {
       water: (x, y) => {
         const leaf = leafAt(room, x, y);
         const s = leaf?.sector ? room.sectors[leaf.sector - 1] : null;
-        // A sector with depth, or water painted on a dry floor (Raza's pool)
-        return s && (s.flags & SF.DEPTH_MASK || this.waterTextures.has(s.floorType)) && s.ceilingType === 0 ? floorHeightAt(s, x, y) : null;
+        // A floor with a water texture (watertextures.json: rivers, the sea, Raza's pool painted on a
+        // dry floor). Not every sector with depth: the wheat fields and wet sand (the beach at
+        // Barloque's main gate, i3) have one, and fish leapt from them
+        return s && this.waterTextures.has(s.floorType) && s.ceilingType === 0 ? floorHeightAt(s, x, y) : null;
       },
     };
   }

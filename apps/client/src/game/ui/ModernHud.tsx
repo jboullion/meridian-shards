@@ -1,5 +1,5 @@
 // The Modern interface's HUD over the view (ours; settings.ts interfaceStyle, desktop only):
-//   - UnitFrame, top left: our face, the three green bars beside it (health, mana, vigor:
+//   - UnitFrame, top left: our face, the green bars beside it (health, mana, vigor, experience:
 //     Sidebar.tsx HudBars) and our enchantments under them. The phone has it too (TouchControls.tsx).
 //   - TargetFrame, top centre: what's targeted, and a button to clear it
 //   - MapCluster, top right: the minimap in a round frame (a click opens the full map), the
@@ -22,7 +22,7 @@ import type { Settings } from "../settings.ts";
 import { useWorld } from "./hooks.ts";
 import { MiniMap } from "./MiniMap.tsx";
 import { Hotbar } from "./QuickSlots.tsx";
-import { HudBars, HudEnchantments, ObjIcon, PortraitIcon } from "./Sidebar.tsx";
+import { ENCHANTMENT_EVENTS, HudBars, HudEnchantments, ObjIcon, PortraitIcon, shownEnchantments } from "./Sidebar.tsx";
 import { ToolbarButtonView, type ToolbarButton } from "./Toolbar.tsx";
 
 /** include/proto.h OF_ATTACKABLE */
@@ -31,8 +31,8 @@ const OF_ATTACKABLE = 0x8;
 /** Our enchantments, or the room's: a right click looks at one (enchant.c WM_RBUTTONDOWN). */
 function Enchantments({ session, icons, kind, tooltips, onLook }: { session: GameSession; icons: IconRenderer; kind: "player" | "room"; tooltips: boolean; onLook: (id: number) => void }) {
   const world = session.world;
-  useWorld(world, ["enchantments"]);
-  const list = [...world.enchantments[kind].values()];
+  useWorld(world, ENCHANTMENT_EVENTS);
+  const list = shownEnchantments(world, kind);
   if (!list.length) return null;
   return (
     <div className={`modern-enchantments ${kind}`}>
@@ -88,7 +88,7 @@ export function UnitFrame({
         </div>
         {/* The green bars, our enchantments under them */}
         <div className="unit-side">
-          <HudBars session={session} icons={icons} onSelectSelf={selecting ? onSelectSelf : undefined} />
+          <HudBars session={session} icons={icons} onSelectSelf={selecting ? onSelectSelf : undefined} xpAsPercent={settings.xpAsPercent} />
           {touch ? (
             <HudEnchantments session={session} icons={icons} kind="player" onLook={onLook} />
           ) : (
