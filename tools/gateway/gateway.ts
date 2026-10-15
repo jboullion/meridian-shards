@@ -80,7 +80,7 @@ function arenaConfig() {
 const statePath = process.env.ARENA_STATE ?? "dist/arena-state.json";
 const arena = new ArenaHost({
   config: arenaConfig(),
-  assetsDir: process.env.ARENA_ASSETS ?? "dist/assets",
+  assetsDir: process.env.ARENA_ASSETS ?? "dist/assets-101",
   statePath: statePath === "none" ? null : statePath,
   log,
 });

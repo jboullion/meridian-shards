@@ -1,10 +1,10 @@
 @echo off
-rem Prepares server\src\run\server after a build: creates the folders blakserv
+rem Prepares server\src-101\run\server after a build: creates the folders blakserv
 rem expects and installs our config and message of the day. Safe to run again; it
 rem never touches savegames.
 setlocal
-set RUN=%~dp0src\run\server
-for %%d in (loadkod rsc rooms memmap savegame channel) do (
+set RUN=%~dp0src-101\run\server
+for %%d in (loadkod rsc memmap savegame channel) do (
   if exist "%RUN%\%%d" if not exist "%RUN%\%%d\" del "%RUN%\%%d"
   if not exist "%RUN%\%%d\" mkdir "%RUN%\%%d"
 )

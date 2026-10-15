@@ -467,8 +467,6 @@ function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }
           <dd>Your stats, karma, weight and bulk carried, and more.</dd>
           <dt>Spells and Skills</dt>
           <dd>What you know and how well. Double click a spell to cast it; drag it to the hotbar. Search spells by name; Study practises one while you're away (it rests when your mana's low, and can log off when done).</dd>
-          <dt>Quests</dt>
-          <dd>The quests you're on.</dd>
           <dt>Friends (P)</dt>
           <dd>Find players of Meridian Shards and ask them to be friends; see where they are, mark them on the map, follow them.</dd>
           <dt>Pets (N)</dt>

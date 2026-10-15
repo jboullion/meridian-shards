@@ -4,6 +4,8 @@ What a browser client must do to talk to an unmodified Server 104 `blakserv`. Ev
 
 Our implementation lives in `packages/protocol/src/`.
 
+> **On the `server-101` branch** the client speaks the original code's protocol instead (the Kirmse repo the official/Steam servers run, `meridian-unreal\ReferenceServers\MeridianSteam\Meridian59`, built in `server/src-101`). The notes below describe Server 104; the section [The 101 server](#the-101-server-server-101-branch) at the end lists what differs, and the code follows it.
+
 ## Transport
 
 - Raw TCP, game port 5959 (`blakserv/config.c:69`). The maintenance (admin) port is 9998, localhost only (`config.c:70-71`).
@@ -257,6 +259,32 @@ A room object then adds:
 - **Chess** (`minigame.kod`, `module/chess`). Using the board (`TryActivate`) sends the user, in order: `BP_LOAD_MODULE` (chess.dll), `UC_MINIGAME_START` (the game object, a BYTE player number: 1 white, 2 red, more for observers), `UC_MINIGAME_MOVE` (the game, then the state string, empty before the first move) and a `UC_MINIGAME_PLAYER` per player (number BYTE, name). A player's move is `UC_MINIGAME_STATE` (the game, the new state string); the server stores it and sends it to the other player and the observers still in the room, not back to the mover, and unloads the module for observers who left. `UC_MINIGAME_RESET_PLAYERS` (the game) starts over with new players. Picking the board up, or the board leaving the room, unloads the module.
 - **The state string** (`board.c`) is 67 bytes: the squares top row first, each the piece (1 to 6, 7 empty) with the colour in bit 7, then turn and castling flags, en passant (bit 1, then the square's row in bits 2-4 and column in 5-7), and resignations, each flag byte with bit 0 set. It's sent as an ordinary string, so it must stay byte-exact (Latin-1).
 - **Admin commands:** `BP_REQ_ADMIN` (a string) runs a maintenance-port command for an `ACCOUNT_ADMIN` account (`blakserv/game.c`), which echoes it as "> command" and answers with `BP_ADMIN` (162, a string with "\n" line ends). Admin characters (`create admin <account id>` on the maintenance port) get "admin.dll" (and "dm.dll") on logon.
+
+## The 101 server (`server-101` branch)
+
+What the original code (the 101 server's, "B" in the citations, under `server/src-101`) does differently. Framing, the LCG security word, the redbook token, the password digest, the login flow and `BP_PLAYER` are the same. **Verified** with the headless client and the browser against our local build (2026-10-14).
+
+| Area | Server 104 | The 101 server |
+|---|---|---|
+| `AP_LOGIN` | name, password digest, then the `SecretKey` string (`synched.c:218-243`) | name and password digest only (`synched.c:163-218`, `clientd3d/protocol.c:16-19`); no account auto-create, a wrong password is `AP_LOGINFAILED`, the third `AP_TOOMANYLOGINS` |
+| Client version | 50.55 | 7.37 (`clientd3d/client.h:49-50`); the server checks minimums only (`InvalidVersion`, `MinVersion`) |
+| `AP_REQ_GAME` | download time 0 | 9999, as a Steam install sends (`config.c:456-465`), else a server listing `packages.txt` answers `AP_DOWNLOAD`; the catch is `(major*100+minor)*3+3` (`login.c:224`) |
+| Object record | flags, drawing type BYTE, minimap DWORD, name colour DWORD, object type BYTE, move-on BYTE (`server.c:324-345`) | flags, then rarity DWORD (`server.c:319-352`). The flags carry the rest (`proto.h:356-411`): move-on in bits 0-1, the drawing effect in `>> 20 & 0x1F`, the player's kind in `0x1C000` (`PF_*`), guild relations in `0x0E000000`, `OF_SAFETY` 0x2000 (our own object only), `OF_HANGING` 0x10000 (shared with `PF_CREATOR`: players never hang), `OF_BOUNCING` 0x60000 (flickering and flashing together). `readObject` unpacks them into the 104 fields (`unpackObjectFlags`). |
+| `BP_PLAYERS`, `BP_PLAYER_ADD` | id, name resource, name, flags, then five more fields | ends with the flags (`server.c:1090-1155`) |
+| `UC_LOOK_PLAYER` | the fixed text is a resource and parameters | a plain string (`merintr.c HandleLookPlayer`) |
+| `BP_CHARINFO` | spells and skills both end with a school BYTE | skills have none (`char.c:216-228`) |
+| Character stats | 70 points | 50 (`char.h:53`): each stat 1-50, the total at most 200 (`player.kod`) |
+| Stat groups | main, stats, spells, skills, quests | no quests (`stats.h:26-33`) |
+| `BP_REQ_DROP` | an object | an object list (`protocol.c:41`) |
+| `BP_REQ_INVENTORY_MOVE` | two object ids | two WORDs: the item's 1-based place in the server's list (ours reversed) and the place it goes before (`inventry.c:1214-1234`) |
+| `BP_REQ_GET_FROM_CONTAINER` | 240 | 239 |
+| Preferences | `UC_REQ_PREFERENCES` (7), `UC_SEND_PREFERENCES` (9), `UC_RECEIVE_PREFERENCES` (34): the `CF_*` flags | `UC_SAFETY` (7) and a BYTE, nothing else. The server never says what it is: the client keeps "Can attack innocent players" (`config.aggressive`) and sends it on entering and after every reset (`mermain.c SendConfiguredSafety`). |
+| Gone in 101 | | `AP_CLIENT_PATCH*`, `BP_AD_SELECTED`, `BP_DELETE_NEWS`, the stat change (156-159), `BP_STOP_WAVE`, `BP_RADIUS_SHOOT`, `BP_SECTOR_CHANGE`, `UC_REQ_TIME`, `EFFECT_FIREWORKS` |
+| `.rsb` | version 5: id, language, string | version 4: id, string (`util/rscload.c:9,49`). The server loads loose `.rsc` files; `bin\rscmerge.exe` makes the client's `rsc0000.rsb` (`server\build.cmd`). Its redbook string is `system_success_rsc` ("Success.", `config.c:196`). |
+| `.roo` | version 14+, floats, two things | versions 12 and 13 (`bspload.c:25`): coordinates are ints below 13 and floats from it, the wall length a WORD below 13, and the raw 4 bytes of every coordinate go into the checksum. No things section: the room is its whole grid (`move.h IsInRoom` on rows and columns). |
+| Movement | `MOVE_DELAY` 85, 210 steps a second, the server told every 250 ms at speed 25/55 | 100, 200, every 1000 ms at speed 18 (36 running), 0 when walking off the room (`move.c:49-60, 354, 775`) |
+| Sounds | `.ogg` | Kod names `.wav` sounds and `.mid` music; the client plays the `.ogg` of a `.wav` when there is one and `.mid`/`.mp3` as `.ogg` (`audio_openal.c:916`, `music.c:35`) |
+| Transport | our gateway on `/ws` | the official servers are plain TCP (`meridian101.meridian59.com:5901`); the desktop app connects straight (`main.ts setupTcp`, servers with `tcp` in `servers.json`) |
 
 ## Sources
 

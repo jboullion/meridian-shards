@@ -24,6 +24,7 @@ import { BrowserWindow, Menu, app, dialog, ipcMain, protocol, screen, shell, typ
 import electronUpdater from "electron-updater";
 import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
+import { connect, type Socket } from "node:net";
 import { extname, join, resolve, sep } from "node:path";
 import type { DesktopAssetProgress, DesktopConfig, DesktopLaunch, DesktopUpdate } from "../../client/src/host.ts";
 import { AssetCache, type DownloadRun } from "./assetCache.ts";
@@ -50,6 +51,8 @@ let launch: DesktopLaunch | null =
 
 /** The server the page's files and socket come from */
 const currentServer = () => launchServer ?? selectedServer();
+/** The selected server when it's reached straight over TCP (a server running no gateway), else null */
+const directServer = () => servers().find((s) => s.origin === currentServer() && s.tcp) ?? null;
 
 // Before `ready`: a standard, secure scheme gets an origin of its own (localStorage,
 // workers, fetch, module scripts) like an https site.
@@ -110,8 +113,27 @@ async function serveClient(pathname: string): Promise<Response> {
   }
 }
 
+/**
+ * A direct server's files: an asset build in a folder (its `resources`, else the app's own), served
+ * as they are, manifest and all. There's no server to download changes from.
+ */
+async function serveFolder(dir: string, name: string): Promise<Response> {
+  let file: string;
+  try {
+    file = resolve(dir, decodeURIComponent(name));
+  } catch {
+    return new Response("bad path", { status: 400 });
+  }
+  if (!file.startsWith(resolve(dir) + sep)) return new Response("not found", { status: 404 });
+  try {
+    return new Response(await readFile(file), { headers: { "content-type": name.endsWith(".json") ? "application/json" : "application/octet-stream" } });
+  } catch {
+    return new Response("not found", { status: 404 });
+  }
+}
+
 // The asset build packaged with the app (electron-builder.yml extraResources); unpackaged, the repo's own
-const bundledAssets = app.isPackaged ? join(process.resourcesPath, "assets") : resolve(app.getAppPath(), "..", "..", "dist", "assets");
+const bundledAssets = app.isPackaged ? join(process.resourcesPath, "assets") : resolve(app.getAppPath(), "..", "..", "dist", "assets-101");
 const assets = new AssetCache(join(app.getPath("userData"), "asset-cache"), existsSync(join(bundledAssets, "manifest.json")) ? bundledAssets : null);
 let win: BrowserWindow | null = null;
 /** The session phase the page reported (apps/client/src/game/Game.tsx). */
@@ -127,7 +149,7 @@ let assetProgress: DesktopAssetProgress | null = null;
  * fetches just the changed files.
  */
 function downloadAssets(): void {
-  if (DEV_URL) return;
+  if (DEV_URL || directServer()) return;
   const origin = currentServer();
   if (download && download.origin === origin && !download.finished) return;
   if (download) download.cancelled = true;
@@ -326,11 +348,55 @@ function setupIpc(): void {
     // The page's files (manifest, rsc0000.rsb, rooms) come from the server: start over
     win?.webContents.reload();
   });
+  setupTcp();
   ipcMain.on("shards:install-update", () => {
     if (update?.state && update.state !== "ready") return;
     if (!update) return;
     closeConfirmed = true;
     electronUpdater.autoUpdater.quitAndInstall();
+  });
+}
+
+/**
+ * The page's game connections to a direct server (host.ts gameSocketFactory): plain TCP to
+ * blakserv's game port, the bytes passed both ways as they come (the protocol's framing is the
+ * page's, as through the gateway).
+ */
+function setupTcp(): void {
+  const sockets = new Map<number, Socket>();
+  let next = 0;
+  ipcMain.on("shards:tcp-open", (e) => {
+    const id = ++next;
+    e.returnValue = id;
+    const target = directServer()?.tcp;
+    const sender = e.sender;
+    const tell = (event: unknown) => {
+      if (!sender.isDestroyed()) sender.send("shards:tcp", id, event);
+    };
+    const [host, port] = (target ?? "").split(":");
+    if (!host || !Number(port)) {
+      setTimeout(() => tell({ type: "close", error: "no direct server" }));
+      return;
+    }
+    const sock = connect({ host, port: Number(port), noDelay: true });
+    sockets.set(id, sock);
+    let error: string | undefined;
+    sock.on("connect", () => tell({ type: "open" }));
+    sock.on("data", (b: Buffer) => tell({ type: "data", bytes: new Uint8Array(b) }));
+    sock.on("error", (err) => {
+      error = err.message;
+      log(`game connection to ${target}: ${err.message}`);
+    });
+    sock.on("close", () => {
+      sockets.delete(id);
+      tell({ type: "close", error });
+    });
+  });
+  ipcMain.on("shards:tcp-send", (_e, id: unknown, bytes: unknown) => {
+    if (bytes instanceof Uint8Array) sockets.get(Number(id))?.write(bytes);
+  });
+  ipcMain.on("shards:tcp-close", (_e, id: unknown) => {
+    sockets.get(Number(id))?.end();
   });
 }
 
@@ -387,7 +453,12 @@ void app.whenReady().then(() => {
   protocol.handle(SCHEME, (req) => {
     const url = new URL(req.url);
     if (url.host !== HOST) return new Response("not found", { status: 404 });
-    if (url.pathname.startsWith("/assets/")) return assets.handle(currentServer(), url.pathname.slice("/assets/".length), url.searchParams.get("v"));
+    if (url.pathname.startsWith("/assets/")) {
+      const name = url.pathname.slice("/assets/".length);
+      const direct = directServer();
+      if (direct) return serveFolder(direct.resources ?? bundledAssets, name);
+      return assets.handle(currentServer(), name, url.searchParams.get("v"));
+    }
     return serveClient(url.pathname);
   });
   setMenu();

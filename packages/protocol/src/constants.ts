@@ -1,4 +1,4 @@
-// Message type numbers from include/proto.h (kept in the same order).
+// Message type numbers from include/proto.h (kept in the same order): the original (101) server's.
 
 export const AP = {
   PING: 1,
@@ -12,8 +12,6 @@ export const AP = {
   GETALL: 9,
   REQ_MENU: 10,
   ADMINNOTE: 11,
-  CLIENT_PATCH_OLD: 12,
-  CLIENT_PATCH: 13,
 
   GETLOGIN: 21,
   GETCHOICE: 22,
@@ -48,7 +46,6 @@ export const BP = {
   WAIT: 21,
   UNWAIT: 22,
   CHANGE_PASSWORD: 23,
-  AD_SELECTED: 24,
 
   CHANGE_RESOURCE: 30,
   SYS_MESSAGE: 31,
@@ -85,7 +82,6 @@ export const BP = {
   REQ_GET_MAIL: 81,
   SEND_MAIL: 82,
   DELETE_MAIL: 83,
-  DELETE_NEWS: 84,
   REQ_ARTICLES: 85,
   REQ_ARTICLE: 86,
   POST_ARTICLE: 87,
@@ -147,10 +143,6 @@ export const BP = {
   REMOVE_BG_OVERLAY: 153,
   CHANGE_BG_OVERLAY: 154,
   USERCOMMAND: 155,
-  REQ_STAT_CHANGE: 156,
-  CHANGED_STATS: 157,
-  CHANGED_STATS_OK: 158,
-  CHANGED_STATS_NOT_OK: 159,
 
   PASSWORD_OK: 160,
   PASSWORD_NOT_OK: 161,
@@ -159,7 +151,6 @@ export const BP = {
   PLAY_WAVE: 170,
   PLAY_MUSIC: 171,
   PLAY_MIDI: 172,
-  STOP_WAVE: 173,
 
   LOOK_NEWSGROUP: 180,
   ARTICLES: 181,
@@ -196,7 +187,6 @@ export const BP = {
   SECTOR_ANIMATE: 226,
   CHANGE_TEXTURE: 227,
   INVALIDATE_DATA: 228,
-  RADIUS_SHOOT: 229,
   REQ_DEPOSIT: 230,
   WITHDRAWAL_LIST: 231,
   REQ_WITHDRAWAL: 232,
@@ -206,8 +196,7 @@ export const BP = {
   SECTOR_SCROLL: 236,
   SET_VIEW: 237,
   RESET_VIEW: 238,
-  SECTOR_CHANGE: 239,
-  REQ_GET_FROM_CONTAINER: 240,
+  REQ_GET_FROM_CONTAINER: 239,
 } as const;
 
 function invert(o: Record<string, number>): Map<number, string> {
@@ -243,13 +232,13 @@ export const objId = (id: number): number => id & 0x0fffffff;
 /** LA_* login-message actions. */
 export const LA = { NOTHING: 0, LOGOFF: 1 } as const;
 
-/** Version our client reports (clientd3d/client.h MAJOR_REV/MINOR_REV). */
-export const CLIENT_MAJOR = 50;
-export const CLIENT_MINOR = 55;
+/** Version our client reports (clientd3d/client.h:49-50 MAJOR_REV/MINOR_REV). */
+export const CLIENT_MAJOR = 7;
+export const CLIENT_MINOR = 37;
 
-/** Movement speeds the original client sends (clientd3d/move.c). */
-export const SPEED_WALK = 25;
-export const SPEED_RUN = 55;
+/** Movement speeds the original client sends (clientd3d/move.c MoveUpdatePosition: 18, doubled running). */
+export const SPEED_WALK = 18;
+export const SPEED_RUN = 36;
 
 /** Genders for character creation (kod blakston.khd). */
 export const GENDER = { MALE: 1, FEMALE: 2 } as const;

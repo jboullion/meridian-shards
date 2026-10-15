@@ -26,7 +26,7 @@ const make = () => {
   const ws = new FakeSocket();
   const errors: string[] = [];
   const s = new GameSession(
-    { url: "ws://x", username: "a", password: "b", secretKey: "", lookupResource: () => undefined, createSocket: () => ws as unknown as WebSocket },
+    { url: "ws://x", username: "a", password: "b", lookupResource: () => undefined, createSocket: () => ws as unknown as WebSocket },
     { error: (e) => errors.push(e) },
   );
   return { s, ws, errors };

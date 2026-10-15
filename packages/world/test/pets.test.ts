@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 import { parseRoo } from "@shards/formats";
 import { PET_KINDS, PET_TIERS, Pets, cleanPetName, petArt, petForKarma, petUnlocked, readPetChoice, type PetOwner } from "../src/index.ts";
 
-const ASSETS = join(import.meta.dirname, "../../../dist/assets");
+const ASSETS = join(import.meta.dirname, "../../../dist/assets-101");
 const have = existsSync(join(ASSETS, "razainn.roo"));
 
 describe("pet kinds and choices", () => {

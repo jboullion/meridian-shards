@@ -29,14 +29,13 @@ export const STAT_HP = 1,
   STAT_XP = 4;
 export const MIN_VIGOR = 10; // statmain.h: below this you can't run; the bar turns red
 
-export type Tab = "inventory" | "stats" | "spells" | "skills" | "quests" | "friends" | "pets";
+export type Tab = "inventory" | "stats" | "spells" | "skills" | "friends" | "pets";
 /** The tabs: the original's stat groups (stats.c), then ours, drawn with an icon of our own (no group, no bitmap) */
 export const TABS: { tab: Tab; group: number | null; bitmap: string | null; label: string }[] = [
   { tab: "inventory", group: STAT_GROUP.INVENTORY, bitmap: "statbtn_left_invent.bmp", label: "Inventory" },
   { tab: "stats", group: STAT_GROUP.STATS, bitmap: "statbtn_left_stats.bmp", label: "Statistics" },
   { tab: "spells", group: STAT_GROUP.SPELLS, bitmap: "statbtn_left_spell.bmp", label: "Spells" },
   { tab: "skills", group: STAT_GROUP.SKILLS, bitmap: "statbtn_left_skills.bmp", label: "Skills" },
-  { tab: "quests", group: STAT_GROUP.QUESTS, bitmap: "statbtn_left_quest.bmp", label: "Quests" },
   // Ours: docs/adr/0005-friends.md and 0006-pets.md
   { tab: "friends", group: null, bitmap: null, label: "Friends" },
   { tab: "pets", group: null, bitmap: null, label: "Pets" },
@@ -415,7 +414,7 @@ export function Sidebar({
           <StatList
             session={session}
             icons={icons}
-            group={tab === "spells" ? STAT_GROUP.SPELLS : tab === "skills" ? STAT_GROUP.SKILLS : STAT_GROUP.QUESTS}
+            group={tab === "spells" ? STAT_GROUP.SPELLS : STAT_GROUP.SKILLS}
             onLook={onLook}
             onCast={onCast}
             onStudy={onStudy}
@@ -560,7 +559,8 @@ export function Inventory({
         if (hidden?.has(id)) return onDropOnGrid?.(id);
         const all = [...world.inventory.values()];
         const last = all[all.length - 1];
-        if (last && world.moveInventoryItem(id, last.id)) session.inventoryMove(id, last.id);
+        const move = last && world.moveInventoryItem(id, last.id);
+        if (move) session.inventoryMove(move);
       }}
     >
       {items.map((o) => (
@@ -586,7 +586,10 @@ export function Inventory({
             e.stopPropagation();
             // From the paper doll: taken off, not moved
             if (hidden?.has(id)) onDropOnGrid?.(id);
-            else if (world.moveInventoryItem(id, o.id)) session.inventoryMove(id, o.id);
+            else {
+              const move = world.moveInventoryItem(id, o.id);
+              if (move) session.inventoryMove(move);
+            }
           }}
           // inventry.c: VK_RBUTTON is A_LOOKINVENTORY
           onContextMenu={(e: ReactMouseEvent) => {
@@ -642,7 +645,7 @@ export function NumericStats({ stats, rs }: { stats: Statistic[]; rs: (id: numbe
   );
 }
 
-/** statlist.c: icon and "name NN%" (quests: name only; headers green). */
+/** statlist.c: icon and "name NN%". */
 export function StatList({
   session, icons, group, onLook, onCast, onStudy, studying,
 }: {
@@ -660,7 +663,6 @@ export function StatList({
   // Ours: the Spells tab's search, by name as shown
   const [search, setSearch] = useState("");
   const stats = world.stats.get(group) ?? [];
-  const quests = group === STAT_GROUP.QUESTS;
   const spells = group === STAT_GROUP.SPELLS;
   const rs = (id: number) => session.resource(id) ?? "";
   const spellFor = (id: number) => world.spells.find((s) => s.object.id === id);
@@ -669,11 +671,10 @@ export function StatList({
     const l = s.list!;
     if (!l) return null;
     if (wanted && !rs(s.nameRes).toLowerCase().includes(wanted)) return null;
-    const header = quests && l.value === 0;
     return (
       <div
         key={`${s.num}:${i}`}
-        className={`stat-list-row${header ? " header" : ""}${selected === i ? " selected" : ""}`}
+        className={`stat-list-row${selected === i ? " selected" : ""}`}
         onClick={() => setSelected(i)}
         // Ours: a spell dragged onto a quick slot fills it (QuickSlots.tsx Hotbar)
         draggable={group === STAT_GROUP.SPELLS && !!l.id}
@@ -685,16 +686,16 @@ export function StatList({
           if (group === STAT_GROUP.SPELLS && l.id) onCast(l.id, spellFor(l.id)?.numTargets ?? 0);
           else if (l.id) onLook(l.id);
         }}
-        // statlist.c StatsListRButton: look at it (not quest headers)
+        // statlist.c StatsListRButton: look at it
         onContextMenu={(e) => {
           e.preventDefault();
-          if (!l.id || header) return;
+          if (!l.id) return;
           setSelected(i);
           onLook(l.id);
         }}
       >
-        {!header && <ObjIcon icons={icons} object={l.icon ? bareIcon(l.icon) : null} className="list-icon" />}
-        <span>{quests ? rs(s.nameRes) : `${rs(s.nameRes)} ${l.value}%`}</span>
+        <ObjIcon icons={icons} object={l.icon ? bareIcon(l.icon) : null} className="list-icon" />
+        <span>{`${rs(s.nameRes)} ${l.value}%`}</span>
       </div>
     );
   });

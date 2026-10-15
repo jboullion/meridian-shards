@@ -8,7 +8,7 @@
 // keep the loaded room as the file has it (rooms are cached and shared) and change a
 // copy, which the renderer and the movement code both use.
 
-import { CHANGE_OVERRIDE, CTF, RA, ANIMATE, KOD_FINENESS, type RoomChange } from "@shards/protocol";
+import { CTF, RA, ANIMATE, KOD_FINENESS, type RoomChange } from "@shards/protocol";
 import { FINENESS, WF, cloneRoom, setWallHeights, type Room, type Sector, type Sidedef } from "@shards/formats";
 import { animStateFrom, animStep, type AnimState } from "./animation.ts";
 
@@ -82,9 +82,6 @@ export class LiveRoom {
           if (c.animation.type === ANIMATE.NONE) this.sectorAnims.delete(i);
           else this.sectorAnims.set(i, a);
         });
-        break;
-      case "sectorChange":
-        this.forSectors(c.sector, (s) => sectorChange(s, c.depth, c.scroll));
         break;
       case "changeTexture":
         // roomanim.c TextureChange (CTF_RESET only tells the server's own bookkeeping apart)
@@ -197,18 +194,4 @@ export class LiveRoom {
   private forSidedefs(serverId: number, fn: (s: Sidedef, index: number) => void): void {
     this.room.sidedefs.forEach((s, i) => s.serverId === serverId && fn(s, i));
   }
-}
-
-/** roomanim.c SectorChange: the depth bits and the scroll speed bits of the sector's flags */
-function sectorChange(s: Sector, depth: number, scroll: number): void {
-  if (depth !== CHANGE_OVERRIDE) s.flags = (s.flags & ~0x3) | depth;
-  if (scroll === CHANGE_OVERRIDE) return;
-  if (scroll === 0) {
-    s.flags &= ~0x1fc; // SCROLL_NONE: drop every scroll bit
-    return;
-  }
-  const direction = (s.flags & 0x70) >> 4;
-  const floor = s.flags & 0x80;
-  const ceiling = s.flags & 0x100;
-  s.flags = (s.flags & ~0x1fc) | (scroll << 2) | (direction << 4) | floor | ceiling;
 }

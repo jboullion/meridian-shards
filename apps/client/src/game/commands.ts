@@ -14,9 +14,7 @@ export type CommandId =
   | "delgroup" | "newgroup" | "buy" | "drop" | "look" | "offer" | "cast" | "map" | "wave" | "point" | "dance"
   | "alias" | "cmdalias" | "rest" | "yell" | "stand" | "suicid" | "suicide" | "neutral" | "happy" | "sad" | "wry"
   | "guild" | "password" | "withdraw" | "deposit" | "balance" | "group" | "appeal" | "tellguild"
-  | "safetyOn" | "safetyOff" | "tempsafeOn" | "tempsafeOff" | "groupingOn" | "groupingOff" | "autolootOn"
-  | "autolootOff" | "autocombineOn" | "autocombineOff" | "reagentbagOn" | "reagentbagOff" | "spellpowerOn"
-  | "spellpowerOff" | "time" | "mail" | "study";
+  | "safetyOn" | "safetyOff" | "mail" | "study";
 
 /** merintr.c `commands`, in its order (ties go to the first), with the German names. */
 export const COMMAND_TABLE: readonly (readonly [string, CommandId])[] = [
@@ -37,15 +35,6 @@ export const COMMAND_TABLE: readonly (readonly [string, CommandId])[] = [
   ["kontostand", "balance"], ["group", "group"], ["gruppen", "group"], ["appeal", "appeal"], ["aufrufen", "appeal"],
   ["tellguild", "tellguild"], ["telgilde", "tellguild"], ["tguild", "tellguild"], ["tgilde", "tellguild"],
   ["safety on", "safetyOn"], ["sicherheit an", "safetyOn"], ["safety off", "safetyOff"], ["sicherheit aus", "safetyOff"],
-  ["tempsafe on", "tempsafeOn"], ["tempsicherheit an", "tempsafeOn"], ["tempsafe off", "tempsafeOff"],
-  ["tempsicherheit aus", "tempsafeOff"], ["grouping on", "groupingOn"], ["gruppenbildung an", "groupingOn"],
-  ["grouping off", "groupingOff"], ["gruppenbildung aus", "groupingOff"], ["autoloot on", "autolootOn"],
-  ["autoloot an", "autolootOn"], ["autoloot off", "autolootOff"], ["autoloot aus", "autolootOff"],
-  ["autocombine on", "autocombineOn"], ["autocombine an", "autocombineOn"], ["autocombine off", "autocombineOff"],
-  ["autocombine aus", "autocombineOff"], ["reagentbag on", "reagentbagOn"], ["reagentbag an", "reagentbagOn"],
-  ["reagentbag off", "reagentbagOff"], ["reagentbag aus", "reagentbagOff"], ["spellpower on", "spellpowerOn"],
-  ["spellpower an", "spellpowerOn"], ["spellpower off", "spellpowerOff"], ["spellpower aus", "spellpowerOff"],
-  ["time", "time"], ["Zeit", "time"],
   // module/mailnews adds its own command (mailnews.c)
   ["mail", "mail"],
   // Ours: Study mode (study.ts), last so it takes no start of a name from the original's

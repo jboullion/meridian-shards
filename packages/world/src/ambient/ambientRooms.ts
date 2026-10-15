@@ -40,11 +40,11 @@ const castle = (count: number, faction: Faction, guards: number): AmbientRoomSpe
 });
 const shop = (count: number, place: Place): AmbientRoomSpec => ({ kind: "shop", count, place });
 
-/** By room file (lower case) */
+/** By room file (lower case), the 101 server's (its Kod's room classes: kod/object/active/holder/room) */
 export const AMBIENT_ROOMS: Record<string, AmbientRoomSpec> = {
   // Tos
   "tos.roo": town(12, "tos", 2, C.BLUE),
-  "toseast.roo": town(6, "tos", 1, C.BLUE),
+  "easttos.roo": town(6, "tos", 1, C.BLUE),
   "tosinn.roo": inn(5, "tos"),
   "tostavern.roo": inn(4, "tos"),
   // The Arena of Kraanan and its foyer
@@ -72,26 +72,17 @@ export const AMBIENT_ROOMS: Record<string, AmbientRoomSpec> = {
   "marion.roo": town(12, "marion", 2, C.GREEN),
   "marinn.roo": inn(5, "marion"),
   // Jasper
-  "jaseast.roo": town(7, "jasper", 1, C.RED),
-  "jaswest.roo": town(9, "jasper", 1, C.RED),
+  "jas-east.roo": town(7, "jasper", 1, C.RED),
+  "jas-west.roo": town(9, "jasper", 1, C.RED),
   "jasinn.roo": inn(4, "jasper"),
   "jastavrn.roo": inn(4, "jasper"),
   // Cor Noth
   "cornoth.roo": town(12, "cornoth", 2, C.DGREEN),
   "corinn.roo": inn(5, "cornoth"),
-  // Raza
-  "raza.roo": town(7, "raza", 1, C.GRAY),
-  "razainn.roo": inn(4, "raza"),
-  "razabar.roo": inn(3, "raza"),
   // Ko'catan
   "settle1.roo": town(8, "kocatan", 1, C.YELLOW),
   "kocinn.roo": inn(5, "kocatan"),
   "koctav.roo": inn(4, "kocatan"),
-  // Bergensdorf and Jixa
-  "bergcity.roo": town(8, "bergen", 1, C.SKY),
-  "berginn.roo": inn(4, "bergen"),
-  "jixa.roo": town(6, "jixa", 1, C.BLACK),
-  "jixa_inn.roo": inn(4, "jixa"),
   // The cities' shops, banks and adventurers' halls: a customer or two
   "tossmith.roo": shop(2, "tos"),
   "tosapoth.roo": shop(2, "tos"),
@@ -101,7 +92,6 @@ export const AMBIENT_ROOMS: Record<string, AmbientRoomSpec> = {
   "barapoth.roo": shop(2, "barloque"),
   "barmerch.roo": shop(2, "barloque"),
   "barhall.roo": shop(2, "barloque"),
-  "barlmarket.roo": shop(5, "barloque"),
   "marsmith.roo": shop(2, "marion"),
   "marhall.roo": shop(2, "marion"),
   "marheal.roo": shop(2, "marion"),
@@ -112,20 +102,10 @@ export const AMBIENT_ROOMS: Record<string, AmbientRoomSpec> = {
   "corgroc.roo": shop(2, "cornoth"),
   "cortail.roo": shop(2, "cornoth"),
   "corhall.roo": shop(2, "cornoth"),
-  "razasmith.roo": shop(2, "raza"),
-  "razaapoth.roo": shop(2, "raza"),
-  "razabank.roo": shop(2, "raza"),
   "kocapoth.roo": shop(2, "kocatan"),
   "kocstore.roo": shop(2, "kocatan"),
   "koctail.roo": shop(2, "kocatan"),
   "kocblack.roo": shop(2, "kocatan"),
-  "bergsmith.roo": shop(2, "bergen"),
-  "bergstore.roo": shop(2, "bergen"),
-  "bergbank.roo": shop(2, "bergen"),
-  "berghall.roo": shop(2, "bergen"),
-  "bergauc.roo": shop(3, "bergen"),
-  "jixa_smith.roo": shop(2, "jixa"),
-  "jixa_hall.roo": shop(2, "jixa"),
 };
 
 /** The Ambient Life setting's population scale */

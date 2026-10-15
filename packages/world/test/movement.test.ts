@@ -6,7 +6,7 @@ import { parseRoo } from "@shards/formats";
 import { PlayerMover } from "../src/movement.ts";
 import { formatServerMessage, parseMarkup } from "../src/text.ts";
 
-const ASSETS = join(import.meta.dirname, "../../../dist/assets");
+const ASSETS = join(import.meta.dirname, "../../../dist/assets-101");
 const have = existsSync(join(ASSETS, "raza.roo"));
 const sq = (v: number) => (v - 1) * 1024; // 1-based square (with fraction) to client fine
 

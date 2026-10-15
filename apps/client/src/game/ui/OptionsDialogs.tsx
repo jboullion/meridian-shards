@@ -61,22 +61,14 @@ function usePlayers(session: GameSession): { id: number; name: string }[] {
 
 // ---------------------------------------------------------------------------- Preferences
 
-/** The game options the server keeps (IDD_SETTINGS Game Options and "Can attack innocent players"). */
-const SERVER_OPTIONS = [
-  ["Receive temporary angel on death", CF.TEMPSAFE, [15, 116, 123, 9]],
-  ["Join building groups", CF.GROUPING, [192, 116, 75, 9]],
-  ["Autoloot stackable items from kills", CF.AUTOLOOT, [15, 128, 123, 9]],
-  ["Autocombine spell items", CF.AUTOCOMBINE, [192, 128, 90, 9]],
-  ["Stash things into the appropriate bag automatically", CF.BAGS, [15, 140, 170, 9]],
-  ["Display spellpower for spells cast", CF.SPELLPOWER, [192, 140, 119, 9]],
-] as const;
 
 /** Options the client keeps but doesn't do anything with yet (docs/missing-features.md). */
 const NOT_YET = "Not in Meridian Shards yet; the setting is kept for when it is";
 
 /**
- * client.rc IDD_SETTINGS (375 x 316 DLU) without the Web Browser group, so 288 tall.
- * `serverFlags` is the server's CF_* preferences (null until UC_RECEIVE_PREFERENCES).
+ * client.rc IDD_SETTINGS (375 x 316 DLU) without the Web Browser group, and without Game
+ * Options, which the 101 server doesn't keep, so 231 tall. `serverFlags` is safety as CF_SAFETY_OFF
+ * (null until our own object has told us, OF_SAFETY).
  */
 export function PreferencesDialog({
   settings, serverFlags, onApply, onPreview, onClose,
@@ -114,7 +106,7 @@ export function PreferencesDialog({
   return (
     <>
       {/* On a phone, 30% wider: its font crowded the template's labels into each other */}
-      <DluDialog title="Preferences" size={[375, 288]} wide={1.3} onClose={onClose}>
+      <DluDialog title="Preferences" size={[375, 231]} wide={1.3} onClose={onClose}>
         <form onSubmit={ok}>
           <GroupBox at={[6, 3, 91, 67]} label="Targeting" />
           <Check
@@ -144,51 +136,38 @@ export function PreferencesDialog({
           <Text at={[121, 84, 56, 10]}>Particle density %</Text>
           <Trackbar at={[181, 78, 179, 18]} min={25} max={150} step={5} value={d.particleDensity} onChange={(v) => set({ particleDensity: v })} label="Particle density" />
 
-          <GroupBox at={[6, 103, 364, 55]} label="Game Options" />
-          {SERVER_OPTIONS.map(([label, f, r]) => (
-            <Check
-              key={f}
-              at={r}
-              label={label}
-              title={known ? "Kept on the server" : "Waiting for the server"}
-              disabled={!known}
-              checked={(flags & f) !== 0}
-              onChange={(v) => flag(f, v)}
-            />
-          ))}
-
-          <GroupBox at={[6, 160, 364, 45]} label="Audio Effects" />
-          {check("Music", [17, 173, 35, 9], "music")}
-          {check("Sounds", [17, 188, 44, 9], "sound")}
+          <GroupBox at={[6, 103, 364, 45]} label="Audio Effects" />
+          {check("Music", [17, 116, 35, 9], "music")}
+          {check("Sounds", [17, 131, 44, 9], "sound")}
           {/* maindlg.c: Steady and Atmospheric Sounds only with Sounds on */}
-          <Check at={[61, 172, 64, 9]} label="Steady Sounds" disabled={!d.sound} checked={d.loopSounds} onChange={(v) => set({ loopSounds: v })} />
-          <Check at={[61, 187, 80, 9]} label="Atmospheric Sounds" disabled={!d.sound} checked={d.randomSounds} onChange={(v) => set({ randomSounds: v })} />
+          <Check at={[61, 115, 64, 9]} label="Steady Sounds" disabled={!d.sound} checked={d.loopSounds} onChange={(v) => set({ loopSounds: v })} />
+          <Check at={[61, 130, 80, 9]} label="Atmospheric Sounds" disabled={!d.sound} checked={d.randomSounds} onChange={(v) => set({ randomSounds: v })} />
           {/* The original has Sound volume on top; ours sit beside their checkboxes (Music, then Sounds) */}
-          <Text at={[161, 173, 50, 10]}>Music volume</Text>
-          <Trackbar at={[217, 170, 147, 15]} min={0} max={100} value={d.musicVolume} onChange={(v) => set({ musicVolume: v })} label="Music volume" ticks={false} />
-          <Text at={[161, 189, 53, 10]}>Sound volume</Text>
-          <Trackbar at={[217, 186, 147, 15]} min={0} max={100} value={d.soundVolume} onChange={(v) => set({ soundVolume: v })} label="Sound volume" ticks={false} />
+          <Text at={[161, 116, 50, 10]}>Music volume</Text>
+          <Trackbar at={[217, 113, 147, 15]} min={0} max={100} value={d.musicVolume} onChange={(v) => set({ musicVolume: v })} label="Music volume" ticks={false} />
+          <Text at={[161, 132, 53, 10]}>Sound volume</Text>
+          <Trackbar at={[217, 129, 147, 15]} min={0} max={100} value={d.soundVolume} onChange={(v) => set({ soundVolume: v })} label="Sound volume" ticks={false} />
 
-          <GroupBox at={[6, 207, 364, 57]} label="Interface Features" />
-          {check("Show toolbar", [15, 218, 62, 9], "toolbar")}
-          {check("Show tooltips", [15, 228, 62, 9], "tooltips")}
-          {check("Lock text window in place when scrolling back", [15, 239, 159, 9], "scrollLock")}
-          {check("Add chat timestamps", [15, 250, 77, 9], "chatTimestamps")}
-          {check("Show latency meter", [91, 218, 77, 9], "latencyMeter")}
-          {check("Show dynamic map", [91, 228, 79, 10], "dynamicMap")}
-          {check("Show colored text", [179, 218, 69, 10], "coloredText")}
-          {check("Map annotations", [179, 228, 72, 10], "mapAnnotations")}
-          {check("Show FPS", [179, 239, 50, 9], "showFps")}
-          {check("Display XP as percent", [254, 218, 87, 9], "xpAsPercent")}
-          {check("Filter text profanity", [254, 228, 77, 9], "profanityFilter")}
-          <Button at={[253, 239, 110, 12]} onClick={() => setProfanityOpen(true)}>
+          <GroupBox at={[6, 150, 364, 57]} label="Interface Features" />
+          {check("Show toolbar", [15, 161, 62, 9], "toolbar")}
+          {check("Show tooltips", [15, 171, 62, 9], "tooltips")}
+          {check("Lock text window in place when scrolling back", [15, 182, 159, 9], "scrollLock")}
+          {check("Add chat timestamps", [15, 193, 77, 9], "chatTimestamps")}
+          {check("Show latency meter", [91, 161, 77, 9], "latencyMeter")}
+          {check("Show dynamic map", [91, 171, 79, 10], "dynamicMap")}
+          {check("Show colored text", [179, 161, 69, 10], "coloredText")}
+          {check("Map annotations", [179, 171, 72, 10], "mapAnnotations")}
+          {check("Show FPS", [179, 182, 50, 9], "showFps")}
+          {check("Display XP as percent", [254, 161, 87, 9], "xpAsPercent")}
+          {check("Filter text profanity", [254, 171, 77, 9], "profanityFilter")}
+          <Button at={[253, 182, 110, 12]} onClick={() => setProfanityOpen(true)}>
             Profanity Options and Policy...
           </Button>
 
-          <Button at={[131, 272, 50, 12]} type="submit" isDefault>
+          <Button at={[131, 215, 50, 12]} type="submit" isDefault>
             OK
           </Button>
-          <Button at={[193, 272, 50, 12]} onClick={onClose}>
+          <Button at={[193, 215, 50, 12]} onClick={onClose}>
             Cancel
           </Button>
         </form>

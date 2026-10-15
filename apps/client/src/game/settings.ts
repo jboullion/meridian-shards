@@ -343,6 +343,8 @@ export interface Settings {
   /** config.extraprofane: Extra search for suspected embedded profanity */
   profanityExtra: boolean;
   xpAsPercent: boolean;
+  /** config.aggressive: Can attack innocent players (safety off), sent to the server on entering */
+  aggressive: boolean;
 
   // ---- Configuration (the Bind Editor's Options and Mouse tab)
   /** Quick Chat: typing a letter starts a chat line (the original's A_TEXTINSERT keys) */
@@ -500,6 +502,7 @@ export const DEFAULT_SETTINGS: Settings = {
   logoutMinutes: 1440,
   profanityExtra: false,
   xpAsPercent: false,
+  aggressive: false,
   typeToChat: false,
   alwaysRun: false,
   attackOnTarget: false,

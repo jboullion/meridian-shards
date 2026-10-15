@@ -12,6 +12,19 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 - What the original has that we don't yet: [docs/missing-features.md](docs/missing-features.md). Add to it whenever something is skipped.
 - Using the in-game admin console (admin accounts, commands, cautions): [docs/admin-console.md](docs/admin-console.md)
 
+## This branch: `server-101`
+
+This branch makes the client work with the **original Meridian 59 code** that the official and Steam servers (101 and 102) run: the Kirmse repo in `meridian-unreal\ReferenceServers\MeridianSteam\Meridian59`, copied into `server/src-101` and built there. It replaces Server 104 outright; there's no switch between them. Main stays the 104 client.
+
+- **What differs** from 104, and how the client follows it: [docs/research/protocol.md](docs/research/protocol.md), "The 101 server". The object record is unpacked into the 104 fields at the protocol boundary (`messages.ts unpackObjectFlags`), so the renderer, minimap and ambient code are unchanged.
+- **Test against the local build only** (`server\build.cmd`, `server\setup-run.cmd`). Connecting to the live 101 or 102 is the user's call, outside this branch's work.
+- **Paths of its own, beside main's** (both are git-ignored and shared between branches): the server in `server/src-101` (main's 104 savegames stay in `server/src`), the game files in `dist/assets-101` (served at `/assets` by `vite.config.ts`; main's are `dist/assets`).
+- **Accounts:** the 101 server never makes one on login. `MAINT_PORT=9998 node tools/maint/maint.ts "create automated shardbot shardbot"` makes the account and its first character slot (the official servers do it from their sign-up site, `aws/`).
+- **Art:** its repo has the rooms but only 10 `.bgf` files. `npm run assets` takes the art from an installed original client (`--client`, by default `%LOCALAPPDATA%\Meridian 59\resource`), else borrows the installed 104 client's `.bgf`, `.ogg` and `.mp3` (`--standin`), never its strings or rooms.
+- **Safety:** the 101 server keeps only safety, and never says what it is. "Can attack innocent players" is a client setting (`settings.aggressive`), sent on entering and after every reset (`GameSession.requestGameData`), as `mermain.c SendConfiguredSafety` does.
+- **The desktop app reaches a server straight over TCP** when its entry has `tcp` (`servers.json`: `{ "name": "...", "tcp": "host:port", "resources": "<asset build>" }`; built in: "Local 101 (direct)", 127.0.0.1:5959). `main.ts setupTcp` opens the socket, the preload passes the bytes, and `host.ts gameSocketFactory` gives `GameSession` a WebSocket-shaped socket over it. Its files are the app's own asset build or `resources`. Friends, pets and the arena need our relay, so they stay offline there.
+- **A second server beside the usual one** (to try the 101 server while the 104 dev stack runs): change the ports in `server/src-101/run/server/blakserv.cfg` (rerun `server\setup-run.cmd` to put them back), start a gateway with `GATEWAY_PORT=8060 BLAKSERV_ADDR=127.0.0.1:5960 ARENA_ASSETS=dist/assets-101`, and Vite with `SHARDS_GATEWAY=ws://127.0.0.1:8060` (`.claude/launch.json` "client101", port 5174). `MAINT_PORT` picks the maintenance port for `maint.ts`.
+
 ## Hard rules
 
 - **The name is "Meridian Shards".** Never use "104" in any product name, branding, UI text or package name. Referring to the "Server 104" *code* in docs is fine.
@@ -21,7 +34,7 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 - **The user makes the commits.** Don't `git commit` or push unless explicitly asked. Finish by listing the changed files.
 - **Ask before downloading or installing anything** (npm packages, tools, client builds), stating what it is, the source and the size.
 - **`meridian-unreal\Server-104` is a read-only reference.** Build and run from our copy in `server/src`.
-- **Own server only.** Never point any client or tool at the live 104 server.
+- **Own server only.** Never point any client or tool at the live 104 server. On this branch, the local 101 build only (see above).
 
 ## Repo layout
 
@@ -44,10 +57,11 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 | `tools/maint/` | Sends commands to blakserv's maintenance port (localhost:9998). |
 | `tools/deploy/` | `stage.ts` gathers the Docker build context in `deploy/.stage` (git-ignored: game data and art); `push.ts` ships it to the VM over ssh and restarts the stack; `release.ts` releases the desktop app (`npm run release -- <x.y.z>`). |
 | `deploy/` | The hosted stack: `docker-compose.yml`, the blakserv Linux image, the gateway image, the Caddyfile, the download page (`web/site/download/`, published to GitHub Pages by `.github/workflows/pages.yml`), and the run book (`deploy/README.md`). |
-| `server/config/blakserv.cfg` | Our server config, the source of truth. Copied into the run folder by `server/setup-run.cmd`. |
+| `server/config/blakserv.cfg` | Our server config (on this branch, the 101 server's), the source of truth. Copied into the run folder by `server/setup-run.cmd`. |
 | `server/config/motd.txt` | The message of the day on the character screen (CRLF line endings, for original clients). `server/setup-run.cmd` copies it into the run folder and deploys put it in the image. |
 | `server/build.cmd`, `server/setup-run.cmd` | Build `blakserv` + Kod, and prepare the run folder. |
-| `server/src/` | **Git-ignored** copy of the Server 104 source plus build output; `server/src/run/server` is the live run folder (savegames!). |
+| `server/src/` | **Git-ignored** copy of the Server 104 source plus build output; `server/src/run/server` is the live run folder (savegames!). Main's. |
+| `server/src-101/` | **Git-ignored** copy of the original (101) server's source plus build output; `server/src-101/run/server` is this branch's run folder, `run/server/rsc0000.rsb` the client's strings (rscmerge). |
 | `docs/` | ADRs, the roadmap, research notes and the original plan. |
 
 ## Running the local stack
@@ -57,7 +71,7 @@ npm install                 # workspaces + dependencies
 server\build.cmd            # first time, or after Kod/C changes (VS 2026 x86 toolset)
 server\setup-run.cmd        # creates run folders, installs server/config/blakserv.cfg
 npm run sounds              # our CC0 ambient recordings into dist/sounds (once; npm run assets copies them)
-npm run assets              # dist/assets from our server build + the installed 104 client
+npm run assets              # dist/assets-101 from our 101 server build + the installed original client (or the 104 client's art)
 npm run dev                 # blakserv (if not running) + gateway (ws://localhost:8059) + Vite (http://localhost:5173)
 npm run headless -- --user shardbot --pass shardbot --walk "8.5,7.5 9.05,6.5" --go --stay 10
 npm run smoke               # headless shardbot: log in, enter, stay 10 s, quit (is the stack up?)

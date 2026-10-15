@@ -8,11 +8,11 @@
 import { FINENESS, SF, WF, floorHeightAt, leafAt, type Room, type Wall } from "@shards/formats";
 
 const MOVEUNITS = FINENESS >> 2; // draw3d.h
-const MOVE_DELAY = 85; // ms per MOVEUNITS
-const NUM_STEPS_PER_SECOND = 210;
+const MOVE_DELAY = 100; // ms per MOVEUNITS (move.c:49)
+const NUM_STEPS_PER_SECOND = 200; // move.c:52
 const STEPS_PER_MOVE = 20;
 const MAX_STEP_HEIGHT = 24 * 16; // HeightKodToClient(24)
-const MOVE_INTERVAL = 250; // inform the server at most this often
+const MOVE_INTERVAL = 1000; // inform the server at most this often (move.c:57)
 const MOVE_THRESHOLD = FINENESS / 4; // compared with the *squared* distance, like the C code
 const MIN_NOMOVEON = FINENESS / 4;
 const MIN_HOTPLATE_DIST = FINENESS;
@@ -22,9 +22,10 @@ const MOVE_OFF_ROOM_INTERVAL = 1000;
 const PLAYER_WIDTH = (31 * 64) / 4; // game.c player.width
 const PLAYER_HEIGHT = (3 * FINENESS) / 4; // game.c player.height
 const TURNDEGREES = 64; // game.h: 4096 / 64 per TURN_DELAY
-const TURN_DELAY = 85;
-export const SPEED_WALK = 25;
-export const SPEED_RUN = 55;
+const TURN_DELAY = 100; // move.c:50
+/** move.c MoveUpdatePosition: the speed sent with a move, doubled when running */
+export const SPEED_WALK = 18;
+export const SPEED_RUN = 36;
 const CLIMB_VELOCITY = (FINENESS * 9) / 2; // move.h, units per second
 const FALL_VELOCITY = (-FINENESS * 2) / 3;
 const GRAVITY = -5 * FINENESS; // moveobj.h, units / s / s
@@ -212,7 +213,7 @@ export class PlayerMover {
       // Off the room's edge: ask the server (edge exits) at most once a second; don't move.
       if (!this.isInRoom(x, y)) {
         if (now - this.moveOffRoomTime >= MOVE_OFF_ROOM_INTERVAL) {
-          this.sink.move(x, y, SPEED_WALK);
+          this.sink.move(x, y, 0); // move.c:354 RequestMove(y, x, 0, ...)
           this.moveOffRoomTime = now;
         }
         x = lastX;
@@ -313,8 +314,11 @@ export class PlayerMover {
   }
 
   private isInRoom(x: number, y: number): boolean {
-    const b = this.room!.thingsBox;
-    return !(x <= 0 || x >= b.maxX || y <= 0 || y >= b.maxY);
+    // move.h IsInRoom on the square (move.c:341-349: a negative coordinate is row/col -1)
+    const room = this.room!;
+    const row = y < 0 ? -1 : Math.trunc(y / FINENESS),
+      col = x < 0 ? -1 : Math.trunc(x / FINENESS);
+    return row >= 0 && row < room.rows && col >= 0 && col < room.cols;
   }
 
   /** move.c FindIntersection: the first wall (depth-first) blocking a step. */
@@ -347,8 +351,8 @@ export class PlayerMover {
       if (newX < Math.min(w.x0, w.x1) - md || newX > Math.max(w.x0, w.x1) + md) continue;
       if (newY < Math.min(w.y0, w.y1) - md || newY > Math.max(w.y0, w.y1) + md) continue;
       // The side we're on decides which sidedef we'd walk through
-      const sdNum = oldDistance > 0 ? w.posSidedef : w.negSidedef;
-      const otherNum = oldDistance > 0 ? w.negSector : w.posSector;
+      const sdNum = oldDistance > 0.001 ? w.posSidedef : w.negSidedef; // move.c:530
+      const otherNum = oldDistance > 0.001 ? w.negSector : w.posSector;
       if (!sdNum) continue;
       const sd = room.sidedefs[sdNum - 1];
       const belowHeight = otherNum ? SECTOR_DEPTHS[room.sectors[otherNum - 1].flags & SF.DEPTH_MASK] : 0;
@@ -431,5 +435,6 @@ function slideAlongWall(w: Wall, xOld: number, yOld: number, xNew: number, yNew:
     wy = w.y1 - w.y0;
   const num = dx * wx + dy * wy;
   const denom = wx * wx + wy * wy || 1;
-  return [xOld + Math.round((wx * num) / denom), yOld + Math.round((wy * num) / denom)];
+  // move.c:456: (int), truncating
+  return [xOld + Math.trunc((wx * num) / denom), yOld + Math.trunc((wy * num) / denom)];
 }

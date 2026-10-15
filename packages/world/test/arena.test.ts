@@ -17,7 +17,7 @@ import { ArenaView } from "../src/arena/arenaView.ts";
 import { ARENA_STATUS, type ArenaPersonWire, type ArenaState, type ArenaTick } from "../src/arena/arenaWire.ts";
 
 const SQ = FINENESS;
-const ASSETS = join(import.meta.dirname, "../../../dist/assets");
+const ASSETS = join(import.meta.dirname, "../../../dist/assets-101");
 const have = existsSync(join(ASSETS, "tosarena.roo"));
 let gridCache: NavGrid | null = null;
 const grid = () => (gridCache ??= buildNavGrid(parseRoo(new Uint8Array(readFileSync(join(ASSETS, "tosarena.roo"))))));

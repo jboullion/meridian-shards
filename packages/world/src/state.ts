@@ -2,7 +2,7 @@
 // (clientd3d/server.c handlers -> game.c / object.c / moveobj.c). Renderer-agnostic.
 
 import {
-  BP, ByteReader, CLIENT_TAG_NUMBER, EFFECT, ENCHANT, objId, objTag, readEffect, readPlayerOverlay, readRadiusShoot, readShoot, type Shot, readAddEnchantment, readChange, readMove, readObject,
+  BP, ByteReader, CLIENT_TAG_NUMBER, EFFECT, ENCHANT, objId, objTag, readEffect, readPlayerOverlay, readShoot, unpackObjectFlags, type Shot, readAddEnchantment, readChange, readMove, readObject,
   readObjectList, readPlayer, readRemoveEnchantment, readRoomContents, readRoomObject, readSpells, readStat,
   readStatGroup, readStatGroups, readTurn, readRoomChange, type RoomChange, readUseList, readSpell, readBgOverlay, type Animation, type BgOverlay, type ObjectInfo, type Overlay,
   type PlayerInfo, type RoomObject, type Spell, type Statistic,
@@ -215,6 +215,14 @@ export class ObjectIdSet extends Set<number> {
   }
 }
 
+/** BP_REQ_INVENTORY_MOVE's arguments: 1-based places in the server's list (user.kod UserMoveInventoryItem) */
+export interface InventoryMove {
+  /** The item's place */
+  payload: number;
+  /** The place it goes before */
+  target: number;
+}
+
 /** Kod fine coordinates (1-based, 64 per square) to client fine (server.c ExtractCoordinates). */
 export const kodToFine = (kod: number): number => (kod - 64) * 16;
 /** Client fine to Kod fine for BP_REQ_MOVE (protocol.h RequestMove). */
@@ -311,17 +319,25 @@ export class WorldState {
    * inventry.c InventoryMoveCurrentItem (list_move_to_nth): `id` takes `target`'s place in
    * the inventory's order. The server is told with BP_REQ_INVENTORY_MOVE.
    */
-  moveInventoryItem(id: number, target: number): boolean {
+  /**
+   * Moves an inventory item to where another one is, and returns the move as the server takes it
+   * (BP_REQ_INVENTORY_MOVE), or null if there's nothing to move.
+   */
+  moveInventoryItem(id: number, target: number): InventoryMove | null {
     const entries = [...this.inventory.entries()];
     const from = entries.findIndex(([k]) => k === objId(id));
     const to = entries.findIndex(([k]) => k === objId(target));
-    if (from < 0 || to < 0 || from === to) return false;
+    if (from < 0 || to < 0 || from === to) return null;
     const [moved] = entries.splice(from, 1);
     entries.splice(to, 0, moved);
     this.inventory.clear();
     for (const [k, v] of entries) this.inventory.set(k, v);
     this.emit({ type: "inventory" });
-    return true;
+    // inventry.c:1214-1234: the item goes before the target's index (one further when moving
+    // down the list), and the server's list is ours reversed and 1-based
+    const length = entries.length;
+    const before = to > from ? to + 1 : to;
+    return { payload: length - from, target: length - before + 1 };
   }
 
   setSpellSchools(schools: number[]): void {
@@ -520,7 +536,6 @@ export class WorldState {
       case BP.SECTOR_MOVE:
       case BP.WALL_ANIMATE:
       case BP.SECTOR_ANIMATE:
-      case BP.SECTOR_CHANGE:
       case BP.CHANGE_TEXTURE:
       case BP.SECTOR_LIGHT: {
         const change = readRoomChange(type, r)!;
@@ -621,18 +636,6 @@ export class WorldState {
         if (src && dst && src !== dst) this.addProjectile(shot, src.x, src.y, dst.x, dst.y);
         return true;
       }
-      case BP.RADIUS_SHOOT: {
-        // project.c RadiusProjectileAdd: a ring of shots out to range * 1000 fine units
-        const shot = readRadiusShoot(r);
-        const src = this.objects.get(shot.source);
-        if (src) {
-          for (let i = 0; i < shot.number; i++) {
-            const a = (((360 / shot.number) * i) * Math.PI) / 180;
-            this.addProjectile(shot, src.x, src.y, src.x + shot.range * 1000 * Math.cos(a), src.y + shot.range * 1000 * Math.sin(a));
-          }
-        }
-        return true;
-      }
       case BP.PLAYER_OVERLAY: {
         // overlay.c SetPlayerOverlay: the object's id is the slot (1-based)
         const { hotspot, object } = readPlayerOverlay(r);
@@ -657,7 +660,6 @@ export class WorldState {
           case EFFECT.SEE: fx.blind = false; break;
           case EFFECT.RAINING: fx.raining = true; break;
           case EFFECT.SNOWING: fx.snowing = true; break;
-          case EFFECT.FIREWORKS: fx.fireworks = true; break;
           case EFFECT.CLEARWEATHER: fx.raining = fx.snowing = fx.fireworks = false; break;
           case EFFECT.SAND: fx.sand = true; break;
           case EFFECT.CLEARSAND: fx.sand = false; break;
@@ -759,12 +761,8 @@ export class WorldState {
     const id = r.u32(),
       nameRes = r.u32(),
       name = r.string(),
-      flags = r.u32();
-    r.u8(); // drawing type
-    r.u32(); // minimap flags
-    r.u32(); // name colour
-    r.u8(); // object type
-    r.u8(); // moveon type
+      // server.c HandlePlayers: the record ends with the flags word
+      flags = unpackObjectFlags(r.u32()).flags;
     this.dynamicResources.set(nameRes, name);
     this.players.set(id, { id, nameRes, name, flags });
   }

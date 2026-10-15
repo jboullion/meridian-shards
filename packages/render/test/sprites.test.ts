@@ -6,7 +6,7 @@ import { XLAT, XlatTable } from "../src/xlat.ts";
 import { compositeSprite, frameFor } from "../src/sprites.ts";
 import { lightIndex, objectBrightness, dlightScale, lightColor } from "../src/objectLighting.ts";
 
-const ASSETS = join(import.meta.dirname, "../../../dist/assets");
+const ASSETS = join(import.meta.dirname, "../../../dist/assets-101");
 const have = existsSync(join(ASSETS, "manifest.json"));
 const read = (n: string) => new Uint8Array(readFileSync(join(ASSETS, n)));
 

@@ -11,12 +11,11 @@ export interface LoginInfo {
   username: string;
   /** 16-byte digest from passwordDigest(). */
   passwordDigest: Uint8Array;
-  secretKey: string;
   screenWidth?: number;
   screenHeight?: number;
 }
 
-/** AP_LOGIN (clientd3d/login.c LoginSendInfo; parsed in blakserv/synched.c). */
+/** AP_LOGIN (clientd3d/login.c LoginSendInfo, protocol.c:16-19: name and password; parsed in blakserv/synched.c:163-218). */
 export function buildLogin(info: LoginInfo): Uint8Array {
   return new ByteWriter()
     .u8(AP.LOGIN)
@@ -34,13 +33,22 @@ export function buildLogin(info: LoginInfo): Uint8Array {
     .i32(32) // reserved: low byte = colour depth, next byte = partner code
     .string(info.username)
     .string(info.passwordDigest)
-    .string(info.secretKey)
     .finish();
 }
 
-/** AP_REQ_GAME: last download time, a "catch" int, hostname. */
-export function buildReqGame(downloadTime = 0): Uint8Array {
-  return new ByteWriter().u8(AP.REQ_GAME).i32(downloadTime).i32(0).string("").finish();
+/**
+ * The download number we claim to have (config.c Download): the one a Steam install ships with
+ * (config.c:456-465), so a server listing update packages (packages.txt) lets us into the game
+ * rather than answering AP_DOWNLOAD. Our game files come from elsewhere.
+ */
+export const DOWNLOAD_TIME = 9999;
+/** client.h:68 P_CATCH: the "catch" number is ((MAJOR_REV * 100 + MINOR_REV) * 3) + 3 (login.c:224) */
+const P_CATCH = 3;
+
+/** AP_REQ_GAME (login.c:224-225 RequestGame): last download time, the "catch" int, hostname. */
+export function buildReqGame(downloadTime = DOWNLOAD_TIME): Uint8Array {
+  const encoded = (CLIENT_MAJOR * 100 + CLIENT_MINOR) * P_CATCH + P_CATCH;
+  return new ByteWriter().u8(AP.REQ_GAME).i32(downloadTime).i32(encoded).string("").finish();
 }
 
 export const buildLoginPing = (): Uint8Array => Uint8Array.of(AP.PING);
@@ -174,6 +182,12 @@ export interface Overlay {
   animation: Animation;
 }
 
+/**
+ * An object as the client keeps it. The 101 server packs most of this into one flags word
+ * (proto.h:356-411); `readObject` unpacks it into the fields below, which keep the meanings
+ * the rest of the client was written for (flags as OF_*, drawingType as DRAWFX_*, minimap
+ * dots as MM_*, nameColor as RGB, objectType as OT_*).
+ */
 export interface ObjectInfo {
   id: number;
   amount: number;
@@ -185,6 +199,10 @@ export interface ObjectInfo {
   nameColor: number;
   objectType: number;
   moveOnType: number;
+  /** proto.h ITEM_RARITY_GRADE_* (the 101 server's items), 0 for anything else */
+  rarity?: number;
+  /** OF_SAFETY: on our own object, whether our safety is on */
+  safety?: boolean;
   light: { flags: number; intensity: number; color: number };
   translation: number;
   effect: number;
@@ -238,18 +256,77 @@ function readOverlays(r: ByteReader): Overlay[] {
   return out;
 }
 
-/** server.c ExtractObject. */
+/** The 101 server's object flags (include/proto.h:356-407) */
+const SERVER_OF = {
+  NOMOVEON_MASK: 0x3, PLAYER: 0x4, SAFETY: 0x2000, PLAYER_MASK: 0x1c000, HANGING: 0x10000, FLICKERING: 0x20000,
+  FLASHING: 0x40000, BOUNCING: 0x60000, PHASING: 0x80000, EFFECT_MASK: 0x01f00000, ENEMY: 0x02000000, FRIEND: 0x04000000,
+  GUILDMATE: 0x08000000,
+} as const;
+/** proto.h PF_*: what kind of player (with OF_PLAYER) */
+const PF = { KILLER: 0x4000, OUTLAW: 0x8000, DM: 0xc000, CREATOR: 0x10000, SUPER: 0x14000, EVENTCHAR: 0x1c000 } as const;
+/** The bits both servers' flags share: player, attackable, gettable, container, noexamine, offerable, buyable, activatable, applyable */
+const COMMON_OF = 0x1e7c;
+/** The client's flags (OF_* as the renderer knows them) */
+const CLIENT_OF = { DISPLAY_NAME: 0x1, HANGING: 0x100, BOUNCING: 0x10000, FLICKERING: 0x20000, FLASHING: 0x40000, PHASING: 0x80000 } as const;
+/** MM_* minimap dots */
+const MM = { PLAYER: 0x1, ENEMY: 0x2, FRIEND: 0x4, GUILDMATE: 0x8, MONSTER: 0x20 } as const;
+const DRAWFX_BLACK = 4;
+const DRAWFX_INVISIBLE = 5;
+
+/**
+ * The 101 server's flags word as the client's fields: what kind of player (OT_*), the name's
+ * colour (color.c GetPlayerNameColor), the drawing effect (GetDrawingEffectIndex), how it may be
+ * walked onto (ObjectMoveonType) and its minimap dot (map.c MapDrawObjects).
+ */
+export function unpackObjectFlags(f: number): Pick<ObjectInfo, "flags" | "drawingType" | "minimapFlags" | "nameColor" | "objectType" | "moveOnType" | "safety"> {
+  const player = (f & SERVER_OF.PLAYER) !== 0;
+  const drawingType = (f & SERVER_OF.EFFECT_MASK) >>> 20;
+  let flags = f & COMMON_OF;
+  // object3d.c:738: only players' names are drawn
+  if (player) flags |= CLIENT_OF.DISPLAY_NAME;
+  // moveobj.c:46: OF_HANGING shares its bit with PF_CREATOR, so players never hang
+  if (f & SERVER_OF.HANGING && !player) flags |= CLIENT_OF.HANGING;
+  // object.c:78: OF_BOUNCING is OF_FLICKERING | OF_FLASHING together
+  if ((f & SERVER_OF.BOUNCING) === SERVER_OF.BOUNCING) flags |= CLIENT_OF.BOUNCING;
+  else {
+    if (f & SERVER_OF.FLICKERING) flags |= CLIENT_OF.FLICKERING;
+    if (f & SERVER_OF.FLASHING) flags |= CLIENT_OF.FLASHING;
+  }
+  if (f & SERVER_OF.PHASING) flags |= CLIENT_OF.PHASING;
+  const kind = player ? f & SERVER_OF.PLAYER_MASK : 0;
+  const objectType =
+    kind === PF.KILLER ? 1 : kind === PF.OUTLAW ? 2 : kind === PF.DM ? 3 : kind === PF.CREATOR ? 4 : kind === PF.SUPER ? 5 : kind === PF.EVENTCHAR ? 7 : 0;
+  // color.c:124-131, GetPlayerNameColor (the palette's cyan, yellow and green for DM, creator and super)
+  const nameColor =
+    drawingType === DRAWFX_BLACK ? 0x000000
+    : kind === PF.DM ? 0x00ffff
+    : kind === PF.KILLER ? 0xff0000
+    : kind === PF.OUTLAW ? 0xfc8000
+    : kind === PF.CREATOR ? 0xffff00
+    : kind === PF.SUPER ? 0x00ff00
+    : kind === PF.EVENTCHAR ? 0xff00ff
+    : 0xffffff;
+  // map.c:413-470: attackable things that aren't invisible; players blue with rings for guild relations
+  let minimapFlags = 0;
+  if (f & 0x8 && drawingType !== DRAWFX_INVISIBLE) {
+    if (player) {
+      minimapFlags = MM.PLAYER;
+      if (f & SERVER_OF.ENEMY) minimapFlags |= MM.ENEMY;
+      if (f & SERVER_OF.FRIEND) minimapFlags |= MM.FRIEND;
+      if (f & SERVER_OF.GUILDMATE) minimapFlags |= MM.GUILDMATE;
+    } else minimapFlags = MM.MONSTER;
+  }
+  return { flags, drawingType, minimapFlags, nameColor, objectType, moveOnType: f & SERVER_OF.NOMOVEON_MASK, safety: (f & SERVER_OF.SAFETY) !== 0 };
+}
+
+/** server.c ExtractObject (server.c:319-352): flags, then rarity. */
 export function readObject(r: ByteReader, withLight = true): ObjectInfo {
   const id = r.u32();
   const amount = objTag(id) === CLIENT_TAG_NUMBER ? r.u32() : 0;
   const iconRes = r.u32();
   const nameRes = r.u32();
-  const flags = r.u32();
-  const drawingType = r.u8();
-  const minimapFlags = r.u32();
-  const nameColor = r.u32();
-  const objectType = r.u8();
-  const moveOnType = r.u8();
+  const { flags, drawingType, minimapFlags, nameColor, objectType, moveOnType, safety } = unpackObjectFlags(r.u32());
+  const rarity = r.u32();
   let light = { flags: 0, intensity: 0, color: 0 };
   if (withLight) {
     const lf = r.u16();
@@ -260,7 +337,7 @@ export function readObject(r: ByteReader, withLight = true): ObjectInfo {
   const overlays = readOverlays(r);
   return {
     id, amount, iconRes, nameRes, flags, drawingType, minimapFlags, nameColor,
-    objectType, moveOnType, light, translation, effect, animation, overlays,
+    objectType, moveOnType, rarity, safety, light, translation, effect, animation, overlays,
   };
 }
 
@@ -425,14 +502,15 @@ export function readCharInfo(r: ByteReader): CharInfo {
     return { hair, head, eyes: ids(), noses: ids(), mouths: ids() };
   };
   const parts: [FaceParts, FaceParts] = [face(), face()];
-  const choices = () => {
+  // char.c:200-228: spells end with their school, skills don't have one
+  const choices = (withSchool: boolean) => {
     const n = r.i32();
     const out: CreatorChoice[] = [];
-    for (let i = 0; i < n; i++) out.push({ id: r.i32(), nameRes: r.u32(), descRes: r.u32(), cost: r.i32(), school: r.u8() });
+    for (let i = 0; i < n; i++) out.push({ id: r.i32(), nameRes: r.u32(), descRes: r.u32(), cost: r.i32(), school: withSchool ? r.u8() : 0 });
     return out;
   };
-  const spells = choices();
-  return { hairTranslations, faceTranslations, parts, spells, skills: choices() };
+  const spells = choices(true);
+  return { hairTranslations, faceTranslations, parts, spells, skills: choices(false) };
 }
 
 /** BP_CHARACTERS (module/char/char.c HandleCharacters). */
@@ -458,7 +536,8 @@ export function readObjectList(r: ByteReader): ObjectInfo[] {
 export const STATS = { NUMERIC: 1, LIST: 2 } as const;
 export const STAT_TAG = { INT: 1, RES: 2 } as const;
 /** Stat groups (module/merintr/stats.h). Group 1 is the main bars (health, mana, vigor). */
-export const STAT_GROUP = { MAIN: 1, STATS: 2, SPELLS: 3, SKILLS: 4, QUESTS: 5, INVENTORY: 6 } as const;
+/** Stat groups (module/merintr/stats.h:26-33); INVENTORY is the client's own */
+export const STAT_GROUP = { MAIN: 1, STATS: 2, SPELLS: 3, SKILLS: 4, INVENTORY: 5 } as const;
 /** Enchantment kinds (include/proto.h ENCHANT_*). */
 export const ENCHANT = { PLAYER: 1, ROOM: 2 } as const;
 
@@ -700,23 +779,10 @@ export function readShoot(r: ByteReader): Shot {
   return { iconRes, translation, animation, source, dest, speed, flags, light: readLight(r), range: 0, number: 1 };
 }
 
-/** BP_RADIUS_SHOOT (server.c HandleRadiusShoot): `number` projectiles in a ring out to `range`. */
-export function readRadiusShoot(r: ByteReader): Shot {
-  const iconRes = r.u32();
-  const { translation } = readTranslation(r);
-  const animation = readAnimation(r);
-  const source = r.u32();
-  const speed = r.u8();
-  const flags = r.u16();
-  const range = r.u8();
-  const number = r.u8();
-  return { iconRes, translation, animation, source, dest: 0, speed, flags, light: readLight(r), range, number };
-}
-
 /** Screen effects (include/proto.h EFFECT_*). */
 export const EFFECT = {
   INVERT: 1, SHAKE: 2, PARALYZE: 3, RELEASE: 4, BLIND: 5, SEE: 6, PAIN: 7, BLUR: 8, RAINING: 9, SNOWING: 10,
-  CLEARWEATHER: 11, SAND: 12, CLEARSAND: 13, WAVER: 14, FLASHXLAT: 15, WHITEOUT: 16, XLATOVERRIDE: 17, FIREWORKS: 18,
+  CLEARWEATHER: 11, SAND: 12, CLEARSAND: 13, WAVER: 14, FLASHXLAT: 15, WHITEOUT: 16, XLATOVERRIDE: 17,
 } as const;
 
 export interface Effect {
@@ -757,14 +823,16 @@ export function readEffect(r: ByteReader): Effect {
 
 /** Some user command types (include/proto.h UC_*). */
 export const UC = {
-  SEND_QUIT: 1, LOOK_PLAYER: 2, CHANGE_URL: 3, SPELL_SCHOOLS: 4, REST: 5, STAND: 6, REQ_PREFERENCES: 7, SUICIDE: 8, SEND_PREFERENCES: 9,
+  SEND_QUIT: 1, LOOK_PLAYER: 2, CHANGE_URL: 3, SPELL_SCHOOLS: 4, REST: 5, STAND: 6, SAFETY: 7, SUICIDE: 8,
   REQ_GUILDINFO: 10, GUILDINFO: 11, INVITE: 12, EXILE: 13, RENOUNCE: 14, ABDICATE: 15, VOTE: 16, SET_RANK: 17, GUILD_ASK: 18,
   GUILD_CREATE: 19, DISBAND: 20, REQ_GUILD_LIST: 21, GUILD_LIST: 22, MAKE_ALLIANCE: 23, END_ALLIANCE: 24, MAKE_ENEMY: 25,
   END_ENEMY: 26, GUILD_HALLS: 27, ABANDON_GUILD_HALL: 28, GUILD_RENT: 29, GUILD_SET_PASSWORD: 30, GUILD_SHIELD: 31,
-  GUILD_SHIELDS: 32, CLAIM_SHIELD: 33, RECEIVE_PREFERENCES: 34, DEPOSIT: 35, WITHDRAW: 36, BALANCE: 37, APPEAL: 40,
+  GUILD_SHIELDS: 32, CLAIM_SHIELD: 33, DEPOSIT: 35, WITHDRAW: 36, BALANCE: 37, APPEAL: 40,
   REQ_RESCUE: 41, MINIGAME_START: 45, MINIGAME_STATE: 46, MINIGAME_MOVE: 47, MINIGAME_PLAYER: 48, MINIGAME_RESET_PLAYERS: 49,
-  REQ_TIME: 60,
 } as const;
+
+/** UC_SAFETY (merintr.c:92, merintr.h SendSafety): safety on (1) or off (0), one byte. */
+export const buildSafety = (on: boolean): Uint8Array => Uint8Array.of(BP.USERCOMMAND, UC.SAFETY, on ? 1 : 0);
 
 /** UC_APPEAL: a message to the game's staff (merintr.h RequestAppeal). */
 export function buildAppeal(text: string): Uint8Array {
@@ -785,9 +853,19 @@ export function buildChangePassword(oldDigest: Uint8Array, newDigest: Uint8Array
   return new ByteWriter().u8(BP.CHANGE_PASSWORD).string(oldDigest).string(newDigest).finish();
 }
 
-/** BP_REQ_INVENTORY_MOVE (inventry.c): move the first item to where the second is. */
-export function buildReqInventoryMove(id: number, before: number): Uint8Array {
-  return new ByteWriter().u8(BP.REQ_INVENTORY_MOVE).u32(objId(id)).u32(objId(before)).finish();
+/**
+ * BP_REQ_INVENTORY_MOVE (inventry.c:1234, protocol.c:40): two WORDs, the item's 1-based place in
+ * the server's inventory list and the place it goes before.
+ */
+export function buildReqInventoryMove(payload: number, target: number): Uint8Array {
+  return new ByteWriter().u8(BP.REQ_INVENTORY_MOVE).u16(payload).u16(target).finish();
+}
+
+/** BP_REQ_DROP (protocol.c:41): an object list, of one item here. */
+export function buildReqDrop(id: number, amount?: number): Uint8Array {
+  const w = new ByteWriter().u8(BP.REQ_DROP);
+  writeObjectList(w, [{ id, amount }]);
+  return w.finish();
 }
 
 /**
@@ -818,8 +896,6 @@ export const RA = { NONE: 0, PASSABLE_END: 1, IMPASSABLE_END: 2, INVISIBLE_END: 
 export const CTF = { ABOVEWALL: 0x01, NORMALWALL: 0x02, BELOWWALL: 0x04, FLOOR: 0x08, CEILING: 0x10, RESET: 0x20 } as const;
 /** BP_SECTOR_LIGHT (include/proto.h SL_*). */
 export const SL = { FLICKER_ON: 1, FLICKER_OFF: 2 } as const;
-/** BP_SECTOR_CHANGE: leave this value as it is (roomanim.h CHANGE_OVERRIDE). */
-export const CHANGE_OVERRIDE = 4;
 
 /**
  * A change the server makes to the room you're in. Walls and sectors are named by their
@@ -832,8 +908,6 @@ export type RoomChange =
   | { type: "wallAnimate"; wall: number; animation: Animation; action: number }
   /** BP_SECTOR_ANIMATE (HandleSectorAnimate): likewise for floors and ceilings */
   | { type: "sectorAnimate"; sector: number; animation: Animation; action: number }
-  /** BP_SECTOR_CHANGE (HandleSectorChange): depth and scroll speed, or CHANGE_OVERRIDE to keep */
-  | { type: "sectorChange"; sector: number; depth: number; scroll: number }
   /** BP_CHANGE_TEXTURE (HandleChangeTexture): new grid texture on the parts named by `flags` (CTF_*) */
   | { type: "changeTexture"; id: number; texture: number; flags: number }
   /** BP_SECTOR_LIGHT (HandleSectorLight): flicker on or off (SL_*) */
@@ -848,8 +922,6 @@ export function readRoomChange(type: number, r: ByteReader): RoomChange | null {
       return { type: "wallAnimate", wall: r.u16(), animation: readAnimation(r), action: r.u8() };
     case BP.SECTOR_ANIMATE:
       return { type: "sectorAnimate", sector: r.u16(), animation: readAnimation(r), action: r.u8() };
-    case BP.SECTOR_CHANGE:
-      return { type: "sectorChange", sector: r.u16(), depth: r.u8(), scroll: r.u8() };
     case BP.CHANGE_TEXTURE:
       return { type: "changeTexture", id: r.u16(), texture: r.u16(), flags: r.u8() };
     case BP.SECTOR_LIGHT:
@@ -967,27 +1039,6 @@ export const buildReqArticle = (newsgroup: number, num: number): Uint8Array =>
 
 export const buildPostArticle = (newsgroup: number, title: string, text: string): Uint8Array =>
   new ByteWriter().u8(BP.POST_ARTICLE).u16(newsgroup).string(title).string(text).finish();
-
-export const buildDeleteNews = (newsgroup: number, num: number): Uint8Array =>
-  new ByteWriter().u8(BP.DELETE_NEWS).u16(newsgroup).u32(objId(num)).finish();
-
-// ---------------------------------------------------------------- stat reallocation (module/stats)
-
-/**
- * BP_REQ_STAT_CHANGE (Kod BP_STAT_CHANGE, stats.c HandleStatChangeRequest): our six stats
- * (might, intellect, stamina, agility, mysticism, aim) and eight school levels (Shal'ille,
- * Qor, Kraanan, Faren, Riija, Jala, Weaponcraft, Crafting).
- */
-export function readStatChange(r: ByteReader): { stats: number[]; levels: number[] } {
-  const stats = Array.from({ length: 6 }, () => r.u8());
-  const levels = Array.from({ length: 8 }, () => r.u8());
-  return { stats, levels };
-}
-
-/** BP_CHANGED_STATS (stats.h SendNewCharInfo): the new stats and levels, a byte each */
-export function buildChangedStats(stats: readonly number[], levels: readonly number[]): Uint8Array {
-  return Uint8Array.of(BP.CHANGED_STATS, ...stats.slice(0, 6), ...levels.slice(0, 8));
-}
 
 // ---------------------------------------------------------------- guilds (merintr.c, guild*.c)
 

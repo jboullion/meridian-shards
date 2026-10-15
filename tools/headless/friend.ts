@@ -29,7 +29,7 @@ const { values: opt } = parseArgs({
     server: { type: "string", default: "ws://localhost:5173/ws" },
     gateway: { type: "string", default: "ws://localhost:8059" },
     relay: { type: "string", default: "ws://localhost:8059/social" },
-    rsb: { type: "string", default: "server/src/run/server/rsc/rsc0000.rsb" },
+    rsb: { type: "string", default: "server/src-101/run/server/rsc0000.rsb" },
     add: { type: "string" },
     walk: { type: "string" },
     go: { type: "boolean", default: false },
@@ -40,8 +40,6 @@ const { values: opt } = parseArgs({
 });
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString().slice(11, 19), ...a);
-const cfg = readFileSync("server/config/blakserv.cfg", "utf8");
-const secretKey = /^SecretKey\s+(\S+)/m.exec(cfg)?.[1] ?? "";
 const rsb = parseRsb(readFileSync(opt.rsb!));
 let exits: Record<string, AmbientExits> = {};
 try {
@@ -54,7 +52,7 @@ const OF_PLAYER = 0x4;
 let friends: FriendsService | null = null;
 let room = "";
 const session = new GameSession(
-  { url: opt.gateway!, username: opt.user!, password: opt.pass!, secretKey, lookupResource: (id, lang) => rsb.get(id, lang) },
+  { url: opt.gateway!, username: opt.user!, password: opt.pass!, lookupResource: (id, lang) => rsb.get(id, lang) },
   {
     phase: (p) => {
       log("phase", p);

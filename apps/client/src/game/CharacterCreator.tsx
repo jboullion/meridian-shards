@@ -26,19 +26,18 @@ export const STAT_NAMES = ["Might", "Intellect", "Stamina", "Agility", "Mysticis
 const STAT_MIN = 1,
   STAT_MAX = 50,
   STAT_START = 25;
-const STAT_POINTS = 70; // char.h STAT_POINTS_INITIAL
+const STAT_POINTS = 50; // char.h:53 STAT_POINTS_INITIAL
 const SPELL_POINTS = 45; // char.h SPELL_POINTS_INITIAL
 /**
- * charstat.c suggested_stats and CharStatsCommand; the notes are char.rc IDD_CHARSTATS's. The
- * original only sets the stats; ours also picks spells and skills to start with (English names,
- * 45 points each set), replacing any chosen. The original's fourth, Trickster (a Riija fighter),
- * is left out (2026-10-12); the three left are spread over its box.
+ * charstat.c:35-37 suggested_stats and CharStatsCommand, in char.rc IDD_CHARSTATS's order (Mage,
+ * Warrior, Hybrid); the notes are its English ones. The original only sets the stats; ours also
+ * picks spells and skills to start with (English names, 45 points each set), replacing any chosen.
  */
 const FIGHTER_SKILLS = ["mace fighting", "slash", "dodge"];
 const PRESETS: { label: string; note: string; stats: number[]; spells: string[]; skills: string[] }[] = [
-  { label: "Mage", note: "Pure mage", stats: [40, 50, 45, 15, 45, 25], spells: ["illuminate", "mystic touch", "touch of flame"], skills: [] },
-  { label: "Warrior", note: "Pure fighter", stats: [40, 10, 50, 50, 20, 50], spells: [], skills: FIGHTER_SKILLS },
-  { label: "Hybrid", note: "Three school bower", stats: [35, 25, 40, 30, 45, 45], spells: [], skills: FIGHTER_SKILLS },
+  { label: "Mage", note: "Learn spells from many schools -- with sufficient study", stats: [35, 40, 50, 15, 45, 15], spells: ["illuminate", "mystic touch", "touch of flame"], skills: [] },
+  { label: "Warrior", note: "Master weaponcraft and ranged combat", stats: [50, 10, 50, 30, 10, 50], spells: [], skills: FIGHTER_SKILLS },
+  { label: "Hybrid", note: "A flexible generalist", stats: [40, 25, 35, 25, 35, 40], spells: [], skills: FIGHTER_SKILLS },
 ];
 /** char.rc IDD_CHARSTATS: each stat's description (two lines there, wrapped here) */
 const STAT_TEXT = [
@@ -57,11 +56,7 @@ const SHEET: readonly [number, number] = [320, 278];
 const PAGE: Rect = [2, 22, 316, 236];
 /** Where each page's template goes in PAGE */
 const INNER: Rect = [0, 2, 316, 232];
-/** char.h School / char.rc school names */
-const SCHOOLS: Record<number, string> = {
-  1: "Shal'ille", 2: "Qor", 3: "Kraanan", 4: "Faren", 5: "Riija", 6: "Jala", 7: "Crafting", 8: "DMSchool",
-  10: "Weaponcraft", 11: "Brawling", 12: "Thievery",
-};
+/** char.h:88-89 School */
 const SS_SHALILLE = 1,
   SS_QOR = 2;
 /** charface.c: hotspots for the mouth, eyes, nose and hair */
@@ -394,8 +389,8 @@ function ChoiceLists({
   /** Prev and Next, beside the points */
   children: ReactNode;
 }) {
-  // char.c: the list string is the school, the level and the name
-  const label = (c: CreatorChoice) => `${SCHOOLS[c.school] ?? "?"} ${c.cost < 25 ? 1 : 2}: ${rs(c.nameRes)}`;
+  // charspel.c:66, charskil.c:62: the list string is the name; LBS_SORT keeps the lists in order
+  const label = (c: CreatorChoice) => rs(c.nameRes);
   const byLabel = (a: CreatorChoice, b: CreatorChoice) => label(a).localeCompare(label(b), undefined, { sensitivity: "base" });
   const available = list.filter((c) => !chosen.includes(c.id)).sort(byLabel);
   const mine = list.filter((c) => chosen.includes(c.id)).sort(byLabel);

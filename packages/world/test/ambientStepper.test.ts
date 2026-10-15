@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 import { parseRoo } from "@shards/formats";
 import { AMBIENT_ROOMS, AMBIENT_SLOT_MS, AMBIENT_TICK_MS, AmbientLife, AmbientStepper, buildNavGrid, slotSeed, type AmbientExits } from "../src/index.ts";
 
-const ASSETS = join(import.meta.dirname, "../../../dist/assets");
+const ASSETS = join(import.meta.dirname, "../../../dist/assets-101");
 const have = existsSync(join(ASSETS, "tosinn.roo")) && existsSync(join(ASSETS, "roomexits.json"));
 
 describe("slotSeed", () => {

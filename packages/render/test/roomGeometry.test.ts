@@ -1,14 +1,13 @@
-// Builds every Raza slice room from the real files in dist/assets (skipped without them).
+// Builds Tos's rooms from the real files in dist/assets-101 (skipped without them).
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { gridTextureName, parseBgf, parseRoo } from "@shards/formats";
 import { buildRoomGeometry, type TextureInfo } from "../src/roomGeometry.ts";
 
-const ASSETS = join(import.meta.dirname, "../../../dist/assets");
+const ASSETS = join(import.meta.dirname, "../../../dist/assets-101");
 const have = existsSync(join(ASSETS, "manifest.json"));
-const SLICE = ["raza", "razainn", "razahall", "razasmith", "razaapoth", "razahut", "razacrypt", "razabar",
-  "razamuseum", "razaforest", "farolwest", "razavault", "razabank"];
+const SLICE = ["tos", "tosinn", "tossmith", "tosapoth", "tosbank", "toshall", "tostavern", "jas-east", "jas-west", "barln"];
 
 async function build(name: string) {
   const room = parseRoo(new Uint8Array(readFileSync(join(ASSETS, `${name}.roo`))));
@@ -40,11 +39,10 @@ describe.skipIf(!have)("slice room geometry", () => {
     expect(tris).toBeGreaterThan(50);
   });
 
-  test("the inn's wall torch texture cycles and Raza's pond scrolls", async () => {
-    const inn = await build("razainn");
-    expect([...inn.geometry.batches.values()].some((b) => b.animation?.kind === "cycle")).toBe(true);
-    const raza = await build("raza");
-    expect([...raza.geometry.batches.values()].some((b) => b.animation?.kind === "scroll")).toBe(true);
-    expect(raza.geometry.skySectors.size).toBeGreaterThan(0);
+  test("textures cycle and scroll (Cor Noth), and the streets have sky", async () => {
+    const cornoth = await build("cornoth");
+    expect([...cornoth.geometry.batches.values()].some((b) => b.animation?.kind === "cycle")).toBe(true);
+    expect([...cornoth.geometry.batches.values()].some((b) => b.animation?.kind === "scroll")).toBe(true);
+    expect((await build("tos")).geometry.skySectors.size).toBeGreaterThan(0);
   });
 });

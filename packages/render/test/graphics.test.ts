@@ -95,11 +95,11 @@ describe("light flicker and the targeting light", () => {
   });
 });
 
-const ASSETS = join(import.meta.dirname, "../../../dist/assets");
-const haveMuseum = existsSync(join(ASSETS, "razamuseum.roo"));
+const ASSETS = join(import.meta.dirname, "../../../dist/assets-101");
+const haveMuseum = existsSync(join(ASSETS, "tosinn.roo"));
 
-describe.skipIf(!haveMuseum)("shaded corners (roomAo.ts, the Museum)", () => {
-  const room = parseRoo(new Uint8Array(readFileSync(join(ASSETS, "razamuseum.roo"))));
+describe.skipIf(!haveMuseum)("shaded corners (roomAo.ts, the Tos inn)", () => {
+  const room = parseRoo(new Uint8Array(readFileSync(join(ASSETS, "tosinn.roo"))));
   test("floors darken by the walls, not in the open, and it bakes quickly", () => {
     const t0 = performance.now();
     const ao = bakeAo(room);

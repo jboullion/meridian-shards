@@ -582,7 +582,9 @@ export class AmbientLife {
     const g = this.grid!;
     const before = cellCentre(g, p.cell);
     const path = findPath(g, from, before);
-    if (!path) return null;
+    // findPath stops at the nearest cell it can reach: a doorway walled off from here isn't a way
+    const end = path?.[path.length - 1] ?? from;
+    if (!path || dist(end, before) > 1) return null;
     // nearestCell chose the cell for reaching the doorway straight on
     if (dist(before, p.at) > 1) path.push(p.at);
     return path;
@@ -977,10 +979,15 @@ export class AmbientLife {
       const doors = this.pointsIn(area, true);
       const ways = doors.length ? doors : this.pointsIn(area);
       if (ways.length) {
-        const near = ways.sort((a, b) => dist(a.at, here) - dist(b.at, here)).slice(0, 3);
-        const path = this.pathToPoint(here, this.pick(near));
-        if (path) return this.walk(w, path, true);
-      } else if (!this.hidden(here)) {
+        const sorted = ways.sort((a, b) => dist(a.at, here) - dist(b.at, here));
+        const first = this.pick(sorted.slice(0, 3));
+        // One of the nearest, else any that can be reached (a door can be walled off from here)
+        for (const p of [first, ...sorted.filter((p) => p !== first)]) {
+          const path = this.pathToPoint(here, p);
+          if (path) return this.walk(w, path, true);
+        }
+      }
+      if (!this.hidden(here)) {
         const cell = this.hiddenCell(area);
         const path = cell >= 0 ? findPath(g, here, cellCentre(g, cell)) : null;
         if (path?.length) return this.walk(w, path, true);

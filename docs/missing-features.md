@@ -6,6 +6,20 @@ Remove an entry when it lands, and add one whenever we skip something. Options f
 
 Our own additions (the modern key preset, chat tabs, damage numbers, pixel-accurate picking, the latency meter in the title bar) stay; parity means the original's features are available beside them.
 
+## The 101 server (`server-101` branch)
+
+What this branch leaves out because the original code doesn't have it, or doesn't have it yet here:
+
+| What | Why | What it needs |
+|---|---|---|
+| Game Options (temporary angel, grouping, autoloot, autocombine, bags, spellpower) | The 101 server has only safety (`UC_SAFETY`) | Nothing: taken out of Preferences |
+| Stat reallocation, quests tab, deleting news, fireworks, the radius shot | Not in the 101 server | Nothing: taken out |
+| Item rarity | The 101 object record carries it (`ITEM_RARITY_GRADE_*`) and the original shows it in descriptions and the inventory (`IDC_INV_RARITY`) | Show `ObjectInfo.rarity` in the look dialog and the inventory |
+| The original's own art and the 14 sounds only it has | B's repo holds the rooms but 10 `.bgf` files; the asset build borrows the 104 client's art as a stand-in | An installed original (Steam) client: `npm run assets -- --client "<its resource folder>"` |
+| Wall translucency | B's rooms carry it in sidedef flag bits 15-16 (`bspload.c`, after `RoomSwizzle`) | Read it and draw those walls see-through |
+| Friends, pets and the arena on a direct server | They need our relay; a server reached over TCP has none | A relay of our own the desktop app could reach |
+| Android and the hosted browser client | Plain TCP needs a native socket or our gateway | A Capacitor socket plugin, or a gateway the server's operators agree to |
+
 ## World (phase 1)
 
 Phase 1 is done: rooms that change, sloped textures, blur and waver, the xlat override, weather and fireworks, flashing and bouncing objects, projectiles' heights, the remote view and resync. What's left:

@@ -28,6 +28,12 @@ ipcRenderer.on("shards:window-state", (_e, s: DesktopWindowState) => {
   for (const fn of windowListeners) fn(s);
 });
 
+type TcpEvent = Parameters<Parameters<NonNullable<DesktopBridge["tcp"]>["onEvent"]>[0]>[1];
+const tcpListeners = new Set<(id: number, e: TcpEvent) => void>();
+ipcRenderer.on("shards:tcp", (_e, id: number, event: TcpEvent) => {
+  for (const fn of tcpListeners) fn(id, event);
+});
+
 const bridge: DesktopBridge = {
   ...config,
   selectServer: (origin) => ipcRenderer.send("shards:select-server", origin),
@@ -55,6 +61,18 @@ const bridge: DesktopBridge = {
     return () => {
       windowListeners.delete(fn);
     };
+  },
+  // main.ts setupTcp: the game connection to a server reached straight over TCP
+  tcp: {
+    open: () => ipcRenderer.sendSync("shards:tcp-open") as number,
+    send: (id, bytes) => ipcRenderer.send("shards:tcp-send", id, bytes),
+    close: (id) => ipcRenderer.send("shards:tcp-close", id),
+    onEvent: (fn) => {
+      tcpListeners.add(fn);
+      return () => {
+        tcpListeners.delete(fn);
+      };
+    },
   },
 };
 

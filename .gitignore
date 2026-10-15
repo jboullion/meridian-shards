@@ -1,5 +1,6 @@
 # --- Server: copied Server 104 source, build output and the live run folder (savegames, logs)
 /server/src/
+/server/src-101/
 /server/*.log
 
 # --- Original game assets: never in git (served from the asset build)
@@ -44,5 +45,7 @@ Thumbs.db
 
 docs/research/reference-images/
 ReferenceImages/
+ReferenceServers/
+
 # The emblem cutout's working files (tools/icons/cutout-emblem.py)
 tools/icons/.cutout/

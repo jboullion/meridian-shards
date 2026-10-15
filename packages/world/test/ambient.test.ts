@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 import { ANIMATE } from "@shards/protocol";
 import { kodToClient, parseRoo } from "@shards/formats";
 import { PlayerMover } from "../src/movement.ts";
-import { buildNavGrid, cellAt, decodeNavGrid, encodeNavGrid, findCells, findPath, isOpen } from "../src/navGrid.ts";
+import { buildNavGrid, cellAt, cellCentre, decodeNavGrid, encodeNavGrid, findCells, findPath, isOpen } from "../src/navGrid.ts";
 import { AMBIENT_ID_BASE, isAmbientId, localRes, localResName } from "../src/ambient/ambientIds.ts";
 import { AmbientLife, seededRandom, type AmbientExits } from "../src/ambient/ambientLife.ts";
 import { AMBIENT_ROOMS, busyAt, hourFromSun, isErrandRoom, torchHours, weatherScale } from "../src/ambient/ambientRooms.ts";
@@ -16,7 +16,7 @@ import {
   setTorch, twoColorXlat,
 } from "../src/ambient/townsfolk.ts";
 
-const ASSETS = join(import.meta.dirname, "../../../dist/assets");
+const ASSETS = join(import.meta.dirname, "../../../dist/assets-101");
 const have = existsSync(join(ASSETS, "tos.roo")) && existsSync(join(ASSETS, "roomexits.json"));
 const room = (name: string) => parseRoo(new Uint8Array(readFileSync(join(ASSETS, name))));
 const exits = (): Record<string, AmbientExits> => (have ? JSON.parse(readFileSync(join(ASSETS, "roomexits.json"), "utf8")) : {});
@@ -254,13 +254,13 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
     expect(back.area).toEqual(g.area);
     expect(back.blockers).toHaveLength(g.blockers.length);
     // Another room, or another version of this one: build it instead
-    expect(decodeNavGrid(encodeNavGrid(g, tos), room("raza.roo"))).toBeNull();
+    expect(decodeNavGrid(encodeNavGrid(g, tos), room("tosinn.roo"))).toBeNull();
     expect(decodeNavGrid(encodeNavGrid(g, { ...tos, security: tos.security + 1 }), tos)).toBeNull();
   });
 
   test("a crowd on a grid built beforehand starts at once", () => {
-    const inn = room("razainn.roo");
-    const life = new AmbientLife(inn, AMBIENT_ROOMS["razainn.roo"], exits()["razainn.roo"], 3, buildNavGrid(inn));
+    const inn = room("tosinn.roo");
+    const life = new AmbientLife(inn, AMBIENT_ROOMS["tosinn.roo"], exits()["tosinn.roo"], 3, buildNavGrid(inn));
     life.update(16, { player: null, scale: 1 });
     life.update(16, { player: null, scale: 1 });
     expect(life.ready).toBe(true);
@@ -296,14 +296,14 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
   }, 30000);
 
   test("inn patrons stay inside, on the floor", () => {
-    const { life, counts } = run("razainn.roo", 90, 9);
+    const { life, counts } = run("tosinn.roo", 90, 9);
     expect(counts.at(-1)).toBeGreaterThan(0);
     for (const o of life.objects()) expect(isOpen(life.nav!, cellAt(life.nav!, o.x, o.y)) || o.info.drawingType !== 0).toBe(true);
   }, 30000);
 
   test("the same seed makes the same crowd", () => {
-    const a = run("razainn.roo", 20, 42, true).life.objects().map((o) => [o.x, o.y, o.info.iconRes]);
-    const b = run("razainn.roo", 20, 42, true).life.objects().map((o) => [o.x, o.y, o.info.iconRes]);
+    const a = run("tosinn.roo", 20, 42, true).life.objects().map((o) => [o.x, o.y, o.info.iconRes]);
+    const b = run("tosinn.roo", 20, 42, true).life.objects().map((o) => [o.x, o.y, o.info.iconRes]);
     expect(a).toEqual(b);
   }, 30000);
 
@@ -316,16 +316,21 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
     const town = night("tos.roo");
     expect(town.length).toBeLessThanOrEqual(Math.round(AMBIENT_ROOMS["tos.roo"].count * busyAt("town", 2)) + (AMBIENT_ROOMS["tos.roo"].guards ?? 0) + 1);
     expect(town.some((o) => o.info.light.intensity > 0)).toBe(true);
-    expect(night("razainn.roo").every((o) => o.info.light.intensity === 0)).toBe(true);
+    expect(night("tosinn.roo").every((o) => o.info.light.intensity === 0)).toBe(true);
   }, 30000);
 
   /** Some private state, for the tests */
-  type Inside = { walkers: { role: string; obj: { id: number; x: number; y: number }; fleeing: boolean; beat: unknown; bout: unknown; fadeDir: number; leaving: boolean; beaten: boolean }[]; points: { at: { x: number; y: number }; door: boolean }[]; bouts: unknown[] };
+  type Inside = {
+    walkers: { role: string; obj: { id: number; x: number; y: number }; fleeing: boolean; beat: unknown; bout: unknown; fadeDir: number; leaving: boolean; beaten: boolean }[];
+    points: { at: { x: number; y: number }; door: boolean; cell: number }[];
+    bouts: unknown[];
+  };
   const inside = (l: AmbientLife) => l as unknown as Inside;
 
   test("townsfolk go in at the middle of a door, not beside it", () => {
     const r = room("tos.roo");
-    const life = new AmbientLife(r, AMBIENT_ROOMS["tos.roo"], exits()["tos.roo"], 12, buildNavGrid(r));
+    const grid = buildNavGrid(r);
+    const life = new AmbientLife(r, AMBIENT_ROOMS["tos.roo"], exits()["tos.roo"], 12, grid);
     const gone = new Set<number>();
     let checked = 0;
     for (let t = 0; t < 120000; t += 33) {
@@ -333,8 +338,13 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
       for (const w of inside(life).walkers) {
         if (w.fadeDir >= 0 || gone.has(w.obj.id) || w.beat) continue;
         gone.add(w.obj.id);
+        // Those who go in by a door go in at its middle; the rest (no door they can reach: the
+        // 101 Tos has walled-off pockets) leave out of sight, away from any door (AmbientLife.leave)
+        const doors = inside(life).points.filter((p) => p.door);
+        const near = Math.min(...doors.map((p) => Math.hypot(p.at.x - w.obj.x, p.at.y - w.obj.y)));
+        const reachable = doors.some((p) => findPath(grid, w.obj, cellCentre(grid, p.cell)));
+        if (near > 2 * 1024 || !reachable) continue;
         checked++;
-        const near = Math.min(...inside(life).points.map((p) => Math.hypot(p.at.x - w.obj.x, p.at.y - w.obj.y)));
         expect(near).toBeLessThan(64);
       }
     }
@@ -373,7 +383,7 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
   }, 30000);
 
   test("nobody when the setting is off", () => {
-    const life = new AmbientLife(room("razainn.roo"), AMBIENT_ROOMS["razainn.roo"], exits()["razainn.roo"], 1);
+    const life = new AmbientLife(room("tosinn.roo"), AMBIENT_ROOMS["tosinn.roo"], exits()["tosinn.roo"], 1);
     for (let t = 0; t < 5000; t += 33) life.update(33, { player: null, scale: 0 });
     expect(life.objects()).toHaveLength(0);
   });
@@ -406,7 +416,7 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
 
   test("critters come out on dry floor about us, run about, and die at a click", () => {
     const terrain: Record<string, string[]> = JSON.parse(readFileSync(join(ASSETS, "roomterrain.json"), "utf8"));
-    for (const name of ["barlsew.roo", "razaforest.roo", "ratcave1.roo", "b6.roo"]) {
+    for (const name of ["barlsew.roo", "forest2.roo", "cave2.roo", "b6.roo"]) {
       const r = room(name);
       const c = new Critters(r, habitatOf(name, terrain[name])!, 6);
       // Stand where critters can be (a sewer's walkways are narrow): one of the spots it finds

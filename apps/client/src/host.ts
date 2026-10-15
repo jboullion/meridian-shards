@@ -13,8 +13,28 @@ declare const __APP_VERSION__: string;
 
 export interface DesktopServer {
   name: string;
-  /** e.g. https://35-206-75-121.sslip.io: the game socket is <origin>/ws, the files <origin>/assets/ */
+  /**
+   * e.g. https://35-206-75-121.sslip.io: the game socket is <origin>/ws, the files <origin>/assets/.
+   * A server reached directly (`tcp`) has tcp://host:port here, as its name for storage keys.
+   */
   origin: string;
+  /**
+   * The desktop app's own: blakserv's game port, "host:port", reached straight over TCP (the
+   * original servers run no gateway). Its files are the app's own asset build, or `resources`.
+   */
+  tcp?: string;
+  /** For a `tcp` server: a folder holding an asset build made for it (npm run assets), if not the app's */
+  resources?: string;
+}
+
+/** The desktop's direct game connections (main.ts net sockets), one per GameSession */
+export interface DesktopTcp {
+  /** Connects to the selected `tcp` server; returns the connection's id */
+  open(): number;
+  send(id: number, bytes: Uint8Array): void;
+  close(id: number): void;
+  /** What happens on a connection: connected, bytes arrived, or it closed (with why) */
+  onEvent(fn: (id: number, e: { type: "open" } | { type: "data"; bytes: Uint8Array } | { type: "close"; error?: string }) => void): () => void;
 }
 
 export interface DesktopUpdate {
@@ -91,6 +111,8 @@ export interface DesktopBridge extends DesktopConfig {
   windowControl(action: "minimize" | "maximize" | "close"): void;
   /** Called at once with the current state */
   onWindowState(fn: (s: DesktopWindowState) => void): () => void;
+  /** The desktop app's direct connections to `tcp` servers (absent on Android and older apps) */
+  tcp?: DesktopTcp;
 }
 
 /** apps/android ShardsHost.java (a WebView JavaScript interface: synchronous, strings only) */
@@ -361,10 +383,58 @@ export function serverName(): string {
   return desktop.servers.find((s) => s.origin === desktop.server)?.name ?? desktop.server;
 }
 
-/** The gateway's WebSocket URL. */
+/** The selected server when the desktop app reaches it straight over TCP, else null. */
+function directServer(): DesktopServer | null {
+  return desktop?.servers.find((s) => s.origin === desktop.server && s.tcp) ?? null;
+}
+
+/**
+ * The gateway's WebSocket URL; a direct server's tcp://host:port (GameSession then uses
+ * gameSocketFactory's socket, and the name keeps each server's saved things apart).
+ */
 export function gameSocketUrl(): string {
+  if (directServer()) return desktop!.server;
   const base = desktop ? new URL(desktop.server) : new URL(location.href);
   return `${base.protocol === "https:" ? "wss" : "ws"}://${base.host}/ws`;
+}
+
+/**
+ * For a direct server, a WebSocket-shaped socket over the desktop's TCP connection (what
+ * GameSession uses of one: binaryType, onopen, onmessage, onclose, onerror, send, close);
+ * otherwise undefined, for the browser's WebSocket.
+ */
+export function gameSocketFactory(): ((url: string) => WebSocket) | undefined {
+  const tcp = desktop?.tcp;
+  if (!directServer() || !tcp) return undefined;
+  return () => {
+    const id = tcp.open();
+    const sock = {
+      binaryType: "arraybuffer",
+      readyState: 0,
+      onopen: null as (() => void) | null,
+      onmessage: null as ((ev: { data: ArrayBuffer }) => void) | null,
+      onclose: null as (() => void) | null,
+      onerror: null as (() => void) | null,
+      send: (b: Uint8Array) => tcp.send(id, b),
+      close: () => tcp.close(id),
+    };
+    const off = tcp.onEvent((from, e) => {
+      if (from !== id) return;
+      if (e.type === "open") {
+        sock.readyState = 1;
+        sock.onopen?.();
+      } else if (e.type === "data") {
+        const copy = new Uint8Array(e.bytes);
+        sock.onmessage?.({ data: copy.buffer });
+      } else {
+        off();
+        sock.readyState = 3;
+        if (e.error) sock.onerror?.();
+        sock.onclose?.();
+      }
+    });
+    return sock as unknown as WebSocket;
+  };
 }
 
 /** The friends relay's WebSocket URL (docs/adr/0005-friends.md), beside the gateway's */

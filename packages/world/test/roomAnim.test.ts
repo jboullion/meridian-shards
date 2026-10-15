@@ -1,12 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { ANIMATE, CHANGE_OVERRIDE, CTF, RA } from "@shards/protocol";
+import { ANIMATE, CTF, RA } from "@shards/protocol";
 import { WF, parseRoo } from "@shards/formats";
 import { LiveRoom } from "../src/roomAnim.ts";
 import { PlayerMover } from "../src/movement.ts";
 
-const ASSETS = join(import.meta.dirname, "../../../dist/assets");
+const ASSETS = join(import.meta.dirname, "../../../dist/assets-101");
 const have = existsSync(join(ASSETS, "razacrypt.roo")) && existsSync(join(ASSETS, "raza.roo"));
 const load = (f: string) => parseRoo(new Uint8Array(readFileSync(join(ASSETS, f))));
 
@@ -91,13 +91,5 @@ describe.skipIf(!have)("room changes (roomanim.c)", () => {
     live.apply({ type: "changeTexture", id: 15, texture: 61016, flags: CTF.BELOWWALL });
     expect(live.room.sidedefs.filter((s) => s.serverId === 15).every((s) => s.belowType === 61016)).toBe(true);
     expect(live.textureIds().has(61016)).toBe(true);
-    const sector = live.room.sectors[0];
-    sector.serverId = 99;
-    sector.flags = 0x2 | (2 << 2) | (3 << 4) | 0x80;
-    live.apply({ type: "sectorChange", sector: 99, depth: 0, scroll: 0 });
-    expect(sector.flags).toBe(0);
-    sector.flags = 0x1 | (3 << 4) | 0x80;
-    live.apply({ type: "sectorChange", sector: 99, depth: CHANGE_OVERRIDE, scroll: 2 });
-    expect(sector.flags).toBe(0x1 | (2 << 2) | (3 << 4) | 0x80);
   });
 });

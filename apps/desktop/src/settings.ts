@@ -1,6 +1,7 @@
 // The desktop app's own settings, in userData (%APPDATA%\Meridian Shards on Windows):
 //   settings.json  the chosen server and the window's size, position and state
-//   servers.json   optional extra servers, [{ "name": "...", "origin": "https://..." }]
+//   servers.json   optional extra servers, [{ "name": "...", "origin": "https://..." }], or reached
+//                  straight over TCP: [{ "name": "...", "tcp": "host:port", "resources": "<asset build>" }]
 // Game settings (keys, sound) stay in the page's localStorage, as in the browser.
 
 import { app } from "electron";
@@ -18,7 +19,15 @@ const DEFAULT_SERVERS: DesktopServer[] = [
   { name: "Local (Docker)", origin: "http://localhost:8080" },
   // npm run dev: Vite serves /assets and proxies /ws to the gateway
   { name: "Local (dev)", origin: "http://localhost:5173" },
+  // Our local 101 server (server\build.cmd), straight over TCP with the app's own files
+  { name: "Local 101 (direct)", origin: "tcp://127.0.0.1:5959", tcp: "127.0.0.1:5959" },
 ];
+
+/** "host:port" for a server reached over TCP, else null */
+export function normalizeTcp(target: string): string | null {
+  const m = /^([A-Za-z0-9.-]+):(\d{1,5})$/.exec(target.trim());
+  return m && Number(m[2]) > 0 && Number(m[2]) < 65536 ? `${m[1]}:${Number(m[2])}` : null;
+}
 
 export interface WindowState {
   x?: number;
@@ -77,6 +86,13 @@ export function servers(): DesktopServer[] {
   const list = [...DEFAULT_SERVERS];
   if (Array.isArray(extra))
     for (const s of extra as Partial<DesktopServer>[]) {
+      const tcp = typeof s?.tcp === "string" ? normalizeTcp(s.tcp) : null;
+      if (tcp) {
+        const origin = `tcp://${tcp}`;
+        const resources = typeof s.resources === "string" && s.resources ? s.resources : undefined;
+        if (!list.some((l) => l.origin === origin)) list.push({ name: String(s.name ?? tcp), origin, tcp, resources });
+        continue;
+      }
       const origin = typeof s?.origin === "string" ? normalizeOrigin(s.origin) : null;
       if (origin && !list.some((l) => l.origin === origin)) list.push({ name: String(s.name ?? origin), origin });
     }

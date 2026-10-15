@@ -1,6 +1,8 @@
 // .roo room files, read the way the original client reads them
-// (clientd3d/bspload.c BSPRooFileLoad, LoadNodes/Walls/Sidedefs/Sectors/Things,
+// (clientd3d/bspload.c BSPRooFileLoad, LoadNodes/Walls/Sidedefs/Sectors,
 // SetWallHeights; drawbsp.c GetFloorHeight/GetCeilingHeight).
+// The 101 server's rooms are versions 12 and 13: coordinates are ints below 13 and floats from
+// 13 (bspload.c readValue), and there's no things section.
 //
 // Client coordinates: "fine" units, FINENESS = 1024 per grid square.
 // x grows east, y grows south (rows), z is height. Kod coordinates (64 per square,
@@ -8,7 +10,9 @@
 
 export const FINENESS = 1024;
 const ROO_MAGIC = [0x52, 0x4f, 0x4f, 0xb1];
-const ROO_VERSION = 14; // the client accepts >= this (bspload.c checks room_version < ROO_VERSION)
+const ROO_VERSION = 10; // the client accepts >= this (bspload.c:25, :78)
+/** bspload.c:51 readValue: ints before version 13, floats from it */
+const FLOAT_VERSION = 13;
 const SECURITY_XOR = 0x89ab786c;
 
 /** Sector flags (clientd3d/bsp.h). */
@@ -158,7 +162,10 @@ export interface Room {
   walls: Wall[];
   sidedefs: Sidedef[];
   sectors: Sector[];
-  /** Room grid box (things box), translated so its minimum is (0, 0); client fine units. */
+  /**
+   * The room's grid in client fine units, from (0, 0): rows and cols squares (move.h IsInRoom).
+   * The name is 104's, whose rooms carry a things box; the original's are the whole grid.
+   */
   thingsBox: { maxX: number; maxY: number };
 }
 
@@ -191,6 +198,13 @@ class Reader {
     this.pos += 4;
     return v;
   }
+  /** bspload.c readValue: a coordinate, int or float by version, and its raw bits for the checksum */
+  value(version: number): { v: number; raw: number } {
+    const raw = this.dv.getInt32(this.pos, true);
+    const v = version < FLOAT_VERSION ? raw : this.dv.getFloat32(this.pos, true);
+    this.pos += 4;
+    return { v, raw };
+  }
 }
 
 /** Client angle tables: 4096 units per circle (trig.c COS/SIN return FINENESS-scaled values). */
@@ -211,7 +225,13 @@ export function parseRoo(data: Uint8Array): Room {
   r.i32(); // editor walls (not used by the client)
   const sidedefPos = r.i32();
   const sectorPos = r.i32();
-  const thingPos = r.i32();
+  // A coordinate, adding its raw 4 bytes to the checksum (bspload.c LoadNodes, LoadWalls)
+  const coord = () => {
+    const { v, raw } = r.value(version);
+    security = (security + raw) | 0;
+    return v;
+  };
+  const value = () => r.value(version).v;
 
   // Nodes (LoadNodes)
   r.pos = nodePos;
@@ -220,11 +240,11 @@ export function parseRoo(data: Uint8Array): Room {
   const nodeWallNum: number[] = [];
   for (let i = 0; i < numNodes; i++) {
     const type = r.u8();
-    const bbox: [number, number, number, number] = [r.f32(), r.f32(), r.f32(), r.f32()];
+    const bbox: [number, number, number, number] = [value(), value(), value(), value()];
     if (type === 1) {
-      const a = r.f32(),
-        b = r.f32(),
-        c = r.f32();
+      const a = coord(),
+        b = coord(),
+        c = coord();
       const pos = r.u16(),
         neg = r.u16(),
         wallNum = r.u16();
@@ -235,7 +255,10 @@ export function parseRoo(data: Uint8Array): Room {
       const sector = r.u16();
       const n = r.u16();
       const points = [];
-      for (let j = 0; j < n; j++) points.push({ x: r.f32(), y: r.f32() });
+      for (let j = 0; j < n; j++) {
+        const x = coord();
+        points.push({ x, y: coord() });
+      }
       nodes.push({ type: "leaf", bbox, sector, points });
     } else throw new Error(`bad BSP node type ${type}`);
   }
@@ -250,11 +273,12 @@ export function parseRoo(data: Uint8Array): Room {
     const posSidedef = r.u16(),
       negSidedef = r.u16();
     security += posSidedef + negSidedef;
-    const x0 = r.f32(),
-      y0 = r.f32(),
-      x1 = r.f32(),
-      y1 = r.f32();
-    const length = r.f32();
+    const x0 = coord(),
+      y0 = coord(),
+      x1 = coord(),
+      y1 = coord();
+    // bspload.c:464: a WORD before version 13, a float from it
+    const length = version < FLOAT_VERSION ? r.u16() : r.f32();
     const posXOffset = r.i16(),
       negXOffset = r.i16(),
       posYOffset = r.i16(),
@@ -299,23 +323,16 @@ export function parseRoo(data: Uint8Array): Room {
     const flags = r.i32();
     security += light + flags;
     const animateSpeed = version >= 10 ? r.u8() : 0;
-    const slopedFloor = flags & SF.SLOPED_FLOOR ? readSlope(r) : null;
-    const slopedCeiling = flags & SF.SLOPED_CEILING ? readSlope(r) : null;
+    const slopedFloor = flags & SF.SLOPED_FLOOR ? readSlope(r, version) : null;
+    const slopedCeiling = flags & SF.SLOPED_CEILING ? readSlope(r, version) : null;
     sectors.push({
       serverId, floorType, ceilingType, tx, ty, floorHeight: fh << 4, ceilingHeight: ch << 4, light, flags,
       animateSpeed, slopedFloor, slopedCeiling,
     });
   }
 
-  // Things: exactly two corner points (LoadThings), Kod fine units (64/square).
-  r.pos = thingPos;
-  const numThings = r.u16();
-  if (numThings !== 2) throw new Error(`expected 2 things, got ${numThings}`);
-  const tx0 = r.i32(),
-    ty0 = r.i32(),
-    tx1 = r.i32(),
-    ty1 = r.i32();
-  const thingsBox = { maxX: Math.abs(tx1 - tx0) * 16, maxY: Math.abs(ty1 - ty0) * 16 };
+  // No things section: the room is its whole grid (move.h IsInRoom)
+  const thingsBox = { maxX: (width >> 10) * FINENESS, maxY: (height >> 10) * FINENESS };
 
   // Swizzle (RoomSwizzle): wall lists per node, normalised separators, wall heights.
   for (let i = 0; i < nodes.length; i++) {
@@ -348,19 +365,20 @@ export function parseRoo(data: Uint8Array): Room {
   };
 }
 
-function readSlope(r: Reader): Slope {
-  let a = r.f32(),
-    b = r.f32(),
-    c = r.f32(),
-    d = r.f32();
+/** bspload.c LoadSlopeInfo: the plane and the texture origin are ints or floats by version */
+function readSlope(r: Reader, version: number): Slope {
+  let a = r.value(version).v,
+    b = r.value(version).v,
+    c = r.value(version).v,
+    d = r.value(version).v;
   if (c === 0) {
     a = 0;
     b = 0;
     c = 1024;
     d = 0;
   }
-  const x = r.i32(),
-    y = r.i32();
+  const x = r.value(version).v,
+    y = r.value(version).v;
   const angle = r.i32();
   r.pos += 18; // 3 x 6 unused bytes
   const p0 = { x, y, z: f32((-a * x - b * y - d) / c) };

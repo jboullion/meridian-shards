@@ -16,7 +16,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const RUN = join(ROOT, "server", "src", "run", "server");
+const RUN = join(ROOT, "server", "src-101", "run", "server");
 const noServer = process.argv.includes("--no-server");
 const desktop = process.argv.includes("--desktop");
 const VITE_URL = "http://localhost:5173";
@@ -49,7 +49,7 @@ async function ensureServer(): Promise<void> {
     }
     await sleep(1000);
   }
-  console.error("[dev] blakserv didn't open port 5959 within 2 minutes; check server/src/run/server/channel/error.txt");
+  console.error("[dev] blakserv didn't open port 5959 within 2 minutes; check server/src-101/run/server/channel/error.txt");
   process.exit(1);
 }
 

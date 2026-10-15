@@ -1,13 +1,19 @@
-// Builds dist/assets: the original game files the browser loads, served as-is.
-// Raw art never goes in git; this folder is git-ignored and rebuilt any time.
+// Builds dist/assets-101: the original game files the browser loads, served as-is at /assets.
+// Raw art never goes in git; this folder is git-ignored and rebuilt any time. (dist/ is shared
+// with main's build, whose dist/assets is the 104 server's.)
 //
-//   node tools/assets/build-assets.ts [--client <dir>] [--force]
+//   node tools/assets/build-assets.ts [--client <dir>] [--standin <dir>] [--force]
 //
 // Sources, first match wins per (lower-cased) file name:
-//   1. our server build: rsc/rsc0000.rsb and rooms/*.roo. These MUST match the
-//      running server (redbook token, room checksums), so they always win.
-//   2. the Server 104 resource tree in server/src/resource (104-only additions)
-//   3. the installed 104 client's resource folder (%LOCALAPPDATA%\Meridian-104\resource)
+//   1. our 101 server build (server/src-101): run/server/rsc0000.rsb (rscmerge, server\build.cmd)
+//      and resource/rooms/*.roo. These MUST match the running server (redbook token, room
+//      checksums), so they always win.
+//   2. the installed original client's resource folder (%LOCALAPPDATA%\Meridian 59\resource,
+//      install.nsi:90, or the Steam install's): the art, sounds and music
+//   3. the server's resource tree in server/src-101/resource (rooms, a few bitmaps, audio)
+//   4. a stand-in for the art while no original client is installed: the installed 104 client's
+//      resource folder (%LOCALAPPDATA%\Meridian-104\resource), its .bgf, .ogg and .mp3 only (never
+//      its strings or rooms). Its art is mostly the original's, by the same names.
 // Plus the palette (blakston.pal, parsed to a 768-byte binary palette.bin), and the
 // bitmaps compiled into the client and its modules (clientd3d/bitmap and
 // module/{merintr,mailnews,chess}/bitmap: backgrounds, stat tab buttons, the toolbar's
@@ -52,15 +58,17 @@ import { AMBIENT_ROOMS } from "../../packages/world/src/ambient/ambientRooms.ts"
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const { values: opt } = parseArgs({
   options: {
-    client: { type: "string", default: join(process.env.LOCALAPPDATA ?? "", "Meridian-104", "resource") },
+    client: { type: "string", default: join(process.env.LOCALAPPDATA ?? "", "Meridian 59", "resource") },
+    standin: { type: "string", default: join(process.env.LOCALAPPDATA ?? "", "Meridian-104", "resource") },
     force: { type: "boolean", default: false },
   },
 });
 
-const OUT = join(ROOT, "dist", "assets");
-const SERVER = join(ROOT, "server", "src");
+const OUT = join(ROOT, "dist", "assets-101");
+const SERVER = join(ROOT, "server", "src-101");
 const RUN = join(SERVER, "run", "server");
 const EXTS = new Set([".bgf", ".roo", ".rsb", ".ogg", ".wav", ".mp3", ".bsf"]);
+const ART = new Set([".bgf", ".ogg", ".mp3", ".bsf"]);
 
 type Source = {
   label: string;
@@ -76,10 +84,11 @@ const BMP_ICO_CUR = new Set([".bmp", ".ico", ".cur"]);
 const TTF = new Set([".ttf"]);
 const PNG = new Set([".png"]);
 const sources: Source[] = [
-  { label: "server rsb", dir: join(RUN, "rsc"), recursive: false, filter: (n) => n === "rsc0000.rsb" },
-  { label: "server rooms", dir: join(RUN, "rooms"), recursive: false },
-  { label: "installed client", dir: opt.client!, recursive: true },
-  { label: "server resource tree", dir: join(SERVER, "resource"), recursive: true },
+  { label: "server rsb", dir: RUN, recursive: false, filter: (n) => n === "rsc0000.rsb" },
+  { label: "server rooms", dir: join(SERVER, "resource", "rooms"), recursive: false, exts: new Set([".roo"]) },
+  { label: "installed client", dir: opt.client!, recursive: true, filter: (n) => !n.endsWith(".rsb") && !n.endsWith(".roo") },
+  { label: "server resource tree", dir: join(SERVER, "resource"), recursive: true, filter: (n) => !n.endsWith(".rsb") },
+  { label: "stand-in art (the 104 client)", dir: opt.standin!, recursive: true, exts: ART },
   { label: "client UI bitmaps", dir: join(SERVER, "clientd3d", "bitmap"), recursive: false, prefix: "ui/", exts: BMP_ICO_CUR },
   { label: "interface UI bitmaps", dir: join(SERVER, "module", "merintr", "bitmap"), recursive: false, prefix: "ui/", exts: BMP },
   // mailnews.c mail_buttons: the toolbar's mailbox
@@ -231,7 +240,7 @@ if (existsSync(join(KOD, "object")) && existsSync(join(KOD, "include"))) {
   files["spelltimes.json"] = { size: times.length, hash: createHash("sha1").update(times).digest("hex").slice(0, 16), mtime: 0 };
   console.log(`spelltimes.json: ${Object.keys(JSON.parse(times.toString()) as object).length} spells`);
 } else {
-  console.warn("!! no Kod source in server/src/kod; the client won't load neighbouring rooms ahead");
+  console.warn("!! no Kod source in server/src-101/kod; the client won't load neighbouring rooms ahead");
 }
 
 // Floor textures that are water even on a dry floor (Raza's pool), for ambient life (ours)
@@ -314,4 +323,4 @@ writeFileSync(
   manifestPath,
   JSON.stringify({ generated: new Date().toISOString(), rsbHash: files["rsc0000.rsb"].hash, files }, null, 0),
 );
-console.log(`dist/assets: ${Object.keys(files).length} files, ${(bytes / 2 ** 20).toFixed(0)} MB, ${copied} copied`);
+console.log(`dist/assets-101: ${Object.keys(files).length} files, ${(bytes / 2 ** 20).toFixed(0)} MB, ${copied} copied`);

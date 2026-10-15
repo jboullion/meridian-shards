@@ -205,8 +205,20 @@ export class GameAudio {
     return this.ctx;
   }
 
+  /**
+   * The file a sound or music name plays from: music named .mid, .midi or .mp3 is .ogg
+   * (music.c:35 ConvertLegacyMusicExtension), and a .wav plays its .ogg when there is one
+   * (audio_openal.c:916 LoadAudioBuffer).
+   */
+  private fileOf(name: string): string {
+    const key = name.toLowerCase();
+    const ogg = key.replace(/\.(mid|midi|mp3|wav)$/, ".ogg");
+    if (/\.(mid|midi|mp3)$/.test(key)) return ogg;
+    return key.endsWith(".wav") && this.assets.has(ogg) ? ogg : key;
+  }
+
   private buffer(file: string): Promise<AudioBuffer | null> {
-    const key = file.toLowerCase();
+    const key = this.fileOf(file);
     let p = this.buffers.get(key);
     if (!p) {
       p = this.assets.has(key)
@@ -228,11 +240,6 @@ export class GameAudio {
       case "stopLoops":
         this.note("server: stop the looping sounds");
         this.stopWhere((v) => (v.flags & SF.LOOP) !== 0);
-        break;
-      case "stop":
-        // audio.c SoundStopFile stops every voice playing that file
-        this.note(`server: stop ${e.file.toLowerCase()}`);
-        this.stopWhere((v) => v.file === e.file.toLowerCase());
         break;
       case "play": {
         const w = e.wave;

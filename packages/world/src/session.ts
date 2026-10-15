@@ -8,13 +8,13 @@ import {
   buildReqCounteroffer, buildReqOffer, buildReqTurn, buildReqWithdrawal, buildReqWithdrawalItems, buildSay, buildSayGroup, buildSendEnchantments,
   buildSendSkills, buildSendSpells, buildChangeDescription, buildChangeUrl, buildReqApply,
   buildReqGetFromContainer, buildReqObjectContents, buildReqPut, buildSendStatGroups, buildSendStats, buildSimple, buildUseCharacter, buildUserCommand,
-  buildSendCharInfo, buildDeleteMail, buildDeleteNews, buildPostArticle, buildReqArticle, buildReqArticles, buildReqGetMail,
-  buildReqLookupNames, buildSendMail, buildChangedStats, readStatChange, readGuildInfo, readGuildList, readGuildShield, readGuildShields,
-  readGuildHalls, type GuildInfo, readArticles, readLookNewsgroup, readLookupNames, readMailHeader, type NewsArticle, buildAction, buildAppeal, buildChangePassword, buildReqInventoryMove, buildSayBlocked, UC, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
+  buildSendCharInfo, buildDeleteMail, buildPostArticle, buildReqArticle, buildReqArticles, buildReqGetMail,
+  buildReqLookupNames, buildSendMail, readGuildInfo, readGuildList, readGuildShield, readGuildShields,
+  readGuildHalls, type GuildInfo, readArticles, readLookNewsgroup, readLookupNames, readMailHeader, type NewsArticle, buildAction, buildAppeal, buildChangePassword, buildReqInventoryMove, buildReqDrop, buildSayBlocked, UC, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
   type BuyItem, type CharInfo, type CharacterSlot, type NewCharInfo, type ObjectInfo, type ObjectRef, type PlayWave,
-  buildReqAdmin,
+  buildReqAdmin, buildSafety, CF,
 } from "@shards/protocol";
-import { WorldState, fineToKod } from "./state.ts";
+import { WorldState, fineToKod, type InventoryMove } from "./state.ts";
 import { formatServerMessage, parseMarkup, type TextSpan } from "./text.ts";
 import { messageChannel, type ChatChannel } from "./chatChannel.ts";
 import { readDamageDealt, type DamageDealt } from "./combatHit.ts";
@@ -137,7 +137,6 @@ export type MinigameEvent =
 /** Sound and music from the server (server.c HandlePlayWave / HandleStopWave / HandlePlayMusic). */
 export type SoundEvent =
   | { type: "play"; wave: PlayWave; file: string }
-  | { type: "stop"; file: string; object: number }
   | { type: "music"; file: string }
   /** Entering a room stops looping sounds (game.c EnterNewRoom SoundStopAll(SF_LOOP)). */
   | { type: "stopLoops" };
@@ -154,11 +153,15 @@ export interface SessionOptions {
   url: string;
   username: string;
   password: string;
-  secretKey: string;
   /** Resolves a resource id to its string (rsc0000.rsb); needed for the redbook token. */
   lookupResource: (id: number, language?: number) => string | undefined;
   /** Set when pings are driven externally (Web Worker); see Connection.pingIntervalMs. */
   pingIntervalMs?: number;
+  /**
+   * "Can attack innocent players" (config.c INIAggressive): the client keeps it and tells the
+   * server on entering and after every reset (mermain.c SendConfiguredSafety). Safety is on without it.
+   */
+  aggressive?: () => boolean;
   /** Factory for the socket; defaults to the global WebSocket. */
   createSocket?: (url: string) => WebSocket;
   /** How long logging in may take (LOGIN_TIMEOUTS, ms); the tests shorten them */
@@ -173,8 +176,6 @@ export interface SessionEvents {
   error?: (message: string) => void;
   chat?: (line: ChatLine) => void;
   look?: (look: LookResult) => void;
-  /** BP_REQ_STAT_CHANGE (module/stats): an elder offers to rearrange our stats and school levels */
-  statChange?: (stats: number[], levels: number[]) => void;
   /** Guilds (merintr.c guild*.c) */
   guild?: (e: GuildEvent) => void;
   /** Mini-game messages (chess) */
@@ -377,11 +378,9 @@ export class GameSession {
     this.send(new ByteWriter().u8(BP.REQ_GET).u32(objId(id)).finish());
   }
 
-  /** BP_REQ_DROP takes an object: id, plus the amount for number items (protocol.c PARAM_OBJECT). */
+  /** BP_REQ_DROP takes an object list (protocol.c:41): id, plus the amount for number items. */
   drop(id: number, amount?: number): void {
-    const w = new ByteWriter().u8(BP.REQ_DROP).u32(id);
-    if (amount !== undefined) w.u32(amount);
-    this.send(w.finish());
+    this.send(buildReqDrop(id, amount));
   }
 
   /** Use (wield/wear) an inventory item. */
@@ -437,10 +436,15 @@ export class GameSession {
     if (ids.length) this.send(buildSayGroup(ids, text));
   }
 
-  /** UC_SEND_PREFERENCES: the game options the server keeps for us (CF_* flags). */
+  /**
+   * The game options, as CF_* flags. The 101 server keeps one, safety (UC_SAFETY, merintr.h
+   * SendSafety), and never says what it is: the client remembers what it sent (mermain.c
+   * pinfo.aggressive). CF_SAFETY_OFF stands for it being off.
+   */
   sendPreferences(flags: number): void {
-    this.preferences = flags;
-    this.userCommand(UC.SEND_PREFERENCES, flags);
+    this.preferences = flags & CF.SAFETY_OFF;
+    this.send(buildSafety(!(flags & CF.SAFETY_OFF)));
+    this.events.preferences?.(this.preferences);
   }
 
   /** BP_SEND_STATS: ask for a stat group (the stats panel asks when its tab opens). */
@@ -547,19 +551,14 @@ export class GameSession {
     this.send(buildSayBlocked(id));
   }
 
-  /** BP_REQ_INVENTORY_MOVE (inventry.c): put an item where another one is in the inventory. */
-  inventoryMove(id: number, before: number): void {
-    this.send(buildReqInventoryMove(id, before));
+  /** BP_REQ_INVENTORY_MOVE (inventry.c): a move made by WorldState.moveInventoryItem. */
+  inventoryMove(move: InventoryMove): void {
+    this.send(buildReqInventoryMove(move.payload, move.target));
   }
 
   /** mailnews.c ReceiveArticles: the index parts so far, and the last part number */
   private articleParts: NewsArticle[] = [];
   private lastArticlePart = 0;
-
-  /** BP_CHANGED_STATS (statsmake.c VerifySettings) */
-  changeStats(stats: readonly number[], levels: readonly number[]): void {
-    this.send(buildChangedStats(stats, levels));
-  }
 
   /** BP_REQ_GET_MAIL: send us our new mail (each comes as BP_MAIL) */
   requestMail(): void {
@@ -591,10 +590,6 @@ export class GameSession {
 
   postArticle(newsgroup: number, title: string, text: string): void {
     this.send(buildPostArticle(newsgroup, title, text));
-  }
-
-  deleteArticle(newsgroup: number, num: number): void {
-    this.send(buildDeleteNews(newsgroup, num));
   }
 
   /** Whether this is the account's password (command.c SuicideVerifyDialogProc checks the typed one). */
@@ -671,8 +666,8 @@ export class GameSession {
     this.send(buildSendSkills());
     this.send(buildSendSpells());
     this.send(buildSendEnchantments(ENCHANT.PLAYER));
-    // mermain.c InterfaceUserChanged: RequestPreferences
-    this.userCommand(UC.REQ_PREFERENCES);
+    // mermain.c InterfaceUserChanged, InterfaceResetData: SendConfiguredSafety
+    this.sendPreferences(this.opts.aggressive?.() ? CF.SAFETY_OFF : 0);
   }
 
   /**
@@ -714,7 +709,6 @@ export class GameSession {
           buildLogin({
             username: this.opts.username,
             passwordDigest: passwordDigest(this.opts.password),
-            secretKey: this.opts.secretKey,
             screenWidth: globalThis.screen?.width,
             screenHeight: globalThis.screen?.height,
           }),
@@ -733,8 +727,8 @@ export class GameSession {
         this.fail(r.string());
         break;
       case AP.GETCLIENT:
-      case AP.CLIENT_PATCH:
-        this.fail("The server rejected this client (wrong secret key or version).");
+        // synched.c:455-468: the server wants a newer client (MinVersion)
+        this.fail("The server rejected this client's version.");
         break;
       case AP.TIMEOUT:
         // server.c HandleTimeout -> LoginTimeout: IDS_TIMEOUT
@@ -852,10 +846,7 @@ export class GameSession {
         case BP.USERCOMMAND: {
           // merintr.c HandleUserCommand
           const uc = r.u8();
-          if (uc === UC.RECEIVE_PREFERENCES) {
-            this.preferences = r.i32();
-            this.events.preferences?.(this.preferences);
-          } else if (uc === UC.SPELL_SCHOOLS) {
+          if (uc === UC.SPELL_SCHOOLS) {
             // merintr.c HandleSpellSchools: the schools' names, for the Spells menu
             const n = r.u8();
             const schools: number[] = [];
@@ -887,12 +878,12 @@ export class GameSession {
             // merintr.c HandleSendQuit: the server wants us out (after a suicide, a rescue)
             this.send(buildSimple(BP.REQ_QUIT));
           } else if (uc === UC.LOOK_PLAYER) {
-            // HandleLookPlayer: the player, flags, their own words, the fixed string, the URL
+            // merintr.c HandleLookPlayer: the player, flags, their own words (a resource and its
+            // parameters), the fixed string (plain text: title and guild), the URL
             const object = readObject(r);
             const flags = r.u8();
-            const lookup = (id: number) => this.resource(id);
-            const words = formatServerMessage(r.u32(), r, lookup) ?? "";
-            const fixed = formatServerMessage(r.u32(), r, lookup) ?? "";
+            const words = formatServerMessage(r.u32(), r, (id) => this.resource(id)) ?? "";
+            const fixed = r.string();
             const url = r.string();
             this.events.look?.({ object, name: this.resource(object.nameRes) ?? "", description: fixed, inscription: words, flags, url, player: true });
           }
@@ -956,21 +947,10 @@ export class GameSession {
           if (file) this.events.sound?.({ type: "play", wave, file });
           break;
         }
-        case BP.STOP_WAVE: {
-          const file = this.resource(r.u32());
-          const object = r.u32();
-          if (file) this.events.sound?.({ type: "stop", file, object });
-          break;
-        }
         case BP.PLAY_MUSIC:
         case BP.PLAY_MIDI: {
           const file = this.resource(r.u32());
           if (file) this.events.sound?.({ type: "music", file });
-          break;
-        }
-        case BP.REQ_STAT_CHANGE: {
-          const { stats, levels } = readStatChange(r);
-          this.events.statChange?.(stats, levels);
           break;
         }
         case BP.ADMIN:

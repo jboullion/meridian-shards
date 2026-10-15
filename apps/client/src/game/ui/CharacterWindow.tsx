@@ -251,7 +251,8 @@ export function CharacterWindow({
     const items = [...world.inventory.values()];
     const wanted = sortByType(items, rs, typeOf).map((o) => o.id);
     for (const [what, where] of sortMoves(items.map((o) => o.id), wanted)) {
-      if (world.moveInventoryItem(what, where)) session.inventoryMove(what, where);
+      const move = world.moveInventoryItem(what, where);
+      if (move) session.inventoryMove(move);
     }
   };
 
@@ -332,7 +333,7 @@ export function CharacterWindow({
               <StatList
                 session={session}
                 icons={icons}
-                group={tab === "spells" ? STAT_GROUP.SPELLS : tab === "skills" ? STAT_GROUP.SKILLS : STAT_GROUP.QUESTS}
+                group={tab === "spells" ? STAT_GROUP.SPELLS : STAT_GROUP.SKILLS}
                 onLook={onLook}
                 onCast={onCast}
                 onStudy={onStudy}

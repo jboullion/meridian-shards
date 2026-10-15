@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 import { parseRoo } from "@shards/formats";
 import { AMBIENT_ROOMS, AmbientLife, buildNavGrid, personName, seededRandom, type AmbientExits } from "../src/index.ts";
 
-const ASSETS = join(import.meta.dirname, "../../../dist/assets");
+const ASSETS = join(import.meta.dirname, "../../../dist/assets-101");
 const have = existsSync(join(ASSETS, "tos.roo")) && existsSync(join(ASSETS, "roomexits.json"));
 
 describe("names for the crowd", () => {

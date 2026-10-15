@@ -3,7 +3,7 @@
 // Strings are kept as Latin-1 (one char per byte) so redbook/protocol use stays byte-exact.
 
 const MAGIC = [0x52, 0x53, 0x43, 0x01];
-const VERSION = 5;
+const VERSION = 4;
 
 export interface RsbBundle {
   /** id -> (lang -> string) */
@@ -25,8 +25,8 @@ export function parseRsb(data: Uint8Array): RsbBundle {
   let pos = 12;
   for (let n = 0; n < count; n++) {
     const id = dv.getInt32(pos, true);
-    const lang = dv.getInt32(pos + 4, true);
-    pos += 8;
+    const lang = 0;
+    pos += 4;
     let end = pos;
     while (end < data.length && data[end] !== 0) end++;
     let s = "";

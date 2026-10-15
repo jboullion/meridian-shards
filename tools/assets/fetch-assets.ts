@@ -17,7 +17,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const { values: opt } = parseArgs({
   options: {
     from: { type: "string" },
-    out: { type: "string", default: join(ROOT, "dist", "assets") },
+    out: { type: "string", default: join(ROOT, "dist", "assets-101") },
   },
 });
 if (!opt.from) {

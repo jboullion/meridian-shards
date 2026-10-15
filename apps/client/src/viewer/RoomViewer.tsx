@@ -6,7 +6,7 @@ import { RoomScene, type RoomStats } from "./roomScene.ts";
 export function RoomViewer({ assets }: { assets: AssetStore }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [scene, setScene] = useState<RoomScene | null>(null);
-  const [rid, setRid] = useState(() => Number(new URLSearchParams(location.search).get("rid")) || 301);
+  const [rid, setRid] = useState(() => Number(new URLSearchParams(location.search).get("rid")) || 52);
   const [lighting, setLighting] = useState({ ...DEFAULT_LIGHTING, fog: true });
   const room = SLICE_ROOMS.find((r) => r.rid === rid)!;
   const ambient = roomAmbient(room, lighting.brightness);
