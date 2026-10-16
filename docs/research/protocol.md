@@ -268,7 +268,11 @@ Our client and our server change together (ADR 0001 decision 4), so these are ou
   - `user.kod ShardsCommand` splits it into words (`ParseString`) and hands it to the verb's feature.
   - The client sends it with `GameSession.shardsCommand(line)` (`buildShardsCommand`).
   - Nothing is spoken, so nothing needs hiding (ADR 0015 decision 1).
-  - **Verbs:** `travel <id>`, fast travel from the portal we stand by (`util/travelnet.kod TravelCommand`, ADR 0011).
+  - **Verbs:**
+    - `travel <id>`: fast travel from the portal we stand by (`util/travelnet.kod TravelCommand`, ADR 0011).
+    - `friend list | request <name> | accept <name> | decline <name> | cancel <name> | remove <name> | options <flags> | search <text> | follow <name> | unfollow | stopfollower <name> | hp`: friends (`util/shardssocial.kod FriendCommand`, ADR 0015). A name always ends a command, so it may hold spaces. `options` takes the `SF_*` bits: 1 hide our location, 2 hide us in search, 4 refuse followers. `hp` asks the server to send our health to friends in our room.
+    - `pet list | set <kind> <colour> [<name>] | clear`: our pet, and the room's (`PetCommand`).
+    - `ambient`: our room's shared crowd (`AmbientCommand`).
 - **`UC_TRAVEL_LIST` (101), server to client** (`user.kod SendTravelList`): where the portal we touched can take us, sent when an attuned player touches a travel portal.
   - The fields: the portal's own point id DWORD, the PvP lockout's seconds left DWORD, a BYTE count, then each place's point id DWORD and name resource DWORD.
   - Places come newest first; the client reverses them.
@@ -279,6 +283,14 @@ Our client and our server change together (ADR 0001 decision 4), so these are ou
     - our `NotePvPHarm`, from `Player.AssessDamage` and room enchantments;
     - and with each travel refusal.
   - The client shows crossed swords and a countdown (`ui/PvpLockout.tsx`).
+- **`UC_FRIENDS` (103), server to client** (`util/shardssocial.kod`): a kind BYTE, then:
+  - **1, the list** (`SendFriendList`, after any change to it): the options BYTE (`SF_*`); a WORD count of friends, each a name STRING, in the game BYTE, and when they last left DWORD (Kod time, 0 if never); a WORD count of requests to us, each a name STRING; the same for ours; whether we follow someone BYTE, and if so their name STRING; a WORD count of our followers, each a name STRING. The client starts or stops following as this says.
+  - **2, a friend's location** (`SendLocation`, after the list for each friend in the game, and to every friend in the game on each room change): the name STRING, shown BYTE (0: they hide it), the room's number DWORD, its file resource DWORD, then row and column WORDs.
+  - **3, a friend's health** (`SendHealth`): the name STRING and a whole percentage BYTE, only to friends in the same room.
+  - **4, an exit** (`RoomChanged`, to followers): the leader's name STRING, the old room's file resource DWORD, the new room's DWORD, and the square they left from, row and column WORDs. The follower works out the door or edge.
+  - **5, search results** (`SendSearch`): a WORD count, each a name STRING.
+- **`UC_PETS` (104), server to client** (`SendRoomPets`, `PetChanged`): a WORD count, then each player's object DWORD, whether they have a pet BYTE, and if so its kind STRING, colour BYTE and name STRING. A room's list always includes the player asking.
+- **`UC_AMBIENT` (105), server to client** (`AmbientCommand`, `Room.GetAmbientCrowd`): the room's crowd seed DWORD, the milliseconds since it began DWORD, and the game hour it began in BYTE.
 
 ## Sources
 

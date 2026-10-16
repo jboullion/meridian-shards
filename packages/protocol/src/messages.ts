@@ -766,7 +766,7 @@ export const UC = {
   REQ_TIME: 60,
   // Ours (Meridian Shards, docs/adr/0015-social-on-our-server.md 1): a command line to our Kod
   // (user.kod ShardsCommand), and what our features send back
-  SHARDS: 100, TRAVEL_LIST: 101, PVP_UNTIL: 102,
+  SHARDS: 100, TRAVEL_LIST: 101, PVP_UNTIL: 102, FRIENDS: 103, PETS: 104, AMBIENT: 105,
 } as const;
 
 /**

@@ -1,6 +1,6 @@
 # ADR 0015: Social on our server, and one command channel
 
-- **Status:** proposed, 2026-10-15. Not built. It changes [ADR 0005](0005-friends.md) (friends), [0006](0006-pets.md) (pets) and [0007](0007-arena.md) (the arena), and the command channel of [0008](0008-player-homes.md)-[0012](0012-cosmetics.md).
+- **Status:** accepted, 2026-10-15; `UC_SHARDS` built with fast travel, and the social move built 2026-10-16 (see "As built" at the end). It changes [ADR 0005](0005-friends.md) (friends), [0006](0006-pets.md) (pets) and [0007](0007-arena.md) (the arena), and the command channel of [0008](0008-player-homes.md)-[0012](0012-cosmetics.md).
 
 ## Context
 
@@ -99,3 +99,35 @@ The user decided these on 2026-10-15.
   - ADRs 0005-0007: status lines pointing here;
   - `deploy/README.md`;
   - `docs/research/protocol.md`.
+
+## As built (2026-10-16)
+
+**Kod** (shards-server):
+- **`util/shardssocial.kod`** (`ShardsSocial`, `SYS@GetShardsSocial`, made on demand) holds no state. It answers the `friend`, `pet` and `ambient` verbs of `UC_SHARDS` (`user.kod ShardsCommand`) and sends `UC_FRIENDS` (103), `UC_PETS` (104) and `UC_AMBIENT` (105). [protocol.md](../research/protocol.md), "Ours", has every field.
+- **On each `User`:** `plFriends`, `plFriendsIn`, `plFriendsOut` (user objects), `piSocialFlags` (1 hide location, 2 hide in search, 4 refuse followers), `piLastSeen`, `poFollowing`, `plFollowers`, `psPetKind`, `piPetColour`, `psPetName`.
+- **Hooks:** `UserLogon` clears follows; `UserLogoff` sets `piLastSeen` and ends follows both ways; `SomeoneLogon` and `SomeoneLogoff` tell friends (a line in the chat and a new list); `NewOwner` notes the square left from, then, once the client has the room, tells friends the new location, followers the exit, and the room the pets.
+- **Requests** are kept with both characters, so they work while the other is offline. Asking someone who already asked us accepts. At most 100 friends and 50 requests.
+- **The shared crowd:** each `Room` keeps `piAmbientSeed`, `piAmbientSince` (`GetTickCount`) and `piAmbientHour`. `GetAmbientCrowd` keeps a crowd half an hour while someone else is in the room and ten minutes in an empty one, then starts a new one.
+- **Found on the way:** Kod names are global and ignore case, so parameters called `list`, `a` and `b` clashed with existing identifiers (`e5.kod`'s `A`), and `SendList` with an existing message. They're `members`, `user1`, `user2` and `SendFriendList`.
+
+**Our client:**
+- **`GameSession`** reads the three messages into a `social` event (`SocialEvent`), passed through `Game.tsx` to `GameView` and `SocialLink`.
+- **`FriendsService`** (`packages/world/src/social/friends.ts`) keeps the server's word and sends its commands. Friends are known by name (`key` is the lower-case name). It keeps only each friend's Locate and Map marker, and Health bars, in `localStorage` (version 2). Following starts and stops as the server's list says.
+- **`SocialLink`** (`apps/client/src/game/social.ts`): the pets of the players in the room by object, our own pet from the server, the room's crowd (`ambient`), and the arena through an `ArenaClient`.
+- **Gone:** `socialProtocol.ts`, `socialClient.ts`, `socialKeys.ts`, the pairing tell, `hideFriendTells` and `GameSession.lineFilter`; the friends window's "Pair again".
+- **Moving over (4):** a version 1 friends save is asked again with `friend request`s once the server's list is in, and the IndexedDB `shards-social` keys are deleted. A pet kept only in this browser goes up to a server that has none.
+
+**The arena (3):** `tools/gateway/relay.ts` is now `ArenaRelay`: `arenaWatch {server, room, hour}`, `arenaLeave`, `arenaHour`, with no sign-in, on `/social` as before. `packages/world/src/arena/arenaClient.ts` connects only while watching.
+
+**Tried on our server:** two characters (`tools/headless/friend.ts`, rewritten for the server, and the browser):
+- a request, an accept, a remove and asking again;
+- logon and logoff notices, and last-seen times;
+- locations on every room change, hidden while a player hides theirs;
+- health between friends in a room;
+- following, and the exit through the Raza inn's door worked out to its square;
+- search, hiding from it, and the options;
+- pets on entering a room and on a change;
+- the same crowd seed for two asks, with the time since it began;
+- the arena through the new feed.
+
+**Not yet tried:** friends on the hosted server (the save changes, so a copy of the VM's save first, as [ADR 0008](0008-player-homes.md) 3.3 says), and two real browsers following each other across several rooms.

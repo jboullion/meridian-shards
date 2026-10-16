@@ -9,11 +9,12 @@
 // GATEWAY_ORIGINS (comma-separated allowed Origin headers; empty = allow all),
 // GATEWAY_TRUST_PROXY=1 (take the client IP from X-Forwarded-For).
 //
-// The path /social is the friends relay instead (relay.ts, docs/adr/0005-friends.md): JSON text
-// frames between players of this client, never reaching blakserv. It has its own per-IP limit,
-// the same number, so a player's two connections don't crowd each other out.
+// The path /social is the arena's feed instead (relay.ts, docs/adr/0007-arena.md): JSON text
+// frames, never reaching blakserv, with its own per-IP limit, the same number, so a player's two
+// connections don't crowd each other out. (It carried the friends relay too until our server took
+// friends and pets over, docs/adr/0015-social-on-our-server.md; the path keeps its name.)
 //
-// The relay also runs the arena's fights (arena.ts, docs/adr/0007-arena.md):
+// The gateway runs the arena's fights (arena.ts):
 // ARENA_ASSETS (the asset build with tosarena.roo, default dist/assets), ARENA_STATE (the season
 // file, default dist/arena-state.json; "none" keeps nothing) and ARENA_CONFIG (an arena.json to
 // change the fights, read at start).
@@ -25,7 +26,7 @@ import { parseArgs } from "node:util";
 import { WebSocketServer } from "ws";
 import { readArenaConfig } from "@shards/world";
 import { ArenaHost } from "./arena.ts";
-import { RELAY_MAX_MESSAGE, SocialRelay } from "./relay.ts";
+import { ArenaRelay, RELAY_MAX_MESSAGE } from "./relay.ts";
 
 const { values: args } = parseArgs({
   options: {
@@ -84,7 +85,7 @@ const arena = new ArenaHost({
   statePath: statePath === "none" ? null : statePath,
   log,
 });
-const social = new SocialRelay({ log, arena });
+const social = new ArenaRelay({ log, arena });
 const socialWss = new WebSocketServer({ noServer: true, maxPayload: RELAY_MAX_MESSAGE, perMessageDeflate: false });
 
 /** One fewer connection from this address */
@@ -186,7 +187,7 @@ http.on("upgrade", (req, socket, head) => {
 });
 
 http.listen(PORT, () => {
-  log(`gateway listening on ws://localhost:${PORT} -> ${SERVER_HOST}:${SERVER_PORT} (max ${MAX_PER_IP}/IP), friends relay on /social`);
+  log(`gateway listening on ws://localhost:${PORT} -> ${SERVER_HOST}:${SERVER_PORT} (max ${MAX_PER_IP}/IP), the arena's feed on /social`);
 });
 
 // The arena's season is saved before going (docker stop sends SIGTERM)

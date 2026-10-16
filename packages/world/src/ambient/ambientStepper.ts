@@ -1,9 +1,9 @@
-// Ours (docs/adr/0005-friends.md section 6): the same crowd for friends in a room. Everyone in a
-// room gets the same seed (from the room and the relay's clock, or from a friend already there),
-// and the crowd steps in fixed ticks counted from a shared start, so two clients step it the same
+// Ours (docs/adr/0005-friends.md section 6, docs/adr/0015-social-on-our-server.md): the same crowd
+// for everyone in a room. Everyone in a room gets the same seed and start from our server
+// (Room.GetAmbientCrowd), and the crowd steps in fixed ticks counted from a shared start, so two clients step it the same
 // number of times and see much the same play out. Someone arriving late runs the ticks they
 // missed at once (a few dozen ms for ten minutes of a town), then carries on alone. (The arena's
-// fights are another matter: one sim on the relay that everyone watches, arena/.) It needn't stay exact: the player's own presence (sidestepping, waving) still
+// fights are another matter: one sim on the gateway that everyone watches, arena/.) It needn't stay exact: the player's own presence (sidestepping, waving) still
 // changes their copy a little.
 //
 // Between ticks, walkers are drawn where they'd be, so the fixed step doesn't show.
@@ -18,7 +18,7 @@ export const AMBIENT_SLOT_MS = 10 * 60_000;
 const MAX_LIVE_TICKS = 40;
 
 /**
- * A room's shared crowd: its seed, the relay time (ms) its ticks count from, and the game hour it
+ * A room's shared crowd: its seed, the time (ms, our clock) its ticks count from, and the game hour it
  * was made in (a late arrival can't know the hours that went by)
  */
 export interface AmbientSeed {
@@ -27,7 +27,7 @@ export interface AmbientSeed {
   hour?: number | null;
 }
 
-/** The seed for a room in a slot of the relay's clock, the same for everyone (FNV-1a) */
+/** The seed for a room in a slot of a shared clock, the same for everyone (FNV-1a; before our server kept seeds) */
 export function slotSeed(room: string, now: number): AmbientSeed {
   const slot = Math.floor(now / AMBIENT_SLOT_MS);
   let h = 0x811c9dc5;
@@ -59,7 +59,7 @@ export class AmbientStepper {
 
   /**
    * One frame. Unshared, the crowd steps by the frame's time as before. Shared, it runs the ticks
-   * due by `now` (the relay's time), at most `budgetMs` of work while catching up, then places
+   * due by `now` (our clock), at most `budgetMs` of work while catching up, then places
    * walkers between the last two ticks.
    */
   advance(now: number, dt: number, frame: AmbientFrame, catchUpFrame: AmbientFrame, budgetMs = 6): void {

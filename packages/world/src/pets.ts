@@ -98,7 +98,7 @@ export function petForKarma(group: string, karma: number | null): string | undef
   return Object.entries(PET_KINDS as Record<string, PetKind>).find(([, k]) => k.group?.name === group && k.group.karma === want)?.[0];
 }
 
-/** (Own keys only: a kind comes from other players through the relay, and "constructor" isn't one) */
+/** (Own keys only: a kind comes from other players through our server, and "constructor" isn't one) */
 export const petKind = (name: string): PetKind | undefined => (Object.hasOwn(PET_KINDS, name) ? (PET_KINDS as Record<string, PetKind>)[name] : undefined);
 
 /** A character's pet: its kind, colour (an index into the kind's) and name, "" for none */
@@ -121,7 +121,7 @@ export function cleanPetName(s: string): string {
  */
 const RETIRED_KINDS: Record<string, string> = { bunny: "rat", greyBunny: "rat" };
 
-/** A pet from storage or the relay, checked: null when it isn't one we know (an unknown kind isn't drawn) */
+/** A pet from storage or our server, checked: null when it isn't one we know (an unknown kind isn't drawn) */
 export function readPetChoice(v: unknown): PetChoice | null {
   if (!v || typeof v !== "object") return null;
   const p = v as Record<string, unknown>;

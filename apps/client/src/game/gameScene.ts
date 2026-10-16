@@ -1111,7 +1111,6 @@ export class GameScene {
       this.ambient = null;
       this.ambientStep = null;
       this.ambientRoom = "";
-      this.social?.setAmbient(this.roomFile, null);
       return;
     }
     const file = this.roomFile;
@@ -1121,13 +1120,12 @@ export class GameScene {
       const grid = this.navGrids.get(file);
       if (grid === undefined) return this.loadNavGrid(file, this.loaded.room);
       if (grid === "loading") return;
-      // The same crowd as friends (docs/adr/0005-friends.md 6): a friend's in the room, or the room's for now
+      // The room's crowd, the same for everyone in it (our server keeps its seed and start)
       const seed = this.crowdSeed(file);
       if (seed === "pending") return;
       this.ambientRoom = file;
       const life = new AmbientLife(this.loaded.room, spec, this.ambientExits[file], seed?.seed, grid === "build" ? undefined : grid, this.waterTextures);
       this.ambientStep = new AmbientStepper(life, seed);
-      this.social?.setAmbient(file, seed);
       for (const f of townsfolkArt()) void this.loadBgf(localRes(f));
     }
     const world = this.session.world;
@@ -1148,7 +1146,7 @@ export class GameScene {
     const step = this.ambientStep;
     // (Obstacles as a list: a tick may read them more than once a frame)
     const neutral: AmbientFrame = { ...frame, player: null, facing: undefined, impressive: false, obstacles: [...this.blockers(true)] };
-    step.advance(this.social?.relayNow() ?? Date.now(), dt, frame, neutral);
+    step.advance(Date.now(), dt, frame, neutral);
     this.ambient = step.catchingUp ? null : step.life;
     if (!this.ambient) return;
     this.scatterAmbient();
@@ -1244,8 +1242,9 @@ export class GameScene {
   }
 
   /**
-   * The crowd to make in a room (docs/adr/0005-friends.md 6): asked of the friends feature once per
-   * visit; "pending" until it answers, null for one of our own (no relay)
+   * The crowd to make in a room: the room's, as our server keeps it, the same for everyone in it
+   * (docs/adr/0015-social-on-our-server.md), asked once per visit; "pending" until it answers, null
+   * for one of our own (no answer)
    */
   private crowdSeed(file: string): AmbientSeed | null | "pending" {
     if (this.ambientSeed?.file !== file) {
@@ -2032,7 +2031,7 @@ export class GameScene {
 
   // ---- pets (ours, docs/adr/0006-pets.md) ----
 
-  /** Every pet in the room: ours always, other players' with Show Pets (and the relay's word on them) */
+  /** Every pet in the room: ours always, other players' with Show Pets (and our server's word on them) */
   private updatePets(dt: number): void {
     const loaded = this.loaded;
     const world = this.session.world;
@@ -2070,7 +2069,7 @@ export class GameScene {
       for (const f of petArt()) void this.loadBgf(localRes(f));
     }
     owners.sort((a, b) => a.d - b.d);
-    this.pets.update(dt, owners.slice(0, MAX_PETS), this.social?.relayNow() ?? Date.now());
+    this.pets.update(dt, owners.slice(0, MAX_PETS), Date.now());
   }
 
   /** Pets' names over their heads, as players' are but smaller (Show Pet Names), hidden by walls */

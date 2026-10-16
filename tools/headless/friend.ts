@@ -1,41 +1,36 @@
-// A scripted friend (docs/adr/0005-friends.md), for trying the friends feature with one person:
-// a character in the game (GameSession) on the friends relay, accepting any friend request,
-// saying where it is and its health as the client does (apps/client social.ts), and telling
-// followers which way it left. It can ask someone itself, and walk a path and use a door.
+// A scripted friend (docs/adr/0005-friends.md, on our server since docs/adr/0015), for trying the
+// friends feature with one person: a character in the game (GameSession) that accepts any friend
+// request, can ask someone itself, keeps a pet, and can walk a path and use a door. Our server
+// tells its friends where it is and its followers which way it went; it only asks the server to
+// send its health, as the client does (apps/client social.ts).
 //
-//   node tools/headless/friend.ts --user shardpal --pass shardpal [--add Shardbot]
-//        [--walk "row,col row,col ..."] [--go] [--wait 20] [--stay 120] [--keyfile <path>]
-//        [--server ws://localhost:5173/ws] [--gateway ws://localhost:8059] [--relay ws://localhost:8059/social]
+//   node tools/headless/friend.ts --user shardpal --pass shardpal [--add Shardbot] [--follow Shardbot]
+//        [--pet kind:colour[:name]]
+//        [--walk "row,col row,col ..."] [--go] [--wait 20] [--stay 120] [--gateway ws://localhost:8059]
 //
-// --server is the game server's name as the browser client sees it (its game socket URL): friends
-// don't cross servers, so it must match the browser's (Vite's in development). --walk waits
-// --wait seconds first (time to start following), then walks the squares and, with --go, sends
-// BP_REQ_GO at the end. --keyfile keeps the character's key and friends in a file between runs
-// (the browser keeps its key unreadable in IndexedDB; this is for testing only), so a restart
-// needn't pair again.
+// --walk waits --wait seconds first (time to start following), then walks the squares and, with
+// --go, sends BP_REQ_GO at the end. --follow asks to follow a friend once they're in the game
+// (the walking is the browser's; this logs the exits the server says they take).
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { parseRsb } from "../../packages/formats/src/rsb.ts";
 import { STAT_GROUP } from "../../packages/protocol/src/index.ts";
-import {
-  FriendsService, GameSession, SocialClient, exitTaken, generateIdentity, squareOf, type AmbientExits,
-} from "../../packages/world/src/index.ts";
+import { FriendsService, GameSession, exitTaken, type AmbientExits } from "../../packages/world/src/index.ts";
 
 const { values: opt } = parseArgs({
   options: {
     user: { type: "string", default: "shardpal" },
     pass: { type: "string", default: "shardpal" },
-    server: { type: "string", default: "ws://localhost:5173/ws" },
     gateway: { type: "string", default: "ws://localhost:8059" },
-    relay: { type: "string", default: "ws://localhost:8059/social" },
     rsb: { type: "string", default: "server/src/run/server/rsc/rsc0000.rsb" },
     add: { type: "string" },
+    follow: { type: "string" },
+    pet: { type: "string" },
     walk: { type: "string" },
     go: { type: "boolean", default: false },
     wait: { type: "string", default: "20" },
     stay: { type: "string", default: "120" },
-    keyfile: { type: "string" },
   },
 });
 
@@ -47,12 +42,11 @@ let exits: Record<string, AmbientExits> = {};
 try {
   exits = JSON.parse(readFileSync("dist/assets/roomexits.json", "utf8")) as Record<string, AmbientExits>;
 } catch {
-  log("no dist/assets/roomexits.json: exits can't be named for followers");
+  log("no dist/assets/roomexits.json: exits can't be named");
 }
 
 const OF_PLAYER = 0x4;
 let friends: FriendsService | null = null;
-let room = "";
 const session = new GameSession(
   { url: opt.gateway!, username: opt.user!, password: opt.pass!, secretKey, lookupResource: (id, lang) => rsb.get(id, lang) },
   {
@@ -68,6 +62,10 @@ const session = new GameSession(
     },
     chat: (l) => log("chat:", l.spans.map((s) => s.text).join("")),
     error: (e) => log("error:", e),
+    social: (e) => {
+      log("social:", JSON.stringify(e));
+      if (e.type !== "pets" && e.type !== "ambient") friends?.handle(e);
+    },
   },
 );
 
@@ -75,69 +73,40 @@ const name = () => {
   const self = session.world.self;
   return self ? (session.resource(self.info.nameRes) ?? "") : "";
 };
-const byName = (n: string) => [...session.world.players.values()].find((p) => p.name.toLowerCase() === n.toLowerCase());
 
 async function startFriends(): Promise<void> {
   while (!name()) await new Promise((r) => setTimeout(r, 100));
-  const me = name();
-  log(`in the game as ${me}`);
-  const { keys, store } = await loadIdentity();
-  const client = new SocialClient(
-    { url: opt.relay!, server: opt.server!, name: me, keys, visible: true },
-    {
-      status: (s) => {
-        log("relay", s);
-        friends?.setRelayStatus(s);
-      },
-      message: (from, n, body) => {
-        log(`relay message from ${n}:`, JSON.stringify(body));
-        void friends?.relayMessage(from, n, body);
-      },
-      presence: (key, online, n) => {
-        log(`presence ${n ?? key.slice(0, 8)}: ${online ? "online" : "offline"}`);
-        friends?.relayPresence(key, online);
-      },
-      undeliverable: (to) => friends?.relayUndeliverable(to),
+  log(`in the game as ${name()}`);
+  const store = new Map<string, string>();
+  const fs = new FriendsService({
+    command: (line) => {
+      log(">", line);
+      session.shardsCommand(line);
     },
-  );
-  await client.start();
-  const fs = new FriendsService(client, {
-    tell: (n, text) => {
-      const p = byName(n);
-      if (!p) return false;
-      session.sayTo([p.id], text);
-      return true;
-    },
-    inGame: (n) => !!byName(n),
     message: (t) => log("friends:", t),
     now: () => Date.now(),
-    storage: {
-      getItem: (k) => store.get(k) ?? null,
-      setItem: (k, v) => {
-        store.set(k, v);
-        void saveIdentity(keys, store);
-      },
-    },
+    exitTaken: (from, to, at) => exitTaken(exits[from], from, to, at, null),
+    storage: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => void store.set(k, v) },
     storageKey: "friends",
   });
   friends = fs;
-  while (client.status !== "online") await new Promise((r) => setTimeout(r, 100));
-  fs.setRelayStatus("online");
-  await fs.init();
-  session.lineFilter = (text, sender) => fs.tellReceived(sender?.name ?? "", text, !sender || sender.id === session.world.player?.id);
-  // Accept whoever asks, as soon as their request is proven
+  // Accept whoever asks; a new friend in the room hears our health
+  let followAsked = false;
   fs.onChange(() => {
+    const lead = opt.follow ? fs.friendByName(opt.follow) : undefined;
+    if (lead && !followAsked && fs.online.has(lead.key)) {
+      followAsked = true;
+      log(`following ${lead.name}: ${fs.startFollow(lead.key) ?? "asked"}`);
+    }
     for (const r of fs.incoming) {
       log(`accepting ${r.name}`);
       fs.accept(r.key);
     }
+    roomFriends();
   });
+  fs.onEvent((e) => log("follow:", JSON.stringify(e)));
+  fs.start();
   const world = session.world;
-  const where = () => {
-    const self = world.self;
-    room = (session.resource(world.player?.roomRes ?? 0) ?? "").toLowerCase();
-    if (self && room) fs.setLocation({ room, rid: 0, at: squareOf(self) });
-  };
   const roomFriends = () => {
     const keys: string[] = [];
     for (const o of world.objects.values()) {
@@ -152,68 +121,18 @@ async function startFriends(): Promise<void> {
     if (hp && hp.currentMax) fs.setHealth((100 * hp.value) / hp.currentMax);
   };
   world.on((e) => {
-    if (e.type === "player" && e.roomChanged) {
-      const from = room;
-      const to = (session.resource(e.player.roomRes) ?? "").toLowerCase();
-      const self = world.self;
-      if (from && to && from !== to && self) {
-        const exit = exitTaken(exits[from], from, to, squareOf(self), null);
-        log(`left ${from} for ${to}:`, JSON.stringify(exit));
-        fs.leftRoom(exit);
-      }
-    }
-    if (e.type === "roomContents") {
-      where();
-      roomFriends();
-    }
-    if (e.type === "objectAdded" || e.type === "objectRemoved") roomFriends();
+    if (e.type === "roomContents" || e.type === "objectAdded" || e.type === "objectRemoved") roomFriends();
     if (e.type === "stats" && e.group === STAT_GROUP.MAIN) health();
   });
   health();
-  where();
   roomFriends();
   setInterval(() => fs.tick(), 250);
-  if (opt.add) {
-    const found = await client.search(opt.add);
-    const p = found.find((x) => x.name.toLowerCase() === opt.add!.toLowerCase()) ?? found[0];
-    log(p ? `asking ${p.name}: ${fs.add(p) ?? "sent"}` : `${opt.add} isn't on the relay`);
+  if (opt.pet) {
+    const [kind, colour, ...petName] = opt.pet.split(":");
+    session.shardsCommand(`pet set ${kind} ${Number(colour) || 0}${petName.length ? ` ${petName.join(":")}` : ""}`);
   }
+  if (opt.add) log(`asking ${opt.add}: ${fs.add(opt.add, name()) ?? "sent"}`);
   if (opt.walk) void walk(opt.walk);
-}
-
-interface KeyFile {
-  privateKey: JsonWebKey;
-  publicKey: JsonWebKey;
-  store: Record<string, string>;
-}
-
-/** A new key each run, or the one in --keyfile (made extractable so it can be kept there) */
-async function loadIdentity(): Promise<{ keys: CryptoKeyPair; store: Map<string, string> }> {
-  if (!opt.keyfile) return { keys: await generateIdentity(), store: new Map() };
-  const alg = { name: "ECDSA", namedCurve: "P-256" };
-  if (existsSync(opt.keyfile)) {
-    const f = JSON.parse(readFileSync(opt.keyfile, "utf8")) as KeyFile;
-    const keys = {
-      privateKey: await crypto.subtle.importKey("jwk", f.privateKey, alg, true, ["sign"]),
-      publicKey: await crypto.subtle.importKey("jwk", f.publicKey, alg, true, ["verify"]),
-    };
-    log(`key from ${opt.keyfile}`);
-    return { keys, store: new Map(Object.entries(f.store ?? {})) };
-  }
-  const keys = await crypto.subtle.generateKey(alg, true, ["sign", "verify"]);
-  const store = new Map<string, string>();
-  await saveIdentity(keys, store);
-  return { keys, store };
-}
-
-async function saveIdentity(keys: CryptoKeyPair, store: Map<string, string>): Promise<void> {
-  if (!opt.keyfile) return;
-  const f: KeyFile = {
-    privateKey: await crypto.subtle.exportKey("jwk", keys.privateKey),
-    publicKey: await crypto.subtle.exportKey("jwk", keys.publicKey),
-    store: Object.fromEntries(store),
-  };
-  writeFileSync(opt.keyfile, JSON.stringify(f));
 }
 
 /** Walk the squares as the headless client does: a short step every 250 ms */

@@ -1,6 +1,6 @@
 # ADR 0007: The arena, one sim on the relay
 
-- **Status:** accepted, 2026-10-12, and built the same day (see "As built"). Builds on the relay of [ADR 0005](0005-friends.md).
+- **Status:** accepted, 2026-10-12, and built the same day (see "As built"). Builds on the relay of [ADR 0005](0005-friends.md). **Since 2026-10-16** the relay is only the arena's feed: anyone in the arena's room watches with no sign-in (`ArenaClient`, [ADR 0015](0015-social-on-our-server.md) 3).
 
 ## Context
 

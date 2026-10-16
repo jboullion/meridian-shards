@@ -87,12 +87,10 @@ Townsfolk, inn patrons, the castles' people and the arena's fighters (`packages/
 
 ## Friends (ours)
 
-Friends, the relay, following and health bars ([ADR 0005](adr/0005-friends.md)) have no counterpart in the original. What they don't do yet:
+Friends, following and health bars ([ADR 0005](adr/0005-friends.md), kept by our server since [ADR 0015](adr/0015-social-on-our-server.md)) have no counterpart in the original. What they don't do yet:
 
 | What | What it needs |
 |---|---|
-| Friends on a second device | Keys live in one browser's IndexedDB; a new device or cleared data means pairing again. Syncing keys is out of scope. |
-| End-to-end encryption | The relay is ours and sees friends' locations; ECDH on the same keys is a possible later step. |
 | Walking to a friend in another room | Following starts only in the same room (ADR 0005 4.7). |
 | Pet colours | [ADR 0006](adr/0006-pets.md) 6.4: every pet kind is in its own colours; recoloured ones come once each is looked at in the game. |
 

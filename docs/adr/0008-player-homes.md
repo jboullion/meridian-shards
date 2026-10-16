@@ -204,7 +204,7 @@ Before any of this:
 2. **Our client** gives them a UI:
    - **A Homes tab** beside Friends and Pets (`Sidebar.tsx TABS`):
      - the character's home and rooms, and their guests
-     - **Add from my friends**: picks among the relay's friends and sends `guest add` for each; the server only ever sees the owner's choice
+     - **Add from my friends**: picks among our friends (kept by our server since [ADR 0015](0015-social-on-our-server.md)) and sends `guest add` for each; the server only ever sees the owner's choice
      - where a bank or inn chest is waiting
      - the picker for `visit` (4.4)
    - **At a bank:** Properties and Sell house buttons, which send the spoken commands. The list of homes for sale is the existing Buy window (`GameView askTrader`), with nothing new needed to show it.

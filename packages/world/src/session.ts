@@ -177,6 +177,41 @@ export interface TravelPlace {
  */
 export type TravelEvent = { type: "list"; here: number; pvpSeconds: number; places: TravelPlace[] } | { type: "pvp"; seconds: number };
 
+/** A friend as our server lists them (UC_FRIENDS FR_LIST) */
+export interface ServerFriend {
+  name: string;
+  online: boolean;
+  /** When they last left the game (Kod time, KOD_TIME_BASE), 0 if never */
+  lastSeen: number;
+}
+
+/** A pet as our server keeps it (UC_PETS), or null for none */
+export interface ServerPet {
+  kind: string;
+  colour: number;
+  name: string;
+}
+
+/**
+ * Ours (docs/adr/0015-social-on-our-server.md): what our server's friends, pets and shared crowd
+ * say (shards-server util/shardssocial.kod). Rooms are their files, lower case.
+ */
+export type SocialEvent =
+  /** Our friends, the requests either way, whom we follow and who follows us, and our options (SF_* flags) */
+  | { type: "friends"; flags: number; friends: ServerFriend[]; incoming: string[]; outgoing: string[]; following: string | null; followers: string[] }
+  /** Where a friend is (shown false: they don't say) */
+  | { type: "location"; name: string; shown: boolean; rid: number; room: string; at: [number, number] }
+  /** A friend in our room's health, a whole percentage */
+  | { type: "health"; name: string; pct: number }
+  /** The friend we follow left a room, from this square */
+  | { type: "exit"; name: string; from: string; to: string; at: [number, number] }
+  /** Players in the game whose names hold what we searched for */
+  | { type: "search"; names: string[] }
+  /** Pets of players in our room, by object id */
+  | { type: "pets"; pets: { id: number; pet: ServerPet | null }[] }
+  /** Our room's shared crowd: its seed, how long ago it began (ms), the game hour it began in */
+  | { type: "ambient"; seed: number; elapsed: number; hour: number | null };
+
 export interface SessionEvents {
   phase?: (phase: SessionPhase) => void;
   characters?: (characters: CharacterSlot[], motd: string) => void;
@@ -200,6 +235,8 @@ export interface SessionEvents {
   trade?: (list: TradeList) => void;
   /** Ours: fast travel (docs/adr/0011-fast-travel.md): where a portal can take us, and the PvP lockout */
   travel?: (e: TravelEvent) => void;
+  /** Ours: friends, pets and the shared crowd, from our server (docs/adr/0015-social-on-our-server.md) */
+  social?: (e: SocialEvent) => void;
   offer?: (e: OfferEvent) => void;
   sound?: (e: SoundEvent) => void;
   /** We hurt something, and by how much (combatHit.ts: for damage numbers over its head) */
@@ -546,6 +583,72 @@ export class GameSession {
     this.send(buildShardsCommand(line));
   }
 
+  /** Ours: UC_FRIENDS, UC_PETS or UC_AMBIENT (shards-server util/shardssocial.kod), as an event */
+  private readSocial(uc: number, r: ByteReader): SocialEvent | null {
+    const room = (rsc: number) => (this.resource(rsc) ?? "").toLowerCase();
+    const names = () => {
+      const out: string[] = [];
+      for (let n = r.u16(); n > 0; n--) out.push(r.string());
+      return out;
+    };
+    if (uc === UC.AMBIENT) {
+      const seed = r.u32();
+      const elapsed = r.i32();
+      const hour = r.u8();
+      return { type: "ambient", seed, elapsed, hour: hour < 24 ? hour : null };
+    }
+    if (uc === UC.PETS) {
+      const pets: { id: number; pet: ServerPet | null }[] = [];
+      for (let n = r.u16(); n > 0; n--) {
+        const id = r.u32();
+        if (!r.u8()) {
+          pets.push({ id, pet: null });
+          continue;
+        }
+        const kind = r.string();
+        const colour = r.u8();
+        pets.push({ id, pet: { kind, colour, name: r.string() } });
+      }
+      return { type: "pets", pets };
+    }
+    switch (r.u8()) {
+      // FR_LIST
+      case 1: {
+        const flags = r.u8();
+        const friends: ServerFriend[] = [];
+        for (let n = r.u16(); n > 0; n--) friends.push({ name: r.string(), online: r.u8() !== 0, lastSeen: r.u32() });
+        const incoming = names();
+        const outgoing = names();
+        const following = r.u8() ? r.string() : null;
+        return { type: "friends", flags, friends, incoming, outgoing, following, followers: names() };
+      }
+      // FR_LOC
+      case 2: {
+        const name = r.string();
+        const shown = r.u8() !== 0;
+        const rid = r.u32();
+        const file = room(r.u32());
+        const row = r.u16();
+        return { type: "location", name, shown, rid, room: file, at: [row, r.u16()] };
+      }
+      // FR_HP
+      case 3:
+        return { type: "health", name: r.string(), pct: r.u8() };
+      // FR_EXIT
+      case 4: {
+        const name = r.string();
+        const from = room(r.u32());
+        const to = room(r.u32());
+        const row = r.u16();
+        return { type: "exit", name, from, to, at: [row, r.u16()] };
+      }
+      // FR_SEARCH
+      case 5:
+        return { type: "search", names: names() };
+    }
+    return null;
+  }
+
   /** BP_REQ_ADMIN: an admin command (the server answers with BP_ADMIN; only admin accounts may) */
   adminCommand(command: string): void {
     this.send(buildReqAdmin(command));
@@ -700,12 +803,6 @@ export class GameSession {
    */
   textFilter: ((text: string) => string) | null = null;
 
-  /**
-   * Ours: a line this returns true for is never shown, nor put in a chat tab (the friend request's
-   * tell, docs/adr/0005-friends.md 2.4.2). Called with the raw text and, for speech, who said it.
-   */
-  lineFilter: ((text: string, sender: { id: number; name: string } | null) => boolean) | null = null;
-
   private chatLine(kind: ChatLine["kind"], text: string, channel: ChatChannel, extra: Pick<ChatLine, "sender" | "sayType"> = {}): void {
     const shown = this.textFilter ? this.textFilter(text) : text;
     const logon = Date.now() < this.logonUntil || undefined;
@@ -849,7 +946,7 @@ export class GameSession {
           // The logon's messages (welcome, news, quests, the help text) all go to the Server tab,
           // whatever words they use; after that, the format string decides
           const channel = type === BP.SYS_MESSAGE || Date.now() < this.logonUntil ? "server" : messageChannel(formatText);
-          if (text !== null && !this.lineFilter?.(text, null)) this.chatLine("system", text, channel);
+          if (text !== null) this.chatLine("system", text, channel);
           if (type === BP.MESSAGE) {
             const hit = readDamageDealt(formatText, params, (id) => this.resource(id));
             if (hit) this.events.damageDealt?.(hit);
@@ -864,7 +961,7 @@ export class GameSession {
           const senderName = this.resource(r.u32()) ?? "";
           const sayType = r.u8();
           const text = formatServerMessage(r.u32(), r, (id) => this.resource(id));
-          if (text !== null && !this.lineFilter?.(text, { id: senderId, name: senderName }))
+          if (text !== null)
             this.chatLine(sayType === SAY.RESOURCE ? "said-resource" : "say", text, "chat", { sender: { id: senderId, name: senderName }, sayType });
           break;
         }
@@ -916,6 +1013,10 @@ export class GameSession {
           } else if (uc === UC.PVP_UNTIL) {
             // Ours (user.kod SendPvPUntil)
             this.events.travel?.({ type: "pvp", seconds: r.i32() });
+          } else if (uc === UC.FRIENDS || uc === UC.PETS || uc === UC.AMBIENT) {
+            // Ours (shards-server util/shardssocial.kod)
+            const e = this.readSocial(uc, r);
+            if (e) this.events.social?.(e);
           } else if (uc === UC.SEND_QUIT) {
             // merintr.c HandleSendQuit: the server wants us out (after a suicide, a rescue)
             this.send(buildSimple(BP.REQ_QUIT));

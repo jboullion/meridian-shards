@@ -5,7 +5,7 @@ The hosted stack is three containers on one small Linux VM:
 | Container | What it is |
 |---|---|
 | `blakserv` | The unmodified Server 104 server, built for Linux (32-bit), with the compiled Kod, resources and rooms from our build. Game state lives on the `savegame` volume. |
-| `gateway` | The WebSocket-to-TCP gateway (`tools/gateway/gateway.ts`), with the friends relay and the arena it runs ([ADR 0007](../docs/adr/0007-arena.md)). The arena's season lives on the `arena` volume (`/srv/gateway/state/arena-state.json`). |
+| `gateway` | The WebSocket-to-TCP gateway (`tools/gateway/gateway.ts`), with the arena's feed on `/social` and the arena it runs (friends and pets are kept by blakserv since ADR 0015) ([ADR 0007](../docs/adr/0007-arena.md)). The arena's season lives on the `arena` volume (`/srv/gateway/state/arena-state.json`). |
 | `web` | Caddy: HTTPS (Let's Encrypt), the website at `/` (the landing page, `/download/` and the wiki: the `meridian-shards-website` repository next to this one), the browser client at `/play/`, the game assets at `/assets/`, the gateway at `/ws` and the friends relay at `/social` (in the gateway's process, [ADR 0005](../docs/adr/0005-friends.md); it keeps nothing on disk but the arena's season). Without a staged website every other path redirects to `/play/`, as before. The browser client was taken down on 2026-10-08 and is back since 2026-10-09; most players use the desktop or Android app. |
 
 Port 5959 is also open for original Windows clients built with our `SecretKey`. Our apps only need 443.

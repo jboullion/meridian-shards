@@ -2,12 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import type { CharInfo, CharacterSlot } from "@shards/protocol";
 import { SAY } from "@shards/protocol";
 import {
-  GameSession, type ChatLine, type ContainerContents, type DamageDealt, type LookResult, type OfferEvent, type SessionPhase, type TradeList, type TravelEvent,
+  GameSession, type ChatLine, type ContainerContents, type DamageDealt, type LookResult, type OfferEvent, type SessionPhase, type SocialEvent, type TradeList, type TravelEvent,
   type MailNewsEvent, type GuildEvent, type MinigameEvent, localResName } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
 import { allowPortrait, desktop, gameSocketUrl, onAndroidAway, requiredUpdate, type RequiredUpdate } from "../host.ts";
-import { hideFriendTells } from "./social.ts";
 import { GameAudio } from "./audio.ts";
 import { IntroBackdrop } from "./Intro.tsx";
 import { CharacterCreator } from "./CharacterCreator.tsx";
@@ -41,6 +40,8 @@ interface Live {
   icons: IconRenderer;
   trades: Relay<TradeList>;
   travel: Relay<TravelEvent>;
+  /** Ours: friends, pets and the shared crowd from our server (docs/adr/0015) */
+  social: Relay<SocialEvent>;
   offers: Relay<OfferEvent>;
   looks: Relay<LookResult>;
   contents: Relay<ContainerContents>;
@@ -171,6 +172,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   const connect = (username: string, password: string, audio: GameAudio) => {
     const trades = new Relay<TradeList>();
     const travel = new Relay<TravelEvent>();
+    const social = new Relay<SocialEvent>();
     const offers = new Relay<OfferEvent>();
     const looks = new Relay<LookResult>();
     const contents = new Relay<ContainerContents>();
@@ -232,6 +234,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
         contents: (container, items) => contents.emit({ container, items }),
         trade: trades.emit,
         travel: travel.emit,
+        social: social.emit,
         offer: offers.emit,
         sound: (e) => audio.handle(e),
         damageDealt: damage.emit,
@@ -239,12 +242,10 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     );
     // srvrstr.c: the profanity filter on every line shown
     s.textFilter = filterIncoming;
-    // Ours: a friend request's tell is never shown, even before the friends feature has started (social.ts)
-    hideFriendTells(s);
     s.setLanguage(getSettings().language);
     void loadProfanity(assets);
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
   };
 
   const logout = () => {
@@ -345,6 +346,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       icons={live.icons}
       trades={live.trades.on}
       travel={live.travel.on}
+      socialEvents={live.social.on}
       offers={live.offers.on}
       phase={phase}
       chat={chat}

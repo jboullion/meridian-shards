@@ -1,11 +1,11 @@
 // Ours (docs/adr/0005-friends.md section 3): the Friends tab of the character window and the
 // interface column (beside Inventory, Spells and the rest), from the ☰ menu's Actions and the
-// Friends key too. Find players of this client on this server and ask them, answer requests, and
-// per friend: where they are (Locate), their pin on the map (Map marker), Follow and Remove. It
-// flows to fit, from the Classic column's narrow page to the Modern window's.
+// Friends key too. Find players in the game and ask them, answer requests, and per friend: where
+// they are (Locate), their pin on the map (Map marker), Follow and Remove. Our server keeps all of
+// it (docs/adr/0015-social-on-our-server.md). It flows to fit, from the Classic column's narrow
+// page to the Modern window's.
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import type { RelayPlayer } from "@shards/world";
 import type { SocialLink } from "../social.ts";
 import { Button, Check, ListBox } from "./kit.tsx";
 
@@ -36,18 +36,18 @@ export function PanelSection({ title, children }: { title: string; children: Rea
 }
 
 export function FriendsPanel({
-  link, inGame, onFollow,
+  link, self, onFollow,
 }: {
   /** The friends feature, or null while it starts */
   link: SocialLink | null;
-  /** Whether a character is in the game (the server's online list) */
-  inGame: (name: string) => boolean;
+  /** Our character's name */
+  self: string;
   /** Follow a friend in our room (GameView checks and starts it) */
   onFollow: (key: string) => void;
 }) {
   useSocial(link);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<RelayPlayer[] | null>(null);
+  const [results, setResults] = useState<string[] | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [request, setRequest] = useState<string | null>(null);
   const [friendKey, setFriendKey] = useState<string | null>(null);
@@ -56,37 +56,32 @@ export function FriendsPanel({
   const [openedAt] = useState(() => Date.now());
   if (!link) return <div className="friends-panel panel-note">Starting…</div>;
   const fs = link.friends;
-  const online = fs.relayStatus === "online";
+  const online = fs.ready;
 
   const search = async (e: FormEvent) => {
     e.preventDefault();
     const q = query.trim();
     if (q.length < 2) return setStatus("Type at least two letters of a name.");
     setStatus("Searching…");
-    const found = await link.client.search(q);
+    const found = await fs.search(q);
     setResults(found);
-    setResult(found[0]?.key ?? null);
-    setStatus(found.length ? "" : "Nobody playing Meridian Shards on this server has a name starting with that.");
+    setResult(found[0] ?? null);
+    setStatus(found.length ? "" : "Nobody in the game has a name with that in it.");
   };
 
-  const add = (p: RelayPlayer | undefined) => {
-    if (!p) return;
-    const err = fs.add(p);
-    setStatus(err ?? `Asked ${p.name}. They'll see your request while you're both in the game.`);
+  const add = (name: string | null | undefined) => {
+    if (!name) return;
+    const err = fs.add(name, self);
+    setStatus(err ?? `Asked ${name}. They'll see your request, now or when they next play.`);
   };
 
   // The first friend until one is chosen
   const friend = fs.friends.find((f) => f.key === friendKey) ?? fs.friends[0] ?? null;
   const here = friend ? link.objectOf(friend.key) !== null : false;
-  const rekeyed = friend ? fs.rekeyed.has(friend.key) : false;
 
   const describe = (key: string): string => {
     const f = fs.friendByKey(key)!;
-    if (fs.rekeyed.has(key)) return "needs pairing again";
-    if (!fs.online.has(key)) {
-      if (inGame(f.name)) return "in the game, not on Meridian Shards";
-      return f.lastSeen ? `offline, seen ${ago(openedAt - f.lastSeen)} ago` : "offline";
-    }
+    if (!fs.online.has(key)) return f.lastSeen ? `offline, seen ${ago(openedAt - f.lastSeen)} ago` : "offline";
     const parts = [link.objectOf(key) !== null ? "here" : "online"];
     if (f.locate && link.objectOf(key) === null) {
       const loc = fs.locations.get(key);
@@ -136,18 +131,7 @@ export function FriendsPanel({
         )}
         {friend && (
           <div className="panel-row wrap">
-            {rekeyed ? (
-              <Button
-                title="They're playing with a new key (another device, or cleared data): ask them again"
-                onClick={async () => {
-                  const p = await fs.rekeyedPlayer(friend.key);
-                  if (p) add(p);
-                  else setStatus(`${friend.name} isn't on Meridian Shards just now.`);
-                }}
-              >
-                Pair again
-              </Button>
-            ) : fs.following === friend.key ? (
+            {fs.following === friend.key ? (
               <Button onClick={() => fs.stopFollowing("you chose to")}>Unfollow</Button>
             ) : (
               <Button title="Walk after them (only while they're in your room)" disabled={!here || !fs.online.has(friend.key)} onClick={() => onFollow(friend.key)}>
@@ -192,11 +176,11 @@ export function FriendsPanel({
               label="Players found"
               selected={result}
               onSelect={setResult}
-              onActivate={(k) => add(results.find((p) => p.key === k))}
-              items={results.map((p) => ({ key: p.key, label: fs.friendByKey(p.key) ? `${p.name} (friend)` : p.name }))}
+              onActivate={(name) => add(name)}
+              items={results.map((name) => ({ key: name, label: fs.friendByName(name) ? `${name} (friend)` : name }))}
             />
             <div className="panel-row">
-              <Button disabled={!online || !result} onClick={() => add(results.find((p) => p.key === result))}>
+              <Button disabled={!online || !result} onClick={() => add(result)}>
                 Add friend
               </Button>
             </div>
@@ -212,12 +196,7 @@ export function FriendsPanel({
       </PanelSection>
 
       <p className="panel-note">
-        {status ||
-          (online
-            ? "Sent through the Meridian Shards server, which keeps nothing on disk. Only players of Meridian Shards are listed."
-            : fs.relayStatus === "replaced"
-              ? "This character is on Meridian Shards in another window."
-              : "Can't reach the Meridian Shards server: friends show offline until it's back.")}
+        {status || (online ? "Your friends are kept with your character, on every device you play on." : "Asking the server for your friends…")}
       </p>
     </div>
   );

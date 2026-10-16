@@ -17,8 +17,8 @@ export * from "./ambient/tuning.ts";
 export * from "./ambient/chatter.ts";
 export * from "./ambient/townsfolk.ts";
 export * from "./ambient/critters.ts";
-export * from "./social/socialProtocol.ts";
-export * from "./social/socialClient.ts";
+
+export * from "./arena/arenaClient.ts";
 export * from "./social/friends.ts";
 export * from "./social/follow.ts";
 export * from "./ambient/ambientStepper.ts";

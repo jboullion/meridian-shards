@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { CF, SAY, STAT_GROUP, UA, UC, objId, type ObjectInfo } from "@shards/protocol";
 import {
   PROFANITY_WARNING, isNumberItem, type SpellRefusal, OBSERVER, WHITE, BLACK, decodeBoard, type GuildEvent, type MinigameEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
-  type TradeList, type TravelEvent, type TravelPlace, petForKarma, petKind, type AmbientPersonInfo,
+  type SocialEvent, type TradeList, type TravelEvent, type TravelPlace, petForKarma, petKind, type AmbientPersonInfo,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import type { AudioPreview, GameAudio } from "./audio.ts";
@@ -175,7 +175,7 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, offers, serverPrefs, latency,
 }: {
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
@@ -214,6 +214,8 @@ export function GameView({
   offers: (fn: (e: OfferEvent) => void) => () => void;
   /** Ours: fast travel's lists and the PvP lockout (docs/adr/0011-fast-travel.md) */
   travel: (fn: (e: TravelEvent) => void) => () => void;
+  /** Ours: friends, pets and the shared crowd from our server (docs/adr/0015-social-on-our-server.md) */
+  socialEvents: (fn: (e: SocialEvent) => void) => () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
@@ -489,8 +491,8 @@ export function GameView({
       return slots;
     });
   /**
-   * Ours (docs/adr/0005-friends.md): this character's friends and the relay, once we know who we
-   * are; without the relay, friends just show offline
+   * Ours (docs/adr/0005-friends.md, docs/adr/0015-social-on-our-server.md): this character's
+   * friends, kept by our server, once we know who we are
    */
   const [social, setSocial] = useState<SocialLink | null>(null);
   // Our object is gone for a moment at every save (BP_INVALIDATE_DATA): keep the name we had, so the
@@ -501,7 +503,7 @@ export function GameView({
     if (!socialName) return;
     let link: SocialLink | null = null;
     let live = true;
-    SocialLink.start(session, assets, socialName).then(
+    SocialLink.start(session, assets, socialName, socialEvents).then(
       (l) => {
         if (!live) return l.dispose();
         link = l;
@@ -514,7 +516,7 @@ export function GameView({
       link?.dispose();
       setSocial(null);
     };
-  }, [session, assets, socialName]);
+  }, [session, assets, socialName, socialEvents]);
   // The scene draws friends' health bars and walks after the friend we follow (4, 5)
   useEffect(() => {
     const scene = sceneRef.current;
@@ -526,10 +528,16 @@ export function GameView({
     });
     // The scene stopped following of itself (we moved, the way was lost): the friend hears, the chat says why
     scene.onFollowStop = (why) => social.friends.stopFollowing(why);
+    // The server starts and ends following (its list says whom we follow); the scene walks
     const offEvents = social.friends.onEvent((e) => {
-      if (e.type === "exit") scene.followExit(e.exit);
+      if (e.type === "startFollowing") scene.startFollowing(e.key, e.name);
+      else if (e.type === "exit") scene.followExit(e.exit);
       else if (e.type === "stopFollowing") scene.stopFollowing(null);
     });
+    if (social.friends.following) {
+      const f = social.friends.friendByKey(social.friends.following);
+      if (f) scene.startFollowing(f.key, f.name);
+    }
     // 4.5: the follower casting, attacking or being hit stops it
     const offCast = session.onCastSent(() => social.friends.following && social.friends.stopFollowing("you cast a spell"));
     let hp = session.world.stats.get(STAT_GROUP.MAIN)?.find((x) => x.num === STAT_HP)?.numeric?.value ?? null;
@@ -548,10 +556,7 @@ export function GameView({
       scene.onFollowStop = undefined;
     };
   }, [social, session]);
-  /**
-   * Ours: Add or Remove friend on another player's description. Adding asks the relay for their
-   * key by name; only players of Meridian Shards who show in search can be asked this way.
-   */
+  /** Ours: Add or Remove friend on another player's description (our server asks them) */
   const friendButton = (look: LookResult) => {
     if (!social || !look.player || look.object.id === session.world.player?.id || !look.name) return undefined;
     const fs = social.friends;
@@ -567,13 +572,10 @@ export function GameView({
     if (fs.outgoing.some((r) => r.name.toLowerCase() === look.name.toLowerCase())) return { label: "Asked", disabled: true, onClick: () => {} };
     return {
       label: "Add friend",
-      title: "Ask them to be your friend (they must play Meridian Shards)",
-      onClick: async () => {
-        const found = await social.client.lookup([look.name]);
-        const p = found.find((x) => x.name.toLowerCase() === look.name.toLowerCase());
-        if (!p) return session.localMessage(`${look.name} doesn't play Meridian Shards, or doesn't show in its search.`);
-        const err = fs.add(p);
-        session.localMessage(err ?? `You asked ${p.name} to be your friend.`);
+      title: "Ask them to be your friend",
+      onClick: () => {
+        const err = fs.add(look.name, socialName);
+        if (err) session.localMessage(err);
         setDesc(null);
       },
     };
@@ -584,18 +586,35 @@ export function GameView({
     const f = social.friends.friendByKey(key);
     if (!f) return;
     if (social.objectOf(key) === null) return session.localMessage(`${f.name} isn't here: you can only start following someone in your room.`);
+    // The server checks and answers with its list, which starts the walking (startFollowing)
     const err = social.friends.startFollow(key);
     if (err) return session.localMessage(err);
-    sceneRef.current?.startFollowing(key, f.name);
     setModal(null);
   };
-  /** Ours (docs/adr/0006-pets.md): this character's pet, loaded once we know who we are */
+  /**
+   * Ours (docs/adr/0006-pets.md): this character's pet. Our server keeps it (docs/adr/0015); this
+   * browser's copy (pet.ts) shows it until the server says, and goes up to the server once if the
+   * server has none (a pet chosen before the server kept them).
+   */
   const [pet, setPetState] = useState<{ name: string; pet: ReturnType<typeof loadPet> }>({ name: "", pet: null });
   if (socialName && pet.name !== socialName) setPetState({ name: socialName, pet: loadPet(localStorage, gameSocketUrl(), socialName) });
   const choosePet = (p: ReturnType<typeof loadPet>) => {
     savePet(localStorage, gameSocketUrl(), pet.name, p);
     setPetState({ name: pet.name, pet: p });
   };
+  useEffect(() => {
+    if (!social) return;
+    let first = true;
+    return social.onOwnPet((p) => {
+      const local = loadPet(localStorage, gameSocketUrl(), social.character);
+      if (first && !p && local) social.setPet(local);
+      else {
+        savePet(localStorage, gameSocketUrl(), social.character, p);
+        setPetState({ name: social.character, pet: p });
+      }
+      first = false;
+    });
+  }, [social]);
   /**
    * Our maximum health (piMax_health: STAT_HP's currentMax, its max always 100) and karma (the
    * Stats group's, -100 to 100), for the Pets tab; kept as they change, not on every regen tick
@@ -622,7 +641,7 @@ export function GameView({
   useEffect(() => {
     if (tab === "pets") session.requestStats(STAT_GROUP.STATS);
   }, [tab, session]);
-  // The scene walks it; the relay tells everyone else (3.1)
+  // The scene walks it; our server keeps it and tells everyone in the room (3.1)
   useEffect(() => {
     const scene = sceneRef.current;
     if (scene) {
@@ -636,7 +655,7 @@ export function GameView({
   const friendsPanel = (
     <FriendsPanel
       link={social}
-      inGame={(name) => [...session.world.players.values()].some((p) => p.name.toLowerCase() === name.toLowerCase())}
+      self={socialName}
       onFollow={followFriend}
     />
   );

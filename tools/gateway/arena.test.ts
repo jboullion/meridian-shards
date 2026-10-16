@@ -1,6 +1,6 @@
 // The arena on the relay (docs/adr/0007-arena.md): everyone on a server watches one arena, it stops
 // when nobody does, its season is kept on disk and turns over each Meridian year, and players get
-// it through the relay with a SocialClient.
+// it through the relay with an ArenaClient.
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -10,10 +10,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 import {
-  DEFAULT_ARENA_CONFIG, SEASON_MS, SocialClient, generateIdentity, seasonStart, type ArenaMessage, type ArenaState, type ArenaTick,
+  ArenaClient, DEFAULT_ARENA_CONFIG, SEASON_MS, seasonStart, type ArenaMessage, type ArenaState, type ArenaTick,
 } from "../../packages/world/src/index.ts";
 import { ArenaHost } from "./arena.ts";
-import { SocialRelay } from "./relay.ts";
+import { ArenaRelay } from "./relay.ts";
 
 const ASSETS = join(import.meta.dirname, "../../dist/assets");
 const have = existsSync(join(ASSETS, "tosarena.roo"));
@@ -21,7 +21,7 @@ const SERVER = "ws://test/ws";
 
 let dir: string | null = null;
 let http: Server | null = null;
-const clients: SocialClient[] = [];
+const clients: ArenaClient[] = [];
 
 afterEach(async () => {
   for (const c of clients.splice(0)) c.close();
@@ -140,7 +140,7 @@ describe.skipIf(!have)("the arena on the relay", () => {
   it("players watch it through the relay; with no arena there, they're told", async () => {
     const clock = { now: Date.now() };
     const h = host(clock);
-    const relay = new SocialRelay({ arena: h });
+    const relay = new ArenaRelay({ arena: h });
     const wss = new WebSocketServer({ noServer: true });
     http = createServer();
     http.on("upgrade", (req, socket, head) =>
@@ -153,19 +153,18 @@ describe.skipIf(!have)("the arena on the relay", () => {
     await new Promise<void>((r) => http!.listen(0, "127.0.0.1", r));
     const url = `ws://127.0.0.1:${(http.address() as AddressInfo).port}/social`;
     const heard: (ArenaMessage | null)[] = [];
-    const client = new SocialClient({ url, server: SERVER, name: "Alice", keys: await generateIdentity(), visible: true }, { arena: (m) => heard.push(m) });
+    const client = new ArenaClient({ url, server: SERVER }, (m) => heard.push(m));
     clients.push(client);
-    client.watchArena("tosarena.roo");
-    await client.start();
+    client.watch("tosarena.roo");
     await until(() => heard.length > 0);
     expect(heard[0]?.t).toBe("arenaState");
     h.stepAll(4);
     await until(() => heard.length >= 3);
     expect(heard.slice(1).every((m) => m?.t === "arenaTick")).toBe(true);
     // Another room isn't the arena
-    client.watchArena(null);
+    client.watch(null);
     await until(() => h.running === 1);
-    client.watchArena("tos.roo");
+    client.watch("tos.roo");
     await until(() => heard.includes(null));
   });
 });

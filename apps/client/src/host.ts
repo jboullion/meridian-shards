@@ -367,7 +367,7 @@ export function gameSocketUrl(): string {
   return `${base.protocol === "https:" ? "wss" : "ws"}://${base.host}/ws`;
 }
 
-/** The friends relay's WebSocket URL (docs/adr/0005-friends.md), beside the gateway's */
+/** The arena's feed's WebSocket URL (docs/adr/0007-arena.md; the friends relay's once), beside the gateway's */
 export function socialSocketUrl(): string {
   return gameSocketUrl().replace(/\/ws$/, "/social");
 }
