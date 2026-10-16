@@ -51,6 +51,9 @@ export const ADMIN_CITIES: readonly { name: string; rid: number }[] = [
   { name: "Underworld", rid: 1 },
 ];
 
+/** Ours: the admin test room (shards-server room/provgrnd.kod): spawn pads, training dummies and every kind of ground */
+export const PROVING_GROUNDS = { name: "Proving Grounds", rid: 4300 } as const;
+
 /** Rooms matching what was typed: a name, a room file or the start of a number */
 export function filterRooms(rooms: readonly AdminRoom[], typed: string): AdminRoom[] {
   const t = typed.trim().toLowerCase();
@@ -249,7 +252,7 @@ export function AdminConsole({
           Reset data
         </Button>
         <ListBox
-          at={[1, PAGE_Y + 59, 337, onEditRoom ? 98 : 112]}
+          at={[1, PAGE_Y + 59, 337, 98]}
           label="Rooms"
           className="admin-rooms"
           items={shownRooms.map((r) => ({ key: r.rid, label: `${r.rid}  ${r.name}  (${r.roo})` }))}
@@ -258,9 +261,12 @@ export function AdminConsole({
           onActivate={goToRoom}
         />
         {!rooms.length && <Text at={[6, PAGE_Y + 64, 320, 8]}>No room list: run npm run assets. A number typed above still works.</Text>}
+        <Button at={[1, PAGE_Y + 160, 72, 11]} title={`Room ${PROVING_GROUNDS.rid}: spawn pads, training dummies and every kind of ground`} onClick={() => goToRoom(PROVING_GROUNDS.rid)}>
+          {PROVING_GROUNDS.name}
+        </Button>
         {onEditRoom && (
           <Button
-            at={[1, PAGE_Y + 160, 72, 11]}
+            at={[77, PAGE_Y + 160, 72, 11]}
             title="Open this room in the room editor; saving it there puts it back in the game, here"
             onClick={() => {
               setStatus("Opening the room in the editor...");

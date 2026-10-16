@@ -55,7 +55,7 @@ Under the text are four tabs, after the remaster's console (`meridian-unreal`):
 
 | Tab | What it has |
 |---|---|
-| **Travel** | **Cities**: one click teleports you to Tos, Barloque, Marion, Cor Noth, Raza, Jasper, Ko'catan, Castle Victoria, Brax or the Underworld. Below, every room by number, name and file (`rooms.json` from `npm run assets`); type in **Find** to narrow it (a name, a file or a number), then double-click a room, or pick one and press **Go there** or Enter. A number the list doesn't have still works. **Where am I?** prints the room's name, file and number and your square. **Reset data** makes the server send your client everything again (`send object <you> invalidatedata`), as after a save. |
+| **Travel** | **Cities**: one click teleports you to Tos, Barloque, Marion, Cor Noth, Raza, Jasper, Ko'catan, Castle Victoria, Brax or the Underworld. Below, every room by number, name and file (`rooms.json` from `npm run assets`); type in **Find** to narrow it (a name, a file or a number), then double-click a room, or pick one and press **Go there** or Enter. A number the list doesn't have still works. **Where am I?** prints the room's name, file and number and your square. **Reset data** makes the server send your client everything again (`send object <you> invalidatedata`), as after a save. **Proving Grounds** takes you to the test room (below). **Edit this room**, in development builds only, opens the room you're in in the room editor, where saving puts it back in the game (meridian-editor's README, "Editing Shards' rooms live"). |
 | **Players** | Everyone logged on. Pick one and the **Object** label shows their object number. **Show** (every property of their character), **Go to** (teleport to them), **Bring here** (teleport them to you), **Rescue** (somewhere safe, for a player stuck in a wall or a broken room) and **Tell** (starts a tell on the chat line). |
 | **Self** | Immortal or mortal, boost stats, get every spell or skill, clear abilities; hidden, invisible, plain (back to normal), stealth, anonymous; karma and appeals; get an item by name or a class of items (money, weapons, armor, reagents, potions, scrolls); clear inventory (press it twice); disguise as a monster. |
 | **World** | The time of day for everyone (until **Real time**), make or call a monster, rumble, place scenery or a light (**Lights?** and **Scenery?** list the names), an event sign, a message to everyone or to this room, and the server's who, status, clock, save game and help. |
@@ -65,6 +65,31 @@ The Self and World buttons are DM commands. Their text fields send with their bu
 ### DM commands
 
 Admin characters also get the original's DM commands, said with `SAY_DM` (`dm.kod` and `admin.kod` `UserSay`). Type `dm` and the command on the command line, such as `dm item long sword`, `dm monster orc`, `dm night` or `dm place brazier`. `dm help` lists them; `dm help lights`, `dm help scenery` and `dm help messages` list more. Their answers are game messages: they show in the chat's Server tab and, for a few seconds after a DM command, in the console too.
+
+### The Proving Grounds
+
+Ours: a room for trying things, RID 4300 (shards-server's `room/provgrnd.kod`, its geometry `resource/rooms/src/provgrnd.room.json`). Only admins and DMs can enter. Its exits on the west side lead to Tos (row 12) and the God room (row 13).
+
+| Zone | Where | For |
+|---|---|---|
+| The pen | rows 2-10, cols 2-14 | Five spawn pads (the lighter squares) to fight monsters on |
+| The spell range | rows 2-10, cols 18-31 | Three training dummies, 2, 5 and 10 squares east of the casting mark (row 6, col 19). They never move, fight back or die, and each hit tells you its damage ("The training dummy takes 12 damage.") |
+| The terrain | rows 14-17 | Grass, earth, rocky ground, cobbles, shallow water, deep water, painted water (a water texture on a dry floor) and grass, west to east: for Ground Detail, critters, fish and puddles |
+| The hall | rows 19-23 | Under a roof: indoor light and bats |
+
+Its helpers, for the command line (`send object 0 FindRoomByNum num int 4300` gives the room's number):
+
+```text
+send object <room> SpawnMonster what class Orc pad int 1 count int 3
+send object <room> ClearMonsters
+send object <room> ClearItems
+send object <room> ResetDummies
+```
+
+- **Spawning:** pads 1-5 are top left, top right, bottom left, bottom right and the middle of the pen. Up to 10 monsters at a time, kept from the room's disposal sweep.
+- **Clearing:** ClearMonsters deletes every monster but the dummies.
+- **Answers:** each helper returns how many it made or deleted.
+- **Other ground (development builds only):** the room counts as fields, so wild critters and ground detail appear. In the browser's console, `shards.gameScene.setTestRoom({ terrain: ["CAVES"] })` tries it as other ground, and `setTestRoom({ crowd: { kind: "town", count: 6, place: "tos", guards: 1, livery: 0 } })` adds a town's crowd. `undefined` puts either back.
 
 ### The Debug tab
 

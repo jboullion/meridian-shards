@@ -17,7 +17,7 @@ import {
   type NameLabel, type ViewObject,
 } from "@shards/render";
 import {
-  AMBIENT_ROOMS, AMBIENT_SCALE, AmbientLife, LiveRoom, MOVEON, PlayerMover, REMOTE_VIEW, animStep, isAmbientId, localRes, localResName, townsfolkArt,
+  AMBIENT_ROOMS, AMBIENT_SCALE, type AmbientRoomSpec, AmbientLife, LiveRoom, MOVEON, PlayerMover, REMOTE_VIEW, animStep, isAmbientId, localRes, localResName, townsfolkArt,
   Critters, batsOf, critterArt, decodeNavGrid, habitatOf, hourFromSun, isImpressiveBody, type AmbientExits, type DamageDealt, type NavGrid, type NavPoint, type RemoteView, type GameSession, type WorldObject,
   FollowPlanner, navGridBuilder, AmbientStepper, type AmbientFrame, type AmbientSeed, Pets, petArt, type PetChoice, type PetOwner,
   ARENA_SEND_EVERY, ARENA_TICK_MS, ArenaSim, ArenaView, arenaArt, arenaHourAt, buildNavGrid, hashText, makeRoster, readArenaConfig, seasonAt,
@@ -256,6 +256,9 @@ export class GameScene {
    * build's (nav/*.nav), else built here ("build" until the ambient life has made it)
    */
   private navGrids = new Map<string, NavGrid | "loading" | "build">();
+  /** Development overrides of the current room's terrain and crowd (setTestRoom) */
+  private testTerrain: string[] | null = null;
+  private testCrowd: AmbientRoomSpec | null | undefined = undefined;
   /** Ours: the room's critters (rats, spiders and the like), and the room they're in */
   private critters: Critters | null = null;
   private critterRoom = "";
@@ -726,6 +729,28 @@ export class GameScene {
   }
 
   /**
+   * Development: try the current room as other terrain (TERRAIN_* names: "CAVES", "SWAMP" ...),
+   * or with another crowd (an AmbientRoomSpec; null for none), whatever the asset build and
+   * AMBIENT_ROOMS say; undefined puts either back. The Proving Grounds (RID 4300) is meant for
+   * this. Critters, bats, nature, ground detail, sounds and the crowd start over.
+   */
+  setTestRoom(o: { terrain?: string[] | null; crowd?: AmbientRoomSpec | null }): void {
+    if ("terrain" in o) this.testTerrain = o.terrain ?? null;
+    if ("crowd" in o) this.testCrowd = o.crowd;
+    this.forgetRoomCaches();
+  }
+
+  /** The current room's terrain (roomterrain.json), unless setTestRoom says otherwise */
+  private terrainHere(): string[] | undefined {
+    return this.testTerrain ?? this.roomTerrain?.[this.roomFile];
+  }
+
+  /** The current room's crowd (AMBIENT_ROOMS), unless setTestRoom says otherwise */
+  private crowdHere(): AmbientRoomSpec | undefined {
+    return this.testCrowd === undefined ? AMBIENT_ROOMS[this.roomFile] : (this.testCrowd ?? undefined);
+  }
+
+  /**
    * The current room's file changed under us (an edit, a deploy): what was worked out from the old
    * one goes, so the crowd, critters, flyers, nature, ground detail, puddles and pets start over
    */
@@ -1066,7 +1091,7 @@ export class GameScene {
    */
   private updateAmbient(dt: number): void {
     const level = this.settings.ambientLife;
-    const spec = AMBIENT_ROOMS[this.roomFile];
+    const spec = this.crowdHere();
     this.updateArena(dt, spec?.arena && level !== "off" ? this.roomFile : null);
     if (!spec || spec.arena || level === "off" || !this.ambientExits || !this.loaded) {
       this.ambient = null;
@@ -1302,7 +1327,7 @@ export class GameScene {
    */
   private updateCritters(dt: number): void {
     const level = this.settings.ambientLife;
-    const habitat = this.roomTerrain && this.loaded ? habitatOf(this.roomFile, this.roomTerrain[this.roomFile]) : null;
+    const habitat = (this.roomTerrain || this.testTerrain) && this.loaded ? habitatOf(this.roomFile, this.terrainHere()) : null;
     if (!habitat || !this.loaded || level === "off" || !this.settings.critters) {
       this.critters = null;
       this.critterRoom = "";
@@ -1421,7 +1446,7 @@ export class GameScene {
     const scale = this.settings.flyers ? AMBIENT_SCALE[level] : 0;
     // Bats only in caves, dungeons, crypts and Brax, and prisons (batsOf): under the roof always,
     // under the sky (Brax's graveyard and ruins) at night
-    const bats = batsOf(this.roomFile, this.roomTerrain?.[this.roomFile]);
+    const bats = batsOf(this.roomFile, this.terrainHere());
     const cave = bats === "covered" || (bats === "necropolis" && !this.roomHasSky);
     const hour = this.gameHour();
     const night = hour !== null && (hour >= 20 || hour < 5);
@@ -1456,7 +1481,7 @@ export class GameScene {
       nature.setRoom(at, room.thingsBox);
     }
     const scale = this.settings.nature ? AMBIENT_SCALE[this.settings.ambientLife] : 0;
-    const t = this.roomTerrain?.[this.roomFile] ?? [];
+    const t = this.terrainHere() ?? [];
     const has = (...names: string[]) => names.some((n) => t.includes(n));
     const green = has("FOREST", "FIELDS", "HILLS", "JUNGLE");
     const hour = this.gameHour();
@@ -1576,9 +1601,9 @@ export class GameScene {
       dt,
       listener: { x: me.x, y: me.y, angle: this.mover.angle },
       room: this.roomFile,
-      kind: life ? (AMBIENT_ROOMS[this.roomFile]?.kind ?? null) : null,
+      kind: life ? (this.crowdHere()?.kind ?? null) : null,
       indoors: this.underRoof(me.x, me.y),
-      populated: AMBIENT_ROOMS[this.roomFile] !== undefined || (this.roomTerrain?.[this.roomFile] ?? []).some((n) => SETTLED.has(n)),
+      populated: this.crowdHere() !== undefined || (this.terrainHere() ?? []).some((n) => SETTLED.has(n)),
       hour: this.gameHour(),
       people,
       raining: this.session.world.effects.raining,
@@ -1623,11 +1648,11 @@ export class GameScene {
 
   /** The ground as GroundCover asks about it */
   private groundQueries(room: Room): GroundRoom {
-    const t = this.roomTerrain?.[this.roomFile] ?? [];
+    const t = this.terrainHere() ?? [];
     const cave = t.some((n) => n === "CAVES" || n === "MINES" || n === "LAIR");
     // No rocks in towns, castles and the like: by the room's terrain, or as ambient life knows it
     // (the castles' rooms mostly have no terrain)
-    const town = t.some((n) => SETTLED.has(n)) || AMBIENT_ROOMS[this.roomFile] !== undefined;
+    const town = t.some((n) => SETTLED.has(n)) || this.crowdHere() !== undefined;
     return {
       spot: (x, y) => {
         const leaf = leafAt(room, x, y);
