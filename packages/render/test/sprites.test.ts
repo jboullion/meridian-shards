@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import { parseBgf, parsePaletteBin, type Bgf } from "@shards/formats";
 import { XLAT, XlatTable } from "../src/xlat.ts";
 import { compositeSprite, frameFor } from "../src/sprites.ts";
+import { compositeToRgba, paletteToRgba } from "../src/colorTexture.ts";
 import { lightIndex, objectBrightness, dlightScale, lightColor } from "../src/objectLighting.ts";
 
 const ASSETS = join(import.meta.dirname, "../../../dist/assets");
@@ -89,7 +90,81 @@ describe.skipIf(!have)("player sprite composite (real files)", () => {
     // the head sits above the body and the legs below, so the composite is taller
     expect(c.height).toBeGreaterThan(base.height);
     expect(c.pixels.some((p) => p !== 254)).toBe(true);
-    // world size: bitmap pixels are 16 / shrink fine units
-    expect(c.heightFine).toBeCloseTo((c.height * 16) / body.shrink);
+    // world size: base-bitmap pixels are 16 / shrink fine units; the image is `resolution` times finer
+    expect(c.heightFine).toBeCloseTo((c.height * 16) / body.shrink / c.resolution);
+    // the head (shrink 7) is finer than the body (shrink 4): drawn at 2x so it keeps its pixels
+    expect(c.resolution).toBe(2);
+  });
+
+  test("a face keeps its features' detail (charface.c: head + shrink 14 eyes, nose, mouth)", async () => {
+    const pal = parsePaletteBin(read("palette.bin"));
+    const xl = new XlatTable(pal.rgb, null);
+    const load = async (n: string) => parseBgf(read(n));
+    const [head, eyes, nose, mouth] = await Promise.all(["phax.bgf", "peax.bgf", "pnax.bgf", "pmax.bgf"].map(load));
+    const c = compositeSprite(
+      {
+        base: { bgf: head, group: 0, translation: 0, hotspot: 0 },
+        overlays: [
+          { bgf: mouth, group: 0, translation: 0, hotspot: 12 },
+          { bgf: eyes, group: 0, translation: 0, hotspot: 11 },
+          { bgf: nose, group: 0, translation: 0, hotspot: 14 },
+        ],
+        viewAngle: 0,
+      },
+      xl,
+    )!;
+    expect(head.shrink).toBe(7);
+    expect(eyes.shrink).toBe(14);
+    expect(c.resolution).toBe(2);
+    // every eye pixel lands on its own image pixel: the eyes' rows appear unchanged in the image
+    const e = frameFor(eyes, 0, 0)!;
+    const ex = c.originX + (frameFor(head, 0, 0)!.hotspots.find((h) => Math.abs(h.number) === 11)!.x + e.xOffset) * 2;
+    const ey = c.originY + (frameFor(head, 0, 0)!.hotspots.find((h) => Math.abs(h.number) === 11)!.y + e.yOffset) * 2;
+    let same = 0,
+      solid = 0;
+    for (let y = 0; y < e.height; y++)
+      for (let x = 0; x < e.width; x++) {
+        const v = e.pixels[y * e.width + x];
+        if (v === 254) continue;
+        solid++;
+        if (c.pixels[(ey + y) * c.width + ex + x] === v) same++;
+      }
+    expect(solid).toBeGreaterThan(0);
+    expect(same / solid).toBeGreaterThan(0.9); // the nose and mouth cover a little of it
+  });
+
+  test("the filtered copy magnifies each part smoothly, not in blocks (compositeToRgba)", async () => {
+    const pal = parsePaletteBin(read("palette.bin"));
+    const xl = new XlatTable(pal.rgb, null);
+    const [body, head] = await Promise.all(["bta.bgf", "phax.bgf"].map(async (n) => parseBgf(read(n))));
+    const c = compositeSprite(
+      { base: { bgf: body, group: 0, translation: 0, hotspot: 0 }, overlays: [{ bgf: head, group: 0, translation: 0, hotspot: 1 }], viewAngle: 0 },
+      xl,
+    )!;
+    expect(c.resolution).toBe(2);
+    const rgba = compositeToRgba(c, pal.rgb, 3);
+    // in the index image every body pixel is a 2x2 block; the filtered copy blends between them
+    const base = c.layers.find((l) => l.bmp === frameFor(body, 0, 0))!;
+    let blocks = 0,
+      blended = 0;
+    for (let y = base.y; y + 1 < base.y + base.bmp.height * 2; y += 2)
+      for (let x = base.x; x + 1 < base.x + base.bmp.width * 2; x += 2) {
+        const at = (xx: number, yy: number) => (yy * c.width + xx) * 4;
+        const q = [at(x, y), at(x + 1, y), at(x, y + 1), at(x + 1, y + 1)];
+        if (q.some((i) => rgba[i + 3] === 0)) continue;
+        blocks++;
+        if (q.some((i) => rgba[i] !== rgba[q[0]] || rgba[i + 1] !== rgba[q[0] + 1] || rgba[i + 2] !== rgba[q[0] + 2])) blended++;
+      }
+    expect(blocks).toBeGreaterThan(100);
+    expect(blended / blocks).toBeGreaterThan(0.5);
+  });
+
+  test("at resolution 1 the filtered copy is the plain palette copy", async () => {
+    const pal = parsePaletteBin(read("palette.bin"));
+    const xl = new XlatTable(pal.rgb, null);
+    const body = await parseBgf(read("bta.bgf"));
+    const c = compositeSprite({ base: { bgf: body, group: 0, translation: 0, hotspot: 0 }, overlays: [], viewAngle: 0 }, xl)!;
+    expect(c.resolution).toBe(1);
+    expect(compositeToRgba(c, pal.rgb, 3)).toEqual(paletteToRgba(c.pixels, c.width, c.height, pal.rgb, 3));
   });
 });

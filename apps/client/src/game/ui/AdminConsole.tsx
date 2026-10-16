@@ -118,7 +118,7 @@ function ButtonRows({ rows }: { rows: { label: string; items: RowItem[] }[] }) {
 }
 
 export function AdminConsole({
-  session, rooms, text, command, onCommandChange, history, onCommand, onDm, onTell, onHide, onQuit, onClear,
+  session, rooms, text, command, onCommandChange, history, onCommand, onDm, onTell, onHide, onQuit, onClear, onEditRoom,
 }: {
   session: GameSession;
   /** Every room (rooms.json), by number; empty before the asset build has one */
@@ -139,6 +139,8 @@ export function AdminConsole({
   onQuit: () => void;
   /** Empty the answers */
   onClear: () => void;
+  /** Development only: open the room we're in in the room editor; says what happened (devEditor.ts) */
+  onEditRoom?: () => Promise<string>;
 }) {
   const setCommand = onCommandChange;
   const [historyAt, setHistoryAt] = useState(-1);
@@ -247,7 +249,7 @@ export function AdminConsole({
           Reset data
         </Button>
         <ListBox
-          at={[1, PAGE_Y + 59, 337, 112]}
+          at={[1, PAGE_Y + 59, 337, onEditRoom ? 98 : 112]}
           label="Rooms"
           className="admin-rooms"
           items={shownRooms.map((r) => ({ key: r.rid, label: `${r.rid}  ${r.name}  (${r.roo})` }))}
@@ -256,6 +258,18 @@ export function AdminConsole({
           onActivate={goToRoom}
         />
         {!rooms.length && <Text at={[6, PAGE_Y + 64, 320, 8]}>No room list: run npm run assets. A number typed above still works.</Text>}
+        {onEditRoom && (
+          <Button
+            at={[1, PAGE_Y + 160, 72, 11]}
+            title="Open this room in the room editor; saving it there puts it back in the game, here"
+            onClick={() => {
+              setStatus("Opening the room in the editor...");
+              void onEditRoom().then(setStatus);
+            }}
+          >
+            Edit this room
+          </Button>
+        )}
       </>
     );
   } else if (tab === "Players") {

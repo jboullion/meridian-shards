@@ -5,6 +5,7 @@
 
 import * as THREE from "three";
 import { TRANSPARENT_INDEX } from "@shards/formats";
+import type { Composite } from "./sprites.ts";
 
 /** How many times transparent texels take their neighbours' colour (enough for the filter's reach) */
 const BLEED_PASSES = 4;
@@ -13,21 +14,27 @@ const BLEED_PASSES = 4;
  * An RGBA copy of palette-index pixels: index 254 is transparent (alpha 0). Transparent
  * texels next to opaque ones take the average of those colours, a few texels deep, so
  * filtering blends into the picture's own colours rather than the palette's
- * cyan or black.
+ * cyan or black. `stride`: bytes per palette entry (4 for the palette texture, 3 for RGB).
  */
-export function paletteToRgba(pixels: Uint8Array, width: number, height: number, palette: Uint8Array): Uint8Array {
+export function paletteToRgba(pixels: Uint8Array, width: number, height: number, palette: Uint8Array, stride = 4): Uint8Array {
   const n = width * height;
   const out = new Uint8Array(n * 4);
   const filled = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     const p = pixels[i];
     if (p === TRANSPARENT_INDEX) continue;
-    out[i * 4] = palette[p * 4];
-    out[i * 4 + 1] = palette[p * 4 + 1];
-    out[i * 4 + 2] = palette[p * 4 + 2];
+    out[i * 4] = palette[p * stride];
+    out[i * 4 + 1] = palette[p * stride + 1];
+    out[i * 4 + 2] = palette[p * stride + 2];
     out[i * 4 + 3] = 255;
     filled[i] = 1;
   }
+  bleed(out, filled, width, height);
+  return out;
+}
+
+/** Transparent texels next to `filled` ones take their average colour, BLEED_PASSES deep. */
+function bleed(out: Uint8Array, filled: Uint8Array, width: number, height: number): void {
   for (let pass = 0; pass < BLEED_PASSES; pass++) {
     const next: number[] = [];
     for (let y = 0; y < height; y++) {
@@ -62,6 +69,60 @@ export function paletteToRgba(pixels: Uint8Array, width: number, height: number,
     if (!next.length) break;
     for (const i of next) filled[i] = 1;
   }
+}
+
+/**
+ * The RGBA copy of a sprite composite for filtered drawing. The D3D client draws each part
+ * as its own filtered quad, so a body keeps its soft look beside a finer face. A composite
+ * made finer than its base (Composite.resolution) would turn each body pixel into a hard
+ * block under the filter, so each part is magnified bilinearly here, back to front, with
+ * the same half-coverage cut-off the sprite shader uses.
+ */
+export function compositeToRgba(c: Composite, palette: Uint8Array, stride = 4): Uint8Array {
+  if (c.resolution === 1) return paletteToRgba(c.pixels, c.width, c.height, palette, stride);
+  const { width, height } = c;
+  const out = new Uint8Array(width * height * 4);
+  const filled = new Uint8Array(width * height);
+  for (const l of c.layers) {
+    const { bmp, xlat, k } = l;
+    const bw = bmp.width,
+      bh = bmp.height;
+    const idx = bmp.pixels.map((v) => (v === TRANSPARENT_INDEX ? v : xlat[v]));
+    const src = paletteToRgba(idx, bw, bh, palette, stride);
+    const w = Math.round(bw * k),
+      h = Math.round(bh * k);
+    for (let y = 0; y < h; y++) {
+      const dy = l.y + y;
+      if (dy < 0 || dy >= height) continue;
+      const fy = Math.min(bh - 1, Math.max(0, (y + 0.5) / k - 0.5));
+      const y0 = Math.floor(fy),
+        y1 = Math.min(bh - 1, y0 + 1),
+        ty = fy - y0;
+      for (let x = 0; x < w; x++) {
+        const dx = l.x + x;
+        if (dx < 0 || dx >= width) continue;
+        const fx = Math.min(bw - 1, Math.max(0, (x + 0.5) / k - 0.5));
+        const x0 = Math.floor(fx),
+          x1 = Math.min(bw - 1, x0 + 1),
+          tx = fx - x0;
+        const a = (y0 * bw + x0) * 4,
+          b = (y0 * bw + x1) * 4,
+          cc = (y1 * bw + x0) * 4,
+          d = (y1 * bw + x1) * 4;
+        const w00 = (1 - tx) * (1 - ty),
+          w10 = tx * (1 - ty),
+          w01 = (1 - tx) * ty,
+          w11 = tx * ty;
+        if (src[a + 3] * w00 + src[b + 3] * w10 + src[cc + 3] * w01 + src[d + 3] * w11 < 128) continue;
+        const o = (dy * width + dx) * 4;
+        for (let ch = 0; ch < 3; ch++)
+          out[o + ch] = Math.round(src[a + ch] * w00 + src[b + ch] * w10 + src[cc + ch] * w01 + src[d + ch] * w11);
+        out[o + 3] = 255;
+        filled[dy * width + dx] = 1;
+      }
+    }
+  }
+  bleed(out, filled, width, height);
   return out;
 }
 

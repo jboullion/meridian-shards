@@ -53,7 +53,29 @@ export interface Composite {
   /** Where the base bitmap's top-left pixel sits in the image (screen overlays place by it) */
   originX: number;
   originY: number;
+  /** Image pixels per base-bitmap pixel (see MAX_DETAIL) */
+  resolution: number;
+  /** The parts as drawn, back to front, for the filtered copy (colorTexture.ts compositeToRgba) */
+  layers: CompositeLayer[];
 }
+
+export interface CompositeLayer {
+  bmp: BgfBitmap;
+  xlat: Uint8Array;
+  /** top-left in image pixels */
+  x: number;
+  y: number;
+  /** image pixels per part pixel */
+  k: number;
+}
+
+/**
+ * Overlays can be finer than their base (a head at shrink 7 carries eyes, nose and mouth at
+ * shrink 14). The C client stretches each part straight to the screen, so that detail shows;
+ * one image on the base's grid would drop every other row of it. The image is made this many
+ * times finer than the base, at most, so the finest part keeps its pixels.
+ */
+const MAX_DETAIL = 4;
 
 /** draw.c GetObjectPdib: the bitmap of `group` seen from `angle`, or null. */
 export function frameFor(bgf: Bgf, angle: number, group: number): BgfBitmap | null {
@@ -145,21 +167,28 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
     maxX = Math.max(maxX, Math.ceil(p.x + p.bmp.width * p.scale));
     maxY = Math.max(maxY, Math.ceil(p.y + p.bmp.height * p.scale));
   }
-  const width = maxX - minX,
-    height = maxY - minY;
+  // image pixels per base pixel: enough that no part is drawn smaller than its own pixels
+  let res = 1;
+  for (const p of placed) res = Math.max(res, Math.ceil(1 / p.scale - 1e-6));
+  res = Math.min(res, MAX_DETAIL);
+  const width = (maxX - minX) * res,
+    height = (maxY - minY) * res;
   const pixels = new Uint8Array(width * height).fill(TRANSPARENT_INDEX);
   placed.sort((a, b) => a.layer - b.layer);
+  const layers: CompositeLayer[] = [];
   for (const p of placed) {
-    const w = Math.round(p.bmp.width * p.scale),
-      h = Math.round(p.bmp.height * p.scale);
-    const ox = Math.round(p.x) - minX,
-      oy = Math.round(p.y) - minY;
+    const k = p.scale * res; // image pixels per part pixel
+    const w = Math.round(p.bmp.width * k),
+      h = Math.round(p.bmp.height * k);
+    const ox = Math.round((p.x - minX) * res),
+      oy = Math.round((p.y - minY) * res);
+    layers.push({ bmp: p.bmp, xlat: p.xlat, x: ox, y: oy, k });
     for (let y = 0; y < h; y++) {
-      const sy = Math.min(p.bmp.height - 1, Math.floor(y / p.scale));
+      const sy = Math.min(p.bmp.height - 1, Math.floor(y / k));
       const dy = oy + y;
       if (dy < 0 || dy >= height) continue;
       for (let x = 0; x < w; x++) {
-        const src = p.bmp.pixels[sy * p.bmp.width + Math.min(p.bmp.width - 1, Math.floor(x / p.scale))];
+        const src = p.bmp.pixels[sy * p.bmp.width + Math.min(p.bmp.width - 1, Math.floor(x / k))];
         if (src === TRANSPARENT_INDEX) continue;
         const dx = ox + x;
         if (dx < 0 || dx >= width) continue;
@@ -177,10 +206,12 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
     pixels,
     left: baseLeft + minX * px,
     top: baseTop - minY * px,
-    widthFine: width * px,
-    heightFine: height * px,
+    widthFine: (maxX - minX) * px,
+    heightFine: (maxY - minY) * px,
     baseTop,
-    originX: -minX,
-    originY: -minY,
+    originX: -minX * res,
+    originY: -minY * res,
+    resolution: res,
+    layers,
   };
 }

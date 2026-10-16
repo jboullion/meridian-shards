@@ -203,6 +203,9 @@ export interface GameSceneStatus {
 /** The longest the view waits for a new room's sprites and sky before showing it anyway. */
 const ENTER_TIMEOUT_MS = 4000;
 
+/** Whether a loaded room is the file the server has: BP_PLAYER's checksum went through a 28-bit Kod integer */
+const sameRoomFile = (security: number, serverSecurity: number) => (security & 0x0fffffff) === (serverSecurity & 0x0fffffff);
+
 export class GameScene {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -665,7 +668,10 @@ export class GameScene {
 
   private async syncRoom(): Promise<void> {
     const p = this.session.world.player;
-    if (!p || !this.rooms || p.roomRes === this.roomRes) {
+    // The room we show isn't the server's any more (edited in the room editor, or deployed while
+    // we play): the server's checksum wins, so it's loaded again in place
+    const stale = !!p && p.roomRes === this.roomRes && !!this.loaded && !this.entering && !sameRoomFile(this.loaded.room.security, p.roomSecurity);
+    if (!p || !this.rooms || (p.roomRes === this.roomRes && !stale)) {
       // game.c HandlePlayer loads the room again even when it's the same one; the server
       // then sends its changes again (user.kod ToCliPlayer). The room's name may have changed
       // language (language.c MenuLanguageChosen asks for everything again): the title follows
@@ -684,6 +690,13 @@ export class GameScene {
     let loaded;
     try {
       loaded = await this.rooms.get(name);
+      if (!sameRoomFile(loaded.room.security, p.roomSecurity)) {
+        // A copy from before the file changed (the one shown, or a neighbour loaded ahead)
+        await this.assets.refresh();
+        this.rooms.invalidate(name, this.loaded);
+        loaded = await this.rooms.get(name);
+        if (!sameRoomFile(loaded.room.security, p.roomSecurity)) console.warn(`room ${name}: its file still isn't the server's (npm run assets?)`);
+      }
     } catch (e) {
       console.error(`room ${name}: ${(e as Error).message}`);
       this.entering = false;
@@ -691,10 +704,14 @@ export class GameScene {
       return;
     }
     if (this.disposed || this.roomRes !== p.roomRes) return;
-    // The cache owns room views: neighbours stay loaded for when you walk back
+    // The cache owns room views: neighbours stay loaded for when you walk back. A view replaced
+    // because its file changed isn't the cache's any more, so it's disposed here once swapped out
+    const replaced = this.loaded && this.loaded !== loaded && this.roomFile === name.toLowerCase() ? this.loaded : null;
     this.loaded = loaded;
     this.roomFile = name.toLowerCase();
+    if (replaced || stale) this.forgetRoomCaches();
     this.resetLiveRoom();
+    if (replaced) replaced.view.dispose();
     const self = this.session.world.self;
     if (self) {
       this.mover.place(self.x, self.y, performance.now());
@@ -706,6 +723,22 @@ export class GameScene {
     this.entering = false;
     this.applyRoomChanges();
     this.status(false);
+  }
+
+  /**
+   * The current room's file changed under us (an edit, a deploy): what was worked out from the old
+   * one goes, so the crowd, critters, flyers, nature, ground detail, puddles and pets start over
+   */
+  private forgetRoomCaches(): void {
+    this.navGrids.delete(this.roomFile);
+    this.ambient = null;
+    this.ambientRoom = "";
+    this.critterRoom = "";
+    this.flyersRoom = "";
+    this.natureRoom = "";
+    this.groundRoom = "";
+    this.puddleRoom = "";
+    this.petsRoom = "";
   }
 
   /**

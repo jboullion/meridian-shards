@@ -13,7 +13,8 @@ import { ACTION_TABS, actionsFor, bindingLabel, getSettings, onSettings, touchUi
 import {
   BAD_COMMAND, defineAlias, filterSayMessage, findSpell, groupAdd, groupDelete, groupNew, interpretLine, resolveTell, type CommandId, type GroupResult,
 } from "./commands.ts";
-import { exitApp, gameSocketUrl, onBackButton } from "../host.ts";
+import { devPagesEnabled, exitApp, gameSocketUrl, onBackButton } from "../host.ts";
+import { editCurrentRoom } from "./devEditor.ts";
 import { loadMailbox, newMailMessage, nextMailNumber, replyRecipients, replySubject, saveMailbox, type MailMessage } from "./mailbox.ts";
 import { StatChangeDialog } from "./ui/StatChangeDialog.tsx";
 import { GuildCreateDialog, GuildHallsDialog, GuildWindow, legalShield, type GuildState } from "./ui/GuildDialogs.tsx";
@@ -2237,6 +2238,7 @@ export function GameView({
             onHide={() => setAdminConsole((a) => (a ? { ...a, open: false } : a))}
             onQuit={() => setAdminConsole((a) => (a ? { ...a, open: false, text: "" } : a))}
             onClear={() => setAdminConsole((a) => (a ? { ...a, text: "" } : a))}
+            onEditRoom={devPagesEnabled ? () => editCurrentRoom(session) : undefined}
           />
         )}
         {chess && (

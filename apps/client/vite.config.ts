@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
+import { devTools } from "../../tools/dev/devTools.ts";
 
 // The login SecretKey must match the server's [Login] SecretKey. It isn't a real
 // secret (it ships in the JS); server/config/blakserv.cfg is the one source of truth.
@@ -13,7 +14,8 @@ const appVersion = (JSON.parse(readFileSync(new URL("../desktop/package.json", i
 // /assets/* in development. Production serves them separately (Caddy), so they
 // are never copied into the client build.
 export default defineConfig({
-  plugins: [react()],
+  // devTools: development-only endpoints (opening a room in the room editor)
+  plugins: [react(), devTools()],
   publicDir: "../../dist",
   define: {
     __SECRET_KEY__: JSON.stringify(secretKey),

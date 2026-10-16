@@ -57,6 +57,25 @@ export class AssetStore {
     return ((await res.json()) as Manifest).generated !== this.manifest.generated;
   }
 
+  /**
+   * Reads the manifest again and forgets the files whose hash changed, so they're fetched anew:
+   * a room edited or deployed while we play. Returns the names that changed. A new rsc0000.rsb
+   * still needs a page reload (the redbook token and every resource name depend on it).
+   */
+  async refresh(): Promise<string[]> {
+    const res = await fetch(this.base + "manifest.json", { cache: "no-store" });
+    if (!res.ok || !this.manifest) return [];
+    const next = (await res.json()) as Manifest;
+    const changed = Object.keys(next.files).filter((k) => next.files[k]!.hash !== this.manifest!.files[k]?.hash);
+    for (const k of changed) {
+      this.bytes.delete(k);
+      this.bgfs.delete(k);
+    }
+    if (next.rsbHash !== this.manifest.rsbHash) console.warn("rsc0000.rsb changed on the server: reload the page to use it");
+    this.manifest = next;
+    return changed;
+  }
+
   has(name: string): boolean {
     return !!this.manifest?.files[name.toLowerCase()];
   }

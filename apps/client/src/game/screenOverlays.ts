@@ -7,7 +7,7 @@
 
 import { TRANSPARENT_INDEX, type Bgf } from "@shards/formats";
 import { HOTSPOT } from "@shards/protocol";
-import { compositeSprite, type SpritePart, type XlatTable } from "@shards/render";
+import { compositeSprite, compositeToRgba, type SpritePart, type XlatTable } from "@shards/render";
 import type { Effects, PlayerOverlayState } from "@shards/world";
 
 /**
@@ -41,6 +41,8 @@ interface Cached {
   canvas: HTMLCanvasElement | null;
   originX: number;
   originY: number;
+  /** canvas pixels per base-bitmap pixel */
+  resolution: number;
   baseW: number;
   baseH: number;
   xOffset: number;
@@ -105,7 +107,9 @@ export class ScreenOverlays {
       x += c.xOffset * sx;
       y += c.yOffset * sy;
       ctx.globalAlpha = alpha;
-      ctx.drawImage(c.canvas, x - c.originX * sx, y - c.originY * sy, c.canvas.width * sx, c.canvas.height * sy);
+      // the picture can be finer than the base bitmap (Composite.resolution)
+      const r = c.resolution;
+      ctx.drawImage(c.canvas, x - (c.originX / r) * sx, y - (c.originY / r) * sy, (c.canvas.width / r) * sx, (c.canvas.height / r) * sy);
       ctx.globalAlpha = 1;
     });
 
@@ -146,7 +150,7 @@ export class ScreenOverlays {
     }
     const q = light.map((v) => Math.round(v * 32) / 32);
     const key = [
-      ov.info.iconRes, ov.look.anim.group, ov.look.translation, q.join(","),
+      ov.info.iconRes, ov.look.anim.group, ov.look.translation, q.join(","), this.smooth,
       ...parts.map((p) => `${p.bgf.name}:${p.group}:${p.translation}:${p.hotspot}`),
     ].join("|");
     const cached = this.cache[slot];
@@ -164,18 +168,30 @@ export class ScreenOverlays {
       canvas.height = comp.height;
       const cx = canvas.getContext("2d")!;
       const img = cx.createImageData(comp.width, comp.height);
-      for (let i = 0; i < comp.pixels.length; i++) {
-        const v = comp.pixels[i];
-        if (v === TRANSPARENT_INDEX) continue;
-        img.data[i * 4] = Math.min(255, this.rgb[v * 3] * q[0]);
-        img.data[i * 4 + 1] = Math.min(255, this.rgb[v * 3 + 1] * q[1]);
-        img.data[i * 4 + 2] = Math.min(255, this.rgb[v * 3 + 2] * q[2]);
-        img.data[i * 4 + 3] = 255;
+      if (this.smooth) {
+        // filtered: each part magnified on its own (compositeToRgba), as the D3D client draws them
+        const rgba = compositeToRgba(comp, this.rgb, 3);
+        for (let i = 0; i < comp.pixels.length; i++) {
+          if (rgba[i * 4 + 3] === 0) continue;
+          img.data[i * 4] = Math.min(255, rgba[i * 4] * q[0]);
+          img.data[i * 4 + 1] = Math.min(255, rgba[i * 4 + 1] * q[1]);
+          img.data[i * 4 + 2] = Math.min(255, rgba[i * 4 + 2] * q[2]);
+          img.data[i * 4 + 3] = 255;
+        }
+      } else {
+        for (let i = 0; i < comp.pixels.length; i++) {
+          const v = comp.pixels[i];
+          if (v === TRANSPARENT_INDEX) continue;
+          img.data[i * 4] = Math.min(255, this.rgb[v * 3] * q[0]);
+          img.data[i * 4 + 1] = Math.min(255, this.rgb[v * 3 + 1] * q[1]);
+          img.data[i * 4 + 2] = Math.min(255, this.rgb[v * 3 + 2] * q[2]);
+          img.data[i * 4 + 3] = 255;
+        }
       }
       cx.putImageData(img, 0, 0);
     }
     const c: Cached = {
-      key, canvas, originX: comp?.originX ?? 0, originY: comp?.originY ?? 0,
+      key, canvas, originX: comp?.originX ?? 0, originY: comp?.originY ?? 0, resolution: comp?.resolution ?? 1,
       baseW: bmp?.width ?? 0, baseH: bmp?.height ?? 0, xOffset: bmp?.xOffset ?? 0, yOffset: bmp?.yOffset ?? 0,
     };
     this.cache[slot] = c;

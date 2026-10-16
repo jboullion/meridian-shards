@@ -78,6 +78,18 @@ export class RoomCache {
     });
   }
 
+  /**
+   * Forgets a room whose file changed, so the next `get` loads it again. Its view is disposed once
+   * loaded, unless it's `shown`: the scene still draws that one, and disposes it after the swap.
+   */
+  invalidate(roo: string, shown: LoadedRoom | null): void {
+    const key = roo.toLowerCase();
+    const p = this.loads.get(key);
+    if (!p) return;
+    this.loads.delete(key);
+    void p.then((l) => l !== shown && l.view.dispose(), () => {});
+  }
+
   /** Disposes a loaded room unless it's still wanted (or already gone). */
   private drop(key: string, p: Promise<LoadedRoom>, l: LoadedRoom): void {
     if ((this.keep.has(key) && !this.disposed) || this.loads.get(key) !== p) return;

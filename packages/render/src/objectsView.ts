@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { FINENESS, SF, ceilingHeightAt, floorHeightAt, leafAt, type Bgf, type Room } from "@shards/formats";
 import { compositeSprite, frameFor, type Composite, type SpritePart } from "./sprites.ts";
 import type { XlatTable } from "./xlat.ts";
-import { colorTexture, paletteToRgba } from "./colorTexture.ts";
+import { colorTexture, compositeToRgba } from "./colorTexture.ts";
 import { glowPass } from "./lighting.ts";
 import { MAX_LIGHTS, dlightScale, fixedSin, flashStep, flicker, fogEnd, highlightScale, isFireColor, isHighlightLight, lightColor, objectBrightness, type LightSource } from "./objectLighting.ts";
 
@@ -574,7 +574,7 @@ export class ObjectsView {
     const c = e.composite;
     if (!e.halo || !c) return;
     e.halo.material.uniforms.uMap.value = e.texture;
-    const shrink = (16 * c.width) / c.widthFine;
+    const shrink = (16 * c.width) / c.resolution / c.widthFine; // the base's, not the finer image's
     const grow = 96 / shrink;
     const l = (c.left - grow) / FINENESS,
       r = (c.left + c.widthFine + grow) / FINENESS;
@@ -601,7 +601,7 @@ export class ObjectsView {
     const u = e.mesh.material.uniforms;
     if (c && this.smooth) {
       const palette = (this.palette.image as { data: Uint8Array }).data;
-      e.colorTexture = colorTexture(paletteToRgba(c.pixels, c.width, c.height, palette), c.width, c.height, false);
+      e.colorTexture = colorTexture(compositeToRgba(c, palette), c.width, c.height, false);
     }
     u.uColorMap.value = e.colorTexture;
     u.uColorMode.value = e.colorTexture ? 1 : 0;
