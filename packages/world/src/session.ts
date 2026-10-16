@@ -7,7 +7,7 @@ import {
   buildReqAttack, buildReqBuy, buildReqBuyItems, buildReqCast, buildReqDeposit, buildReqGame, buildReqLook, buildReqMove,
   buildReqCounteroffer, buildReqOffer, buildReqTurn, buildReqWithdrawal, buildReqWithdrawalItems, buildSay, buildSayGroup, buildSendEnchantments,
   buildSendSkills, buildSendSpells, buildChangeDescription, buildChangeUrl, buildReqApply,
-  buildReqGetFromContainer, buildReqObjectContents, buildReqPut, buildSendStatGroups, buildSendStats, buildSimple, buildUseCharacter, buildUserCommand,
+  buildReqGetFromContainer, buildReqObjectContents, buildReqPut, buildSendStatGroups, buildSendStats, buildSimple, buildUseCharacter, buildUserCommand, buildShardsCommand,
   buildSendCharInfo, buildDeleteMail, buildDeleteNews, buildPostArticle, buildReqArticle, buildReqArticles, buildReqGetMail,
   buildReqLookupNames, buildSendMail, buildChangedStats, readStatChange, readGuildInfo, readGuildList, readGuildShield, readGuildShields,
   readGuildHalls, type GuildInfo, readArticles, readLookNewsgroup, readLookupNames, readMailHeader, type NewsArticle, buildAction, buildAppeal, buildChangePassword, buildReqInventoryMove, buildSayBlocked, UC, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
@@ -165,6 +165,18 @@ export interface SessionOptions {
   loginTimeouts?: Partial<typeof LOGIN_TIMEOUTS>;
 }
 
+/** A travel point on a portal's list (UC_TRAVEL_LIST) */
+export interface TravelPlace {
+  id: number;
+  name: string;
+}
+
+/**
+ * Ours (docs/adr/0011-fast-travel.md): UC_TRAVEL_LIST, the places the portal we touched can take
+ * us (`here` is its own point), and UC_PVP_UNTIL, the seconds the PvP lockout has left.
+ */
+export type TravelEvent = { type: "list"; here: number; pvpSeconds: number; places: TravelPlace[] } | { type: "pvp"; seconds: number };
+
 export interface SessionEvents {
   phase?: (phase: SessionPhase) => void;
   characters?: (characters: CharacterSlot[], motd: string) => void;
@@ -186,6 +198,8 @@ export interface SessionEvents {
   /** BP_OBJECT_CONTENTS: what's inside a container we asked about (gameuser.c GotObjectContents) */
   contents?: (container: number, items: ObjectInfo[]) => void;
   trade?: (list: TradeList) => void;
+  /** Ours: fast travel (docs/adr/0011-fast-travel.md): where a portal can take us, and the PvP lockout */
+  travel?: (e: TravelEvent) => void;
   offer?: (e: OfferEvent) => void;
   sound?: (e: SoundEvent) => void;
   /** We hurt something, and by how much (combatHit.ts: for damage numbers over its head) */
@@ -525,6 +539,11 @@ export class GameSession {
   /** BP_USERCOMMAND (UC_DEPOSIT amount, UC_WITHDRAW amount, UC_BALANCE, UC_REST ...). */
   userCommand(uc: number, ...ints: number[]): void {
     this.send(buildUserCommand(uc, ...ints));
+  }
+
+  /** UC_SHARDS (ours): a command line for our server's Kod, such as "travel 2" (user.kod ShardsCommand) */
+  shardsCommand(line: string): void {
+    this.send(buildShardsCommand(line));
   }
 
   /** BP_REQ_ADMIN: an admin command (the server answers with BP_ADMIN; only admin accounts may) */
@@ -883,6 +902,20 @@ export class GameSession {
           } else if (uc === UC.MINIGAME_PLAYER) {
             // HandleGamePlayer: player number BYTE, name string
             this.events.minigame?.({ type: "player", player: r.u8(), name: r.string() });
+          } else if (uc === UC.TRAVEL_LIST) {
+            // Ours (user.kod SendTravelList): this point, the lockout's seconds, then id and name each
+            const here = r.u32();
+            const pvpSeconds = r.i32();
+            const n = r.u8();
+            const places: TravelPlace[] = [];
+            for (let i = 0; i < n; i++) {
+              const id = r.u32();
+              places.push({ id, name: this.resource(r.u32()) ?? `#${id}` });
+            }
+            this.events.travel?.({ type: "list", here, pvpSeconds, places: places.reverse() });
+          } else if (uc === UC.PVP_UNTIL) {
+            // Ours (user.kod SendPvPUntil)
+            this.events.travel?.({ type: "pvp", seconds: r.i32() });
           } else if (uc === UC.SEND_QUIT) {
             // merintr.c HandleSendQuit: the server wants us out (after a suicide, a rescue)
             this.send(buildSimple(BP.REQ_QUIT));

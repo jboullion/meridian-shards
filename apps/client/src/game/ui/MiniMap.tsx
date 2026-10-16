@@ -10,6 +10,7 @@ import { FINENESS, type Room } from "@shards/formats";
 import { DRAWFX, OF } from "@shards/render";
 import type { WorldState } from "@shards/world";
 import { currentSocial } from "../social.ts";
+import { markerFor } from "../markers.ts";
 
 /** include/proto.h MM_* */
 const MM = {
@@ -175,6 +176,13 @@ export function MiniMap({
         if (o.info.drawingType === DRAWFX.INVISIBLE || mm === 0) continue;
         const x = xo + o.x * scale,
           y = yo + o.y * scale;
+        // Ours (markers.ts): travel portals, with a gold "!" until we attune to them
+        const marker = markerFor(mm);
+        if (marker) {
+          if (marker.map === "exclaim") exclaim(ctx, x, y, Math.max(7, 3.2 * radius));
+          else portalSign(ctx, x, y, Math.max(3, 1.6 * radius));
+          continue;
+        }
         if (o.info.flags & OF.PLAYER) {
           if (mm & MM.BUILDER_GROUP) dot(COLOR.builder, COLOR.player, 2.6 * radius, x, y);
           if (mm & MM.FRIEND) dot(COLOR.friend, COLOR.player, 1.6 * radius, x, y, 4);
@@ -288,5 +296,28 @@ function star(ctx: CanvasRenderingContext2D, size: number, x: number, y: number)
   ctx.fill();
   ctx.lineWidth = 2;
   ctx.strokeStyle = COLOR.rareItem;
+  ctx.stroke();
+}
+
+/** Ours (markers.ts): a gold "!" standing on the spot, outlined to read on any floor */
+function exclaim(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+  ctx.save();
+  ctx.font = `bold ${Math.round(size * 1.6)}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgb(40,20,0)";
+  ctx.strokeText("!", x, y + size * 0.6);
+  ctx.fillStyle = "rgb(255,200,40)";
+  ctx.fillText("!", x, y + size * 0.6);
+  ctx.restore();
+}
+
+/** Ours (markers.ts): an attuned travel portal, a small purple ring */
+function portalSign(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.lineWidth = Math.max(1.5, r / 2);
+  ctx.strokeStyle = "rgb(190,120,255)";
   ctx.stroke();
 }

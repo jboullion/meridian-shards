@@ -1,6 +1,7 @@
 # ADR 0011: Fast travel
 
-- **Status:** proposed, 2026-10-15. Not built. It uses [ADR 0009](0009-quests.md)'s channel and markers:
+- **Status:** accepted 2026-10-15; built 2026-10-16, apart from the website (7). See "As built" at the end.
+- It uses [ADR 0009](0009-quests.md)'s channel and markers:
   - hidden spoken `#` commands from our client (changed by [ADR 0015](0015-social-on-our-server.md): `UC_SHARDS` lines, `travel <id>`);
   - `BP_USERCOMMAND` `UC_*` packets back, sent to everyone;
   - per-viewer minimap bits.
@@ -228,3 +229,52 @@ The user decided these on 2026-10-15:
   - `docs/admin-console.md` (attuning a player, listing the network)
   - `docs/research/protocol.md`
   - the website's wiki
+
+## As built (2026-10-16)
+
+**Kod** (shards-server):
+
+- **The network:** `util/travelnet.kod` (`TravelNetwork`, `SYS@GetTravelNetwork`, made on demand) has no state of its own. The points are `GetPoints`' table:
+  - main network: ids 1-10, the ten towns, and 90, the Proving Grounds (RID 4300);
+  - historic network: 111-115, the museum's five portals, and 101-106, the historic rooms.
+  - Historic ids aren't kept by players (that network needs no attuning), so they could change: the museum's single portal, 100, became five on 2026-10-16.
+
+  Ids never change: players keep them in `User.plAttunedPortals`.
+- **The squares:**
+  - **Towns and historic rooms:** each portal and arrival square was picked on flat, dry floor with headroom, within a square of open ground. Each is near the room's own arrival square, at least 2 squares from doors (`roomexits.json`) and 1 from objects the room's Kod places.
+  - **Why not the nav grid:** our nav grid marked Tos's open street as closed, so it wasn't used.
+  - **Facing:** arrivals face away from the portal.
+  - **The museum:** five portals stand along the west wall, exactly where the five commented-out portals were meant to (rows 20, 18, 17, 16 and 14 at col 1, with their fine positions: the table's optional last two fields). Each has its arrival two squares east, facing east.
+  - **Brax:** moved on 2026-10-16 from the Decaying City (828) to the Cragged Mountains just outside (`g8.roo`, RID 578, whose east edge leads to the Winding Caverns), at (36,38), arriving at (38,38). The point keeps id 9 and the name "Brax", so players attuned to Brax stay attuned.
+  - **Moving them since:** the admin dashboard's World tab (Move portal here, Arrival here), which rewrites the table.
+- **Portals:** `TravelPortal` (`object/active/portal/travportal.kod`) uses the existing `portal.bgf`. It's touched, not walked onto. `room.kod Constructed` places them (`PlacePortals`), so no room's class changed; a room built before its point existed needs a `Recreate`.
+- **The rules:** `PortalTouched` attunes the player, or sends `UC_TRAVEL_LIST`. `TravelCommand` checks the command again, then `Journey` does a dry run with `UtilGoNearSquare` and the move. The historic network has no list: `GetHistoricLinks` pairs each museum portal with one town, a touch goes straight to the other end (`HistoricOtherEnd`, then `Journey`, so the PvP lockout and token rules still apply), and each portal's description says where it leads (`GetPortalDesc`, read by `TravelPortal.ShowDesc`). The Hall of Genealogy's portal leads back to Cor Noth's museum portal. With five portals in one room, `PortalHere` picks the nearest.
+- **The PvP lockout:**
+  - `Player.PvPSecondsLeft` and `IsInPvP` read the two times.
+  - `NotePvPHarm` sets both times for any harm, called from `Player.AssessDamage` (melee, bolts, walls, clouds, and minions through their master) and from room enchantments (whose damage names the spell, so the caster is passed). Arenas (`IsArena`) are exempt.
+  - Elusion and Rescue use `IsInPvP`.
+  - **Admins are immortal:** `DM.AssessDamage` returns before `Player`'s, so an immortal admin is never locked out.
+- **Markers:** `MM_TRAVEL` (0x40000) and `MM_TRAVEL_UNATTUNED` (0x80000), from `User.BuildMinimapDotFlag`. `AttunePortal` re-sends the portal (`SomethingChanged`), so the "!" goes at once.
+- **The historic towns:** `OldTown` (and the Hall) are `ROOM_NO_COMBAT | ROOM_SAFELOGOFF`, still without monsters. Historic Cor Noth's exits to the living world were already commented out. The museum's sign says how to use the portal.
+- **Found on the way:** three rooms and `statue.kod` had a local `COLOR_BLUE` that clashes, Kod ignoring case, with `dyebottle.kod`'s `color_blue` resource. It only showed when those rooms recompiled. The constants are `HUE_*` now.
+
+**The command channel:** `UC_SHARDS` (100) carries `travel <id>`; `UC_TRAVEL_LIST` (101) and `UC_PVP_UNTIL` (102) come back. All three are in `docs/research/protocol.md`, "Ours".
+
+**Our client:**
+- the Travel window (`ui/Dialogs.tsx TravelDialog`);
+- the crossed swords (`ui/PvpLockout.tsx`);
+- the markers (`game/markers.ts`, shared with ADR 0009's to come): a bobbing gold "!" over an unattuned portal (`gameScene drawMarkers`), and on the minimap a "!" or a purple ring.
+
+**Tried on our server:**
+- attuning, and the "!" going;
+- travel between Tos, Raza and the Proving Grounds;
+- the museum's list, and the round trip to Historic Jasper;
+- the sanctuary flags on all six historic rooms;
+- the lockout started by a hit, greying the window and refusing a typed `travel`.
+
+**Not yet tried:**
+- a real fight between two players;
+- Elusion and Rescue being refused;
+- standing on each of the other towns' portal squares;
+- the website (7).
+

@@ -258,6 +258,28 @@ A room object then adds:
 - **The state string** (`board.c`) is 67 bytes: the squares top row first, each the piece (1 to 6, 7 empty) with the colour in bit 7, then turn and castling flags, en passant (bit 1, then the square's row in bits 2-4 and column in 5-7), and resignations, each flag byte with bit 0 set. It's sent as an ordinary string, so it must stay byte-exact (Latin-1).
 - **Admin commands:** `BP_REQ_ADMIN` (a string) runs a maintenance-port command for an `ACCOUNT_ADMIN` account (`blakserv/game.c`), which echoes it as "> command" and answers with `BP_ADMIN` (162, a string with "\n" line ends). Admin characters (`create admin <account id>` on the maintenance port) get "admin.dll" (and "dm.dll") on logon.
 
+## Ours: Meridian Shards' own messages (2026-10-16)
+
+Our client and our server change together (ADR 0001 decision 4), so these are ours alone. Our own user commands are numbered from 100, clear of the original's.
+
+- **`UC_SHARDS` (100), client to server:**
+  - It carries a command line: a string, a verb and its arguments separated by spaces.
+  - `blakserv/sprocket.c` reads it as a temp string (`TAG_TEMP_STRING`, as `UC_MINIGAME_STATE`'s state).
+  - `user.kod ShardsCommand` splits it into words (`ParseString`) and hands it to the verb's feature.
+  - The client sends it with `GameSession.shardsCommand(line)` (`buildShardsCommand`).
+  - Nothing is spoken, so nothing needs hiding (ADR 0015 decision 1).
+  - **Verbs:** `travel <id>`, fast travel from the portal we stand by (`util/travelnet.kod TravelCommand`, ADR 0011).
+- **`UC_TRAVEL_LIST` (101), server to client** (`user.kod SendTravelList`): where the portal we touched can take us, sent when an attuned player touches a travel portal.
+  - The fields: the portal's own point id DWORD, the PvP lockout's seconds left DWORD, a BYTE count, then each place's point id DWORD and name resource DWORD.
+  - Places come newest first; the client reverses them.
+  - The list includes the portal's own point.
+- **`UC_PVP_UNTIL` (102), server to client** (`user.kod SendPvPUntil`): the PvP lockout's seconds left, a DWORD.
+  - It's sent whenever either player's time is set:
+    - `Player.CheckStatusAndSafety` and `DoPvpNotify`;
+    - our `NotePvPHarm`, from `Player.AssessDamage` and room enchantments;
+    - and with each travel refusal.
+  - The client shows crossed swords and a countdown (`ui/PvpLockout.tsx`).
+
 ## Sources
 
 - The reference source: `meridian-unreal/Server-104` (`blakserv`, `clientd3d`, `module`, `kod`, `include/proto.h`), and M59's own `doc/protocol.txt`, which is older than the code. Trust the code.

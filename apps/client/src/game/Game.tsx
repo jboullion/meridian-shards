@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CharInfo, CharacterSlot } from "@shards/protocol";
 import { SAY } from "@shards/protocol";
 import {
-  GameSession, type ChatLine, type ContainerContents, type DamageDealt, type LookResult, type OfferEvent, type SessionPhase, type TradeList,
+  GameSession, type ChatLine, type ContainerContents, type DamageDealt, type LookResult, type OfferEvent, type SessionPhase, type TradeList, type TravelEvent,
   type MailNewsEvent, type GuildEvent, type MinigameEvent, localResName } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
@@ -40,6 +40,7 @@ interface Live {
   audio: GameAudio;
   icons: IconRenderer;
   trades: Relay<TradeList>;
+  travel: Relay<TravelEvent>;
   offers: Relay<OfferEvent>;
   looks: Relay<LookResult>;
   contents: Relay<ContainerContents>;
@@ -169,6 +170,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
 
   const connect = (username: string, password: string, audio: GameAudio) => {
     const trades = new Relay<TradeList>();
+    const travel = new Relay<TravelEvent>();
     const offers = new Relay<OfferEvent>();
     const looks = new Relay<LookResult>();
     const contents = new Relay<ContainerContents>();
@@ -229,6 +231,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
         admin: admin.emit,
         contents: (container, items) => contents.emit({ container, items }),
         trade: trades.emit,
+        travel: travel.emit,
         offer: offers.emit,
         sound: (e) => audio.handle(e),
         damageDealt: damage.emit,
@@ -241,7 +244,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     s.setLanguage(getSettings().language);
     void loadProfanity(assets);
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
   };
 
   const logout = () => {
@@ -341,6 +344,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       audio={live.audio}
       icons={live.icons}
       trades={live.trades.on}
+      travel={live.travel.on}
       offers={live.offers.on}
       phase={phase}
       chat={chat}

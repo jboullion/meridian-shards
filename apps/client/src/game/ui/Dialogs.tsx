@@ -5,11 +5,11 @@
 // dialog kit; item lists are the client's owner-drawn lists (white on black, the chosen rows
 // black on white).
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { UC, type ObjectInfo, type ObjectRef } from "@shards/protocol";
-import { isNumberItem, type GameSession, type OfferEvent, type TradeList } from "@shards/world";
+import { isNumberItem, type GameSession, type OfferEvent, type TradeList, type TravelPlace } from "@shards/world";
 import type { IconRenderer } from "../icons.ts";
-import { Button, TextField, Window } from "./kit.tsx";
+import { Button, ListBox, TextField, Window } from "./kit.tsx";
 import { ObjIcon } from "./Sidebar.tsx";
 
 function Dialog({ title, children, onClose, wide }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
@@ -110,6 +110,67 @@ export function TradeDialog({
       <div className="mk-buttons">
         <Button isDefault onClick={ok} disabled={!chosen.size}>
           {buying ? "Buy" : "Withdraw"}
+        </Button>
+        <Button onClick={onClose}>Cancel</Button>
+      </div>
+    </Dialog>
+  );
+}
+
+/** Ours: a fast travel portal's places (UC_TRAVEL_LIST, docs/adr/0011-fast-travel.md 6) */
+const TRAVEL_REACH = 3 * 1024;
+
+/**
+ * Ours (docs/adr/0011-fast-travel.md 6): where a travel portal can take us. Travel sends
+ * "travel <id>" (UC_SHARDS), which the server checks again. Greyed while the PvP lockout runs
+ * (`pvpUntil`, ms); it closes when we walk away from the portal.
+ */
+export function TravelDialog({
+  here, places, pvpUntil, session, onClose,
+}: {
+  here: number;
+  places: TravelPlace[];
+  pvpUntil: number;
+  session: GameSession;
+  onClose: () => void;
+}) {
+  const others = places.filter((p) => p.id !== here);
+  const [picked, setPicked] = useState<number | null>(others[0]?.id ?? null);
+  const [now, setNow] = useState(() => Date.now());
+  const [from] = useState(() => {
+    const self = session.world.self;
+    return self ? { x: self.x, y: self.y } : null;
+  });
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  });
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      setNow(Date.now());
+      const self = session.world.self;
+      if (from && self && Math.hypot(self.x - from.x, self.y - from.y) > TRAVEL_REACH) close.current();
+    }, 250);
+    return () => window.clearInterval(t);
+  }, [session, from]);
+  const wait = Math.ceil((pvpUntil - now) / 1000);
+  const go = (id: number | null) => {
+    if (id === null || wait > 0) return;
+    session.shardsCommand(`travel ${id}`);
+    onClose();
+  };
+  const name = places.find((p) => p.id === here)?.name ?? "this portal";
+  return (
+    <Dialog title={`The portal of ${name}`} onClose={onClose}>
+      {others.length ? (
+        <ListBox items={others.map((p) => ({ key: p.id, label: p.name }))} selected={picked} onSelect={setPicked} onActivate={go} autoFocus label="Travel to" />
+      ) : (
+        <p>You know no other portal yet. Touch one in another town to attune to it.</p>
+      )}
+      {wait > 0 && <p className="travel-pvp">You fought another player too recently: {wait} seconds left.</p>}
+      <div className="mk-buttons">
+        <Button isDefault onClick={() => go(picked)} disabled={picked === null || wait > 0}>
+          Travel
         </Button>
         <Button onClick={onClose}>Cancel</Button>
       </div>

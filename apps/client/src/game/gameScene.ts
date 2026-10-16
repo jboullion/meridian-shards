@@ -27,6 +27,7 @@ import type { AssetStore } from "../assets.ts";
 import { gameSocketUrl } from "../host.ts";
 import { RoomCache } from "../render/roomCache.ts";
 import { sceneTune } from "./sceneTuning.ts";
+import { markerFor } from "./markers.ts";
 import { startDevBridge } from "./devBridge.ts";
 import { loadSkybox, type LoadedRoom } from "../render/roomLoader.ts";
 import { ORIGINAL_FOV } from "../viewer/roomScene.ts";
@@ -214,6 +215,8 @@ export class GameScene {
   private readonly session: GameSession;
   private readonly assets: AssetStore;
   private readonly labelsEl: HTMLElement;
+  /** Ours: the "!" markers' elements (drawMarkers), reused frame to frame */
+  private readonly markerPool: HTMLElement[] = [];
   private readonly canvas: HTMLCanvasElement;
   private palette: THREE.Texture | null = null;
   private xlats: XlatTable | null = null;
@@ -1045,6 +1048,7 @@ export class GameScene {
     else this.renderer.render(this.scene, this.camera);
     if (world.effects.blur > 0 || world.effects.waver > 0) (this.blur ??= new TrailBlur()).apply(this.renderer);
     this.drawLabels(labels);
+    this.drawMarkers();
     this.drawSpeech();
     this.drawPetNames();
     this.drawDamage();
@@ -2195,6 +2199,37 @@ export class GameScene {
         return { run: step.run };
       }
     }
+  }
+
+  /** Ours (markers.ts): a "!" over objects that ask for one (an unattuned travel portal), hidden by walls as names are */
+  private drawMarkers(): void {
+    const w = this.canvas.clientWidth,
+      h = this.canvas.clientHeight;
+    const v = new THREE.Vector3();
+    const dir = new THREE.Vector3();
+    const eye = this.camera.position;
+    let n = 0;
+    for (const o of this.session.world.objects.values()) {
+      const glyph = markerFor(o.info.minimapFlags)?.glyph;
+      const top = glyph ? this.objects?.topOf(o.id) : null;
+      if (!glyph || !top) continue;
+      v.copy(top).project(this.camera);
+      if (v.z > 1 || v.z < -1) continue;
+      if (this.roomView) {
+        dir.subVectors(top, eye);
+        const dist = dir.length();
+        this.labelRay.set(eye, dir.divideScalar(dist));
+        this.labelRay.far = dist - LABEL_OCCLUSION_SLACK;
+        if (this.labelRay.far > 0 && this.roomView.occludes(this.labelRay)) continue;
+      }
+      const el = this.markerPool[n] ?? this.labelsEl.appendChild(document.createElement("div"));
+      this.markerPool[n++] = el;
+      el.className = "world-marker";
+      if (el.textContent !== glyph) el.textContent = glyph;
+      el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -150%)`;
+      el.style.display = "";
+    }
+    for (let i = n; i < this.markerPool.length; i++) this.markerPool[i].style.display = "none";
   }
 
   private drawLabels(labels: NameLabel[]): void {

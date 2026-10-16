@@ -15,8 +15,8 @@ import { IconRenderer } from "../game/icons.ts";
 import { TUNING_DEFAULTS, TUNING_TABLES, type TuningValues } from "../game/tuning.ts";
 import type { SceneOverrides } from "../game/devBridge.ts";
 import {
-  buildKod, castSpell, findRoom, giveItem, loadCatalog, maint, objectsHere, provingGrounds, PROVING_GROUNDS_RID, saveTuning, spawnBeside, useDevLink,
-  type Catalog, type CatalogEntry, type GameReport,
+  buildKod, castSpell, findRoom, giveItem, loadCatalog, maint, objectsHere, provingGrounds, PROVING_GROUNDS_RID, saveTuning, spawnBeside, travelHere, travelMove,
+  useDevLink, type Catalog, type CatalogEntry, type GameReport, type TravelHere, type TravelPoint,
 } from "./api.ts";
 
 const TABS = ["Spawn", "Items", "Spells", "Rooms", "World", "Tuning", "Server"] as const;
@@ -92,7 +92,7 @@ export function Dashboard() {
   else if (tab === "Items") page = <ItemsPanel catalog={catalog} act={act} needMe={needMe} />;
   else if (tab === "Spells") page = <SpellsPanel catalog={catalog} act={act} needMe={needMe} me={me} />;
   else if (tab === "Rooms") page = <RoomsPanel act={act} needMe={needMe} />;
-  else if (tab === "World") page = <WorldPanel act={act} scene={link.state.scene} setScene={(scene) => link.set({ scene })} />;
+  else if (tab === "World") page = <WorldPanel act={act} needMe={needMe} me={me} scene={link.state.scene} setScene={(scene) => link.set({ scene })} />;
   else if (tab === "Tuning") page = <TuningPanel act={act} tuning={link.state.tuning} setTuning={(tuning) => link.set({ tuning })} />;
   else page = <ServerPanel act={act} say={say} />;
 
@@ -316,6 +316,90 @@ function RoomsPanel({ act, needMe }: { act: Act; needMe: () => GameReport }) {
   );
 }
 
+/** "Move portal here": this room's travel point, moved to where we stand (tools/dev/adminApi.ts travelMove) */
+function PortalPlacer({ act, me }: { act: Act; me: GameReport | null }) {
+  const [asked, setAsked] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const playerId = me?.playerId;
+  const roomFile = me?.roomFile;
+  // The answer for one question (who, which room, which try); a newer question shows as asking
+  const question = `${playerId}|${roomFile}|${asked}`;
+  const [answer, setAnswer] = useState<{ question: string; here?: TravelHere; problem?: string } | null>(null);
+  useEffect(() => {
+    if (!playerId) return;
+    let live = true;
+    void travelHere(playerId).then(
+      (here) => live && setAnswer({ question, here }),
+      (e: unknown) => live && setAnswer({ question, problem: (e as Error).message }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [playerId, question]);
+  const current = answer?.question === question ? answer : null;
+  const here = current?.here ?? null;
+  const problem = current?.problem ?? null;
+  const points = here?.points ?? [];
+  const label = (p: TravelPoint) => {
+    const name = (rsc: string) => rsc.replace(/^travel_name_/, "").replace(/_/g, " ");
+    return p.leadsTo ? `${name(p.name)} → ${name(p.leadsTo)}` : name(p.name);
+  };
+  const move = (p: TravelPoint, part: "portal" | "arrival") =>
+    act(`${part === "portal" ? "Move portal here" : "Arrival here"} (point ${p.id})`, async () => {
+      if (!me) throw new Error("No game tab is in the game");
+      const what = part === "portal" ? `point ${p.id}'s portal to your square` : `point ${p.id}'s arrival to your square, facing the way you face`;
+      const then = part === "portal" ? ", then rebuilds this room (its monsters and items start over)" : "";
+      if (!window.confirm(`Move ${what}? This rewrites travelnet.kod, builds the Kod and runs reload system, which saves the game${then}.`)) return "not done";
+      setBusy(true);
+      try {
+        const r = await travelMove(me.playerId, p.id, part);
+        setAnswer((a) => (a?.here ? { ...a, here: { ...a.here, points: a.here.points.map((x) => (x.id === p.id ? { ...r.point, leadsTo: x.leadsTo } : x)) } } : a));
+        return r.steps.join(", ");
+      } finally {
+        setBusy(false);
+      }
+    });
+  return (
+    <>
+      <h2>This room's portals</h2>
+      {!me ? (
+        <p className="dim">No game tab in the game.</p>
+      ) : problem ? (
+        <>
+          <p className="dim">{problem}</p>
+          <div className="buttons">
+            <button onClick={() => setAsked((n) => n + 1)}>Ask again</button>
+          </div>
+        </>
+      ) : !here ? (
+        <p className="dim">Asking the server…</p>
+      ) : !points.length ? (
+        <p className="dim">RID {here.rid} has no travel point. A new one needs an id and a name in GetPoints (shards-server util/travelnet.kod): add it by hand.</p>
+      ) : (
+        <>
+          {points.map((p) => (
+            <div key={p.id}>
+              <p>
+                Point {p.id} ({label(p)}): portal at row {p.row}, col {p.col}
+                {p.fineRow !== null ? ` (fine ${p.fineRow}, ${p.fineCol})` : ""}; arrival at row {p.arrivalRow}, col {p.arrivalCol}, facing{" "}
+                {p.angle.replace(/^ANGLE_/, "").toLowerCase().replace("_", " ")}.
+              </p>
+              <div className="buttons">
+                <button disabled={busy} onClick={move(p, "portal")}>Move portal here</button>
+                <button disabled={busy} onClick={move(p, "arrival")}>Arrival here</button>
+              </div>
+            </div>
+          ))}
+          <p className="dim">
+            Stand on the square you want (you're on row {me.row}, col {me.col}). For the arrival, face the way players should face too. Each move builds the Kod and runs
+            reload system, a few seconds.
+          </p>
+        </>
+      )}
+    </>
+  );
+}
+
 const TERRAINS = ["", "FIELDS", "FOREST", "HILLS", "JUNGLE", "SWAMP", "DESERT", "MOUNTAIN", "CAVES", "SEWERS", "NECROPOLIS", "CITY", "SHOP"];
 const CROWDS: Record<string, SceneOverrides["crowd"]> = {
   "": null,
@@ -325,7 +409,10 @@ const CROWDS: Record<string, SceneOverrides["crowd"]> = {
   shop: { kind: "shop", count: 2, place: "tos" },
 };
 
-function WorldPanel({ act, scene, setScene }: { act: Act; scene: SceneOverrides; setScene: (s: SceneOverrides) => void }) {
+/** The main network's points (shards-server util/travelnet.kod GetPoints) */
+const TRAVEL_POINTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 90];
+
+function WorldPanel({ act, needMe, me, scene, setScene }: { act: Act; needMe: () => GameReport; me: GameReport | null; scene: SceneOverrides; setScene: (s: SceneOverrides) => void }) {
   const hour = (h: number) => act(`The server's hour: ${h}`, async () => void (await maint(`send object 0 SetHour iNum int ${h}`)));
   const crowdKey = Object.entries(CROWDS).find(([, v]) => JSON.stringify(v) === JSON.stringify(scene.crowd ?? null))?.[0] ?? "";
   return (
@@ -340,6 +427,23 @@ function WorldPanel({ act, scene, setScene }: { act: Act; scene: SceneOverrides;
           <button onClick={act("Real time", async () => void (await maint("send object 0 SystemInitGameHour")))}>Real time</button>
         </div>
         <p className="dim">The sun, the light and the lamps follow, for every player.</p>
+        <h2>Fast travel (you)</h2>
+        <div className="buttons">
+          <button onClick={act("Attune to every portal", async () => void (await maint(...TRAVEL_POINTS.map((id) => `send object ${needMe().playerId} AttunePortal id int ${id}`))))}>
+            Attune to every portal
+          </button>
+          <button onClick={act("Forget every portal", async () => void (await maint(`set object ${needMe().playerId} plAttunedPortals nil 0`)))}>Forget every portal</button>
+          <button
+            onClick={act("End the PvP lockout", async () => {
+              const me = needMe().playerId;
+              await maint(`set object ${me} piTimeAttackedPlayer int 0`, `set object ${me} piTimeAttackedByPlayer int 0`, `send object ${me} SendPvPUntil`);
+            })}
+          >
+            End the PvP lockout
+          </button>
+        </div>
+        <p className="dim">Portals you've forgotten show their gold "!" again once you re-enter the room.</p>
+        <PortalPlacer act={act} me={me} />
       </div>
       <div>
         <h2>Our client only (the game tabs)</h2>

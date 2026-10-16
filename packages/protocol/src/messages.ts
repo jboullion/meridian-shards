@@ -764,7 +764,18 @@ export const UC = {
   GUILD_SHIELDS: 32, CLAIM_SHIELD: 33, RECEIVE_PREFERENCES: 34, DEPOSIT: 35, WITHDRAW: 36, BALANCE: 37, APPEAL: 40,
   REQ_RESCUE: 41, MINIGAME_START: 45, MINIGAME_STATE: 46, MINIGAME_MOVE: 47, MINIGAME_PLAYER: 48, MINIGAME_RESET_PLAYERS: 49,
   REQ_TIME: 60,
+  // Ours (Meridian Shards, docs/adr/0015-social-on-our-server.md 1): a command line to our Kod
+  // (user.kod ShardsCommand), and what our features send back
+  SHARDS: 100, TRAVEL_LIST: 101, PVP_UNTIL: 102,
 } as const;
+
+/**
+ * UC_SHARDS (ours): a command line for our server's Kod, a verb and its arguments separated by
+ * spaces ("travel 2"). blakserv/sprocket.c reads it as a temp string.
+ */
+export function buildShardsCommand(line: string): Uint8Array {
+  return new ByteWriter().u8(BP.USERCOMMAND).u8(UC.SHARDS).string(line).finish();
+}
 
 /** UC_APPEAL: a message to the game's staff (merintr.h RequestAppeal). */
 export function buildAppeal(text: string): Uint8Array {

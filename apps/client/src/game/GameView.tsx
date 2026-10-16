@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { CF, SAY, STAT_GROUP, UA, UC, objId, type ObjectInfo } from "@shards/protocol";
 import {
   PROFANITY_WARNING, isNumberItem, type SpellRefusal, OBSERVER, WHITE, BLACK, decodeBoard, type GuildEvent, type MinigameEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
-  type TradeList, petForKarma, petKind, type AmbientPersonInfo,
+  type TradeList, type TravelEvent, type TravelPlace, petForKarma, petKind, type AmbientPersonInfo,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import type { AudioPreview, GameAudio } from "./audio.ts";
@@ -20,7 +20,8 @@ import { StatChangeDialog } from "./ui/StatChangeDialog.tsx";
 import { GuildCreateDialog, GuildHallsDialog, GuildWindow, legalShield, type GuildState } from "./ui/GuildDialogs.tsx";
 import { ReadMailDialog, ReadNewsDialog, SendMailDialog, type MailDraft, type Newsgroup } from "./ui/MailNewsDialogs.tsx";
 import type { NewsArticle } from "@shards/protocol";
-import { AmountDialog, GiveDialog, OfferDialog, PasswordDialog, SuicideDialog, TradeDialog, reduceOffer } from "./ui/Dialogs.tsx";
+import { PvpLockout } from "./ui/PvpLockout.tsx";
+import { AmountDialog, GiveDialog, OfferDialog, PasswordDialog, SuicideDialog, TradeDialog, TravelDialog, reduceOffer } from "./ui/Dialogs.tsx";
 import { AmbientPersonDialog, DESC, DescriptionDialog, LookListDialog, type DescAction, type LookListChoice } from "./ui/LookDialogs.tsx";
 import { MiniMap } from "./ui/MiniMap.tsx";
 import {
@@ -145,6 +146,7 @@ const CHAT_HISTORY = 20;
 
 type Modal =
   | { type: "trade"; list: TradeList }
+  | { type: "travel"; here: number; places: TravelPlace[] }
   | { type: "give"; kind: "offer" | "deposit"; target: { id: number; name: string } }
   | { type: "amount"; object: ObjectInfo }
   | { type: "suicide" }
@@ -173,7 +175,7 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, offers, serverPrefs, latency,
 }: {
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
@@ -210,6 +212,8 @@ export function GameView({
   /** Subscribe to shop and offer events from the session */
   trades: (fn: (t: TradeList) => void) => () => void;
   offers: (fn: (e: OfferEvent) => void) => () => void;
+  /** Ours: fast travel's lists and the PvP lockout (docs/adr/0011-fast-travel.md) */
+  travel: (fn: (e: TravelEvent) => void) => () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
@@ -719,6 +723,17 @@ export function GameView({
         setModal({ type: "trade", list });
       }),
     [trades],
+  );
+  // Ours: a travel portal's places, and the PvP lockout (UC_PVP_UNTIL), shown as crossed swords
+  const [pvpUntil, setPvpUntil] = useState(0);
+  useEffect(
+    () =>
+      travel((e) => {
+        if (e.type === "pvp") return setPvpUntil(Date.now() + e.seconds * 1000);
+        setPvpUntil(Date.now() + e.pvpSeconds * 1000);
+        setModal({ type: "travel", here: e.here, places: e.places });
+      }),
+    [travel],
   );
   // game.c ResetUserData: AbortLookList; the description and pick lists hold stale ids
   useEffect(
@@ -1893,6 +1908,7 @@ export function GameView({
       >
         <canvas ref={canvasRef} className="viewport" />
         <div ref={labelsRef} className="labels" />
+        <PvpLockout until={pvpUntil} />
         {fullMap && (
           <div className="full-map" title={modern ? "Map (click it, or press the Map key, to close)" : "Map (press the Map key again to close)"}>
             <MiniMap
@@ -2089,6 +2105,9 @@ export function GameView({
         )}
         {modal?.type === "trade" && (
           <TradeDialog list={modal.list} session={session} icons={icons} onClose={() => setModal(null)} />
+        )}
+        {modal?.type === "travel" && (
+          <TravelDialog here={modal.here} places={modal.places} pvpUntil={pvpUntil} session={session} onClose={() => setModal(null)} />
         )}
         {modal?.type === "give" && (
           <GiveDialog kind={modal.kind} target={modal.target} session={session} icons={icons} onClose={() => setModal(null)} />

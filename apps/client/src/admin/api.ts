@@ -49,6 +49,35 @@ export async function loadCatalog(): Promise<Catalog> {
 }
 
 export const buildKod = () => post<{ ok: boolean; tail: string }>("/__admin/kod/build");
+
+/** A fast travel point (shards-server util/travelnet.kod GetPoints), as tools/dev/travelPoints.ts reads it */
+export interface TravelPoint {
+  id: string;
+  name: string;
+  ridName: string;
+  rid: number | null;
+  row: number;
+  col: number;
+  arrivalRow: number;
+  arrivalCol: number;
+  angle: string;
+  fineRow: number | null;
+  fineCol: number | null;
+  /** A historic portal's other end, by its name resource (GetHistoricLinks) */
+  leadsTo?: string;
+}
+export interface TravelHere {
+  rid: number;
+  row: number;
+  col: number;
+  angle: string;
+  /** The room's travel points (the museum has five) */
+  points: TravelPoint[];
+}
+export const travelHere = (playerId: number) => post<TravelHere>("/__admin/travel/here", { playerId });
+/** Moves one of the room's portals, or its arrival square and facing, to where the player stands */
+export const travelMove = (playerId: number, id: string, part: "portal" | "arrival") =>
+  post<{ point: TravelPoint; steps: string[] }>("/__admin/travel/move", { playerId, id, part });
 export const saveTuning = (values: DevState["tuning"]) => post<{ written: string[] }>("/__admin/tuning/save", { values });
 
 /** The room object for a room number (object numbers change at every save, so always asked) */

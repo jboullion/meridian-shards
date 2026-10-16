@@ -102,6 +102,39 @@ send object <room> ResetDummies
 - **Answers:** each helper returns how many it made or deleted.
 - **Other ground (development builds only):** the room counts as fields, so wild critters and ground detail appear. In the browser's console, `shards.gameScene.setTestRoom({ terrain: ["CAVES"] })` tries it as other ground, and `setTestRoom({ crowd: { kind: "town", count: 6, place: "tos", guards: 1, livery: 0 } })` adds a town's crowd. `undefined` puts either back.
 
+### Fast travel
+
+Ours ([ADR 0011](adr/0011-fast-travel.md)): a travel portal in each town, attuned to by touching it, and one in the Cor Noth museum to the historic towns. For a player (their object number from `show user <name>`, which changes at every save):
+
+```text
+send object <player> AttunePortal id int 3
+set object <player> plAttunedPortals nil 0
+show object <player>
+set object <player> piTimeAttackedPlayer int 0
+set object <player> piTimeAttackedByPlayer int 0
+```
+
+- **What each does:**
+  - `AttunePortal` attunes them to one point. The ids are 1-10 for the towns, 90 for the Proving Grounds, and, on the museum's network, which needs no attuning, 111-115 for the museum's five portals and 101-106 for the historic towns.
+  - `set object ... plAttunedPortals nil 0` forgets them all.
+  - `show object` lists `plAttunedPortals`.
+  - The two `piTimeAttacked...` lines end their PvP lockout.
+- **Where the points are:** shards-server's `util/travelnet.kod GetPoints`.
+- **The dashboard:** its World tab has the same for your own character.
+- **Moving a portal** (the dashboard's World tab, "This room's portals"):
+  - **To move one:** stand on the square you want and press **Move portal here** on that portal's row. A room with several (the museum's five) lists each, with where it leads.
+  - **The museum's fine positions:** a moved portal stands in the middle of its square.
+  - **The arrival:** stand on the square, face the way players should face, and press **Arrival here**. The facing is rounded to the nearest of the eight compass points.
+  - **What it does:** rewrites that point's row in `GetPoints`, builds the Kod and runs `reload system`, which saves the game. A portal move also rebuilds the room, since rooms place their portals when they're built.
+  - **What it won't do:**
+    - put the portal on the arrival square, or the arrival on the portal's;
+    - change a point's id;
+    - add a point to a room without one, which needs a new id and a name string, added by hand;
+    - build while the table has a line it can't read (a half-done hand edit).
+  - **If the build fails,** the file goes back as it was.
+  - **Commit it:** the change is a source edit in shards-server.
+- **Admins are immortal,** so fighting never locks them out. `set object <you> pbImmortal int 0` to try the lockout, and `int 1` after.
+
 ### The Debug tab
 
 Admin characters get a **Debug** tab in the chat window, beside Server. It's the client's own log, for tracking things down. For now it lists every sound as it starts:

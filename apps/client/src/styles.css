@@ -213,6 +213,45 @@ button.link {
 }
 
 /* Ours: the view lit up by lightning far off (gameScene.ts updateStorm) */
+/* Ours: a "!" over an object (markers.ts, gameScene drawMarkers): an unattuned travel portal */
+.world-marker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font: bold 30px sans-serif;
+  color: rgb(255 200 40);
+  text-shadow: 0 0 2px rgb(40 20 0), 0 0 6px rgb(40 20 0), 0 0 12px rgb(255 160 0 / 0.6);
+  pointer-events: none;
+  animation: world-marker-bob 1.6s ease-in-out infinite;
+}
+@keyframes world-marker-bob {
+  50% {
+    margin-top: -6px;
+  }
+}
+
+/* Ours: the PvP lockout's crossed swords and countdown (ui/PvpLockout.tsx), by the minimap */
+.pvp-lockout {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgb(60 10 10 / 0.75);
+  border: 1px solid rgb(200 60 50 / 0.8);
+  color: #ffd9a0;
+  font-weight: bold;
+  pointer-events: auto;
+  z-index: 5;
+}
+.game.modern-ui .pvp-lockout {
+  top: calc(var(--hud-scale, 1) * 230px);
+  right: calc(var(--hud-scale, 1) * 40px);
+}
+.game.touch-ui .pvp-lockout {
+  top: 160px;
+}
+
 .lightning-flash {
   position: absolute;
   inset: 0;
