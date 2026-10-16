@@ -4,9 +4,12 @@
 //   node tools/assets/build-assets.ts [--client <dir>] [--force]
 //
 // Sources, first match wins per (lower-cased) file name:
+//   0. restyled item icons from shards-server's tools/iconforge (resource/graphics/shards, or
+//      ICONFORGE_DIR); they keep the original names, so they replace the client's copies
 //   1. our server build: rsc/rsc0000.rsb and rooms/*.roo. These MUST match the
-//      running server (redbook token, room checksums), so they always win.
-//   2. the Server 104 resource tree in server/src/resource (104-only additions)
+//      running server (redbook token, room checksums), so they always win, and
+//      rooms come from nowhere else (REMOVED_ROOMS lists the ones we drop).
+//   2. the server's resource tree in server/src/resource (shards-server, linked by server\link-src.cmd)
 //   3. the installed 104 client's resource folder (%LOCALAPPDATA%\Meridian-104\resource)
 // Plus the palette (blakston.pal, parsed to a 768-byte binary palette.bin), and the
 // bitmaps compiled into the client and its modules (clientd3d/bitmap and
@@ -76,6 +79,9 @@ const BMP_ICO_CUR = new Set([".bmp", ".ico", ".cur"]);
 const TTF = new Set([".ttf"]);
 const PNG = new Set([".png"]);
 const sources: Source[] = [
+  // shards-server's tools/iconforge installs restyled item icons here, under the original names, so
+  // they replace the installed client's art. ICONFORGE_DIR points elsewhere (e.g. another checkout).
+  { label: "restyled icons (iconforge)", dir: process.env.ICONFORGE_DIR ?? join(SERVER, "resource", "graphics", "shards"), recursive: false, exts: new Set([".bgf"]) },
   { label: "server rsb", dir: join(RUN, "rsc"), recursive: false, filter: (n) => n === "rsc0000.rsb" },
   { label: "server rooms", dir: join(RUN, "rooms"), recursive: false },
   { label: "installed client", dir: opt.client!, recursive: true },
@@ -97,6 +103,11 @@ const sources: Source[] = [
   { label: "ambient sounds (npm run sounds)", dir: join(ROOT, "dist", "sounds"), recursive: false, filter: (n) => n.startsWith("amb_") },
 ];
 
+// Rooms come only from our server build: the installed client and the resource tree carry
+// test and abandoned maps no server room loads. These are dropped even from the server build.
+const ROOMS_SOURCE = "server rooms";
+const REMOVED_ROOMS = new Set(["newroom.roo", "oc07.roo", "ocw1.roo", "toscrypt2.roo", "toseast_old.roo"]);
+
 function* walk(dir: string, recursive: boolean): Generator<string> {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
@@ -117,6 +128,7 @@ for (const s of sources) {
     const base = (s.prefix ?? "") + basename(p).toLowerCase();
     if (!(s.exts ?? EXTS).has(extname(base))) continue;
     if (s.filter && !s.filter(base)) continue;
+    if (extname(base) === ".roo" && (s.label !== ROOMS_SOURCE || REMOVED_ROOMS.has(base))) continue;
     if (chosen.has(base)) continue;
     chosen.set(base, { path: p, source: s.label });
     n++;

@@ -99,7 +99,7 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
   - The buy, withdraw, offer, deposit and amount dialogs, and the settings as "Preferences" and "Keys" tabs.
   - Reference shots of the original's creator tabs and Preferences are in `docs/research/reference-images/` (git-ignored).
 - [ ] Test Chrome, Firefox and Safari against the hosted server.
-- [ ] A friends playtest mixing original-client and browser players.
+- [ ] A friends playtest with several players of this client.
 
 ### 8. Desktop client (2026-10-07)
 
@@ -326,25 +326,25 @@ Players of the original ran bots to cast spells while away, to raise them. Study
 
 ## What the slice must prove
 
-- [x] An unmodified Server 104 `blakserv` (plus config changes only) serves browser players through the gateway (the protocol side; proven with the headless client).
+- [x] An unmodified Server 104 `blakserv` (plus config changes only) serves browser players through the gateway (the protocol side; proven with the headless client). Since 2026-10-15 the server is our own fork, changed as our features need (ADR 0001 decision 4).
 - [ ] Raza looks like the original: the same textures, colours, light and sprites, crisp at 1440p and in widescreen.
-- [ ] Movement and collision match the original. No wall clipping, and original clients see browser players move normally.
+- [ ] Movement and collision match the original. No wall clipping.
 - [x] Chat, shops, combat, death and respawn, and room changes work end to end.
-- [ ] Original-client and browser players play together on one server.
+- ~~Original-client and browser players play together on one server.~~ Dropped 2026-10-15: only our client is supported (ADR 0001 decision 3).
 - [ ] The first room loads in under 5 s on broadband, and sessions stay stable for 1+ hour, including background tabs.
 - [ ] The modern controls feel better than the original's, and the original preset still works.
 
 ## Open questions
 
-- **The original Windows client and the `SecretKey`.** The installed 104 client has the live server's key compiled in, so it can't log in to our server as-is. We build our own instead:
+- **The original Windows client and the `SecretKey`.** Settled 2026-10-15: original clients aren't supported, and our build of one is kept only as a reference. The installed 104 client has the live server's key compiled in, so it can't log in to our server as-is. We built our own instead:
   - `login.c` comes from `login.c-example` with our key. The example is stale: `LoginOk` needs a second `int sessionid` parameter to match `login.h`.
   - `dm.dll` (the DM tools module) fails to link (`ShowBGFEditorDlg`); players don't need it.
   - `server\setup-client.cmd` adds the art and music from the installed 104 client but keeps our `rsc0000.rsb` and rooms, which must match the server.
 - **Possible feature: the gateway adds the login key.** Today every client ships `[Login] SecretKey` (it's in our JavaScript and in the Unreal client's `servers.json`), so the key keeps nothing out. The gateway could write the key into each `AP_LOGIN` on its way to blakserv instead:
   - Login frames are only CRC-checked, not encrypted, so the gateway rewrites the key string and recomputes the CRC. blakserv doesn't change.
-  - Clients would send no key, and the real key would live only in the VM's `.env`. The key would become a secret again, so the raw port (5959) would only take original Windows clients we've built.
+  - Clients would send no key, and the real key would live only in the VM's `.env`. The key would become a secret again, and the raw port (5959) needn't be public at all: only our client connects, through the gateway.
   - The gate for WebSocket clients would then be the gateway (its origin list and per-address limit), which a non-browser client can get past by sending any `Origin`.
-  - Not built: the game has run with a public key for 30 years. Worth doing if we only ever run our own servers and want them tighter. It's also how a Server 104 operator could take our clients without publishing their key.
+  - Not built: the game has run with a public key for 30 years. Worth doing now that ours is the only server, if we want it tighter.
 
 ## Progress log
 

@@ -46,7 +46,7 @@ export const ADMIN_CITIES: readonly { name: string; rid: number }[] = [
   { name: "Raza", rid: 300 },
   { name: "Jasper", rid: 350 },
   { name: "Ko'catan", rid: 2000 },
-  { name: "Castle Victoria", rid: 40 },
+  { name: "Castle Victoria", rid: 38 },
   { name: "Brax", rid: 828 },
   { name: "Underworld", rid: 1 },
 ];

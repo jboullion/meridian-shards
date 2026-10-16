@@ -1,5 +1,7 @@
-# --- Server: copied Server 104 source, build output and the live run folder (savegames, logs)
+# --- Server: junction to the shards-server repository (server/link-src.cmd), its build output and live run folder
 /server/src/
+# the Server 104 copy server/src used to be, with its savegames (kept as a backup)
+/server/src-104/
 /server/*.log
 
 # --- Original game assets: never in git (served from the asset build)
@@ -44,5 +46,7 @@ Thumbs.db
 
 docs/research/reference-images/
 ReferenceImages/
+ReferenceServers/
+
 # The emblem cutout's working files (tools/icons/cutout-emblem.py)
 tools/icons/.cutout/

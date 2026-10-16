@@ -49,7 +49,7 @@ The desktop app starts in the Modern interface. The original's layout, with the 
 
 The client does what the original client and its modules do. What's still missing is listed, with the original's source for each, in [docs/missing-features.md](docs/missing-features.md).
 
-- **The world:** every room drawn as the original D3D client draws it, with its lighting, sky, sun and moon, weather, and rooms that change (lifts, doors, the Raza clock). Objects, players and monsters are drawn, lit and animated, with blur, waver and flashing effects. Walking uses the original's movement code, so original clients see our moves.
+- **The world:** every room drawn as the original D3D client draws it, with its lighting, sky, sun and moon, weather, and rooms that change (lifts, doors, the Raza clock). Objects, players and monsters are drawn, lit and animated, with blur, waver and flashing effects. Walking uses the original's movement code.
 - **Playing:**
   - fighting with a weapon in hand, casting spells (with a Spells menu by school), dying and leaving the Underworld;
   - looking at things, picking up and dropping, containers, trading with players, shops, the bank and the vault;
@@ -70,6 +70,7 @@ Requirements: Node 24+ and Visual Studio 2026 with the C++ x86 toolset.
 
 ```bash
 npm install
+server\link-src.cmd       # point server\src at the shards-server repository (once)
 server\build.cmd          # build blakserv, the Kod and rsc0000.rsb from server\src
 server\setup-run.cmd      # prepare server\src\run\server and install our config
 npm run assets            # copy the original game files into dist/assets (never committed)
@@ -77,7 +78,7 @@ npm run dev               # blakserv + gateway + Vite; open http://localhost:517
 ```
 
 - `npm run assets` reads the art and sounds from an installed Server 104 client (`%LOCALAPPDATA%\Meridian-104`). Run it again after pulling changes that add interface files.
-- `server\src` is a git-ignored copy of the Server 104 source. Copy it from `meridian-unreal\Server-104` (for example with `robocopy <that folder> server\src /E /XD run .vs`).
+- `server\src` is a git-ignored directory junction to our server, the [shards-server](https://github.com/jboullion/shards-server) repository (by default `J:\m59-shards-server\shards-server`; `server\link-src.cmd <path>` for another checkout). Builds, the asset build and deploys all read it there, so changes in that repository apply here directly; rebuild with `server\build.cmd` and `npm run assets`.
 - The local test accounts are `shardbot`, `shardpal` and the admin `shardadmin` (password = name); [AGENTS.md](AGENTS.md) says how to make them on a fresh server.
 
 Other commands:

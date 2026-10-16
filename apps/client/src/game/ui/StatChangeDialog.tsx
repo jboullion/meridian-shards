@@ -15,7 +15,11 @@ const STAT_TOTAL = 220;
 const STAT_POINTS_INITIAL = 70;
 const SCHOOL_MAX = 6;
 
-/** stats.rc: where each school's bar and name go (Shal'ille, Qor, Kraanan, Faren, Riija, Jala, Weaponcraft, Crafting) */
+/**
+ * stats.rc: where each school's bar and name go (Shal'ille, Qor, Kraanan, Faren, Riija, Jala, Weaponcraft, Crafting).
+ * Servers without crafting (shards-server) always send its level as 0, so a zero Crafting row is hidden.
+ */
+const CRAFTING_ROW = 7;
 const SCHOOL_ROWS: { name: string; label: Rect; bar: Rect }[] = [
   { name: "Shal'ille", label: [21, 205, 34, 8], bar: [57, 202, 79, 14] },
   { name: "Qor", label: [21, 224, 34, 8], bar: [57, 223, 79, 14] },
@@ -103,7 +107,7 @@ export function StatChangeDialog({
           </FlowText>
           <Fixed y={186} h={130}>
             <GroupBox at={[16, 186, 286, 100]} label="Schools" />
-            {SCHOOL_ROWS.map((s, i) => [
+            {SCHOOL_ROWS.map((s, i) => (i === CRAFTING_ROW && !initialLevels[i]) ? null : [
               <Text key="l" at={s.label}>
                 {s.name}
               </Text>,

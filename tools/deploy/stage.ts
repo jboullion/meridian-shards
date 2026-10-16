@@ -87,7 +87,7 @@ if (opt["client-only"] || opt["web-only"]) {
   process.exit(0);
 }
 
-need(join(SRC, "blakserv", "makefile.linux"), "copy the Server 104 source to server/src first (see README)");
+need(join(SRC, "blakserv", "makefile.linux"), "point server/src at the shards-server repository first (server\\link-src.cmd, see README)");
 need(join(RUN, "memmap"), "build the server and Kod first: server\\build.cmd");
 need(join(ROOT, "dist", "assets", "manifest.json"), "build the assets first: npm run assets");
 

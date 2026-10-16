@@ -5,7 +5,7 @@
 
 ## Context
 
-Meridian Shards is the third Meridian 59 experiment, beside the UE 5.8 "Unreal Meridian" (`E:\2026_Experiments\meridian-unreal`) and the Roblox spin-off "Fantasy Blocks". It is a faithful browser port of the original client. It talks to our own server, which runs the unmodified Server 104 `blakserv`.
+Meridian Shards is the third Meridian 59 experiment, beside the UE 5.8 "Unreal Meridian" (`E:\2026_Experiments\meridian-unreal`) and the Roblox spin-off "Fantasy Blocks". It is a faithful browser port of the original client. It talks to our own server, built from our fork of the Server 104 source (`shards-server`).
 
 The name comes from the lore: every server or world is a "shard" of one original universe.
 
@@ -16,6 +16,7 @@ The name comes from the lore: every server or world is a "shard" of one original
    - ~~**Never copy Shards code into the UE remaster**, which stays non-GPL.~~ Changed 2026-10-08: the remaster is GPLv2 too, with an Unreal Engine linking exception, so our own code may go there. Code we ported from the Meridian 59 source still may not, because that exception can only cover code we own (AGENTS.md, "Hard rules").
    - Before going public, check that nothing in git is original art or rooms.
 3. **Our server only.** Browser players connect to our server running Server 104 code. We never connect to the live 104 server.
+   - Changed 2026-10-15: our client and our server are the only pair that has to work. Original Windows clients aren't supported, and nothing is kept compatible with other servers. They're still useful as references.
    - Changed 2026-10-08: the hosted browser client was only for early testing and has been taken down. Players use the desktop app (and later the Android app), which runs this same client; the browser is for development.
    - Changed 2026-10-09: the hosted browser client is back, because players asked to try the game without a download. The apps stay the main way to play (their game files are local, so they cost the VM far less traffic).
 4. **Server: unmodified `blakserv`, config changes only.** The config is [server/config/blakserv.cfg](../../server/config/blakserv.cfg):
@@ -24,6 +25,7 @@ The name comes from the lore: every server or world is a "shard" of one original
    - automatic account creation, which is built into `synched.c` and needs no setting.
 
    Kod changes are allowed later but kept minimal, because Kod defines message formats.
+   - Changed 2026-10-15: the server is ours to change. Kod and blakserv change as our features need ([ADR 0008](0008-player-homes.md), [0009](0009-quests.md), [0010](0010-followers.md)); the message formats are a protocol between our client and our Kod, changed in both together.
    - We build from **a copy** of the source in `server/src` (git-ignored). `meridian-unreal\Server-104` stays an untouched reference.
    - Windows build for development, Linux build (Docker or WSL) for hosting.
 5. **Gateway:** a small Node/TS WebSocket-to-TCP bridge (`tools/gateway`). It passes bytes through unchanged, enforces per-IP limits and logs real IPs. Caddy in front provides WSS/TLS, which matters because the login uses unsalted MD5.
@@ -73,6 +75,6 @@ The name comes from the lore: every server or world is a "shard" of one original
 
 ## Consequences
 
-- The browser can play with original Windows clients on the same server. That gives us a parity test.
+- Early on, original Windows clients on the same server gave us a parity test. Since 2026-10-15 they aren't supported; the C source and recorded sessions are the reference.
 - Movement is mostly client-authoritative. The server rejects only destinations outside the room, so the browser must port `move.c` collision faithfully.
-- Protocol drift risk: formats live in Kod and C. We pin the server build and should keep a recorded-session fixture.
+- Protocol drift risk: formats live in Kod and C, both ours. Our client and server change together, and we should keep a recorded-session fixture.

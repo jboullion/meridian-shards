@@ -32,7 +32,7 @@ It would do for the static sites, not for the game files or the installers.
    | `<domain>/ws` | Caddy → the gateway | The game connection (Cloudflare passes WebSockets through) |
    | `<domain>/download/` | A page of the marketing site | Its links go to `dl.<domain>` |
    | `dl.<domain>` | Cloudflare R2 | Installers, the APK and the update feeds. R2 charges nothing for downloads |
-   | `game.<domain>` | The VPS, DNS only (not proxied) | Port 5959 for original Windows clients; Cloudflare's free plan only passes web traffic |
+   | ~~`game.<domain>`~~ | ~~The VPS, DNS only (not proxied)~~ | ~~Port 5959 for original Windows clients~~. Dropped 2026-10-15: only our client is supported, and it connects through `/ws` |
 
    The marketing site may use any path except `/play`, `/assets` and `/ws`.
 4. **Cloudflare caches `/assets/*` and `/play/*`** (a Cache Rule: eligible for cache, respect the origin's headers). Caddy already marks hashed files immutable and `manifest.json` and `index.html` no-cache. By default Cloudflare only caches known extensions, and `.bgf`, `.roo` and `.rsb` aren't among them. After the first request for a file, the VPS barely sends it again.

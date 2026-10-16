@@ -9,14 +9,14 @@ The Arena of Kraanan's fights began as part of ambient life (`ambientLife.ts`, 2
 - The spells were for show. Walls never stopped anyone, a web was a timer on its target, there was no Blind or Dazzle, the damage was made up, and the winner cheered with their sword still out.
 - The arena was tangled into the generic crowd code, hard to change and impossible to configure.
 
-We want real battles that everyone on a game server watches together, using the game's spells and weapons with the numbers its Kod gives them, and a roster of fighters with records worth inspecting.
+We want real battles that everyone on our server watches together, using the game's spells and weapons with the numbers its Kod gives them, and a roster of fighters with records worth inspecting.
 
 ## Decisions
 
 ### 1. One sim, run by the relay
 
 1. **The arena is its own sim** (`packages/world/src/arena/arenaSim.ts`), pure TypeScript that runs in Node and the browser. It steps in fixed 50 ms ticks from a seeded random stream: the same seed and calls give the same fights.
-2. **The relay runs it** (`tools/gateway/arena.ts`, in the gateway's process): one arena per game server string, the same scoping as everything else on the relay. Everyone connected to the relay for that server who is in the arena's room with Ambient Life on watches the same fights, friends or not.
+2. **The relay runs it** (`tools/gateway/arena.ts`, in the gateway's process): one arena per server string, the same scoping as everything else on the relay (in practice one: there is only our server). Everyone connected to the relay for that server who is in the arena's room with Ambient Life on watches the same fights, friends or not.
 3. **State, not seeds.** The relay sends a watcher everything when it starts watching (`arenaState`), then what changed every 100 ms (`arenaTick`): figures' positions, poses and status, new walls and spells in flight (the client flies and animates them), events for sounds, and lines said. That's about 2 KB/s per watcher.
 4. **Clients play it back about 220 ms behind** (a jitter buffer in `arenaView.ts`): each tick is applied when its time comes, and figures glide between ticks.
 5. **With no relay** (or none answering within 4 s, or an older gateway that answers `arenaOff`), the client runs the same sim itself with the default settings and the season's roster. It's the same to look at, just not shared.

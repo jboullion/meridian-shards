@@ -95,7 +95,6 @@ Friends, the relay, following and health bars ([ADR 0005](adr/0005-friends.md)) 
 | End-to-end encryption | The relay is ours and sees friends' locations; ECDH on the same keys is a possible later step. |
 | Walking to a friend in another room | Following starts only in the same room (ADR 0005 4.7). |
 | Pet colours | [ADR 0006](adr/0006-pets.md) 6.4: every pet kind is in its own colours; recoloured ones come once each is looked at in the game. |
-| Original-client players | Only players of this client are on the relay; the one tell they might see is readable. |
 
 ## Deliberately different or left out
 
