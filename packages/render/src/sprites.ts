@@ -35,6 +35,12 @@ export interface SpriteInput {
   secondOnly?: boolean;
   /** false: overlays only, still placed by the base's hotspots (drawbmp.c DrawObject draw_obj) */
   drawBase?: boolean;
+  /**
+   * Ours: keep the picture on the base's grid and give a face's finer detail as `face`, a small
+   * image of its own (the views of the world, which make pictures all the time). Without it the
+   * whole picture is made as fine as the face (portraits and icons, made once).
+   */
+  faceApart?: boolean;
 }
 
 export interface Composite {
@@ -57,6 +63,31 @@ export interface Composite {
   resolution: number;
   /** The parts as drawn, back to front, for the filtered copy (colorTexture.ts compositeToRgba) */
   layers: CompositeLayer[];
+  /** With `faceApart`: the face, finer than the rest, to draw over its box (null without one) */
+  face: CompositeDetail | null;
+}
+
+/** Palette-index pixels made of parts, some maybe finer than the base (colorTexture.ts compositeToRgba) */
+export interface CompositeImage {
+  width: number;
+  height: number;
+  /** palette indices, row-major, 254 = transparent */
+  pixels: Uint8Array;
+  /** Image pixels per base-bitmap pixel */
+  resolution: number;
+  layers: CompositeLayer[];
+}
+
+/**
+ * A face drawn finer than its figure: everything the figure has in the face's box (the head,
+ * its features, a helm, a raised arm over it), made `resolution` times finer than the base.
+ */
+export interface CompositeDetail extends CompositeImage {
+  /** The box in the composite's pixels: left, top, width and height */
+  boxX: number;
+  boxY: number;
+  boxW: number;
+  boxH: number;
 }
 
 export interface CompositeLayer {
@@ -72,13 +103,13 @@ export interface CompositeLayer {
 /**
  * Overlays can be finer than their base (a head at shrink 7 carries eyes, nose and mouth at
  * shrink 14). The C client stretches each part straight to the screen, so that detail shows;
- * one image on the base's grid would drop every other row of it. The image is made this many
+ * one image on the base's grid would drop every other row of it. A face is made this many
  * times finer than the base, at most, so the finest part keeps its pixels.
  *
- * Only a face makes it finer: the head and its features, on a figure that has features
- * (FACE_HOTSPOTS). Elsewhere the extra detail barely shows, and finer images are costly to
- * make again whenever a figure turns or a lamp flickers (Raza's lamps at night took the desktop
- * app to 5 fps, 2026-10-16).
+ * Only a face is made finer: the head and its features, on a figure that has features
+ * (FACE_HOTSPOTS). Elsewhere the extra detail barely shows. In the world it's an image of its
+ * own over the face's box (`faceApart`): a whole figure made four times finer cost about 19 ms
+ * at every step a townsperson took, and Raza's streets stuttered (2026-10-16).
  */
 const MAX_DETAIL = 4;
 
@@ -181,51 +212,82 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
   }
   // image pixels per base pixel: enough that a face's parts (the head and its features, on a
   // figure with features) aren't drawn smaller than their own pixels; nothing else counts
+  const facial = (p: Placed) => p.hotspot === HS_HEAD || FACE_HOTSPOTS.has(p.hotspot);
   let res = 1;
   if (placed.some((p) => FACE_HOTSPOTS.has(p.hotspot)))
-    for (const p of placed) if (p.hotspot === HS_HEAD || FACE_HOTSPOTS.has(p.hotspot)) res = Math.max(res, Math.ceil(1 / p.scale - 1e-6));
+    for (const p of placed) if (facial(p)) res = Math.max(res, Math.ceil(1 / p.scale - 1e-6));
   res = Math.min(res, MAX_DETAIL);
-  const width = (maxX - minX) * res,
-    height = (maxY - minY) * res;
-  const pixels = new Uint8Array(width * height).fill(TRANSPARENT_INDEX);
   placed.sort((a, b) => a.layer - b.layer);
-  const layers: CompositeLayer[] = [];
-  for (const p of placed) {
-    const k = p.scale * res; // image pixels per part pixel
-    const w = Math.round(p.bmp.width * k),
-      h = Math.round(p.bmp.height * k);
-    const ox = Math.round((p.x - minX) * res),
-      oy = Math.round((p.y - minY) * res);
-    layers.push({ bmp: p.bmp, xlat: p.xlat, x: ox, y: oy, k });
-    for (let y = 0; y < h; y++) {
-      const sy = Math.min(p.bmp.height - 1, Math.floor(y / k));
-      const dy = oy + y;
-      if (dy < 0 || dy >= height) continue;
-      for (let x = 0; x < w; x++) {
-        const src = p.bmp.pixels[sy * p.bmp.width + Math.min(p.bmp.width - 1, Math.floor(x / k))];
-        if (src === TRANSPARENT_INDEX) continue;
-        const dx = ox + x;
-        if (dx < 0 || dx >= width) continue;
-        pixels[dy * width + dx] = p.xlat[src];
-      }
+  const apart = input.faceApart === true;
+  const whole = raster(placed, apart ? 1 : res, minX, minY, maxX - minX, maxY - minY);
+
+  let face: CompositeDetail | null = null;
+  if (apart && res > 1) {
+    // the face's box in base pixels, within the picture
+    let fx0 = Infinity,
+      fy0 = Infinity,
+      fx1 = -Infinity,
+      fy1 = -Infinity;
+    for (const p of placed) {
+      if (!facial(p)) continue;
+      fx0 = Math.min(fx0, Math.floor(p.x));
+      fy0 = Math.min(fy0, Math.floor(p.y));
+      fx1 = Math.max(fx1, Math.ceil(p.x + p.bmp.width * p.scale));
+      fy1 = Math.max(fy1, Math.ceil(p.y + p.bmp.height * p.scale));
     }
+    fx0 = Math.max(fx0, minX);
+    fy0 = Math.max(fy0, minY);
+    fx1 = Math.min(fx1, maxX);
+    fy1 = Math.min(fy1, maxY);
+    if (fx1 > fx0 && fy1 > fy0)
+      face = { ...raster(placed, res, fx0, fy0, fx1 - fx0, fy1 - fy0), boxX: fx0 - minX, boxY: fy0 - minY, boxW: fx1 - fx0, boxH: fy1 - fy0 };
   }
 
   const px = 16 / s; // fine units per base pixel
   const baseLeft = -8 * (bmp.width / s) - bmp.xOffset;
   const baseTop = 16 * (bmp.height / s) - bmp.yOffset * 4;
   return {
-    width,
-    height,
-    pixels,
+    ...whole,
     left: baseLeft + minX * px,
     top: baseTop - minY * px,
     widthFine: (maxX - minX) * px,
     heightFine: (maxY - minY) * px,
     baseTop,
-    originX: -minX * res,
-    originY: -minY * res,
-    resolution: res,
-    layers,
+    originX: -minX * whole.resolution,
+    originY: -minY * whole.resolution,
+    face,
   };
+}
+
+/**
+ * The parts drawn into an image `res` times finer than the base, covering `w` x `h` base
+ * pixels from (`x0`, `y0`); `placed` back to front. Parts reaching outside are cut off.
+ */
+function raster(placed: Placed[], res: number, x0: number, y0: number, w: number, h: number): CompositeImage {
+  const width = w * res,
+    height = h * res;
+  const pixels = new Uint8Array(width * height).fill(TRANSPARENT_INDEX);
+  const layers: CompositeLayer[] = [];
+  for (const p of placed) {
+    const k = p.scale * res; // image pixels per part pixel
+    const pw = Math.round(p.bmp.width * k),
+      ph = Math.round(p.bmp.height * k);
+    const ox = Math.round((p.x - x0) * res),
+      oy = Math.round((p.y - y0) * res);
+    if (ox >= width || oy >= height || ox + pw <= 0 || oy + ph <= 0) continue;
+    layers.push({ bmp: p.bmp, xlat: p.xlat, x: ox, y: oy, k });
+    const ya = Math.max(0, -oy),
+      yb = Math.min(ph, height - oy),
+      xa = Math.max(0, -ox),
+      xb = Math.min(pw, width - ox);
+    for (let y = ya; y < yb; y++) {
+      const sy = Math.min(p.bmp.height - 1, Math.floor(y / k));
+      const row = (oy + y) * width + ox;
+      for (let x = xa; x < xb; x++) {
+        const src = p.bmp.pixels[sy * p.bmp.width + Math.min(p.bmp.width - 1, Math.floor(x / k))];
+        if (src !== TRANSPARENT_INDEX) pixels[row + x] = p.xlat[src];
+      }
+    }
+  }
+  return { width, height, pixels, resolution: res, layers };
 }

@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { TRANSPARENT_INDEX } from "@shards/formats";
-import { paletteToRgba } from "../src/colorTexture.ts";
+import { paletteToRgba, sharedPaletteToRgba } from "../src/colorTexture.ts";
 
 /** The whole-image passes, as colorTexture.ts had them before 2026-10-16 */
 function reference(pixels: Uint8Array, width: number, height: number, palette: Uint8Array): Uint8Array {
@@ -83,5 +83,19 @@ describe("the edge fill", () => {
     reference(px, w, h, palette);
     const before = performance.now() - t1;
     expect(ours).toBeLessThan(before);
+  });
+});
+
+describe("sharedPaletteToRgba", () => {
+  it("gives the same copy for the same pixels and palette, and a new one for another palette", () => {
+    const palette = new Uint8Array(1024).map((_, i) => i & 255);
+    const px = new Uint8Array(64).map((_, i) => (i % 7 === 0 ? TRANSPARENT_INDEX : i));
+    const a = sharedPaletteToRgba(px, 8, 8, palette);
+    expect(a).toEqual(paletteToRgba(px, 8, 8, palette));
+    expect(sharedPaletteToRgba(px, 8, 8, palette)).toBe(a);
+    const other = palette.slice();
+    const b = sharedPaletteToRgba(px, 8, 8, other);
+    expect(b).not.toBe(a);
+    expect(b).toEqual(a);
   });
 });

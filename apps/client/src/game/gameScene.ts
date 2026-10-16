@@ -204,6 +204,12 @@ export interface GameSceneStatus {
 /** The longest the view waits for a new room's sprites and sky before showing it anyway. */
 const ENTER_TIMEOUT_MS = 4000;
 
+/** Ours: each idle slice that readies a room next door (prepareRoom) takes this long, ms: what the browser says is free, within these */
+const PREPARE_MIN_MS = 2;
+const PREPARE_MAX_MS = 8;
+/** ...and comes at least this often, ms, even when the browser is never idle (a busy phone): 2 ms in 100 */
+const PREPARE_WAIT_MS = 100;
+
 /** Whether a loaded room is the file the server has: BP_PLAYER's checksum went through a 28-bit Kod integer */
 const sameRoomFile = (security: number, serverSecurity: number) => (security & 0x0fffffff) === (serverSecurity & 0x0fffffff);
 
@@ -580,7 +586,7 @@ export class GameScene {
     const [pal, lightPal] = await Promise.all([this.assets.palette(), this.assets.lightPalettes()]);
     if (this.disposed) return;
     this.palette = paletteTexture(pal);
-    this.rooms = new RoomCache(this.assets, this.palette);
+    this.rooms = new RoomCache(this.assets, this.palette, (l) => this.prepareRoom(l));
     this.xlats = new XlatTable(pal.rgb, lightPal);
     this.objects = new ObjectsView(this.palette, this.xlats, (id) => this.bgf(id), (id) => this.session.resource(id));
     this.scene.add(this.objects.group);
@@ -664,6 +670,33 @@ export class GameScene {
       this.bgfLoads.set(resource, p);
     }
     return p;
+  }
+
+  /**
+   * A room next door, made ready to show while the page is idle (RoomCache): its textures'
+   * smoothed copies and shaded corners, then everything sent to the graphics card, a few
+   * milliseconds at a time. Walking in then draws it at once.
+   */
+  private async prepareRoom(l: LoadedRoom): Promise<void> {
+    const view = l.view;
+    const idle = (): Promise<IdleDeadline | null> =>
+      new Promise((r) => (typeof requestIdleCallback === "function" ? requestIdleCallback(r, { timeout: PREPARE_WAIT_MS }) : setTimeout(() => r(null), 16)));
+    // a slice: what the browser says is free, within bounds
+    const slice = (d: IdleDeadline | null) => Math.max(PREPARE_MIN_MS, Math.min(PREPARE_MAX_MS, d?.timeRemaining() ?? PREPARE_MIN_MS));
+    const opts = { smooth: true, shadedCorners: this.settings.enhanced };
+    for (;;) {
+      const d = await idle();
+      if (this.disposed || view.disposed) return;
+      if (view.prepare(opts, slice(d))) break;
+    }
+    const textures = view.allTextures();
+    for (let i = 0; i < textures.length; ) {
+      const d = await idle();
+      // the shown room may be this one by now: its frame has uploaded what it draws already
+      if (this.disposed || view.disposed) return;
+      const until = performance.now() + slice(d);
+      while (i < textures.length && performance.now() < until) this.renderer.initTexture(textures[i++]);
+    }
   }
 
   /** The sprites of everything in the room, once the server has said what's in it. */

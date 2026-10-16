@@ -114,15 +114,27 @@ uniform float uFog;
 // Ours: the glow pass (postFx.ts) draws only what shines, flames and spells, by brightness
 uniform float uGlowPass;
 uniform float uEmissive;
+// Ours: a face finer than its figure (sprites.ts Composite.face), drawn over its box
+// (left, top, right, bottom in uv) from images of its own
+uniform float uFaceOn;
+uniform vec4 uFaceRect;
+uniform sampler2D uFaceMap;
+uniform sampler2D uFaceColorMap;
 void main() {
+  bool face = uFaceOn > 0.5 && all(greaterThanEqual(vUv, uFaceRect.xy)) && all(lessThan(vUv, uFaceRect.zw));
+  vec2 faceUv = (vUv - uFaceRect.xy) / max(uFaceRect.zw - uFaceRect.xy, vec2(1e-6));
   vec3 rgb;
   if (uColorMode > 0.5) {
     // Smooth textures (colorTexture.ts)
-    vec4 c = texture(uColorMap, vUv);
+    vec4 body = texture(uColorMap, vUv);
+    vec4 fine = texture(uFaceColorMap, faceUv);
+    vec4 c = face ? fine : body;
     if (c.a < 0.5) discard;
     rgb = c.rgb;
   } else {
-    float index = floor(texture(uMap, vUv).r * 255.0 + 0.5);
+    float body = texture(uMap, vUv).r;
+    float fine = texture(uFaceMap, faceUv).r;
+    float index = floor((face ? fine : body) * 255.0 + 0.5);
     if (index == 254.0) discard;
     rgb = texelFetch(uPalette, ivec2(int(index), 0), 0).rgb;
   }
@@ -185,19 +197,38 @@ export const HALO_COLORS = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 
 /** proto.h LIGHT_BRED, LIGHT_BBLUE, LIGHT_BGREEN: the targeting light's colour, by halo colour */
 const TARGET_LIGHT_COLORS = [0x7c00, 0x001f, 0x03e0];
 
-/** A composite as COMPOSITES keeps it: made once, its filtered RGBA copy when first wanted */
+/** A sprite's palette-index image, sampled crisp (the shader looks its colours up) */
+function indexTexture(pixels: Uint8Array, width: number, height: number): THREE.DataTexture {
+  const tex = new THREE.DataTexture(pixels, width, height, THREE.RedFormat, THREE.UnsignedByteType);
+  tex.magFilter = tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.unpackAlignment = 1;
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/** A composite as COMPOSITES keeps it: made once, its filtered RGBA copies when first wanted */
 interface CachedComposite {
   composite: Composite | null;
   rgba: Uint8Array | null;
+  /** The face's (Composite.face) */
+  faceRgba: Uint8Array | null;
 }
 
 /**
  * Ours: how many composites ObjectsView keeps for reuse. Animated objects cycle a few frames
- * (a lamp's flame has six), often many alike in a room, and the finer composites of
- * sprites.ts (MAX_DETAIL) are costly to make: Raza's lamps at night, each made again at every
- * frame of every lamp, took the desktop app to 5 fps (2026-10-16).
+ * (a lamp's flame has six), often many alike in a room, and making them again at every frame
+ * took Raza's lamps at night to 5 fps when every picture was made finer (2026-10-16).
  */
 const COMPOSITES = 512;
+
+/**
+ * Ours: how long a frame may spend making sprites' smoothed copies (colorTexture.ts), ms. Entering
+ * a busy room needs every figure's at once, which took the first frames 15-50 ms; past the
+ * budget a sprite is drawn crisp for a frame or two until its turn, the nearest first (2026-10-16).
+ */
+const SMOOTH_BUDGET_MS = 4;
 
 interface Entry {
   halo: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial> | null;
@@ -209,6 +240,9 @@ interface Entry {
   texture: THREE.DataTexture | null;
   /** The RGBA copy of `texture` while the filter uses one (colorTexture.ts) */
   colorTexture: THREE.DataTexture | null;
+  /** The face's index image and RGBA copy (Composite.face), drawn over its box */
+  faceTexture: THREE.DataTexture | null;
+  faceColorTexture: THREE.DataTexture | null;
   /** Ours: its shadow on the floor (shadows under figures), made when first needed */
   shadow: THREE.Mesh | null;
   /** client position and ground height */
@@ -245,6 +279,9 @@ export class ObjectsView {
   private readonly entries = new Map<number, Entry>();
   /** Composites by what they're drawn from, shared between objects, the least recently used dropped first */
   private readonly composites = new Map<string, CachedComposite>();
+  /** Until when this frame may make smoothed copies (SMOOTH_BUDGET_MS), and the sprites waiting for theirs */
+  private smoothUntil = 0;
+  private readonly unsmoothed = new Set<Entry>();
   private readonly palette: THREE.Texture;
   private readonly xlats: XlatTable;
   private readonly getBgf: (resource: number) => Bgf | null | undefined;
@@ -342,6 +379,7 @@ export class ObjectsView {
 
   /** Sync meshes with the objects and update their frame, placement and light. */
   update(objects: Iterable<ViewObject>, ctx: ObjectViewContext, lights: LightSource[], selfId: number): NameLabel[] {
+    this.smoothUntil = performance.now() + SMOOTH_BUDGET_MS;
     const seen = new Set<number>();
     const labels: NameLabel[] = [];
     for (const o of objects) {
@@ -393,13 +431,20 @@ export class ObjectsView {
             uFog: { value: 1 },
             uGlowPass: glowPass,
             uEmissive: { value: 0 },
+            uFaceOn: { value: 0 },
+            uFaceRect: { value: new THREE.Vector4() },
+            uFaceMap: { value: null },
+            uFaceColorMap: { value: null },
           },
           side: THREE.DoubleSide,
         });
         const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
         mesh.name = `object ${o.id}`;
         this.group.add(mesh);
-        e = { mesh, halo: null, key: "", composite: null, cached: null, texture: null, colorTexture: null, shadow: null, x, y, z: 0, flashTime: 0, lightAdjust: 0, bounceTime: 0, scale: 1 };
+        e = {
+          mesh, halo: null, key: "", composite: null, cached: null, texture: null, colorTexture: null, faceTexture: null, faceColorTexture: null, shadow: null,
+          x, y, z: 0, flashTime: 0, lightAdjust: 0, bounceTime: 0, scale: 1,
+        };
         this.entries.set(o.id, e);
       }
       if (e.key !== key) {
@@ -423,6 +468,7 @@ export class ObjectsView {
               viewAngle,
               secondTranslation: dt === DRAWFX.DOUBLETRANS || dt === DRAWFX.SECONDTRANS ? SECOND_TRANSLATION : 0,
               secondOnly: dt === DRAWFX.SECONDTRANS,
+              faceApart: true,
             },
             this.xlats,
           ),
@@ -504,7 +550,19 @@ export class ObjectsView {
         this.entries.delete(id);
       }
     }
+    this.smoothWaiting(ctx.viewer);
     return labels;
+  }
+
+  /** Sprites drawn crisp until their smoothed copies are made, the nearest first, in what's left of the frame's budget */
+  private smoothWaiting(viewer: { x: number; y: number }): void {
+    if (!this.unsmoothed.size) return;
+    const near = (e: Entry) => Math.hypot(e.x - viewer.x, e.y - viewer.y);
+    const waiting = [...this.unsmoothed].sort((a, b) => near(a) - near(b));
+    for (const e of waiting) {
+      if (performance.now() >= this.smoothUntil) return;
+      this.setColorTexture(e, true);
+    }
   }
 
   /** Where an object's name label would go (the top of its sprite), or null when it isn't drawn. */
@@ -625,17 +683,31 @@ export class ObjectsView {
   }
 
   /** The sprite's RGBA copy, made or dropped as Smooth textures needs. */
-  private setColorTexture(e: Entry): void {
+  private setColorTexture(e: Entry, now = false): void {
     e.colorTexture?.dispose();
     e.colorTexture = null;
+    e.faceColorTexture?.dispose();
+    e.faceColorTexture = null;
+    this.unsmoothed.delete(e);
     const c = e.composite;
     const u = e.mesh.material.uniforms;
-    if (c && this.smooth) {
+    const shared = c && e.cached?.composite === c ? e.cached : null;
+    // Over the frame's budget, a copy not made yet waits (smoothWaiting): crisp till then
+    const ready = !!shared?.rgba && (!c?.face || !!shared.faceRgba);
+    if (c && this.smooth && !now && !ready && performance.now() >= this.smoothUntil) {
+      this.unsmoothed.add(e);
+    } else if (c && this.smooth) {
       const palette = (this.palette.image as { data: Uint8Array }).data;
-      const rgba = e.cached?.composite === c ? (e.cached.rgba ??= compositeToRgba(c, palette)) : compositeToRgba(c, palette);
+      const rgba = shared ? (shared.rgba ??= compositeToRgba(c, palette)) : compositeToRgba(c, palette);
       e.colorTexture = colorTexture(rgba, c.width, c.height, false);
+      const f = c.face;
+      if (f) {
+        const faceRgba = shared ? (shared.faceRgba ??= compositeToRgba(f, palette)) : compositeToRgba(f, palette);
+        e.faceColorTexture = colorTexture(faceRgba, f.width, f.height, false);
+      }
     }
     u.uColorMap.value = e.colorTexture;
+    u.uFaceColorMap.value = e.faceColorTexture;
     u.uColorMode.value = e.colorTexture ? 1 : 0;
   }
 
@@ -646,7 +718,7 @@ export class ObjectsView {
       // Used again: to the back of the queue
       this.composites.delete(key);
     } else {
-      c = { composite: make(), rgba: null };
+      c = { composite: make(), rgba: null, faceRgba: null };
       if (this.composites.size >= COMPOSITES) this.composites.delete(this.composites.keys().next().value!);
     }
     this.composites.set(key, c);
@@ -656,17 +728,23 @@ export class ObjectsView {
   private setComposite(e: Entry): void {
     e.texture?.dispose();
     e.texture = null;
+    e.faceTexture?.dispose();
+    e.faceTexture = null;
     const c = e.composite;
+    const u = e.mesh.material.uniforms;
     this.setColorTexture(e);
+    u.uFaceOn.value = 0;
     if (!c) return;
-    const tex = new THREE.DataTexture(c.pixels, c.width, c.height, THREE.RedFormat, THREE.UnsignedByteType);
-    tex.magFilter = tex.minFilter = THREE.NearestFilter;
-    tex.generateMipmaps = false;
-    tex.unpackAlignment = 1;
-    tex.colorSpace = THREE.NoColorSpace;
-    tex.needsUpdate = true;
-    e.texture = tex;
-    e.mesh.material.uniforms.uMap.value = tex;
+    e.texture = indexTexture(c.pixels, c.width, c.height);
+    u.uMap.value = e.texture;
+    const f = c.face;
+    if (f) {
+      // the face over its box, in the body's uv (v = 0 is the top row)
+      e.faceTexture = indexTexture(f.pixels, f.width, f.height);
+      u.uFaceMap.value = e.faceTexture;
+      (u.uFaceRect.value as THREE.Vector4).set(f.boxX / c.width, f.boxY / c.height, (f.boxX + f.boxW) / c.width, (f.boxY + f.boxH) / c.height);
+      u.uFaceOn.value = 1;
+    }
     // Quad in the billboard's local frame (scene units): +X = screen right, +Y = up.
     const l = c.left / FINENESS,
       r = (c.left + c.widthFine) / FINENESS;
@@ -690,6 +768,9 @@ export class ObjectsView {
     e.mesh.material.dispose();
     e.texture?.dispose();
     e.colorTexture?.dispose();
+    e.faceTexture?.dispose();
+    e.faceColorTexture?.dispose();
+    this.unsmoothed.delete(e);
     if (e.shadow) this.shadows.remove(e.shadow);
   }
 
@@ -697,6 +778,7 @@ export class ObjectsView {
     for (const e of this.entries.values()) this.disposeEntry(e);
     this.entries.clear();
     this.composites.clear();
+    this.unsmoothed.clear();
     this.shadowGeometry.dispose();
     this.shadowMaterial.dispose();
   }

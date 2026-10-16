@@ -53,6 +53,7 @@ const RAMPS = [0x10, 0x20, 0x30, 0x40, 0x50, 0x70, 0x90, 0xa0, 0xc0, 0xd0, 0xe0]
 
 export class XlatTable {
   private readonly tables = new Map<number, Uint8Array>();
+  private readonly composed = new Map<number, Uint8Array>();
   private readonly rgb: Uint8Array;
   private readonly lightPalettes: Uint8Array | null;
 
@@ -72,12 +73,19 @@ export class XlatTable {
     return this.tables.get(id) ?? this.tables.get(XLAT.IDENTITY)!;
   }
 
-  /** Composite map: index -> xlat1[xlat0[index]]. */
+  /**
+   * Composite map: index -> xlat1[xlat0[index]]. Made once for each pair and shared (never
+   * change it): the same table for the same pair lets colorTexture.ts reuse a part's copy.
+   */
   compose(xlat0: number, xlat1: number): Uint8Array {
+    const key = xlat0 * 65536 + xlat1;
+    let out = this.composed.get(key);
+    if (out) return out;
     const a = this.get(xlat0),
       b = this.get(xlat1);
-    const out = new Uint8Array(256);
+    out = new Uint8Array(256);
     for (let i = 0; i < 256; i++) out[i] = b[a[i]];
+    this.composed.set(key, out);
     return out;
   }
 

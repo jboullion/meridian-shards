@@ -102,6 +102,40 @@ describe.skipIf(!have)("player sprite composite (real files)", () => {
     expect(plain.resolution).toBe(1);
   });
 
+  test("faceApart: the figure stays on its base's grid and the face comes finer, over its box", async () => {
+    const pal = parsePaletteBin(read("palette.bin"));
+    const xl = new XlatTable(pal.rgb, null);
+    const [body, head, eyes] = await Promise.all(["bta.bgf", "phax.bgf", "peax.bgf"].map(async (n) => parseBgf(read(n))));
+    const input = {
+      base: { bgf: body, group: 0, translation: 0, hotspot: 0 },
+      overlays: [
+        { bgf: head, group: 0, translation: 0, hotspot: 1 },
+        { bgf: eyes, group: 0, translation: 0, hotspot: 11 },
+      ],
+      viewAngle: 0,
+    };
+    const whole = compositeSprite(input, xl)!;
+    const apart = compositeSprite({ ...input, faceApart: true }, xl)!;
+    expect(whole.face).toBeNull();
+    expect(apart.resolution).toBe(1);
+    const f = apart.face!;
+    expect(f.resolution).toBe(whole.resolution);
+    // the box lies inside the picture, round the head, and is far smaller than it
+    expect(f.boxX).toBeGreaterThanOrEqual(0);
+    expect(f.boxY).toBeGreaterThanOrEqual(0);
+    expect(f.boxX + f.boxW).toBeLessThanOrEqual(apart.width);
+    expect(f.boxY + f.boxH).toBeLessThanOrEqual(apart.height);
+    expect(f.width * f.height * 4).toBeLessThan(whole.width * whole.height);
+    // its pixels are the whole fine picture's within the box
+    let differ = 0;
+    for (let y = 0; y < f.height; y++)
+      for (let x = 0; x < f.width; x++)
+        if (f.pixels[y * f.width + x] !== whole.pixels[(f.boxY * f.resolution + y) * whole.width + f.boxX * f.resolution + x]) differ++;
+    expect(differ).toBe(0);
+    // and the filtered copy of it can be made like any composite
+    expect(compositeToRgba(f, pal.rgb, 3).length).toBe(f.width * f.height * 4);
+  });
+
   test("a face keeps its features' detail (charface.c: head + shrink 14 eyes, nose, mouth)", async () => {
     const pal = parsePaletteBin(read("palette.bin"));
     const xl = new XlatTable(pal.rgb, null);

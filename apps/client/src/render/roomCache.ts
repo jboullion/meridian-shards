@@ -4,6 +4,10 @@
 // textures download and its geometry is built. Rooms that aren't the current one or next
 // to it are dropped when you move on.
 //
+// Ours: each neighbour is also made ready to show while the page is idle (`prepare`, given by the
+// scene): its textures' smoothed copies and shaded corners made and sent to the graphics card,
+// which otherwise took the first frame in a big town 70-90 ms (2026-10-16).
+//
 // The cache owns the RoomViews: the scene adds and removes their groups but never disposes them.
 
 import type * as THREE from "three";
@@ -24,10 +28,15 @@ export class RoomCache {
   private queue: string[] = [];
   private pumping = false;
   private disposed = false;
+  /** Makes a loaded neighbour ready to show, a little at a time (the scene's: it has the renderer) */
+  private readonly prepare: ((l: LoadedRoom) => Promise<void>) | null;
+  /** Rooms prepare() has made ready (a room loaded again is a new LoadedRoom) */
+  private readonly prepared = new WeakSet<LoadedRoom>();
 
-  constructor(assets: AssetStore, palette: THREE.Texture) {
+  constructor(assets: AssetStore, palette: THREE.Texture, prepare?: (l: LoadedRoom) => Promise<void>) {
     this.assets = assets;
     this.palette = palette;
+    this.prepare = prepare ?? null;
     this.links = assets.roomLinks().catch(() => ({}));
   }
 
@@ -58,7 +67,8 @@ export class RoomCache {
     if (this.disposed || !this.keep.has(key)) return; // moved on meanwhile
     this.keep = new Set([key, ...near]);
     for (const [k, p] of this.loads) if (!this.keep.has(k)) void p.then((l) => this.drop(k, p, l), () => {});
-    this.queue = near.filter((n) => !this.loads.has(n));
+    // every neighbour: one loaded already (the room you just left) may not be made ready yet
+    this.queue = [...near];
     this.pump();
   }
 
@@ -74,7 +84,20 @@ export class RoomCache {
         this.pump();
       };
       if (this.disposed || !this.keep.has(next)) return done();
-      this.get(next).then(done, done);
+      this.get(next)
+        .then(
+          async (l) => {
+            if (this.disposed || !this.keep.has(next) || !this.prepare || this.prepared.has(l)) return;
+            try {
+              await this.prepare(l);
+              this.prepared.add(l);
+            } catch (e) {
+              console.warn(`room ${next}: not made ready ahead: ${(e as Error).message}`);
+            }
+          },
+          () => {}, // a failed load is tried again when it's wanted
+        )
+        .then(done, done);
     });
   }
 

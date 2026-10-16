@@ -10,7 +10,7 @@ import { FINENESS, ceilingHeightAt, floorHeightAt, leafAt, paletteRgba, type Bgf
 import { buildRoomGeometry, type Batch, type RoomGeometry, type TextureInfo } from "./roomGeometry.ts";
 import { lightingUniforms, roomFragmentShader, roomVertexShader } from "./lighting.ts";
 import { MAX_LIGHTS, type LightSource } from "./objectLighting.ts";
-import { colorTexture, paletteToRgba } from "./colorTexture.ts";
+import { colorTexture, sharedPaletteToRgba } from "./colorTexture.ts";
 import { triangleVisibility, wallsNear } from "./lightOcclusion.ts";
 import { bakeAoSteps, surfaceInfo, type AoMap } from "./roomAo.ts";
 
@@ -85,6 +85,8 @@ export class RoomView {
   private readonly visibility = new Map<string, Map<Batch, Uint8Array>>();
   /** The light list the mask attributes were last made for */
   private maskKey = "";
+  /** Gone: prepare() and allTextures() leave it alone */
+  private gone = false;
 
   constructor(room: Room, textures: Map<number, Bgf>, palette: THREE.Texture) {
     this.textures = textures;
@@ -138,7 +140,7 @@ export class RoomView {
     if (!t) {
       const { data, width, height } = this.indexTextures.get(key)!.image as { data: Uint8Array; width: number; height: number };
       const palette = (this.palette.image as { data: Uint8Array }).data;
-      t = colorTexture(paletteToRgba(data, width, height, palette), width, height, true);
+      t = colorTexture(sharedPaletteToRgba(data, width, height, palette), width, height, true);
       this.colorTextures.set(key, t);
     }
     return t;
@@ -152,14 +154,21 @@ export class RoomView {
     material.uniforms.uColorMap.value = color ? this.colorTexture(frameKey) : null;
   }
 
-  /** Enhanced lighting's uniforms on a material: soft highlights and shaded corners. */
-  private applyEnhanced(material: THREE.ShaderMaterial): void {
+  /**
+   * Enhanced lighting's uniforms on a material: soft highlights and shaded corners. `ao` is
+   * cornersNow(), worked out once for all the materials (its key covers every sector).
+   */
+  private applyEnhanced(material: THREE.ShaderMaterial, ao: ReturnType<RoomView["cornerMap"]>): void {
     const u = material.uniforms;
     u.uSoftLight.value = this.enhanced.softLights ? 1 : 0;
-    const ao = this.enhanced.shadedCorners ? this.cornerMap() : null;
     u.uAo.value = ao ? 1 : 0;
     u.uAoMap.value = ao?.texture ?? null;
     if (ao) u.uAoRect.value = ao.rect;
+  }
+
+  /** The corner map the materials use now: none while it's off or being baked */
+  private cornersNow(): ReturnType<RoomView["cornerMap"]> {
+    return this.enhanced.shadedCorners ? this.cornerMap() : null;
   }
 
   /**
@@ -191,9 +200,42 @@ export class RoomView {
     texture.colorSpace = THREE.NoColorSpace;
     texture.needsUpdate = true;
     this.ao = { key: job.key, texture, rect: [m.x0, m.y0, 1 / (m.width * m.texel), 1 / (m.height * m.texel)] };
-    for (const m of this.materials) this.applyEnhanced(m);
+    const ao = this.cornersNow();
+    for (const m of this.materials) this.applyEnhanced(m, ao);
   }
 
+
+  /**
+   * Ours: gets the room ready to be shown, `budgetMs` at a time, before anyone walks in
+   * (RoomCache, for the rooms next door): its textures' smoothed copies and its shaded corners,
+   * which are otherwise made in the first frame it's shown. True when done (or disposed).
+   */
+  prepare(o: { smooth: boolean; shadedCorners: boolean }, budgetMs: number): boolean {
+    if (this.gone) return true;
+    const until = performance.now() + budgetMs;
+    if (o.smooth)
+      for (const key of this.indexTextures.keys()) {
+        if (this.colorTextures.has(key)) continue;
+        if (performance.now() >= until) return false;
+        this.colorTexture(key);
+      }
+    if (o.shadedCorners) {
+      this.cornerMap();
+      if (this.aoJob) this.bakeCorners(Math.max(0, until - performance.now()));
+      if (this.aoJob) return false;
+    }
+    return true;
+  }
+
+  get disposed(): boolean {
+    return this.gone;
+  }
+
+  /** Every texture the room draws with now, to upload ahead (WebGLRenderer.initTexture) */
+  allTextures(): THREE.Texture[] {
+    if (this.gone) return [];
+    return [...this.indexTextures.values(), ...this.colorTextures.values(), ...(this.ao ? [this.ao.texture] : [])];
+  }
 
   /** Smooth textures (Graphics Options): filtered, as the original; off, crisp pixels. */
   setSmoothTextures(smooth: boolean): void {
@@ -208,7 +250,8 @@ export class RoomView {
     const was = this.enhanced;
     if ((Object.keys(NO_ENHANCEMENTS) as (keyof EnhancedLighting)[]).every((k) => e[k] === was[k])) return;
     this.enhanced = { ...e };
-    for (const m of this.materials) this.applyEnhanced(m);
+    const ao = this.cornersNow();
+    for (const m of this.materials) this.applyEnhanced(m, ao);
     this.maskKey = "";
     this.setLights(this.lights);
     this.update(this.time);
@@ -223,6 +266,7 @@ export class RoomView {
       return { width: bmp.width, height: bmp.height, shrink: b.shrink };
     };
     this.geometry = buildRoomGeometry(room, info);
+    const ao = this.cornersNow();
     for (const batch of this.geometry.batches.values()) {
       const bgf = this.textures.get(batch.textureId)!;
       const n = batch.positions.length / 3;
@@ -282,7 +326,7 @@ export class RoomView {
       }
       this.materials.push(mat);
       this.applyTextures(mat, frameKeys[0]);
-      this.applyEnhanced(mat);
+      this.applyEnhanced(mat, ao);
       if (batch.animation) this.animated.push({ batch, material: mat, frames, frameKeys, bgf });
       const mesh = new THREE.Mesh(g, mat);
       mesh.name = batch.key;
@@ -433,6 +477,7 @@ export class RoomView {
   }
 
   dispose(): void {
+    this.gone = true;
     for (const m of this.meshes) m.geometry.dispose();
     for (const m of this.materials) m.dispose();
     for (const t of this.indexTextures.values()) t.dispose();
