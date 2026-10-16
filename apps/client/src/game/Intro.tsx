@@ -1,6 +1,6 @@
 // The intro module (module/intro/intro.c IntroShowSplash): the picture behind the login dialog,
-// and the main theme (main.ogg) after 3 s. It's behind the login dialog at startup and after
-// logging off.
+// and the main theme (main.ogg), at once and fading in over 1 s (intro.c waits 3 s and starts it
+// at full volume). It's behind the login dialog at startup and after logging off.
 //
 // Unlike the original, there's no logo first (logo.bmp is Near Death Studios' logo), and there's
 // no "Click here to log on!" button: the login dialog is open over the picture from the start
@@ -16,8 +16,9 @@ import type { AssetStore } from "../assets.ts";
 import type { GameAudio } from "./audio.ts";
 import { getSettings, touchUi } from "./settings.ts";
 
+/** Ours: the music fades in over this long, at once, where intro.c waits 3 s (ms) */
+const MUSIC_FADE_IN = 1000;
 /** intro.c */
-const MUSIC_DELAY = 3000;
 const SPLASH_MUSIC = "main.ogg";
 const SPLASH = "xsplash.bgf";
 
@@ -49,8 +50,7 @@ export function IntroBackdrop({ assets, audio }: { assets: AssetStore; audio: Ga
   useEffect(() => {
     if (!audio) return;
     // PlayMusicProc (GameAudio checks the Music option)
-    const music = window.setTimeout(() => audio.handle({ type: "music", file: SPLASH_MUSIC }), MUSIC_DELAY);
-    return () => clearTimeout(music);
+    audio.fadeInMusic(SPLASH_MUSIC, MUSIC_FADE_IN);
   }, [audio]);
 
   if (!pictures) return null;

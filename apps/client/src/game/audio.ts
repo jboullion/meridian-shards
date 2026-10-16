@@ -349,7 +349,12 @@ export class GameAudio {
     for (const v of [...this.ambientVoices]) v.stop(fadeMs);
   }
 
-  private async playMusic(file: string): Promise<void> {
+  /** Ours: music that fades in from silence over `fadeInMs` once it starts (the login screen's) */
+  fadeInMusic(file: string, fadeInMs: number): void {
+    void this.playMusic(file, fadeInMs);
+  }
+
+  private async playMusic(file: string, fadeInMs = 0): Promise<void> {
     const name = file.toLowerCase();
     this.wantedMusic = name;
     if (!this.settings.music || this.music?.file === name) return;
@@ -366,6 +371,11 @@ export class GameAudio {
     src.buffer = buf;
     src.loop = true;
     src.connect(gain);
+    if (fadeInMs > 0) {
+      const t = ctx.currentTime;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(this.settings.musicVolume / 100, t + fadeInMs / 1000);
+    }
     src.start();
     entry.source = src;
     this.note(`server: music ${name}`);
@@ -460,7 +470,11 @@ export class GameAudio {
   private setSettings(s: Settings): void {
     const prev = this.settings;
     this.settings = s;
-    if (this.music) this.music.gain.gain.value = s.musicVolume / 100;
+    if (this.music && s.musicVolume !== prev.musicVolume) {
+      // Ends a fade-in (fadeInMusic) at the new volume
+      this.music.gain.gain.cancelScheduledValues(0);
+      this.music.gain.gain.value = s.musicVolume / 100;
+    }
     if (!s.music) this.stopMusic();
     else if (!prev.music && this.wantedMusic) void this.playMusic(this.wantedMusic);
     if (!s.sound) this.stopWhere(() => true);
