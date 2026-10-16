@@ -6,7 +6,7 @@ The hosted stack is three containers on one small Linux VM:
 |---|---|
 | `blakserv` | The unmodified Server 104 server, built for Linux (32-bit), with the compiled Kod, resources and rooms from our build. Game state lives on the `savegame` volume. |
 | `gateway` | The WebSocket-to-TCP gateway (`tools/gateway/gateway.ts`), with the arena's feed on `/social` and the arena it runs (friends and pets are kept by blakserv since ADR 0015) ([ADR 0007](../docs/adr/0007-arena.md)). The arena's season lives on the `arena` volume (`/srv/gateway/state/arena-state.json`). |
-| `web` | Caddy: HTTPS (Let's Encrypt), the website at `/` (the landing page, `/download/` and the wiki: the `meridian-shards-website` repository next to this one), the browser client at `/play/`, the game assets at `/assets/`, the gateway at `/ws` and the friends relay at `/social` (in the gateway's process, [ADR 0005](../docs/adr/0005-friends.md); it keeps nothing on disk but the arena's season). Without a staged website every other path redirects to `/play/`, as before. The browser client was taken down on 2026-10-08 and is back since 2026-10-09; most players use the desktop or Android app. |
+| `web` | Caddy: HTTPS (Let's Encrypt), the website at `/` (the landing page, `/download/` and the wiki: the `meridian-shards-website` repository next to this one), the browser client at `/play/`, the game assets at `/assets/`, the gateway at `/ws` and the arena's feed at `/social` (in the gateway's process; it keeps nothing on disk but the arena's season). Friends and pets are kept by blakserv ([ADR 0015](../docs/adr/0015-social-on-our-server.md)). Without a staged website every other path redirects to `/play/`, as before. The browser client was taken down on 2026-10-08 and is back since 2026-10-09; most players use the desktop or Android app. |
 
 Port 5959 is also open for original Windows clients built with our `SecretKey`. Our apps only need 443.
 
@@ -162,6 +162,11 @@ All of these run on the VM, in `~/meridian-shards`:
 | The arena's season | `sudo docker compose -f deploy/docker-compose.yml exec gateway cat /srv/gateway/state/arena-state.json` (each server's season, roster, records and champions). Removing it starts a new roster now, without the old champions |
 
 blakserv saves every 30 minutes (`[Auto] SavePeriod`). Run "save game" before stopping the VM or redeploying.
+
+**A save the new Kod can't load starts a new world.** If any saved object's class is gone from the Kod, blakserv's `LoadGame` fails. It then starts a fresh world with the old accounts but no characters (`blakserv/loadall.c`), and its next save overwrites the old world.
+- **After Kod changes that remove classes,** try the VM's save on a copy first. Copy the latest `accounts`, `dynarscs`, `gameuser` and `striings` files and `lastsave.txt` into the `savegame/` of a copy of the local run folder. Change its ports, start it, and look for `LoadObject can't find class name` in `channel/error.txt`.
+- **After a fresh start,** give each account its character slots again with `create user <account>`, four each.
+- **This happened on 2026-10-16,** when the server cleanup's removed crafting and monster classes met the old save. The old save is backed up on the VM (`~/savegame-before-phase5-1792167724.tgz`) and in `~/.meridian-shards/backups` on the PC that deployed.
 
 **Don't send maintenance commands while blakserv is starting** (the first minute after a deploy or restart). On 2026-10-12 a `show status` sent during startup never answered and left the server's main loop hung: the port still accepted connections, but every login waited forever (the gateway logged `down 0 B`). The way out is `sudo docker compose -f deploy/docker-compose.yml restart blakserv`. To see whether it's up, try logging in, or watch for `network worker thread started` in `channel/debug.txt`.
 
