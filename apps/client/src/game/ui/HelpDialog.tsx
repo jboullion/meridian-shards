@@ -280,7 +280,7 @@ const HUD_PARTS: HudPart[] = [
   { sel: [".modern-enchantments.room", ".classic-room-enchantments", ".hud-enchantments.room"], title: "Room enchantments", text: "Spells on the room you're in." },
   { sel: [".action-bar", ".touch-hotbar", ".view .hotbar"], title: "Hotbar", text: "Quick slots: 1 to 0 use them. Drag spells or items onto them; right click (long press) one to change it." },
   { sel: [".chat-tabs"], title: "Chat tabs", text: "All, Chat (what people say), Combat and Server. A mark shows on a tab with new lines." },
-  { sel: [".chat-log"], title: "Chat", text: "What's said and what happens. In Modern it fades until you point at it; drag its edge to resize it." },
+  { sel: [".chat-log"], title: "Chat", text: "What's said and what happens. In Modern it fades until you point at it; drag its tab strip to move it, its right or bottom edge to resize it, and double-click the strip to put it back." },
   { sel: [".chat-input"], title: "Chat line", text: "Enter starts it; type to talk, or a command (tell, yell, emote, who, help…)." },
   { sel: [".sidebar .stat-tabs"], title: "Tabs", text: "Inventory, Statistics, Spells, Skills, Quests, Friends and Pets." },
   { sel: [".sidebar .stat-frame"], title: "Inventory and lists", text: "What the tab shows. Double click to use, right click to look, drag to the view to drop." },
@@ -493,7 +493,7 @@ function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }
           <dt>Hotbar slots</dt>
           <dd>Right click (long press) a slot to choose a spell or item for it.</dd>
           <dt>The chat</dt>
-          <dd>Enter starts a line; T tells, Y yells, B broadcasts, ; emotes. Tabs keep chat, fights and the server's messages apart.</dd>
+          <dd>Enter starts a line; T tells, Y yells, B broadcasts, ; emotes. Tabs keep chat, fights and the server's messages apart. In Modern, drag the strip beside the tabs to move it and its right or bottom edge or corner to size it; a double-click on the strip puts it back.</dd>
           {layout === "modern" && (
             <>
               <dt>Camera View (V) and Hide Interface (H)</dt>

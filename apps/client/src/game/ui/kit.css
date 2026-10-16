@@ -56,6 +56,12 @@
   text-shadow: 1px 1px 0 #000, 0 0 4px #000;
 }
 
+/* Pressed, the letters go down with the button, the button keeping its size (.mk-btn:active's
+   2 px would replace its own padding) */
+.mk-btn.login-button:active:not(:disabled) {
+  padding: 12px 36px 8px;
+}
+
 @media (max-height: 520px) {
   .mk-backdrop.login {
     padding-top: 16px;

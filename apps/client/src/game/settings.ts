@@ -402,6 +402,13 @@ export interface Settings {
   /** The Modern layout's chat: its width in pixels, dragged by its right edge */
   chatWidth: number;
   /**
+   * The Modern layout's chat: where its tab strip was dragged to (left and top in the view's
+   * pixels), or null for its place down the left; and its height in its own pixels (dragged by its
+   * bottom edge), or null to reach the view's bottom
+   */
+  chatAt: [number, number] | null;
+  chatTall: number | null;
+  /**
    * The Modern layout's character window: where its title was dragged to (left and top in the
    * view's pixels), or null for its place beside the map
    */
@@ -522,6 +529,8 @@ export const DEFAULT_SETTINGS: Settings = {
   chatHeight: 168,
   interfaceStyle: "modern",
   chatWidth: 340,
+  chatAt: null,
+  chatTall: null,
   characterWindowAt: null,
   hudScale: 100,
   enhanced: true,

@@ -79,6 +79,14 @@ const CHAT_FRESH_MS = 10000;
 const DM_ANSWER_MS = 3000;
 /** Its width, dragged by its right edge: at least this */
 const MIN_CHAT_WIDTH = 220;
+/** The Modern chat moved by its tab strip: this much of it stays in the window across, and its strip down, px */
+const CHAT_KEEP_X = 120;
+const CHAT_KEEP_Y = 40;
+/** The Modern chat's height, dragged by its bottom edge: at least this, px; and where it starts unmoved */
+const MIN_CHAT_TALL = 100;
+const CHAT_TOP = 190;
+/** A second press on the Modern chat's tab strip this soon after the first puts it back, ms */
+const CHAT_DOUBLE_MS = 400;
 /** The chat window's height, dragged by its top edge: at least this, and leaving the view this much */
 const MIN_CHAT_HEIGHT = 60;
 const MIN_VIEW_HEIGHT = 160;
@@ -383,6 +391,11 @@ export function GameView({
   const [dragHeight, setDragHeight] = useState<number | null>(null);
   /** The Modern chat's width while its edge is being dragged */
   const [dragWidth, setDragWidth] = useState<number | null>(null);
+  /** The Modern chat's place and height while it's being moved or its bottom edge dragged */
+  const [dragChatAt, setDragChatAt] = useState<[number, number] | null>(null);
+  const [dragTall, setDragTall] = useState<number | null>(null);
+  /** When the Modern chat's tab strip was last pressed: a second press soon after puts the chat back */
+  const chatStripPress = useRef(0);
   const gameRef = useRef<HTMLDivElement>(null);
   const getGameRoot = useCallback(() => gameRef.current, []);
   /** The 3D view's next frame, for Help's picture of the screen */
@@ -1747,35 +1760,90 @@ export function GameView({
     atBottomRef.current = true;
     updateSettings({ chatTab: tab });
   };
+  /**
+   * The Modern chat's edges: its right edge makes it wider or narrower, its bottom edge taller or
+   * shorter, the corner between them both. It's zoomed by the HUD size: its size is in its own
+   * pixels, the pointer's in the page's.
+   */
+  const resizeModernChat = (e: ReactPointerEvent<HTMLDivElement>, across: boolean, down: boolean) => {
+    const game = gameRef.current;
+    const chat = e.currentTarget.parentElement;
+    if (!game || !chat) return;
+    e.preventDefault();
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    const zoom = settings.hudScale / 100;
+    const g = game.getBoundingClientRect();
+    const c = chat.getBoundingClientRect();
+    const widthAt = (x: number) => Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(g.right - 10 - c.left, x - c.left) / zoom));
+    const tallAt = (y: number) => Math.round(Math.max(MIN_CHAT_TALL, Math.min(g.bottom - 10 - c.top, y - c.top) / zoom));
+    let w: number | null = null,
+      h: number | null = null;
+    const move = (ev: PointerEvent) => {
+      if (across) setDragWidth((w = widthAt(ev.clientX)));
+      if (down) setDragTall((h = tallAt(ev.clientY)));
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+      setDragWidth(null);
+      setDragTall(null);
+      if (w !== null || h !== null) updateSettings({ ...(w !== null ? { chatWidth: w } : {}), ...(h !== null ? { chatTall: h } : {}) });
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  };
+
+  /**
+   * The Modern chat moved by its tab strip (not its tabs), kept on letting go; a double press on
+   * the strip puts it back down the left, at its first height. (Not onDoubleClick: the pointer
+   * capture makes the chat, not the strip, its target.)
+   */
+  const moveChat = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const game = gameRef.current;
+    const chat = e.currentTarget.parentElement;
+    if (!modern || !game || !chat || e.button !== 0 || (e.target as Element).closest("button")) return;
+    e.preventDefault();
+    if (e.timeStamp - chatStripPress.current < CHAT_DOUBLE_MS) {
+      chatStripPress.current = 0;
+      updateSettings({ chatAt: null, chatTall: null });
+      return;
+    }
+    chatStripPress.current = e.timeStamp;
+    const strip = e.currentTarget;
+    strip.setPointerCapture(e.pointerId);
+    const g = game.getBoundingClientRect();
+    const c = chat.getBoundingClientRect();
+    const grabX = e.clientX - c.left,
+      grabY = e.clientY - c.top;
+    const place = (x: number, y: number): [number, number] => [
+      Math.round(Math.max(CHAT_KEEP_X - c.width, Math.min(g.width - CHAT_KEEP_X, x - g.left - grabX))),
+      Math.round(Math.max(0, Math.min(g.height - CHAT_KEEP_Y, y - g.top - grabY))),
+    ];
+    let last: [number, number] | null = null;
+    const move = (ev: PointerEvent) => setDragChatAt((last = place(ev.clientX, ev.clientY)));
+    const up = () => {
+      strip.removeEventListener("pointermove", move);
+      strip.removeEventListener("pointerup", up);
+      strip.removeEventListener("pointercancel", up);
+      setDragChatAt(null);
+      if (last) updateSettings({ chatAt: last });
+    };
+    strip.addEventListener("pointermove", move);
+    strip.addEventListener("pointerup", up);
+    strip.addEventListener("pointercancel", up);
+  };
+
   /** Drag the chat window's top edge to make it taller or shorter (the Modern chat: its right edge, wider or narrower) */
   const resizeChat = (e: ReactPointerEvent<HTMLDivElement>) => {
     const game = gameRef.current;
     if (!game) return;
+    if (modern) return resizeModernChat(e, true, false);
     e.preventDefault();
     const handle = e.currentTarget;
     handle.setPointerCapture(e.pointerId);
-    if (modern) {
-      const left = (handle.parentElement ?? handle).getBoundingClientRect().left;
-      // The chat is zoomed by the HUD size: its width is in its own pixels, the pointer's in the page's
-      const zoom = settings.hudScale / 100;
-      const widthAt = (x: number) => Math.round(Math.max(MIN_CHAT_WIDTH, Math.min(game.clientWidth / 2, x - left) / zoom));
-      let w = widthAt(e.clientX);
-      const move = (ev: PointerEvent) => {
-        w = widthAt(ev.clientX);
-        setDragWidth(w);
-      };
-      const up = () => {
-        handle.removeEventListener("pointermove", move);
-        handle.removeEventListener("pointerup", up);
-        handle.removeEventListener("pointercancel", up);
-        setDragWidth(null);
-        updateSettings({ chatWidth: w });
-      };
-      handle.addEventListener("pointermove", move);
-      handle.addEventListener("pointerup", up);
-      handle.addEventListener("pointercancel", up);
-      return;
-    }
     const bottom = game.getBoundingClientRect().bottom;
     const max = game.clientHeight - MIN_VIEW_HEIGHT;
     const heightAt = (y: number) => Math.round(Math.max(MIN_CHAT_HEIGHT, Math.min(max, bottom - y)));
@@ -1817,6 +1885,26 @@ export function GameView({
           { bitmap: "mailbox.bmp", name: "Read mail", onClick: () => runCommand("mail") },
         ]
       : undefined;
+
+  // The Modern chat where it was moved (kept in the window if that has shrunk since), and as tall
+  // as it was made; unmoved, down the left; unsized, down to the window's bottom. Its left and top
+  // are in the window's pixels, divided by the HUD size it's zoomed by.
+  const chatAt = dragChatAt ?? settings.chatAt;
+  const chatTall = dragTall ?? settings.chatTall;
+  const hudZoom = settings.hudScale / 100;
+  const chatTop = chatAt ? `min(${chatAt[1] / hudZoom}px, 100% - ${CHAT_KEEP_Y}px)` : `${CHAT_TOP}px`;
+  const chatPlace: CSSProperties | undefined = modern
+    ? {
+        ...(chatAt && {
+          left: `clamp(${CHAT_KEEP_X}px - 100%, ${chatAt[0] / hudZoom}px, 100% - ${CHAT_KEEP_X}px)`,
+          top: `clamp(0px, ${chatAt[1] / hudZoom}px, 100% - ${CHAT_KEEP_Y}px)`,
+          // moved, it may go anywhere: behind the hotbar too
+          maxWidth: "calc(100% - 20px)",
+        }),
+        ...(chatTall !== null && { bottom: "auto", height: `${chatTall}px` }),
+        maxHeight: `calc(100% - ${chatTop} - 10px)`,
+      }
+    : undefined;
 
   return (
     <div
@@ -2296,9 +2384,15 @@ export function GameView({
         )}
       </div>
       </div>
-      <div className="chat">
+      <div className="chat" style={chatPlace}>
         <div className="chat-resize" onPointerDown={resizeChat} title="Drag to resize the chat window" aria-hidden />
-        <div className="chat-tabs" role="tablist" aria-label="Chat">
+        {modern && (
+          <>
+            <div className="chat-resize-bottom" onPointerDown={(e) => resizeModernChat(e, false, true)} title="Drag to make the chat taller or shorter" aria-hidden />
+            <div className="chat-resize-corner" onPointerDown={(e) => resizeModernChat(e, true, true)} title="Drag to resize the chat" aria-hidden />
+          </>
+        )}
+        <div className="chat-tabs" role="tablist" aria-label="Chat" onPointerDown={moveChat} title={modern ? "Drag to move the chat; double-click to put it back" : undefined}>
           {touch && (
             <button
               type="button"

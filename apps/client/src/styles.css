@@ -3375,15 +3375,18 @@ canvas.server-wait {
 }
 
 /* The chat down the left side. Idle, only lines newer than CHAT_FRESH_MS show (GameView .fresh),
-   over the view; hovered or typed in, it's a panel with its tabs, scrollback and chat line. */
+   over the view; hovered or typed in, it's a panel with its tabs, scrollback and chat line. Moved
+   by its tab strip and sized by its right and bottom edges (GameView chatPlace: settings chatAt,
+   chatWidth, chatTall). It's at the back of the HUD: the face, target, map and hotbar stay over it. */
 .game.modern-ui .chat {
   position: absolute;
   left: 10px;
   top: 190px;
   bottom: 10px;
-  z-index: 6;
+  z-index: 4;
   width: var(--chat-width, 340px);
-  /* Left of the action bar (half its width, 245 px, and a gap) whatever the window's width */
+  /* Left of the action bar (half its width, 245 px, and a gap) whatever the window's width, till
+     it's moved (GameView chatPlace): its corner stays clear of the bar to be dragged */
   max-width: calc(50% - 265px);
   min-width: 180px;
   background: transparent;
@@ -3413,6 +3416,37 @@ canvas.server-wait {
   padding: 4px 4px 0;
   background: transparent;
   border-bottom: 1px solid var(--hud-edge);
+  /* the strip between and after the tabs moves the chat */
+  cursor: move;
+  touch-action: none;
+}
+
+.game.modern-ui .chat-tabs button {
+  cursor: pointer;
+}
+
+/* The Modern chat's bottom edge (taller or shorter) and its bottom right corner (both) */
+.game.modern-ui .chat-resize-bottom,
+.game.modern-ui .chat-resize-corner {
+  position: absolute;
+  z-index: 3;
+  touch-action: none;
+}
+
+.game.modern-ui .chat-resize-bottom {
+  left: 0;
+  right: 0;
+  bottom: -5px;
+  height: 10px;
+  cursor: ns-resize;
+}
+
+.game.modern-ui .chat-resize-corner {
+  right: -6px;
+  bottom: -6px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
 }
 
 .game.modern-ui .chat-tabs button {

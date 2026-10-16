@@ -71,6 +71,8 @@ export const AMBIENT_ROOMS: Record<string, AmbientRoomSpec> = {
   // Marion
   "marion.roo": town(12, "marion", 2, C.GREEN),
   "marinn.roo": inn(5, "marion"),
+  // The Green Acres Plantation, outside Marion: as big as the town, and its people work the fields
+  "greenplantation.roo": town(9, "marion", 1, C.GREEN),
   // Jasper
   "jaseast.roo": town(7, "jasper", 1, C.RED),
   "jaswest.roo": town(9, "jasper", 1, C.RED),

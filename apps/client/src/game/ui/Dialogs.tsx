@@ -134,7 +134,8 @@ export function TravelDialog({
   session: GameSession;
   onClose: () => void;
 }) {
-  const others = places.filter((p) => p.id !== here);
+  // in alphabetical order (the server sends them in its table's)
+  const others = places.filter((p) => p.id !== here).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   const [picked, setPicked] = useState<number | null>(others[0]?.id ?? null);
   const [now, setNow] = useState(() => Date.now());
   const [from] = useState(() => {
