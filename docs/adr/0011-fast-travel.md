@@ -1,7 +1,7 @@
 # ADR 0011: Fast travel
 
 - **Status:** proposed, 2026-10-15. Not built. It uses [ADR 0009](0009-quests.md)'s channel and markers:
-  - hidden spoken `#` commands from our client;
+  - hidden spoken `#` commands from our client (changed by [ADR 0015](0015-social-on-our-server.md): `UC_SHARDS` lines, `travel <id>`);
   - `BP_USERCOMMAND` `UC_*` packets back, sent to everyone;
   - per-viewer minimap bits.
 
@@ -190,7 +190,7 @@ The user decided these on 2026-10-15:
    - the destinations by name, with this one marked, Travel and Cancel;
    - greyed out, with the seconds left, while `UC_PVP_UNTIL` is ahead;
    - it closes if the player walks away from the portal.
-2. **The `#travel` lines are hidden** through `lineFilter` (the chain from 0009).
+2. ~~**The `#travel` lines are hidden** through `lineFilter` (the chain from 0009).~~ `travel` goes as a `UC_SHARDS` line (ADR 0015): nothing to hide.
 
 ### 7. The website
 

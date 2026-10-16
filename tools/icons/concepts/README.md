@@ -9,6 +9,8 @@ favicon from, and the website will use too.
 | File | What it is |
 |---|---|
 | `ai-close-noguard.png` | **The logo** (2026-10-11): five roses, the shard standing on its own among them |
+| `login-screen-2.png` | **The login screen's logo** (2026-10-15): the emblem behind "Meridian 59 Shards" in gold, the glow in its alpha. `apps/client/src/icons/logo.webp` is it cropped to the glow, 1200 px wide |
+| `login-screen-1.png`, `login-screen-3.png` | The other two logo candidates |
 | `ai-close-hilt.png` | Kept for reference: the same roses, the shard as the blade of a whole gold hilt (cut out with `../cutout-emblem.py concepts/ai-close-hilt.png <out.png>`) |
 | `ai-close.png`, `ai-lush.png` | The first two AI images (a leftover crossguard; a dense round bed of roses with a broader shard) |
 | `a-hexagon.svg` | Hand-drawn SVG: five roses on a hexagon, the shard through it |

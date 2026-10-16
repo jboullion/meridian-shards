@@ -5,11 +5,16 @@
 //   3. the gateway (ws://localhost:8059) and Vite (http://localhost:5173), with prefixed output.
 //   4. with --desktop (npm run desktop): the Electron app (apps/desktop) on the Vite server;
 //      closing its window stops what this script started.
+//   5. with --editor: the room editor's web build (../meridian-editor, http://127.0.0.1:5174).
 //
-//   npm run dev [-- --no-server] [-- --desktop]
+// Before starting, it says what's out of date: Kod or rooms edited since the last server build,
+// or a server build newer than dist/assets. With --rebuild it builds them instead
+// (serveruild.cmd Bresource Bkod, then npm run assets).
+//
+//   npm run dev [-- --no-server] [-- --desktop] [-- --editor] [-- --rebuild]
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { connect } from "node:net";
 import { dirname, join, resolve } from "node:path";
@@ -19,6 +24,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const RUN = join(ROOT, "server", "src", "run", "server");
 const noServer = process.argv.includes("--no-server");
 const desktop = process.argv.includes("--desktop");
+const editor = process.argv.includes("--editor");
+const rebuild = process.argv.includes("--rebuild");
+const SRC = join(ROOT, "server", "src");
+const MANIFEST = join(ROOT, "dist", "assets", "manifest.json");
+const EDITOR = resolve(ROOT, "..", "meridian-editor");
 const VITE_URL = "http://localhost:5173";
 
 const isListening = (port: number, host = "127.0.0.1") =>
@@ -53,6 +63,42 @@ async function ensureServer(): Promise<void> {
   process.exit(1);
 }
 
+/** The newest modification time of the files under `dir` whose names match, 0 if there are none */
+function newest(dir: string, match: RegExp): number {
+  if (!existsSync(dir)) return 0;
+  let t = 0;
+  for (const e of readdirSync(dir, { withFileTypes: true, recursive: true })) {
+    if (e.isFile() && match.test(e.name)) t = Math.max(t, statSync(join(e.parentPath, e.name)).mtimeMs);
+  }
+  return t;
+}
+
+const mtime = (path: string) => (existsSync(path) ? statSync(path).mtimeMs : 0);
+
+/** What's out of date: the server build behind its sources, the asset build behind the server */
+function staleness(): { server: string[]; assets: boolean } {
+  const server: string[] = [];
+  // kodbase.txt is rewritten by every Kod build; the run folder's rooms are copied by Bresource
+  if (newest(join(SRC, "kod"), /\.(kod|khd|lkod)$/i) > mtime(join(RUN, "kodbase.txt"))) server.push("Kod");
+  if (newest(join(SRC, "resource", "rooms"), /\.roo$/i) > newest(join(RUN, "rooms"), /\.roo$/i)) server.push("rooms");
+  const built = Math.max(newest(join(RUN, "rooms"), /\.roo$/i), mtime(join(RUN, "rsc", "rsc0000.rsb")));
+  return { server, assets: !existsSync(MANIFEST) || built > mtime(MANIFEST) };
+}
+
+function buildServer(): void {
+  console.log("[dev] building the server's Kod and resources (server\\build.cmd Bresource Bkod)");
+  const r = spawnSync("cmd", ["/c", join(ROOT, "server", "build.cmd"), "Bresource", "Bkod"], { stdio: "inherit" });
+  if (r.status !== 0) {
+    console.error("[dev] the server build failed");
+    process.exit(1);
+  }
+}
+
+function buildAssets(): void {
+  console.log("[dev] building dist/assets");
+  spawnSync(process.execPath, [join(ROOT, "tools", "assets", "build-assets.ts")], { stdio: "inherit" });
+}
+
 const children: ChildProcess[] = [];
 /** `viaShell` is needed for .cmd shims such as npx on Windows; never for paths with spaces. */
 function run(name: string, cmd: string, args: string[], cwd = ROOT, viaShell = false, env: Record<string, string> = {}): ChildProcess {
@@ -70,16 +116,29 @@ function run(name: string, cmd: string, args: string[], cwd = ROOT, viaShell = f
   return child;
 }
 
-if (!noServer) await ensureServer();
-if (!existsSync(join(ROOT, "dist", "assets", "manifest.json"))) {
-  console.log("[dev] building dist/assets (first run)");
-  spawnSync(process.execPath, [join(ROOT, "tools", "assets", "build-assets.ts")], { stdio: "inherit" });
+const stale = staleness();
+const running = await isListening(5959);
+if (stale.server.length) {
+  if (rebuild) {
+    buildServer();
+    // blakserv keeps the Kod it loaded: reloading saves the game, so it's left to you
+    if (running && stale.server.includes("Kod")) console.log('[dev] blakserv is running the old Kod: node tools/maint/maint.ts "reload system" (saves the game first)');
+  } else console.log(`[dev] ${stale.server.join(" and ")} changed since the last server build: npm run dev -- --rebuild, or server\\build.cmd`);
 }
+if (!existsSync(MANIFEST) || (rebuild && staleness().assets)) buildAssets();
+else if (stale.assets) console.log("[dev] the server build is newer than dist/assets: npm run dev -- --rebuild, or npm run assets");
+if (!noServer) await ensureServer();
 if (await isListening(8059)) console.log("[dev] a gateway is already running on 8059; not starting another");
 else run("gateway", process.execPath, [join(ROOT, "tools", "gateway", "gateway.ts")]);
 // Vite listens on localhost, which can be ::1 only
 if (await isListening(5173, "localhost")) console.log("[dev] Vite is already running on 5173; not starting another");
 else run("vite", "npx vite", [], join(ROOT, "apps", "client"), true);
+
+if (editor) {
+  if (!existsSync(join(EDITOR, "package.json"))) console.log(`[dev] no room editor at ${EDITOR}`);
+  else if (await isListening(5174)) console.log("[dev] the room editor is already running on 5174");
+  else run("editor", "npm run editor:web", [], EDITOR, true);
+}
 
 const shutdown = () => {
   for (const c of children) c.kill();

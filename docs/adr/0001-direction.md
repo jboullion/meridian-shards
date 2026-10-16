@@ -27,6 +27,7 @@ The name comes from the lore: every server or world is a "shard" of one original
    Kod changes are allowed later but kept minimal, because Kod defines message formats.
    - Changed 2026-10-15: the server is ours to change. Kod and blakserv change as our features need ([ADR 0008](0008-player-homes.md), [0009](0009-quests.md), [0010](0010-followers.md)); the message formats are a protocol between our client and our Kod, changed in both together.
    - We build from **a copy** of the source in `server/src` (git-ignored). `meridian-unreal\Server-104` stays an untouched reference.
+   - Changed 2026-10-15: `server/src` is now a junction to our fork, the shards-server repository (`server/link-src.cmd`). Kod, blakserv and room changes are committed there. Its run folder started a fresh game; the old copy's save is still in `server/src-104`.
    - Windows build for development, Linux build (Docker or WSL) for hosting.
 5. **Gateway:** a small Node/TS WebSocket-to-TCP bridge (`tools/gateway`). It passes bytes through unchanged, enforces per-IP limits and logs real IPs. Caddy in front provides WSS/TLS, which matters because the login uses unsalted MD5.
 6. **Client stack:**

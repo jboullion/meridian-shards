@@ -1,6 +1,7 @@
 # ADR 0012: Cosmetics
 
 - **Status:** proposed, 2026-10-15. Not built. It uses [ADR 0009](0009-quests.md)'s channel: hidden spoken `#` commands from our client, `BP_USERCOMMAND` `UC_*` packets back. Its windows build on [ADR 0010](0010-followers.md)'s `AppearanceEditor`.
+  - Changed 2026-10-15 ([ADR 0015](0015-social-on-our-server.md)): our client sends its `#` commands as `UC_SHARDS` lines, the same words without the `#`, instead of speaking them. Nothing is spoken, so there are no lines to hide.
 
 ## Context
 
@@ -203,7 +204,7 @@ The user decided these on 2026-10-15:
 
 1. **`ANIMATE_DYE`** read with the other translations (`readTranslation`), and `XlatTable.dye(code)` (1.3).
 2. **The tailor's and the barber's windows,** on `AppearanceEditor` with the whole-figure preview. The paper doll (`CharacterWindow.tsx`) shows the result.
-3. **`UC_TAILOR_*`**, with the `#tailor` and `#barber` lines hidden through `lineFilter` (0009's chain).
+3. **`UC_TAILOR_*`**; the `tailor` and `barber` commands go as `UC_SHARDS` lines (ADR 0015), so there's nothing to hide.
 4. **Later, true colour** (its own decision, after the palette dyes):
    - each part recoloured in RGB while compositing, fed to the existing RGBA path, with picking still on the index image;
    - an `ANIMATE_TRANSLATION_RGB`;

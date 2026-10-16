@@ -1,6 +1,7 @@
 # ADR 0009: Quests you can find
 
 - **Status:** proposed, 2026-10-15. Not built. Like [ADR 0008](0008-player-homes.md), it goes well past [ADR 0001](0001-direction.md)'s "Kod changes allowed later but kept minimal", and it uses 0008's spoken command channel (0008 section 8).
+  - Changed 2026-10-15 ([ADR 0015](0015-social-on-our-server.md)): our client sends its `#` commands as `UC_SHARDS` lines, the same words without the `#`, instead of speaking them. Nothing is spoken, so there are no lines to hide.
 
 ## Context
 
@@ -125,7 +126,7 @@ The user decided these on 2026-10-15:
 
 ### 3. Offers and the command channel
 
-1. **Our client to the server: spoken commands**, hidden, with a reserved prefix, as 0008 section 8:
+1. **Our client to the server: spoken commands**, hidden, with a reserved prefix, as 0008 section 8 (changed by [ADR 0015](0015-social-on-our-server.md): `UC_SHARDS` lines, `quest offers <npc>` and so on, so nothing is spoken or swallowed):
    - `#quest offers <npc>`
    - `#quest accept <id>`
    - `#quest turnin <npc>`
@@ -148,7 +149,7 @@ The user decided these on 2026-10-15:
    - **Suggested for you:** the catalogue's quests whose band fits our health (`STAT_HP`'s `currentMax`, as pets use it, ADR 0006 "As built"), with the giver's town. This is what leads a player on.
    - **Completed.**
 2. **A tracker:** up to 3 tracked quests under the minimap in the Modern HUD ("Avar warriors 7/20").
-3. **`lineFilter` becomes a chain** shared with `social.ts`, and hides the quest commands and their echoes.
+3. ~~**`lineFilter` becomes a chain** shared with `social.ts`, and hides the quest commands and their echoes.~~ Not needed with `UC_SHARDS` (ADR 0015).
 
 ### 5. Areas on the minimap
 

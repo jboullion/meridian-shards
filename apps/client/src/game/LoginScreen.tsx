@@ -4,14 +4,15 @@
 // (the page's own), so the Server field is left out and the box moves up; the desktop app has
 // the template's Server field as a drop-down of the servers it knows.
 //
-// Ours: the backgrounds (Intro.tsx) behind it all, with the game's name over them and a Log in
-// button near the bottom; the dialog opens from the button (or Enter) and closes back to it, so
-// the pictures can be seen. And the login names used before in a list under the name field (▾),
+// Ours: the backgrounds (Intro.tsx) behind it all, with the game's logo over them and a Log in
+// button near the bottom; the dialog fades in over it all from the button (or Enter), moving
+// nothing, and closes back to it, so the pictures can be seen. And the login names used before in a list under the name field (▾),
 // newest first, each with × to forget it. Only names: never passwords (the browser's own
 // password manager can keep those).
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { AssetStore } from "../assets.ts";
+import logoUrl from "../icons/logo.webp";
 import { desktop, devPagesEnabled, isAndroid, type DesktopBridge, type DesktopUpdate, type RequiredUpdate } from "../host.ts";
 import { Backdrop, Button, GroupBox, MessageBox, Select, Text, TextField, Window, at, type Rect } from "./ui/kit.tsx";
 
@@ -123,39 +124,43 @@ export function LoginScreen({
     if (username.trim() && password) onLogin(username.trim(), password);
   };
   return (
-    <Backdrop behind={behind} className={open ? "login login-open" : "login"}>
-      <h1 className="mk-shard-title">Meridian 59: Shards</h1>
+    <Backdrop behind={behind} className="login">
+      <h1 className="mk-shard-title">
+        <img src={logoUrl} alt="Meridian 59: Shards" />
+      </h1>
       {open && (
-        <Window title="Login" dlu={LAYOUT.size} onClose={() => setOpen(false)}>
-          <form onSubmit={submit}>
-            <img className="mk-login-icon" src={assets.url("ui/icon1.ico")} alt="" style={at([6, 6, 20, 20])} />
-            <Text at={LAYOUT.intro} wrap>
-              Meridian Shards is a game played over the Internet. To play, you must have an account with the central server.
-            </Text>
-            <GroupBox at={LAYOUT.newBox} label="New to Meridian Shards" />
-            <Text at={LAYOUT.newText} wrap>
-              If you don't have an account simply enter your desired account info and it will be made automatically!
-            </Text>
-            <GroupBox at={LAYOUT.accountBox} label="Enter Your Account Information" />
-            <Text at={LAYOUT.nameLabel}>Login name:</Text>
-            <NameField at={LAYOUT.name} value={username} onChange={setUsername} names={names} onForget={(n) => setNames(forgetName(n))} />
-            <Text at={LAYOUT.passLabel}>Password:</Text>
-            <TextField
-              at={LAYOUT.pass}
-              value={password}
-              onChange={setPassword}
-              password
-              autoFocus={!!username}
-              autoComplete="current-password"
-            />
-            {desktop && LAYOUT.serverLabel && LAYOUT.server && (
-              <ServerField desktop={desktop} label={LAYOUT.serverLabel} field={LAYOUT.server} />
-            )}
-            <Button at={LAYOUT.ok} type="submit" isDefault disabled={!username.trim() || !password || !!required}>
-              Log In
-            </Button>
-          </form>
-        </Window>
+        <div className="mk-modal login-modal">
+          <Window title="Login" dlu={LAYOUT.size} onClose={() => setOpen(false)}>
+            <form onSubmit={submit}>
+              <img className="mk-login-icon" src={assets.url("ui/icon1.ico")} alt="" style={at([6, 6, 20, 20])} />
+              <Text at={LAYOUT.intro} wrap>
+                Meridian Shards is a game played over the Internet. To play, you must have an account with the central server.
+              </Text>
+              <GroupBox at={LAYOUT.newBox} label="New to Meridian Shards" />
+              <Text at={LAYOUT.newText} wrap>
+                If you don't have an account simply enter your desired account info and it will be made automatically!
+              </Text>
+              <GroupBox at={LAYOUT.accountBox} label="Enter Your Account Information" />
+              <Text at={LAYOUT.nameLabel}>Login name:</Text>
+              <NameField at={LAYOUT.name} value={username} onChange={setUsername} names={names} onForget={(n) => setNames(forgetName(n))} />
+              <Text at={LAYOUT.passLabel}>Password:</Text>
+              <TextField
+                at={LAYOUT.pass}
+                value={password}
+                onChange={setPassword}
+                password
+                autoFocus={!!username}
+                autoComplete="current-password"
+              />
+              {desktop && LAYOUT.serverLabel && LAYOUT.server && (
+                <ServerField desktop={desktop} label={LAYOUT.serverLabel} field={LAYOUT.server} />
+              )}
+              <Button at={LAYOUT.ok} type="submit" isDefault disabled={!username.trim() || !password || !!required}>
+                Log In
+              </Button>
+            </form>
+          </Window>
+        </div>
       )}
       <div className="login-bottom">
         {!open && (

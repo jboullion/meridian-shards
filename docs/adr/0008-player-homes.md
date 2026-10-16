@@ -1,6 +1,7 @@
 # ADR 0008: Player homes and rented inn rooms
 
 - **Status:** proposed, 2026-10-15. Not built. Amends [ADR 0001](0001-direction.md) decision 4 (2 below).
+  - Changed 2026-10-15 ([ADR 0015](0015-social-on-our-server.md)): our client sends its `#` commands as `UC_SHARDS` lines, the same words without the `#`, instead of speaking them. Nothing is spoken, so there are no lines to hide.
 
 ## Context
 
@@ -52,7 +53,7 @@ Server 104 already has much of this. Paths below are under `server/src/kod/`.
 - **Signs have fixed text.** `object/passive/sign.kod` takes its text as a resource in its constructor.
 - **Messages from the client are fixed in C** (`blakserv/sprocket.c`'s tables). Kod hears new commands only as speech, as the decorator does. (Kod can send the client new ones: [ADR 0009](0009-quests.md) 3.2.)
 - **Dead doors** are `ROOM_LOCKED_DOOR` entries in a room's `plExits`, which says "the door is locked" (`room.kod SomethingTryGo`). Tos has 16, Barloque's port 29, Ko'catan south 27, Jasper west 15. A room can override `SomethingTryGo` to send a door somewhere, as `kocinn.kod` does.
-- **Nothing we change on the server is in git.** Our Kod lives in the git-ignored `server/src` beside the savegames, and so do room sources.
+- ~~**Nothing we change on the server is in git.** Our Kod lives in the git-ignored `server/src` beside the savegames, and so do room sources.~~ Changed 2026-10-15: `server/src` is a junction to the shards-server repository, so Kod and room changes are committed there (only its `run/` folder is ignored).
 
 ### What we have to build with
 
@@ -196,7 +197,7 @@ Before any of this:
 
 ### 8. The command channel, and our client
 
-1. **Commands are spoken.**
+1. **Commands are spoken.** (Changed by [ADR 0015](0015-social-on-our-server.md): they're `UC_SHARDS` lines, `home guest add Alice`, handled by its dispatcher, so no room has to swallow speech.)
    - Every new command is a line said with a reserved prefix, for example `#home guest add Alice`.
    - The room's (or the inn's) `SomeoneSaid` takes such lines before they're passed on, so nobody else hears them. To check: that a room can swallow speech this way.
    - The answers come back to the speaker only.
@@ -208,7 +209,7 @@ Before any of this:
      - the picker for `visit` (4.4)
    - **At a bank:** Properties and Sell house buttons, which send the spoken commands. The list of homes for sale is the existing Buy window (`GameView askTrader`), with nothing new needed to show it.
    - **A decorate mode:** the catalogue, how many props are left under the cap, Place here, Turn, and Remove or Move on the target.
-   - **Hidden lines:** the command lines and their answers are hidden through `GameSession.lineFilter`, as friend tells are (`social.ts hideFriendTells`).
+   - ~~**Hidden lines:** the command lines and their answers are hidden through `GameSession.lineFilter`, as friend tells are (`social.ts hideFriendTells`).~~ Not needed with `UC_SHARDS` (ADR 0015).
    - **Room names:** plot and rental rooms get names for a friend's Locate. They have no fixed number and `rooms.json` skips them (`roomLinks.ts parseRoom`), so Locate shows a bare file name today.
    - **No critters:** housing files are left out of `critters.ts habitatOf`, whose name prefixes would give `barrent.roo` and any `tos*` house rats.
    - **No ambient life:** homes are left out of `ambientRooms.ts`.

@@ -1,6 +1,7 @@
 # ADR 0010: Followers
 
 - **Status:** proposed, 2026-10-15. Not built. A big Kod change, like [ADR 0008](0008-player-homes.md) and [ADR 0009](0009-quests.md), using 0009's channel: hidden spoken `#` commands from our client, `BP_USERCOMMAND` `UC_*` packets back.
+  - Changed 2026-10-15 ([ADR 0015](0015-social-on-our-server.md)): our client sends its `#` commands as `UC_SHARDS` lines, the same words without the `#`, instead of speaking them. Nothing is spoken, so there are no lines to hide.
 
 ## Context
 
@@ -243,7 +244,7 @@ The user decided these on 2026-10-15:
    - its green minimap dot, which it already gets as a minion;
    - target cycling and click-to-attack skip our own follower;
    - typed `deposit` and `withdraw` prefer a banker to it.
-5. **Hidden lines:** the `#follower` commands and their answers are hidden through `lineFilter` (the chain from ADR 0009).
+5. ~~**Hidden lines:** the `#follower` commands and their answers are hidden through `lineFilter` (the chain from ADR 0009).~~ Not needed with `UC_SHARDS` (ADR 0015).
 
 ### 10. The order to build it
 
