@@ -71,16 +71,18 @@ describe.skipIf(!have)("player sprite composite (real files)", () => {
     const pal = parsePaletteBin(read("palette.bin"));
     const xl = new XlatTable(pal.rgb, existsSync(join(ASSETS, "lightpal.bin")) ? read("lightpal.bin") : null);
     const load = async (n: string) => parseBgf(read(n));
-    const [body, la, ra, legs, head] = await Promise.all(["bta.bgf", "bla.bgf", "bra.bgf", "bfa.bgf", "phax.bgf"].map(load));
+    const [body, la, ra, legs, head, eyes] = await Promise.all(["bta.bgf", "bla.bgf", "bra.bgf", "bfa.bgf", "phax.bgf", "peax.bgf"].map(load));
+    const parts = [
+      { bgf: la, group: 0, translation: 236, hotspot: 31 },
+      { bgf: ra, group: 0, translation: 236, hotspot: 21 },
+      { bgf: legs, group: 0, translation: 159, hotspot: 41 },
+      { bgf: head, group: 0, translation: 3, hotspot: 1 },
+    ];
     const c = compositeSprite(
       {
         base: { bgf: body, group: 0, translation: 236, hotspot: 0 },
-        overlays: [
-          { bgf: la, group: 0, translation: 236, hotspot: 31 },
-          { bgf: ra, group: 0, translation: 236, hotspot: 21 },
-          { bgf: legs, group: 0, translation: 159, hotspot: 41 },
-          { bgf: head, group: 0, translation: 3, hotspot: 1 },
-        ],
+        // the eyes hang on the head: a player's face (player.kod SendOverlays)
+        overlays: [...parts, { bgf: eyes, group: 0, translation: 0, hotspot: 11 }],
         viewAngle: 0,
       },
       xl,
@@ -92,8 +94,12 @@ describe.skipIf(!have)("player sprite composite (real files)", () => {
     expect(c.pixels.some((p) => p !== 254)).toBe(true);
     // world size: base-bitmap pixels are 16 / shrink fine units; the image is `resolution` times finer
     expect(c.heightFine).toBeCloseTo((c.height * 16) / body.shrink / c.resolution);
-    // the head (shrink 7) is finer than the body (shrink 4): drawn at 2x so it keeps its pixels
-    expect(c.resolution).toBe(2);
+    // the face (a shrink 7 head, shrink 14 eyes) is finer than the body (shrink 4): drawn at 4x
+    // (at most MAX_DETAIL) so it keeps its pixels
+    expect(c.resolution).toBe(4);
+    // without features it's no face: nothing is made finer (lamps, signs and props neither)
+    const plain = compositeSprite({ base: { bgf: body, group: 0, translation: 236, hotspot: 0 }, overlays: parts, viewAngle: 0 }, xl)!;
+    expect(plain.resolution).toBe(1);
   });
 
   test("a face keeps its features' detail (charface.c: head + shrink 14 eyes, nose, mouth)", async () => {
@@ -136,21 +142,29 @@ describe.skipIf(!have)("player sprite composite (real files)", () => {
   test("the filtered copy magnifies each part smoothly, not in blocks (compositeToRgba)", async () => {
     const pal = parsePaletteBin(read("palette.bin"));
     const xl = new XlatTable(pal.rgb, null);
-    const [body, head] = await Promise.all(["bta.bgf", "phax.bgf"].map(async (n) => parseBgf(read(n))));
+    const [body, head, nose] = await Promise.all(["bta.bgf", "phax.bgf", "pnax.bgf"].map(async (n) => parseBgf(read(n))));
     const c = compositeSprite(
-      { base: { bgf: body, group: 0, translation: 0, hotspot: 0 }, overlays: [{ bgf: head, group: 0, translation: 0, hotspot: 1 }], viewAngle: 0 },
+      {
+        base: { bgf: body, group: 0, translation: 0, hotspot: 0 },
+        overlays: [
+          { bgf: head, group: 0, translation: 0, hotspot: 1 },
+          { bgf: nose, group: 0, translation: 0, hotspot: 14 },
+        ],
+        viewAngle: 0,
+      },
       xl,
     )!;
-    expect(c.resolution).toBe(2);
+    expect(c.resolution).toBe(4);
     const rgba = compositeToRgba(c, pal.rgb, 3);
-    // in the index image every body pixel is a 2x2 block; the filtered copy blends between them
+    // in the index image every body pixel is a block of `r` x `r`; the filtered copy blends within them
+    const r = c.resolution;
     const base = c.layers.find((l) => l.bmp === frameFor(body, 0, 0))!;
     let blocks = 0,
       blended = 0;
-    for (let y = base.y; y + 1 < base.y + base.bmp.height * 2; y += 2)
-      for (let x = base.x; x + 1 < base.x + base.bmp.width * 2; x += 2) {
+    for (let y = base.y; y + r - 1 < base.y + base.bmp.height * r; y += r)
+      for (let x = base.x; x + r - 1 < base.x + base.bmp.width * r; x += r) {
         const at = (xx: number, yy: number) => (yy * c.width + xx) * 4;
-        const q = [at(x, y), at(x + 1, y), at(x, y + 1), at(x + 1, y + 1)];
+        const q = [at(x, y), at(x + r - 1, y), at(x, y + r - 1), at(x + r - 1, y + r - 1)];
         if (q.some((i) => rgba[i + 3] === 0)) continue;
         blocks++;
         if (q.some((i) => rgba[i] !== rgba[q[0]] || rgba[i + 1] !== rgba[q[0] + 1] || rgba[i + 2] !== rgba[q[0] + 2])) blended++;

@@ -74,8 +74,18 @@ export interface CompositeLayer {
  * shrink 14). The C client stretches each part straight to the screen, so that detail shows;
  * one image on the base's grid would drop every other row of it. The image is made this many
  * times finer than the base, at most, so the finest part keeps its pixels.
+ *
+ * Only a face makes it finer: the head and its features, on a figure that has features
+ * (FACE_HOTSPOTS). Elsewhere the extra detail barely shows, and finer images are costly to
+ * make again whenever a figure turns or a lamp flickers (Raza's lamps at night took the desktop
+ * app to 5 fps, 2026-10-16).
  */
 const MAX_DETAIL = 4;
+
+/** blakston.khd HS_EYES, HS_MOUTH, HS_TOUPEE, HS_NOSE: the parts only a head has */
+const FACE_HOTSPOTS = new Set([11, 12, 13, 14]);
+/** blakston.khd HS_HEAD: the head, finer than the body on players and townsfolk */
+const HS_HEAD = 1;
 
 /** draw.c GetObjectPdib: the bitmap of `group` seen from `angle`, or null. */
 export function frameFor(bgf: Bgf, angle: number, group: number): BgfBitmap | null {
@@ -106,6 +116,8 @@ interface Placed {
   scale: number;
   layer: number;
   xlat: Uint8Array;
+  /** The hotspot it hangs from (0 for the base): a face's parts set the image's fineness (MAX_DETAIL) */
+  hotspot: number;
 }
 
 export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite | null {
@@ -117,7 +129,7 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
   const xlatFor = (t: number) => (input.secondOnly ? xlats.compose(0, second) : xlats.compose(t, second));
 
   const drawBase = input.drawBase ?? true;
-  const placed: Placed[] = drawBase ? [{ bmp, x: 0, y: 0, scale: 1, layer: LAYER.BASE, xlat: xlatFor(base.translation) }] : [];
+  const placed: Placed[] = drawBase ? [{ bmp, x: 0, y: 0, scale: 1, layer: LAYER.BASE, xlat: xlatFor(base.translation), hotspot: 0 }] : [];
 
   // Overlays on the base, then overlays on overlays (d3drender.c D3DRenderOverlaysDraw).
   const firstLevel: { part: SpritePart; bmp: BgfBitmap; x: number; y: number; over: boolean }[] = [];
@@ -130,7 +142,7 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
     const x = hs.x + ob.xOffset;
     const y = hs.y + ob.yOffset;
     const layer = hs.helm ? LAYER.HELM : hs.over ? LAYER.OVER : LAYER.UNDER;
-    placed.push({ bmp: ob, x, y, scale: s / part.bgf.shrink, layer, xlat: xlatFor(part.translation) });
+    placed.push({ bmp: ob, x, y, scale: s / part.bgf.shrink, layer, xlat: xlatFor(part.translation), hotspot: part.hotspot });
     firstLevel.push({ part, bmp: ob, x: hs.x, y: hs.y, over: hs.over });
   }
   for (const part of input.overlays) {
@@ -150,7 +162,7 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
         : parent.over
           ? LAYER.OVERUNDER
           : LAYER.UNDERUNDER;
-      placed.push({ bmp: ob, x, y, scale: s / part.bgf.shrink, layer, xlat: xlatFor(part.translation) });
+      placed.push({ bmp: ob, x, y, scale: s / part.bgf.shrink, layer, xlat: xlatFor(part.translation), hotspot: part.hotspot });
       break;
     }
   }
@@ -167,9 +179,11 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
     maxX = Math.max(maxX, Math.ceil(p.x + p.bmp.width * p.scale));
     maxY = Math.max(maxY, Math.ceil(p.y + p.bmp.height * p.scale));
   }
-  // image pixels per base pixel: enough that no part is drawn smaller than its own pixels
+  // image pixels per base pixel: enough that a face's parts (the head and its features, on a
+  // figure with features) aren't drawn smaller than their own pixels; nothing else counts
   let res = 1;
-  for (const p of placed) res = Math.max(res, Math.ceil(1 / p.scale - 1e-6));
+  if (placed.some((p) => FACE_HOTSPOTS.has(p.hotspot)))
+    for (const p of placed) if (p.hotspot === HS_HEAD || FACE_HOTSPOTS.has(p.hotspot)) res = Math.max(res, Math.ceil(1 / p.scale - 1e-6));
   res = Math.min(res, MAX_DETAIL);
   const width = (maxX - minX) * res,
     height = (maxY - minY) * res;

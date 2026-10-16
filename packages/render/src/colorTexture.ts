@@ -33,41 +33,72 @@ export function paletteToRgba(pixels: Uint8Array, width: number, height: number,
   return out;
 }
 
-/** Transparent texels next to `filled` ones take their average colour, BLEED_PASSES deep. */
+/**
+ * Transparent texels next to `filled` ones take their average colour, BLEED_PASSES deep. Each
+ * pass reads only texels filled before it. Only texels beside the last pass's can change, so
+ * each pass visits those alone, not the whole image (sprites.ts's finer composites made the
+ * whole-image passes cost about 50 ms a figure: 2026-10-16).
+ */
 function bleed(out: Uint8Array, filled: Uint8Array, width: number, height: number): void {
-  for (let pass = 0; pass < BLEED_PASSES; pass++) {
-    const next: number[] = [];
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const i = y * width + x;
-        if (filled[i]) continue;
-        let r = 0,
-          g = 0,
-          b = 0,
-          count = 0;
-        for (let dy = -1; dy <= 1; dy++) {
-          const yy = y + dy;
-          if (yy < 0 || yy >= height) continue;
-          for (let dx = -1; dx <= 1; dx++) {
-            const xx = x + dx;
-            if (xx < 0 || xx >= width || (dx === 0 && dy === 0)) continue;
-            const j = yy * width + xx;
-            if (!filled[j]) continue;
-            r += out[j * 4];
-            g += out[j * 4 + 1];
-            b += out[j * 4 + 2];
-            count++;
-          }
+  const n = width * height;
+  // The pass a texel was last listed for, so each is listed once a pass
+  const listed = new Int32Array(n).fill(-1);
+  /** The unfilled texels beside `from` (all filled texels at first), for pass `pass` */
+  const around = (from: Iterable<number>, pass: number): number[] => {
+    const out: number[] = [];
+    for (const i of from) {
+      const x = i % width,
+        y = (i - x) / width;
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= height) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= width || (dx === 0 && dy === 0)) continue;
+          const j = yy * width + xx;
+          if (filled[j] || listed[j] === pass) continue;
+          listed[j] = pass;
+          out.push(j);
         }
-        if (!count) continue;
-        out[i * 4] = Math.round(r / count);
-        out[i * 4 + 1] = Math.round(g / count);
-        out[i * 4 + 2] = Math.round(b / count);
-        next.push(i);
       }
+    }
+    return out;
+  };
+  const start: number[] = [];
+  for (let i = 0; i < n; i++) if (filled[i]) start.push(i);
+  let candidates = around(start, 0);
+  for (let pass = 0; pass < BLEED_PASSES && candidates.length; pass++) {
+    const next: number[] = [];
+    for (const i of candidates) {
+      const x = i % width,
+        y = (i - x) / width;
+      let r = 0,
+        g = 0,
+        b = 0,
+        count = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= height) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= width || (dx === 0 && dy === 0)) continue;
+          const j = yy * width + xx;
+          if (!filled[j]) continue;
+          r += out[j * 4];
+          g += out[j * 4 + 1];
+          b += out[j * 4 + 2];
+          count++;
+        }
+      }
+      if (!count) continue;
+      out[i * 4] = Math.round(r / count);
+      out[i * 4 + 1] = Math.round(g / count);
+      out[i * 4 + 2] = Math.round(b / count);
+      next.push(i);
     }
     if (!next.length) break;
     for (const i of next) filled[i] = 1;
+    candidates = around(next, pass + 1);
   }
 }
 

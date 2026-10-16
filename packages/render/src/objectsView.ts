@@ -185,11 +185,27 @@ export const HALO_COLORS = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 
 /** proto.h LIGHT_BRED, LIGHT_BBLUE, LIGHT_BGREEN: the targeting light's colour, by halo colour */
 const TARGET_LIGHT_COLORS = [0x7c00, 0x001f, 0x03e0];
 
+/** A composite as COMPOSITES keeps it: made once, its filtered RGBA copy when first wanted */
+interface CachedComposite {
+  composite: Composite | null;
+  rgba: Uint8Array | null;
+}
+
+/**
+ * Ours: how many composites ObjectsView keeps for reuse. Animated objects cycle a few frames
+ * (a lamp's flame has six), often many alike in a room, and the finer composites of
+ * sprites.ts (MAX_DETAIL) are costly to make: Raza's lamps at night, each made again at every
+ * frame of every lamp, took the desktop app to 5 fps (2026-10-16).
+ */
+const COMPOSITES = 512;
+
 interface Entry {
   halo: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial> | null;
   mesh: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   key: string;
   composite: Composite | null;
+  /** The shared copy `composite` came from (its RGBA copy is kept there) */
+  cached: CachedComposite | null;
   texture: THREE.DataTexture | null;
   /** The RGBA copy of `texture` while the filter uses one (colorTexture.ts) */
   colorTexture: THREE.DataTexture | null;
@@ -227,6 +243,8 @@ export class ObjectsView {
     polygonOffsetUnits: -4,
   });
   private readonly entries = new Map<number, Entry>();
+  /** Composites by what they're drawn from, shared between objects, the least recently used dropped first */
+  private readonly composites = new Map<string, CachedComposite>();
   private readonly palette: THREE.Texture;
   private readonly xlats: XlatTable;
   private readonly getBgf: (resource: number) => Bgf | null | undefined;
@@ -381,22 +399,35 @@ export class ObjectsView {
         const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
         mesh.name = `object ${o.id}`;
         this.group.add(mesh);
-        e = { mesh, halo: null, key: "", composite: null, texture: null, colorTexture: null, shadow: null, x, y, z: 0, flashTime: 0, lightAdjust: 0, bounceTime: 0, scale: 1 };
+        e = { mesh, halo: null, key: "", composite: null, cached: null, texture: null, colorTexture: null, shadow: null, x, y, z: 0, flashTime: 0, lightAdjust: 0, bounceTime: 0, scale: 1 };
         this.entries.set(o.id, e);
       }
       if (e.key !== key) {
         e.key = key;
         const dt = o.info.drawingType;
-        e.composite = compositeSprite(
-          {
-            base: { bgf: base, group: look.anim.group, translation: look.translation, hotspot: 0 },
-            overlays,
-            viewAngle,
-            secondTranslation: dt === DRAWFX.DOUBLETRANS || dt === DRAWFX.SECONDTRANS ? SECOND_TRANSLATION : 0,
-            secondOnly: dt === DRAWFX.SECONDTRANS,
-          },
-          this.xlats,
+        // Everything the picture is made of, so objects that look alike share it (the
+        // object's own version only says when its look changed). By resource, never by the
+        // bgf's name: the server's art has none, and every object then shared one picture.
+        const shared = [
+          o.info.iconRes, look.anim.group, frameNum(base, look.anim.group), look.translation, dt,
+          ...look.overlays.map((ov) => {
+            const b = this.getBgf(ov.iconRes);
+            return b ? `${ov.iconRes}:${ov.anim.group}:${ov.translation}:${ov.hotspot}:${frameNum(b, ov.anim.group)}` : "-";
+          }),
+        ].join("|");
+        e.cached = this.cachedComposite(shared, () =>
+          compositeSprite(
+            {
+              base: { bgf: base, group: look.anim.group, translation: look.translation, hotspot: 0 },
+              overlays,
+              viewAngle,
+              secondTranslation: dt === DRAWFX.DOUBLETRANS || dt === DRAWFX.SECONDTRANS ? SECOND_TRANSLATION : 0,
+              secondOnly: dt === DRAWFX.SECONDTRANS,
+            },
+            this.xlats,
+          ),
         );
+        e.composite = e.cached.composite;
         this.setComposite(e);
       }
       if (!e.composite) {
@@ -601,10 +632,25 @@ export class ObjectsView {
     const u = e.mesh.material.uniforms;
     if (c && this.smooth) {
       const palette = (this.palette.image as { data: Uint8Array }).data;
-      e.colorTexture = colorTexture(compositeToRgba(c, palette), c.width, c.height, false);
+      const rgba = e.cached?.composite === c ? (e.cached.rgba ??= compositeToRgba(c, palette)) : compositeToRgba(c, palette);
+      e.colorTexture = colorTexture(rgba, c.width, c.height, false);
     }
     u.uColorMap.value = e.colorTexture;
     u.uColorMode.value = e.colorTexture ? 1 : 0;
+  }
+
+  /** A composite from the shared cache, made with `make` the first time it's asked for */
+  private cachedComposite(key: string, make: () => Composite | null): CachedComposite {
+    let c = this.composites.get(key);
+    if (c) {
+      // Used again: to the back of the queue
+      this.composites.delete(key);
+    } else {
+      c = { composite: make(), rgba: null };
+      if (this.composites.size >= COMPOSITES) this.composites.delete(this.composites.keys().next().value!);
+    }
+    this.composites.set(key, c);
+    return c;
   }
 
   private setComposite(e: Entry): void {
@@ -650,6 +696,7 @@ export class ObjectsView {
   dispose(): void {
     for (const e of this.entries.values()) this.disposeEntry(e);
     this.entries.clear();
+    this.composites.clear();
     this.shadowGeometry.dispose();
     this.shadowMaterial.dispose();
   }

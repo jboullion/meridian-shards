@@ -49,10 +49,23 @@ interface Cached {
   yOffset: number;
 }
 
+/**
+ * A hand's composite and, filtered, its RGBA copy: what the picture is made of, apart from the
+ * light. The light changes all the time (flickering flames nearby), the parts seldom, and the
+ * finer composites (sprites.ts MAX_DETAIL) are costly to make: made again at every flicker, they
+ * took the desktop app under 50 fps in Raza at night (2026-10-16).
+ */
+interface Parts {
+  key: string;
+  comp: ReturnType<typeof compositeSprite>;
+  rgba: Uint8Array | null;
+}
+
 export class ScreenOverlays {
   readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
   private readonly cache: Cached[] = [];
+  private readonly parts: Parts[] = [];
   private readonly rgb: Uint8Array;
   private readonly xlats: XlatTable;
   private readonly getBgf: (resource: number) => Bgf | null | undefined;
@@ -149,16 +162,26 @@ export class ScreenOverlays {
       if (b) parts.push({ bgf: b, group: o.anim.group, translation: o.translation, hotspot: o.hotspot });
     }
     const q = light.map((v) => Math.round(v * 32) / 32);
-    const key = [
-      ov.info.iconRes, ov.look.anim.group, ov.look.translation, q.join(","), this.smooth,
-      ...parts.map((p) => `${p.bgf.name}:${p.group}:${p.translation}:${p.hotspot}`),
+    const partsKey = [
+      ov.info.iconRes, ov.look.anim.group, ov.look.translation, this.smooth,
+      // by resource: the server's art has no name
+      ...ov.look.overlays.map((o) => `${o.iconRes}:${o.anim.group}:${o.translation}:${o.hotspot}`),
     ].join("|");
+    const key = `${partsKey}|${q.join(",")}`;
     const cached = this.cache[slot];
     if (cached?.key === key) return cached;
-    const comp = compositeSprite(
-      { base: { bgf: base, group: ov.look.anim.group, translation: ov.look.translation, hotspot: 0 }, overlays: parts, viewAngle: 0 },
-      this.xlats,
-    );
+    // The parts, made only when they change; the light alone only redraws the canvas below
+    let made = this.parts[slot];
+    if (made?.key !== partsKey) {
+      const c = compositeSprite(
+        { base: { bgf: base, group: ov.look.anim.group, translation: ov.look.translation, hotspot: 0 }, overlays: parts, viewAngle: 0 },
+        this.xlats,
+      );
+      // filtered: each part magnified on its own (compositeToRgba), as the D3D client draws them
+      made = { key: partsKey, comp: c, rgba: c && this.smooth ? compositeToRgba(c, this.rgb, 3) : null };
+      this.parts[slot] = made;
+    }
+    const comp = made.comp;
     const g = base.groups[ov.look.anim.group];
     const bmp = g?.length ? base.bitmaps[g[0]] : undefined;
     let canvas: HTMLCanvasElement | null = null;
@@ -168,9 +191,8 @@ export class ScreenOverlays {
       canvas.height = comp.height;
       const cx = canvas.getContext("2d")!;
       const img = cx.createImageData(comp.width, comp.height);
-      if (this.smooth) {
-        // filtered: each part magnified on its own (compositeToRgba), as the D3D client draws them
-        const rgba = compositeToRgba(comp, this.rgb, 3);
+      if (made.rgba) {
+        const rgba = made.rgba;
         for (let i = 0; i < comp.pixels.length; i++) {
           if (rgba[i * 4 + 3] === 0) continue;
           img.data[i * 4] = Math.min(255, rgba[i * 4] * q[0]);
