@@ -7,16 +7,13 @@
 // Positions are scene units (squares: X east, Y up, Z south), about the camera.
 
 import * as THREE from "three";
+import { renderTune } from "./tuning.ts";
 
-/** How far off and how high strikes come down, in squares */
-const DISTANCE_MIN = 45,
-  DISTANCE_MAX = 70;
+/** How high strikes come down, in squares (how far off: tuning.ts lightningNear and lightningFar) */
 const TOP = 45;
 /** Half the bolt's width, squares */
 const BOLT_WIDTH = 0.18;
-/** Seconds between strikes */
-const GAP_MIN = 5,
-  GAP_MAX = 18;
+// Seconds between strikes: tuning.ts lightningGapMin and lightningGapMax
 /** A strike's flickers: [on ms, off ms] */
 const FLICKERS: [number, number][][] = [
   [[70, 60], [110, 0]],
@@ -85,7 +82,7 @@ export class Lightning {
       this.group.visible = false;
       if (!storm) return;
       if ((this.nextMs -= dt) > 0) return;
-      this.nextMs = (GAP_MIN + Math.random() * (GAP_MAX - GAP_MIN)) * 1000;
+      this.nextMs = (renderTune("lightningGapMin") + Math.random() * (renderTune("lightningGapMax") - renderTune("lightningGapMin"))) * 1000;
       this.begin();
     }
     const s = this.strike!;
@@ -100,7 +97,7 @@ export class Lightning {
   /** A new bolt somewhere off in the distance */
   private begin(): void {
     const yaw = Math.random() * 2 * Math.PI;
-    const d = DISTANCE_MIN + Math.random() * (DISTANCE_MAX - DISTANCE_MIN);
+    const d = renderTune("lightningNear") + Math.random() * (renderTune("lightningFar") - renderTune("lightningNear"));
     this.struck = { yaw, distance: d };
     const bx = Math.cos(yaw) * d,
       bz = Math.sin(yaw) * d;

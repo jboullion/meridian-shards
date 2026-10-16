@@ -13,6 +13,7 @@ export * from "./navGrid.ts";
 export * from "./ambient/ambientIds.ts";
 export * from "./ambient/ambientLife.ts";
 export * from "./ambient/ambientRooms.ts";
+export * from "./ambient/tuning.ts";
 export * from "./ambient/chatter.ts";
 export * from "./ambient/townsfolk.ts";
 export * from "./ambient/critters.ts";

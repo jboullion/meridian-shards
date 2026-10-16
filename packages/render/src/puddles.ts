@@ -10,18 +10,19 @@
 
 import * as THREE from "three";
 import { FINENESS } from "@shards/formats";
+import { renderTune } from "./tuning.ts";
 
-/** Puddles are looked for on a grid of squares this far about the player */
-const RADIUS = 18 * FINENESS;
-const FADE_FROM = 13 * FINENESS;
+/** Puddles are looked for on a grid of squares this far about the player, fading from fadeFrom (tuning.ts) */
+const radius = () => renderTune("puddleRadius") * FINENESS;
+const fadeFrom = () => Math.min(renderTune("puddleFadeFrom"), renderTune("puddleRadius") - 1) * FINENESS;
 const MAX_PUDDLES = 400;
 /** Rebuilt when the player has moved this far, and relit this often */
 const MOVE = FINENESS;
 const RELIGHT_MS = 2000;
-/** How likely a square is to hold a puddle, by the ground (30% fewer since 2026-10-12) */
-const CHANCE = { paved: 0.098, earth: 0.126, grass: 0.035 } as const;
+export type PuddleGround = "paved" | "earth" | "grass";
 
-export type PuddleGround = keyof typeof CHANCE;
+/** How likely a square is to hold a puddle, by the ground (tuning.ts; 30% fewer since 2026-10-12) */
+const chance = (g: PuddleGround) => renderTune(g === "paved" ? "puddlePaved" : g === "earth" ? "puddleEarth" : "puddleGrass");
 
 /** The ground at a point, as Puddles asks the room */
 export interface PuddleSpot {
@@ -306,19 +307,19 @@ export class Puddles {
   private place(v: { x: number; y: number }): void {
     const room = this.room!;
     const out: Puddle[] = [];
-    const n = Math.ceil(RADIUS / FINENESS);
+    const n = Math.ceil(radius() / FINENESS);
     const c0 = Math.floor(v.x / FINENESS),
       r0 = Math.floor(v.y / FINENESS);
     for (let r = r0 - n; r <= r0 + n && out.length < MAX_PUDDLES; r++)
       for (let c = c0 - n; c <= c0 + n && out.length < MAX_PUDDLES; c++) {
         const roll = hash(this.roomHash, c, r, 0);
         // Cheap first: no ground has a chance above the largest
-        if (roll >= CHANCE.earth) continue;
+        if (roll >= chance("earth")) continue;
         const x = (c + 0.2 + 0.6 * hash(this.roomHash, c, r, 1)) * FINENESS,
           y = (r + 0.2 + 0.6 * hash(this.roomHash, c, r, 2)) * FINENESS;
-        if (Math.hypot(x - v.x, y - v.y) > RADIUS) continue;
+        if (Math.hypot(x - v.x, y - v.y) > radius()) continue;
         const spot = room.spot(x, y);
-        if (!spot || roll >= CHANCE[spot.ground]) continue;
+        if (!spot || roll >= chance(spot.ground)) continue;
         const rx = (0.25 + 0.45 * hash(this.roomHash, c, r, 3)) * FINENESS;
         const ry = rx * (0.55 + 0.4 * hash(this.roomHash, c, r, 4));
         const turn = hash(this.roomHash, c, r, 5) * Math.PI;
@@ -366,7 +367,7 @@ export class Puddles {
     this.puddles.forEach((p, i) => {
       const [lr, lg, lb] = room.light(p.x, p.y, p.z);
       const d = Math.hypot(p.x - v.x, p.y - v.y);
-      const f = d < FADE_FROM ? 1 : Math.max(0, 1 - (d - FADE_FROM) / (RADIUS - FADE_FROM));
+      const f = d < fadeFrom() ? 1 : Math.max(0, 1 - (d - fadeFrom()) / (radius() - fadeFrom()));
       const cos = Math.cos(p.turn),
         sin = Math.sin(p.turn);
       corners.forEach(([u, w], k) => {

@@ -214,6 +214,27 @@ npm run android:web-bundle  # the page by itself as a release's update zip, in d
   - **Other ground:** it counts as fields. In dev, `gameScene.setTestRoom({ terrain, crowd })` tries it as other terrain or with a crowd, without changing the server.
   - **Its geometry** is drawn by meridian-editor's `tools/shards/make-provgrnd.ts`, and edited live like any room.
   - **New rooms** go in with meridian-editor's `npm run shards:install -- <room>`. It checks the Kod registration, builds, asks before `reload system`, creates the room and rebuilds the assets.
+- **The admin dashboard** (ours, development only) is at http://localhost:5173/admin.html, a page of the client's own Vite server. `vite build` takes only `index.html`, so no build has it.
+  - **The page:** `apps/client/admin.html`, `src/admin/` (`Dashboard.tsx`, `api.ts`).
+  - **The server side:** `tools/dev/adminApi.ts`, registered by `tools/dev/devTools.ts`, a plugin for `vite serve` only.
+  - **The game tab's side:** `game/devBridge.ts`, started by `GameScene` in dev.
+  - **Its tabs:**
+    - **Spawn:** on the Proving Grounds' pads, or beside us anywhere.
+    - **Items:** into our inventory.
+    - **Spells:** cast as us at what's in our room (`mcp_blakserv.py t_cast`'s recipe).
+    - **Rooms:** go, rebuild, edit.
+    - **World:** the server's hour (`System.SetHour`), and our client's hour, weather, terrain and crowd.
+    - **Tuning.**
+    - **Server:** build the Kod, `reload system` and `save game` (both asked first), any maintenance command.
+  - **Lists** of monsters, items and spells are read from the server's Kod (`/__admin/catalog`), with pictures drawn by `IconRenderer`.
+  - **Maintenance commands** go through `tools/maint/maintClient.ts`, which waits for each command's output to settle. `maint.ts` uses it too.
+  - **Live tuning:** the numbers are tables of one shape:
+    - `AMBIENT_TUNING` (`packages/world/src/ambient/tuning.ts`: the crowd, speech, critters);
+    - `SCENE_TUNING` (`apps/client/src/game/sceneTuning.ts`: birds, bats, nature, how fast the ground wets and dries);
+    - `RENDER_TUNING` (`packages/render/src/tuning.ts`: ground detail, puddles, lightning).
+  - **How a value reaches the game tabs:** modules read values at use (`tune()`, `sceneTune()`, `renderTune()`). The dashboard sends changes over Vite's HMR socket (`shards:set`). The dev server keeps them, so a reloaded game tab gets them back. The game tab applies them (`tuning.ts applyTuning`) and starts the room's ambient life over (`GameScene.retune`).
+  - **Saving:** "Save as defaults" rewrites each changed entry's `value:` in its file. Keep every entry on one line, as `key: { value: N, ... },`. Saving a tuning or scene file reloads the game tabs.
+  - **What's left out on purpose:** the arena keeps its own constants (the relay runs it deterministically), and live values are this client's only: friends' shared crowds go out of step while they differ.
 - **Movement is client-authoritative but checked:** keep `PlayerMover` byte-for-byte faithful to `move.c` (units, step sizes, thresholds). The server only rejects off-map destinations, so the client's own faithfulness is what keeps movement fair.
 - **Uniform arrays** in Three.js `ShaderMaterial`s must be flat typed arrays (or `Vector` objects), not nested JS arrays.
 - **Graphics** (ours):

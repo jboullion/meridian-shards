@@ -23,6 +23,7 @@ import type { ArenaFighterInfo } from "../arena/arenaView.ts";
 import { busyAt, isErrandRoom, torchHours, weatherScale, type AmbientRoomSpec } from "./ambientRooms.ts";
 import { chatterLine, scatterLine, type ChatterContext, type Role, type Weather } from "./chatter.ts";
 import { personName } from "./names.ts";
+import { tune } from "./tuning.ts";
 import {
   C, fighterAppearance, guardAppearance, knightAppearance, ladyAppearance, lookFor, mageAppearance, makePerson, nobleAppearance, randomAppearance, setTorch,
   type Appearance, type Pose,
@@ -87,19 +88,12 @@ const REACH_CLEARANCE_NUDGE = 64;
 /** proto.h DRAWFX_TRANSLUCENT75/50/25: fading in and out */
 const FADE_FX = [1, 2, 3, 0];
 const FADE_MS = 600;
-/** Walking pace, fine units per ms (a player walks about 3 squares a second) */
-const PACE_MIN = 1.0,
-  PACE_MAX = 1.6;
-/** Running from a spell, and hurrying through rain or snow */
-const FLEE_PACE = 2.4;
-const WET_PACE = 1.3;
 /** Turning speed, client angle units per ms */
 const TURN_RATE = 6;
 /** How long a walker waits for the player to get out of the way before going on */
 const WAIT_FOR_PLAYER_MS = 1600;
 const GREET_DISTANCE = 1.6 * SQ;
-/** Waved at from this close, someone in front of the player waves back (or, nearer, anyone) */
-const WAVE_RANGE = 6 * SQ;
+/** Waved at from nearer than this, anyone waves back, in front or not (the farther range is tune("waveRange")) */
 const WAVE_NEAR = 2.5 * SQ;
 const GREET_COOLDOWN_MS = 30000;
 /** The player this close ahead: step aside */
@@ -108,24 +102,14 @@ const SIDESTEP_COOLDOWN_MS = 2500;
 /** Fine armour this close: a second look */
 const GLANCE_DISTANCE = 3.5 * SQ;
 const GLANCE_COOLDOWN_MS = 45000;
-/** Speech: how long a line stays up, and only within this distance of the player */
-const SAY_MS = 3200;
-const SPEAK_RANGE = 10 * SQ;
-const MAX_SPEAKING = 2;
-/** Towns: how many walkers go on an errand, and how near the door they stop */
-const ERRAND_CHANCE = 0.3;
 /** An area with no doors gets people only if it's this big (cells) and the player is in it */
 const MIN_AREA_CELLS = 200;
-/** In a big room (a castle's courtyard), those who stay keep mostly within this of the player */
-const NEAR_PLAYER = 18 * SQ;
 /** Guards' beats, from one end to the other */
 const BEAT_MIN = 5 * SQ,
   BEAT_MAX = 10 * SQ;
 /** Cells this close to a blocking object are closed */
 const OBSTACLE_RADIUS = 0.55 * SQ;
 const OBSTACLE_REFRESH_MS = 1500;
-/** How many townsfolk carry a torch after dark */
-const TORCH_BEARERS = 0.8;
 /** Time per frame for building the nav grid */
 const BUILD_BUDGET_MS = 3;
 
@@ -387,7 +371,7 @@ export class AmbientLife {
     if (!this.ready) return;
     const ahead = (w: Walker) => Math.abs(((angleTo(w.obj.x - p.x, w.obj.y - p.y) - facing + 6144) % 4096) - 2048) < 700;
     const near = this.walkers
-      .filter((w) => w.fadeDir >= 0 && w.fade >= 1 && !w.fleeing && w.waveBackMs <= 0 && dist(w.obj, p) < WAVE_RANGE)
+      .filter((w) => w.fadeDir >= 0 && w.fade >= 1 && !w.fleeing && w.waveBackMs <= 0 && dist(w.obj, p) < tune("waveRange") * SQ)
       .filter((w) => ahead(w) || dist(w.obj, p) < WAVE_NEAR)
       .sort((a, b) => dist(a.obj, p) - dist(b.obj, p));
     const w = near[0];
@@ -440,7 +424,7 @@ export class AmbientLife {
     const kind = this.spec.kind;
     this.hour = frame.hour ?? null;
     this.weather = frame.weather ?? null;
-    this.busy = frame.scale * busyAt(kind, this.hour) * weatherScale(kind, this.weather);
+    this.busy = frame.scale * busyAt(kind, this.hour) * weatherScale(kind, this.weather) * tune("crowdScale");
     const target = Math.round(this.spec.count * this.busy);
     // Guards are on duty whatever the hour; Few halves them, Many doesn't add any
     const guards = frame.scale > 0 ? Math.round((this.spec.guards ?? 0) * Math.min(1, frame.scale)) : 0;
@@ -611,7 +595,7 @@ export class AmbientLife {
     return this.openCellAwayFrom(area);
   }
 
-  /** A random open cell in an area, not on top of the player; `near`: within NEAR_PLAYER of them if there's one */
+  /** A random open cell in an area, not on top of the player; `near`: within tune("nearPlayer") squares of them if there's one */
   private openCellAwayFrom(area: number, near = false): number {
     const player = this.frame.player;
     let fallback = -1;
@@ -620,7 +604,7 @@ export class AmbientLife {
       if (cell < 0) return -1;
       const d = player ? dist(cellCentre(this.grid!, cell), player) : Infinity;
       if (d < 1.5 * SQ) continue;
-      if (!near || !player || d < NEAR_PLAYER) return cell;
+      if (!near || !player || d < tune("nearPlayer") * SQ) return cell;
       if (fallback < 0) fallback = cell;
     }
     return fallback;
@@ -685,11 +669,11 @@ export class AmbientLife {
   private spawn(at: NavPoint, angle: number, fadeIn: boolean, role: Role, area: number, look = this.dress(role)): Walker {
     const obj = makePerson(look, Math.round(at.x), Math.round(at.y), angle);
     const slow = role === "guard" || role === "knight" || role === "lady";
-    const pace = (PACE_MIN + this.rand() * (PACE_MAX - PACE_MIN)) * (slow ? 0.75 : 1);
+    const pace = (tune("paceMin") + this.rand() * (tune("paceMax") - tune("paceMin"))) * (slow ? 0.75 : 1);
     const w: Walker = {
       obj, look, role, pose: "stand", mode: "idle", path: [], pace, idleMs: 0, faceAngle: -1, leaving: false, fade: fadeIn ? 0 : 1,
       fadeDir: fadeIn ? 1 : 0, waitedMs: 0, greetCooldown: 0, sidestepMs: 0, glanceMs: 0, stayMs: this.spec.kind === "shop" ? 20000 + this.rand() * 40000 : 60000 + this.rand() * 180000, faceId: -1,
-      torchBearer: role === "guard" || (role === "folk" && this.rand() < TORCH_BEARERS), torch: false, area, errand: null, fleeing: false,
+      torchBearer: role === "guard" || (role === "folk" && this.rand() < tune("torchBearers")), torch: false, area, errand: null, fleeing: false,
       say: null, beat: null, beatEnd: 0, emoteMs: 0, nextEmoteMs: 2000 + this.rand() * 8000, cheerFrame: 0, waveBackMs: 0,
       name: personName(this.nameRand, role, look.female), fromRoom: null, toRoom: null, errandRoom: null,
     };
@@ -724,7 +708,7 @@ export class AmbientLife {
   private planTown(from: NavPoint, area: number): { path: NavPoint[]; errand: NavPoint | null; leaving: boolean; to: string | null; errandRoom: string | null } | null {
     const g = this.grid!;
     const errands = this.pointsIn(area).filter((p) => p.errand && dist(p.at, from) >= 4 * SQ);
-    if (errands.length && this.rand() < ERRAND_CHANCE * (this.weather ? 0.4 : 1)) {
+    if (errands.length && this.rand() < tune("errandChance") * (this.weather ? 0.4 : 1)) {
       const p = this.pick(errands);
       const path = findPath(g, from, cellCentre(g, p.cell));
       if (path) return { path, errand: p.at, leaving: false, to: null, errandRoom: p.to };
@@ -820,7 +804,7 @@ export class AmbientLife {
     // In by a door (from the doorway itself), or out of sight where there's none
     let starts = this.pointsIn(area).filter((p) => !player || dist(p.at, player) > 1.5 * SQ);
     // Those who stay come in by a door near the player, in a big room
-    if (stays && player) starts = starts.filter((p) => dist(p.at, player) < NEAR_PLAYER);
+    if (stays && player) starts = starts.filter((p) => dist(p.at, player) < tune("nearPlayer") * SQ);
     let from: NavPoint;
     let fromRoom: string | null = null;
     const lead: NavPoint[] = [];
@@ -890,7 +874,7 @@ export class AmbientLife {
       const cell = randomCell(g, this.rand, area);
       if (cell < 0) return null;
       const a = cellCentre(g, cell);
-      if ((player && (dist(a, player) < 2 * SQ || (k < 30 && dist(a, player) > 2 * NEAR_PLAYER))) || !clear(a)) continue;
+      if ((player && (dist(a, player) < 2 * SQ || (k < 30 && dist(a, player) > 2 * tune("nearPlayer") * SQ))) || !clear(a)) continue;
       const dir = (Math.floor(this.rand() * 8) * Math.PI) / 4;
       const len = BEAT_MIN + this.rand() * (BEAT_MAX - BEAT_MIN);
       const endCell = cellAt(g, a.x + Math.cos(dir) * len, a.y + Math.sin(dir) * len);
@@ -938,7 +922,7 @@ export class AmbientLife {
   }
 
   private say(w: Walker, text: string): void {
-    w.say = { text, ms: SAY_MS + text.length * 40 };
+    w.say = { text, ms: tune("sayMs") + text.length * 40 };
   }
 
   /** Now and then, someone near the player says something */
@@ -946,8 +930,8 @@ export class AmbientLife {
     if ((this.sayMs -= dt) > 0) return;
     this.sayMs = (this.spec.kind === "inn" ? 2500 : 4000) + this.rand() * 7000;
     const pl = this.frame.player;
-    if (!pl || this.walkers.filter((w) => w.say).length >= MAX_SPEAKING) return;
-    const near = this.walkers.filter((w) => !w.say && w.fadeDir >= 0 && w.fade >= 1 && !w.fleeing && dist(w.obj, pl) < SPEAK_RANGE);
+    if (!pl || this.walkers.filter((w) => w.say).length >= tune("maxSpeaking")) return;
+    const near = this.walkers.filter((w) => !w.say && w.fadeDir >= 0 && w.fade >= 1 && !w.fleeing && dist(w.obj, pl) < tune("speakRange") * SQ);
     if (!near.length) return;
     const w = this.pick(near);
     this.say(w, chatterLine(this.rand, this.context(w)));
@@ -1159,8 +1143,8 @@ export class AmbientLife {
         }
       } else w.waitedMs = 0;
       this.setPose(w, "walk");
-      const wet = this.weather && town && w.role === "folk" ? WET_PACE : 1;
-      let move = w.pace * dt * (w.fleeing ? FLEE_PACE : wet);
+      const wet = this.weather && town && w.role === "folk" ? tune("wetPace") : 1;
+      let move = w.pace * dt * (w.fleeing ? tune("fleePace") : wet);
       let x = o.x,
         y = o.y;
       while (move > 0 && w.path.length) {

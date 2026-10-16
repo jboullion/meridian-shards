@@ -12,6 +12,7 @@
 import * as THREE from "three";
 import { FINENESS } from "@shards/formats";
 import { glowPass } from "./lighting.ts";
+import { renderTune } from "./tuning.ts";
 
 const FRAME = 64;
 const COLS = 4,
@@ -28,14 +29,14 @@ type Art = keyof typeof ART | "rock";
 const ROCK_CELL = 128;
 const ROCK_COLS = 4,
   ROCK_ROWS = 2;
-/** Rocks are drawn this much of the size they'd have (mostly pebbles, never bigger than the ornament) */
-const ROCK_SIZE = 0.75;
+// Rocks are drawn a fraction of the size they'd have (mostly pebbles, never bigger than the ornament):
+// tuning.ts rockSize
 
-/** A cell of ground half a square across; the cover is looked at this far about the player */
+/** A cell of ground half a square across; the cover is looked at out to tuning.ts groundRadius about the player */
 const CELL = FINENESS / 2;
-const RADIUS = 20 * FINENESS;
-/** Shrunk to nothing toward the edge, so nothing pops in */
-const FADE_FROM = 15 * FINENESS;
+/** Out to here, shrunk to nothing toward the edge (from groundFadeFrom), so nothing pops in */
+const radius = () => renderTune("groundRadius") * FINENESS;
+const fadeFrom = () => Math.min(renderTune("groundFadeFrom"), renderTune("groundRadius") - 1) * FINENESS;
 const MAX_POINTS = 6000;
 /** Rebuilt when the player has moved this far, and relit this often (the hour changes the light) */
 const MOVE = FINENESS / 2;
@@ -415,7 +416,7 @@ export class GroundCover {
     if (art === "rock") {
       const [rock, index] = rocks[Math.floor(h(4) * rocks.length) % rocks.length];
       // Mostly small (pebbles), now and then a stone half a square across; never bigger than the ornament
-      const width = ROCK_SIZE * Math.min(rock.width, 70 + 380 * h(6) ** 2.2);
+      const width = renderTune("rockSize") * Math.min(rock.width, 70 + 380 * h(6) ** 2.2);
       p = { x, y, floor: spot.floor, art, variant: index, size: width / rock.fw, r: 1, g: 1, b: 1, lr: 1, lg: 1, lb: 1 };
     } else {
       const sizes: Record<Exclude<Art, "rock">, [number, number]> = { tuft: [128, 225], flower: [120, 180], dry: [112, 195] };
@@ -446,18 +447,18 @@ export class GroundCover {
     const tufts = this.tufts,
       rocks = this.rockLayer;
     tufts.n = rocks.n = 0;
-    const c0 = Math.floor((v.x - RADIUS) / CELL),
-      c1 = Math.floor((v.x + RADIUS) / CELL);
-    const r0 = Math.floor((v.y - RADIUS) / CELL),
-      r1 = Math.floor((v.y + RADIUS) / CELL);
+    const c0 = Math.floor((v.x - radius()) / CELL),
+      c1 = Math.floor((v.x + radius()) / CELL);
+    const r0 = Math.floor((v.y - radius()) / CELL),
+      r1 = Math.floor((v.y + radius()) / CELL);
     for (let cy = r0; cy <= r1; cy++)
       for (let cx = c0; cx <= c1; cx++) {
         if (cx < 0 || cy < 0) continue;
         const p = this.piece(cx, cy);
         if (!p) continue;
         const d = Math.hypot(p.x - v.x, p.y - v.y);
-        if (d > RADIUS) continue;
-        const shrink = d < FADE_FROM ? 1 : 1 - (d - FADE_FROM) / (RADIUS - FADE_FROM);
+        if (d > radius()) continue;
+        const shrink = d < fadeFrom() ? 1 : 1 - (d - fadeFrom()) / (radius() - fadeFrom());
         const size = p.size * shrink;
         // The point's middle half its size up: its picture stands on the floor (a hair sunk in)
         const z = p.floor + size * 0.47;

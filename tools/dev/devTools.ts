@@ -6,12 +6,16 @@
 //     and token it writes to agent.json (the app) or agent-web.json (its web build), the
 //     same way an agent finds it (meridian-editor apps/editor/src/main/agentFiles.ts).
 //     Answers { ok, message }, for the admin console to show.
+//
+//   /__admin/* and the dashboard's HMR messages: the admin dashboard (apps/client/admin.html),
+//     in adminApi.ts.
 
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
+import { adminApi } from "./adminApi.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 const ROOM_SOURCES = join(ROOT, "server", "src", "resource", "rooms", "src");
@@ -82,6 +86,7 @@ export function devTools(): Plugin {
     name: "shards-dev-tools",
     apply: "serve",
     configureServer(server) {
+      adminApi(server);
       server.middlewares.use("/__dev/editor/open", (req: IncomingMessage, res: ServerResponse) => {
         const room = new URL(req.url ?? "/", "http://localhost").searchParams.get("room") ?? "";
         void openInEditor(room).then(

@@ -4,6 +4,17 @@ The admin console lets an administrator run server commands from inside the game
 
 **Everything you type changes the live world at once.** There's no undo and no "are you sure". Read [Be careful](#be-careful) before using it on a server with real players.
 
+On the local development server there's also the **admin dashboard**, at http://localhost:5173/admin.html in a tab of its own. Its tabs:
+- **Spawn:** monsters by name with their pictures, on the Proving Grounds' pads or beside you.
+- **Items:** items into your inventory.
+- **Spells:** cast at what's in your room.
+- **Rooms:** go to any room, rebuild it, or edit it.
+- **World:** the server's time, and your client's weather, terrain and crowd.
+- **Tuning:** ambient life's numbers, live.
+- **Server:** build and reload the Kod, and any maintenance command.
+
+It needs a game tab logged in as an admin for the things it does as you. It's for development only: no build has it (AGENTS.md has the details).
+
 ## Who gets it
 
 Only characters on an **admin account** see it. The server sends admin characters the console (the "admin.dll" module) when they log on, along with the message "Welcome to the game, Administrator *name*". Ordinary players never get it, and the server refuses admin commands from any other account.

@@ -26,6 +26,8 @@ import {
 import type { AssetStore } from "../assets.ts";
 import { gameSocketUrl } from "../host.ts";
 import { RoomCache } from "../render/roomCache.ts";
+import { sceneTune } from "./sceneTuning.ts";
+import { startDevBridge } from "./devBridge.ts";
 import { loadSkybox, type LoadedRoom } from "../render/roomLoader.ts";
 import { ORIGINAL_FOV } from "../viewer/roomScene.ts";
 import { AmbientSounds } from "./ambientSounds.ts";
@@ -39,8 +41,6 @@ const SQUISH_RANGE = 10 * FINENESS;
 const CRITTER_REACH = 1.6 * FINENESS;
 const CRITTER_DEATH_VOLUME = 0.35;
 /** Ours: puddles spread over this long in the rain, and dry up over this long after */
-const WET_UP_MS = 45000;
-const WET_DOWN_MS = 150000;
 /** Ours: Limit to 60 FPS, a frame's time, and how early one may come (the screen's timing jitters) */
 const FRAME_MS = 1000 / 60;
 const FRAME_SLACK_MS = 2;
@@ -226,7 +226,7 @@ export class GameScene {
   /** The current room as the cache loaded it (shared; never changed) */
   private loaded: LoadedRoom | null = null;
   /** The current room's file name, lower case */
-  private roomFile = "";
+  roomFile = "";
   /**
    * Ours: the room's townsfolk or inn patrons (Ambient Life), and the room they're in. `ambient`
    * is null while the crowd catches up (docs/adr/0005-friends.md 6); `ambientStep` steps it
@@ -259,6 +259,8 @@ export class GameScene {
   /** Development overrides of the current room's terrain and crowd (setTestRoom) */
   private testTerrain: string[] | null = null;
   private testCrowd: AmbientRoomSpec | null | undefined = undefined;
+  /** Development: the admin dashboard's link (devBridge.ts) */
+  private stopDevBridge: (() => void) | null = null;
   /** Ours: the room's critters (rats, spiders and the like), and the room they're in */
   private critters: Critters | null = null;
   private critterRoom = "";
@@ -274,7 +276,7 @@ export class GameScene {
   private groundCover: GroundCover | null = null;
   /** Ours: puddles in the rain, how far they've spread (up while it rains, down after), and their room */
   private puddles: Puddles | null = null;
-  private wetness = 0;
+  wetness = 0;
   private puddleRoom = "";
   /** Ours: lightning far off in the rain, and the view's flash with it */
   private lightning: Lightning | null = null;
@@ -564,8 +566,11 @@ export class GameScene {
     canvas.addEventListener("pointerup", this.onPointerUp);
     canvas.addEventListener("pointercancel", this.onPointerCancel);
     void this.init();
-    if (import.meta.env.DEV)
+    if (import.meta.env.DEV) {
       (window as unknown as { shards: unknown }).shards = { gameScene: this, session, audio: this.audio, THREE, pose: () => this.pose() };
+      // The admin dashboard (admin.html): live tuning and scene overrides, and where we are
+      this.stopDevBridge = startDevBridge(this, session);
+    }
   }
 
   private async init(): Promise<void> {
@@ -737,6 +742,11 @@ export class GameScene {
   setTestRoom(o: { terrain?: string[] | null; crowd?: AmbientRoomSpec | null }): void {
     if ("terrain" in o) this.testTerrain = o.terrain ?? null;
     if ("crowd" in o) this.testCrowd = o.crowd;
+    this.forgetRoomCaches();
+  }
+
+  /** Tuning changed (the admin dashboard, tuning.ts): the crowd, critters and the rest start over with it */
+  retune(): void {
     this.forgetRoomCaches();
   }
 
@@ -1452,8 +1462,8 @@ export class GameScene {
     const night = hour !== null && (hour >= 20 || hour < 5);
     const sky = this.roomHasSky && !cave;
     const opts = {
-      flocks: sky && !night ? Math.round(2 * scale) : 0,
-      bats: cave ? Math.round(9 * scale) : bats && night ? Math.round(3 * scale) : 0,
+      flocks: sky && !night ? Math.round(sceneTune("flocks") * scale) : 0,
+      bats: cave ? Math.round(sceneTune("batsCave") * scale) : bats && night ? Math.round(sceneTune("batsNight") * scale) : 0,
       cave,
     };
     const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
@@ -1488,9 +1498,9 @@ export class GameScene {
     const day = hour === null || (hour >= 7 && hour < 19);
     const night = hour !== null && (hour >= 20 || hour < 5);
     const opts = {
-      butterflies: green && day && !world.effects.raining ? Math.round(8 * scale) : 0,
-      fireflies: night && (green || has("SWAMP", "LAKE", "RIVER")) ? Math.round(25 * scale) : 0,
-      leaves: has("FOREST", "JUNGLE") ? Math.round(12 * scale) : 0,
+      butterflies: green && day && !world.effects.raining ? Math.round(sceneTune("butterflies") * scale) : 0,
+      fireflies: night && (green || has("SWAMP", "LAKE", "RIVER")) ? Math.round(sceneTune("fireflies") * scale) : 0,
+      leaves: has("FOREST", "JUNGLE") ? Math.round(sceneTune("leaves") * scale) : 0,
       fish: scale > 0 && !has("SEWERS", "CAVES", "MINES"),
     };
     const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
@@ -1559,7 +1569,7 @@ export class GameScene {
     const fx = this.session.world.effects;
     const on = this.settings.weather && !fx.blind;
     const raining = on && fx.raining;
-    this.wetness = Math.max(0, Math.min(1, this.wetness + (raining ? dt / WET_UP_MS : -dt / WET_DOWN_MS)));
+    this.wetness = Math.max(0, Math.min(1, this.wetness + (raining ? dt / (sceneTune("wetUpS") * 1000) : -dt / (sceneTune("wetDownS") * 1000))));
     const puddles = this.puddles;
     if (puddles) {
       if (this.puddleRoom !== this.roomFile) {
@@ -2922,6 +2932,7 @@ export class GameScene {
   }
 
   dispose(): void {
+    this.stopDevBridge?.();
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.unsubscribe();

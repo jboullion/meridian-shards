@@ -5,32 +5,18 @@
 //
 // Never use it for "save game" against a server you care about without meaning to.
 
-import { connect } from "node:net";
+import { maint } from "./maintClient.ts";
 
-const PORT = Number(process.env.MAINT_PORT ?? 9998);
 const cmds = process.argv.slice(2);
 if (!cmds.length) {
   console.error('usage: node tools/maint/maint.ts "<command>" ...');
   process.exit(2);
 }
 
-const sock = connect({ host: "127.0.0.1", port: PORT });
-let out = "";
-sock.on("data", (d) => (out += d.toString("latin1")));
-sock.on("error", (e) => {
-  console.error(`maintenance port ${PORT}: ${e.message}`);
+try {
+  const outs = await maint(...cmds);
+  cmds.forEach((c, i) => process.stdout.write(`> ${c}\n${outs[i]}\n`));
+} catch (e) {
+  console.error((e as Error).message);
   process.exit(1);
-});
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-sock.on("connect", async () => {
-  await sleep(300);
-  out = "";
-  for (const c of cmds) {
-    sock.write(c + "\r");
-    await sleep(700);
-    process.stdout.write(`> ${c}\n${out.replace(/\r/g, "")}\n`);
-    out = "";
-  }
-  sock.end();
-});
+}

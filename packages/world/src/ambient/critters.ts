@@ -16,6 +16,7 @@ import type { Look, WorldObject } from "../state.ts";
 import { ambientId, localRes } from "./ambientIds.ts";
 import { AMBIENT_ROOMS } from "./ambientRooms.ts";
 import { seededRandom } from "./ambientLife.ts";
+import { tune } from "./tuning.ts";
 
 /** proto.h OF_NPC: a shadow under it, like a monster's (ObjectsView) */
 const OF_NPC = 0x2000;
@@ -127,12 +128,9 @@ export function critterArt(h: Habitat): string[] {
   return [...new Set(h.mix.flatMap(([n]) => [SPECIES[n].icon, SPECIES[n].dead]))];
 }
 
-/** Fewer than the habitats say: half (2026-10-12: there were too many about) */
-const DENSITY = 0.5;
-/** Spawned this far from the player (fine units), and gone past the last */
-const SPAWN_NEAR = 4 * FINENESS,
-  SPAWN_FAR = 12 * FINENESS,
-  GONE = 18 * FINENESS;
+// How many (fewer than the habitats say: half, 2026-10-12, there were too many about), how far
+// from the player they turn up and go, and how long a corpse lies: tuning.ts (critterDensity,
+// critterSpawnNear, critterSpawnFar, critterGone, corpseMs)
 /** They run from the player this close */
 const SHY = 2 * FINENESS;
 /** Floors more than this above or below the player's (rooftops, ledges) get none */
@@ -140,8 +138,6 @@ const SAME_LEVEL = 600;
 const MAX_STEP = 24 * 16;
 /** Time a frame for finding where critters can be */
 const SAMPLE_BUDGET_MS = 2;
-/** A corpse lies this long, then fades */
-const CORPSE_MS = 6000;
 const FADE_MS = 500;
 
 /**
@@ -248,7 +244,7 @@ export class Critters {
     const c = this.critters.find((v) => v.obj.id === id && v.mode !== "dead");
     if (!c) return null;
     c.mode = "dead";
-    c.timer = CORPSE_MS;
+    c.timer = tune("corpseMs");
     c.fade = 1;
     c.fadeDir = 0;
     const o = c.obj;
@@ -277,7 +273,7 @@ export class Critters {
       if (this.sampler && !this.started) return;
     }
     const night = frame.hour !== null && frame.hour !== undefined && (frame.hour >= 20 || frame.hour < 6);
-    const raw = this.habitat.count * frame.scale * DENSITY;
+    const raw = this.habitat.count * frame.scale * tune("critterDensity");
     const target = Math.floor(raw) + (this.extra < raw % 1 ? 1 : 0);
     if (target === 0) {
       this.critters = this.critters.filter((c) => c.mode === "dead");
@@ -298,7 +294,7 @@ export class Critters {
       }
     }
     for (const c of this.critters) this.step(c, dt, p);
-    this.critters = this.critters.filter((c) => !(c.fadeDir < 0 && c.fade <= 0) && (c.mode === "dead" || dist(c.obj, p) < GONE));
+    this.critters = this.critters.filter((c) => !(c.fadeDir < 0 && c.fade <= 0) && (c.mode === "dead" || dist(c.obj, p) < tune("critterGone") * FINENESS));
   }
 
   /** Whether a critter can be at a point: a dry floor about the player's level, with room, away from walls */
@@ -349,8 +345,8 @@ export class Critters {
       const dx = sp[i] - p.x,
         dy = sp[i + 1] - p.y;
       const d = Math.hypot(dx, dy);
-      if (d < SPAWN_NEAR || d > GONE - 2 * FINENESS || (level !== null && Math.abs(sp[i + 2] - level) > SAME_LEVEL)) continue;
-      if (d > SPAWN_FAR) {
+      if (d < tune("critterSpawnNear") * FINENESS || d > tune("critterGone") * FINENESS - 2 * FINENESS || (level !== null && Math.abs(sp[i + 2] - level) > SAME_LEVEL)) continue;
+      if (d > tune("critterSpawnFar") * FINENESS) {
         farther.push(i);
         continue;
       }
