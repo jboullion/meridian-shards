@@ -24,7 +24,7 @@ export const ACTION_TABS = {
   Map: ["map", "mapZoomIn", "mapZoomOut"],
   // Ours: keys for our own panels and menus, and the quick slots (quickSlots.ts)
   Interface: [
-    "inventory", "settings", "configuration", "actions", "quickEmotes", "friends", "pets", "cameraView", "hideInterface",
+    "inventory", "settings", "configuration", "actions", "quickEmotes", "friends", "pets", "companion", "cameraView", "hideInterface",
     "quickSlot1", "quickSlot2", "quickSlot3", "quickSlot4", "quickSlot5", "quickSlot6", "quickSlot7", "quickSlot8", "quickSlot9",
     "quickSlot10",
     // The Modern interface's second row
@@ -85,6 +85,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   quickEmotes: "Quick Emotes",
   friends: "Friends",
   pets: "Pets",
+  companion: "Companion",
   quickSlot1: "Quick Slot 1",
   quickSlot2: "Quick Slot 2",
   quickSlot3: "Quick Slot 3",
@@ -173,6 +174,8 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     friends: k("KeyP"),
     // Ours: the Pets tab (docs/adr/0006-pets.md 4)
     pets: k("KeyN"),
+    // Ours: the Companion tab (docs/adr/0010-followers.md 9.2)
+    companion: k("KeyC"),
     // Ours: first person, chase, behind, front (the Modern interface only; gameScene.ts ViewMode)
     cameraView: k("KeyV"),
     // Ours: the Modern interface's HUD away and back, for screenshots (GameView hudHidden)
@@ -246,6 +249,7 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     quickEmotes: [],
     friends: [],
     pets: [],
+    companion: [],
     cameraView: [],
     hideInterface: [],
     // Typing starts a chat line in the original preset, digits too: no keys unless the player adds them
@@ -473,7 +477,7 @@ export function touchUi(s: Settings): boolean {
   return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 }
 
-const SETTINGS_VERSION = 13;
+const SETTINGS_VERSION = 14;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
@@ -624,6 +628,11 @@ export function migrate(s: SavedSettings): Settings {
   if (version < 13) {
     const taken = Object.entries(keys).some(([a, list]) => a !== "pets" && list.some((b) => b.code === "KeyN" && !b.alt && !b.ctrl));
     if (taken) keys.pets = keys.pets.filter((b) => b.code !== "KeyN" || b.alt || b.ctrl);
+  }
+  // Version 14 (the Companion tab on C): not if the player had put C to another use
+  if (version < 14) {
+    const taken = Object.entries(keys).some(([a, list]) => a !== "companion" && list.some((b) => b.code === "KeyC" && !b.alt && !b.ctrl));
+    if (taken) keys.companion = keys.companion.filter((b) => b.code !== "KeyC" || b.alt || b.ctrl);
   }
   delete (out as SavedSettings).mouseSpeed;
   delete (out as SavedSettings).rightClickLooks;

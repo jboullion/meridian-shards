@@ -24,11 +24,11 @@ export type Insignia = keyof typeof INSIGNIA;
 export const FACTIONS = ["neutral", "duke", "princess", "rebel", "any"] as const;
 export type Faction = (typeof FACTIONS)[number];
 
-export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes"] as const;
+export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
 /** Steps that happen by doing something, once (the guide chains' kinds): done by themselves unless `auto` is false */
-export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes"];
+export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion"];
 
 /** How a quest's markers look: gold for the main and levelling chains, silver for story quests, bronze for errands */
 export const TIERS = ["main", "story", "errand"] as const;
@@ -40,7 +40,7 @@ export type Tier = (typeof TIERS)[number];
  * the hand-in; deliver gives a parcel at the start of the step and takes it back at the hand-in.
  * The action kinds happen once: cast a spell, deposit shillings with a banker, stash an item with
  * a vault keeper, buy from someone, equip one of some items, reach a health, choose a hometown,
- * bond with every mana node.
+ * bond with every mana node, have a companion (docs/adr/0010-followers.md).
  */
 export interface QuestStep {
   kind: StepKind;

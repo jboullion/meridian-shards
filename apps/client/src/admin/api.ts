@@ -224,7 +224,7 @@ export interface QuestFile {
 }
 
 export interface QuestStepFile {
-  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes";
+  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion";
   auto?: boolean;
   rewards?: QuestRewardsFile;
   spell?: string;
@@ -298,6 +298,20 @@ export const saveGiver = (giver: Partial<GiverFile> & { key: string }, playerId?
 export const deleteGiver = (key: string) => post<{ steps: string[] }>("/__admin/quests/giver/delete", { key });
 /** QuestBook's admin messages on a player: state, grant, step, finish, complete, reset, resetAll */
 export const questPlayer = (playerId: number, action: string, id?: number, step?: number) => post<PlayerQuests>("/__admin/quests/player", { playerId, action, id, step });
+
+/** A player's companion as tools/dev/companionApi.ts reports it (util/companionbook.kod AdminState); state 0 is none */
+export interface PlayerCompanion {
+  state: number;
+  kind: number;
+  bond: number;
+  tier: number;
+  hp: number;
+  maxHp: number;
+  rid: number;
+  pack: number;
+}
+export const companionPlayer = (playerId: number, action: string, extra: { kind?: number; points?: number } = {}) =>
+  post<PlayerCompanion>("/__admin/companions/player", { playerId, action, ...extra });
 
 // ---------------------------------------------------------------- sprites (tools/dev/spriteApi.ts)
 

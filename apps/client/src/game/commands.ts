@@ -16,7 +16,7 @@ export type CommandId =
   | "guild" | "password" | "withdraw" | "deposit" | "balance" | "group" | "appeal" | "tellguild"
   | "safetyOn" | "safetyOff" | "tempsafeOn" | "tempsafeOff" | "groupingOn" | "groupingOff" | "autolootOn"
   | "autolootOff" | "autocombineOn" | "autocombineOff" | "reagentbagOn" | "reagentbagOff" | "spellpowerOn"
-  | "spellpowerOff" | "time" | "mail" | "study";
+  | "spellpowerOff" | "time" | "mail" | "study" | "companion";
 
 /** merintr.c `commands`, in its order (ties go to the first), with the German names. */
 export const COMMAND_TABLE: readonly (readonly [string, CommandId])[] = [
@@ -50,6 +50,8 @@ export const COMMAND_TABLE: readonly (readonly [string, CommandId])[] = [
   ["mail", "mail"],
   // Ours: Study mode (study.ts), last so it takes no start of a name from the original's
   ["study", "study"], ["studieren", "study"],
+  // Ours: our companion (docs/adr/0010-followers.md): "companion stay", "companion ask"...
+  ["companion", "companion"], ["begleiter", "companion"],
 ];
 
 /** Ours, on top: shorthands players are used to. */
@@ -58,7 +60,7 @@ const EXTRA_WORDS: Record<string, CommandId> = { em: "emote", bc: "broadcast", t
 /** Commands whose words after the name mean something; the others only count typed alone (our default). */
 const TAKES_WORDS = new Set<CommandId>([
   "say", "broadcast", "emote", "yell", "tell", "tellguild", "appeal", "cast", "addgroup", "delgroup", "newgroup", "alias",
-  "cmdalias", "deposit", "withdraw", "study",
+  "cmdalias", "deposit", "withdraw", "study", "companion",
 ]);
 
 export interface ParsedCommand {

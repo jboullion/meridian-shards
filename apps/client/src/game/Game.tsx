@@ -18,6 +18,7 @@ import { getSettings } from "./settings.ts";
 import { filterIncoming, loadProfanity } from "./profanity.ts";
 import { IconRenderer } from "./icons.ts";
 import { QuestStore } from "./quests.ts";
+import { CompanionStore } from "./companion.ts";
 import { ConnectingScreen, LoginScreen, rememberName } from "./LoginScreen.tsx";
 
 /** A tiny event relay: session events that arrive before (or without) a listener are dropped. */
@@ -49,6 +50,8 @@ interface Live {
    */
   quests: QuestStore;
   questOffers: Relay<Extract<QuestEvent, { type: "offers" }>>;
+  /** Ours (docs/adr/0010-followers.md): our companion, kept from its first status at logon */
+  companion: CompanionStore;
   offers: Relay<OfferEvent>;
   looks: Relay<LookResult>;
   contents: Relay<ContainerContents>;
@@ -184,6 +187,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     let speak: (text: string) => void = () => {};
     const quests = new QuestStore(assets, (text) => speak(text));
     const questOffers = new Relay<Extract<QuestEvent, { type: "offers" }>>();
+    const companion = new CompanionStore();
     const offers = new Relay<OfferEvent>();
     const looks = new Relay<LookResult>();
     const contents = new Relay<ContainerContents>();
@@ -219,7 +223,11 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
           quickstart.current = false;
           setError(e);
         },
-        charInfo: (info) => setCreating((c) => (c ? { ...c, info } : c)),
+        charInfo: (info) => {
+          setCreating((c) => (c ? { ...c, info } : c));
+          // Ours: in game, for the companion's looks
+          companion.setCharInfo(info);
+        },
         chat: (line) => {
           const self = s.world.self;
           const tell = line.sayType === SAY.GROUP && line.sender && line.sender.id !== s.world.player?.id;
@@ -247,6 +255,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
         travel: travel.emit,
         social: social.emit,
         quest: (e) => (e.type === "offers" ? questOffers.emit(e) : quests.handle(e)),
+        companion: (e) => companion.handle(e),
         offer: offers.emit,
         sound: (e) => audio.handle(e),
         damageDealt: damage.emit,
@@ -258,7 +267,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     s.setLanguage(getSettings().language);
     void loadProfanity(assets);
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, quests, questOffers, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, quests, questOffers, companion, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
   };
 
   const logout = () => {
@@ -362,6 +371,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       socialEvents={live.social.on}
       quests={live.quests}
       questOffers={live.questOffers.on}
+      companion={live.companion}
       offers={live.offers.on}
       phase={phase}
       chat={chat}

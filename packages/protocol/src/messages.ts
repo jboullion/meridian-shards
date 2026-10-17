@@ -781,6 +781,8 @@ export const UC = {
   SHARDS: 100, TRAVEL_LIST: 101, PVP_UNTIL: 102, FRIENDS: 103, PETS: 104, AMBIENT: 105,
   // Ours (docs/adr/0009-quests.md 3): quests (shards-server util/questbook.kod)
   QUEST_OFFERS: 106, QUEST_LOG: 107, QUEST_PROGRESS: 108,
+  // Ours (docs/adr/0010-followers.md): our companion (shards-server util/companionbook.kod)
+  COMPANION: 109,
 } as const;
 
 /**

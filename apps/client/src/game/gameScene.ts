@@ -445,6 +445,8 @@ export class GameScene {
    */
   ownPet: PetChoice | null = null;
   ownName = "";
+  /** Ours (docs/adr/0010-followers.md 9.4): our companion, for its health under its name */
+  companion: { id: number; hpPct: number } | null = null;
   private pets: Pets | null = null;
   private petsRoom = "";
   private petNamePool: HTMLDivElement[] = [];
@@ -2311,7 +2313,18 @@ export class GameScene {
       // Ours (docs/adr/0005-friends.md 5): a friend's name in the friends colour, their health under it
       const friend = this.social?.friends.options.healthBars ? this.social.friendIds.get(l.id) : undefined;
       el.className = `name-label${l.id === this.hovered ? " hovered" : ""}${l.id === this.target ? " target" : ""}${friend ? " friend" : ""}`;
-      if (friend) {
+      // Ours: our companion's health under its name, as a friend's
+      const comp = this.companion && this.companion.id === l.id ? this.companion : null;
+      if (comp && !friend) {
+        const width = Math.max(FRIEND_BAR_MIN, Math.min(FRIEND_BAR_WIDTH, FRIEND_BAR_WIDTH / Math.max(1, l.position.distanceTo(eye))));
+        if (el.children.length !== 2) el.replaceChildren(document.createElement("span"), document.createElement("i"));
+        const [name, bar] = [el.children[0] as HTMLElement, el.children[1] as HTMLElement];
+        if (name.textContent !== l.name) name.textContent = l.name;
+        bar.className = "companion-hp";
+        bar.style.width = `${Math.round(width)}px`;
+        bar.style.setProperty("--hp", `${comp.hpPct}%`);
+        el.style.color = l.color;
+      } else if (friend) {
         const hp = this.social!.friends.healthOf(friend.key);
         // Smaller further off, as the sprite is
         const width = Math.max(FRIEND_BAR_MIN, Math.min(FRIEND_BAR_WIDTH, FRIEND_BAR_WIDTH / Math.max(1, l.position.distanceTo(eye))));
@@ -2971,6 +2984,7 @@ export class GameScene {
       case "quickEmotes":
       case "friends":
       case "pets":
+      case "companion":
       case "who":
       case "offer":
       case "buy":

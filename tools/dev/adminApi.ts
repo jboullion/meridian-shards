@@ -8,6 +8,7 @@
 //   POST /__admin/tuning/save    { values: { <table id>: { <key>: number } } } -> { written }
 //   POST /__admin/travel/here    { playerId } -> where they stand, and the room's travel points
 //   /__admin/quests/...          the quests (tools/dev/questApi.ts)
+//   /__admin/companions/...      trying companions out (tools/dev/companionApi.ts)
 //   /__admin/sprites/...         the sprite editor's files (tools/dev/spriteApi.ts)
 //   POST /__admin/travel/move    { playerId, id, part: "portal" | "arrival" } -> point id moved there:
 //                                travelnet.kod rewritten, the Kod built, reload system, and for
@@ -29,6 +30,7 @@ import { descendants, lookup, readClasses } from "../assets/kodClasses.ts";
 import type { KodFile } from "../assets/roomLinks.ts";
 import { maint } from "../maint/maintClient.ts";
 import { questApi } from "./questApi.ts";
+import { companionApi } from "./companionApi.ts";
 import { spriteApi } from "./spriteApi.ts";
 import { movePoint, nearestAngle, readHistoricLinks, readPoints, readRids, strayLines, withLinks, type TravelPoint } from "./travelPoints.ts";
 
@@ -272,6 +274,7 @@ export function adminApi(server: ViteDevServer): void {
   );
   server.middlewares.use("/__admin/catalog", route(async () => catalog()));
   questApi(server, { buildKod, standing: travelHere }, route, body);
+  companionApi(server, route, body);
   spriteApi(server, { buildKod, route, body });
   server.middlewares.use(
     "/__admin/kod/build",

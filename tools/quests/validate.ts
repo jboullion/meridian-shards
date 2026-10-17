@@ -8,7 +8,7 @@ import { classOf, iconOf, isItem, isMonster, isNpc, isNumberItem, isSpell, nameO
 
 /** QuestBook's step kinds (questbook.kod QK_*) */
 export const KIND_NUM: Record<StepKind, number> = {
-  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13,
+  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14,
 };
 
 /** The faction a quest needs, as QuestBook reads it: the FACTION_ number, -1 any but neutral, $ none */
@@ -305,7 +305,9 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
                               ? `Reach ${amount} health`
                               : s.kind === "hometown"
                                 ? "Choose a hometown"
-                                : "Bond with every mana node");
+                                : s.kind === "companion"
+                                  ? "Take a companion into your service"
+                                  : "Bond with every mana node");
       kodText(objective, `${where}: objective`, errs);
       if (s.parcel) kodText(s.parcel, `${where}: parcel`, errs);
       if (s.brief) clientText(s.brief, `${where}: brief`, errs);

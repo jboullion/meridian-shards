@@ -94,6 +94,16 @@ Friends, following and health bars ([ADR 0005](adr/0005-friends.md), kept by our
 | Walking to a friend in another room | Following starts only in the same room (ADR 0005 4.7). |
 | Pet colours | [ADR 0006](adr/0006-pets.md) 6.4: every pet kind is in its own colours; recoloured ones come once each is looked at in the game. |
 
+## Companions (ours)
+
+Companions ([ADR 0010](adr/0010-followers.md)) have no counterpart in the original. The four fighting kinds are built; what's left:
+
+| What | What it needs |
+|---|---|
+| The casters' companions | Shal'ille's healer, Qor's dark caster, Faren's mage, Riija's illusionist, Jala's bard: monsters that heal and buff their allies, which Kod's monsters can't do yet. |
+| Restore Companion's icon | It borrows Raise Dead's (`irasdead.bgf`) until it has its own. |
+| A whole-figure preview | The looks dialog shows the face, not the figure in its colours (ADR 0010 9.3). |
+
 ## Deliberately different or left out
 
 | What | Why |

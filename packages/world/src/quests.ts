@@ -14,7 +14,7 @@ export interface CatalogNpc {
   rooms: { rid: number; name: string }[];
 }
 
-export type QuestStepKind = "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes";
+export type QuestStepKind = "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion";
 
 /** How a quest's markers look: gold (main and levelling chains), silver (story), bronze (errands) */
 export type QuestTier = "main" | "story" | "errand";

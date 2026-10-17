@@ -24,6 +24,7 @@ export * from "./social/follow.ts";
 export * from "./ambient/ambientStepper.ts";
 export * from "./pets.ts";
 export * from "./quests.ts";
+export * from "./companion.ts";
 export * from "./questWay.ts";
 export * from "./ambient/names.ts";
 export * from "./arena/arenaData.ts";

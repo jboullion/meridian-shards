@@ -1,6 +1,6 @@
-# ADR 0010: Followers
+# ADR 0010: Companions (proposed as Followers)
 
-- **Status:** proposed, 2026-10-15. Not built. A big Kod change, like [ADR 0008](0008-player-homes.md) and [ADR 0009](0009-quests.md), using 0009's channel: hidden spoken `#` commands from our client, `BP_USERCOMMAND` `UC_*` packets back.
+- **Status:** accepted 2026-10-17 and built the same day for the fighting kinds (the Duke's, the Princess's, the rebels' and Kraanan's); the casters are still to do. Built under the name **Companion**, since "follow" already means following a friend (ADR 0005). See "As built" at the end, which overrides the sections above where they differ. Proposed 2026-10-15. A big Kod change, like [ADR 0008](0008-player-homes.md) and [ADR 0009](0009-quests.md), using 0009's channel: hidden spoken `#` commands from our client, `BP_USERCOMMAND` `UC_*` packets back.
   - Changed 2026-10-15 ([ADR 0015](0015-social-on-our-server.md)): our client sends its `#` commands as `UC_SHARDS` lines, the same words without the `#`, instead of speaking them. Nothing is spoken, so there are no lines to hide.
 
 ## Context
@@ -279,3 +279,36 @@ The user decided these on 2026-10-15:
   - `docs/admin-console.md` (granting, reviving and removing a follower)
   - `docs/research/protocol.md` (`UC_FOLLOWER_*`)
   - the website's wiki
+
+## As built (2026-10-17)
+
+**Decided with the user on 2026-10-17:**
+- **Scope:** everything above, with the fighting kinds only: the Duke's soldier, the Princess's knight, the rebels' fencer and Kraanan's warrior-priest. The casters (Shal'ille, Qor, Faren, Riija, Jala) come later: monsters can't heal or buff allies today.
+- **The name:** Companion everywhere (Kod, commands, packets, the tab). The file keeps its name, as code comments point at it.
+- **A school's standing (2.1):** the disciple quest done: QuestBook 82 for Kraanan, or the old `QST_ID_KRAANAN_DISCIPLE` (`HasDoneReplacing`).
+- **A refused room (4.1):** the companion steps out to limbo, its owner is told it was left behind, and it rejoins them in the next room that will have it (not "waits by the door").
+- **Aggro:** aggressive monsters attack companions as they attack players (`Brain.GetHatred`).
+- **Leaving a faction:** the companion keeps serving; the faction only matters when asking.
+
+**Kod** (shards-server):
+- `util/companionkinds.kod` (`CompanionKinds`): per kind its leader, hall, faction, names, damage, five gear tiers, faction shield and palette; the bond tiers and their bonuses. `util/companionbook.kod` (`CompanionBook is CompanionKinds`, `SYS@GetCompanionBook`): the commands, asking, placing, scaling, the bond, death, dismissal, looks, the client packets and the admin messages. It keeps no state of its own.
+- `battler/monster/human/companion.kod` (`Companion is Human`): its owner (`poSworn`), kind, state, stance, ready time, name, colours, gear tier. `GetObjectFlags` per viewer: never attackable by its owner, who gets `OF_BUYABLE | OF_OFFERABLE` (the vault windows). It answers `GetFaction` with its kind's faction, so it can wear that faction's soldier shield. `Killed` is a full override (no treasure, no quest credit); `CanPlayerAdvanceOnMe` is FALSE (no XP from killing one).
+- `object/passive/body/compcorp.kod` (`CompanionCorpse`, 10 minutes) and `spell/restcomp.kod` (`RestoreCompanion`, SID 203, Shal'ille level 4, 2 emeralds and 2 elderberries, sold by Shal'ille's priestess; the Raise Dead icon for now).
+- **States:** active (with its owner, or in limbo while they're away or it was left behind), waiting (dismissed, at its hall), fallen (in limbo while its corpse lasts), recovering (at its hall). **Stances:** follow, defend (only `CommandMinionAttack(#defend=TRUE)`, from `Player.AssessDamage`), stay, passive.
+- **Numbers** (blakston.khd `COMPANION_*`): health 70% of its owner's base health, fighting 85%, each raised by the bond tier's 0/3/7/11/15%; bond 1 a minute together and 3 a shared kill of a monster at least 2/3 its owner's level (at most 120 kill points an hour), tiers at 0/300/1000/2500/5000; the corpse 10 minutes, then an hour at its hall or 25 shillings per point of its owner's health; 50 health to ask.
+- **Hooks:** `User` (properties, logon, logoff, `NewOwner`, `KilledSomething`, `Delete`, the `companion` verb), `Player` (`GainBaseMaxHealth`, `CommandMinionAttack`), `Battler` (minion count and `RemoveAllMinions` skip companions), `Monster` (`SomethingLeft`'s `abs()`, defaults), `Human` (`prBeard`), monster rooms' counts, `Room.AllowsCompanion` (not arenas, the Underworld or survival rooms), `Brain.GetHatred`, heal (the caster's or their group's companion), animate (refuses its corpse).
+- **Guide quests:** a `companion` step kind (`QK_COMPANION` 14, done while the player has one) and four quests, ids 240-243 (`companion-duke`, `-princess`, `-rebel`, `-kraanan`), band 50, from each leader to their faction's members and from Kraanan's priestess to her disciples.
+
+**The commands and the packet:** `companion status | ask | follow | defend | stay | passive | dismiss | dismiss forever [confirm] | come | pay | look <10 positions>` over `UC_SHARDS`; `UC_COMPANION` (109) back, a status or a health update ([protocol.md](../research/protocol.md), "Ours"). Looks travel as places in `BP_CHARINFO`'s lists, not resource ids: Kod can't turn a number into a resource.
+
+**Our client:**
+- `packages/world/src/companion.ts` (tested): `readCompanion`, `buildLookCommand`. `game/companion.ts` (`CompanionStore`): the status from logon, and the creator's lists once asked for in game.
+- `ui/CompanionPanel.tsx`: the Companion tab beside Pets (key C, settings version 14 unless C was taken): portrait, name, kind, health and bond bars, where it is, stances, Give and Take (the Deposit and Withdraw windows), Appearance…, Dismiss, Fetch or Call back, Pay, Dismiss forever with a confirm; Ask when there's none.
+- `ui/AppearanceEditor.tsx`: the character creator's Appearance page as a component, used by the creator and by `ui/CompanionLooksDialog.tsx`, which adds the shirt and legs colours from its kind's palette. The preview is the face, not the whole figure.
+- In the world: its health bar under its name; our own companion is never targeted (the server's per-viewer flags); typed `deposit` and `withdraw` prefer a banker or trader to it.
+
+**The admin dashboard's Companions tab** (`apps/client/src/admin/CompanionsTab.tsx`, `tools/dev/companionApi.ts`): give yourself one of any kind, set the bond or jump to a tier, bring it here, kill, revive, recover now, remove. **Test script:** `tools/headless/companion.ts`.
+
+**Tried on our server:** getting one (by Ask's checks and by the dashboard), following through exits and teleports, logoff and logon, death, the corpse and Restore Companion, recovering at the hall, both dismissals, every kind's gear at every tier (shields included), the pack's Give and Take, the looks by command and from the dialog, the tab, the C key, the guide quest's step. **Not yet tried:** its health bar over its head in the browser, PvP with a second player, Ask's faction and disciple refusals with a 50-health character.
+
+**Still to do:** the casters (5 more kinds), the website's wiki page, Restore Companion's own icon, a whole-figure preview in the looks dialog.

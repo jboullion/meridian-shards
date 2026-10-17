@@ -17,7 +17,7 @@ describe("settings", () => {
 
   it("migrates version 2 settings: one mouse speed, right click looks", () => {
     const s = migrate({ version: 2, preset: "modern", mouseSpeed: 2, rightClickLooks: true, musicVolume: 40 } as never);
-    expect(s.version).toBe(13);
+    expect(s.version).toBe(14);
     expect(s.mouseXScale).toBe(30);
     expect(s.mouseYScale).toBe(30);
     expect(s.keys.examine).toEqual([{ code: "Mouse1" }]);
@@ -52,6 +52,12 @@ describe("settings", () => {
     expect(migrate({ version: 12, preset: "modern" } as never).keys.pets).toEqual([{ code: "KeyN" }]);
     expect(migrate({ version: 12, preset: "modern", keys: { map: [{ code: "KeyN" }] } } as never).keys.pets).toEqual([]);
     expect(DEFAULT_SETTINGS.showPets && DEFAULT_SETTINGS.showPetNames).toBe(true);
+  });
+
+  it("Companion on C (version 14), unless C was already taken", () => {
+    expect(migrate({ version: 13, preset: "modern" } as never).keys.companion).toEqual([{ code: "KeyC" }]);
+    expect(migrate({ version: 13, preset: "modern", keys: { map: [{ code: "KeyC" }] } } as never).keys.companion).toEqual([]);
+    expect(migrate({ version: 13, preset: "original" } as never).keys.companion).toEqual([]);
   });
 
   it("Enhanced Lighting on by default; the test builds' graphics options are dropped", () => {

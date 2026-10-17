@@ -19,6 +19,7 @@ import { formatServerMessage, parseMarkup, type TextSpan } from "./text.ts";
 import { messageChannel, type ChatChannel } from "./chatChannel.ts";
 import { readDamageDealt, type DamageDealt } from "./combatHit.ts";
 import { readSpellRefusal, type SpellRefusal } from "./spellRefusal.ts";
+import { readCompanion, type CompanionEvent } from "./companion.ts";
 
 /** A line for the chat window, with the original client's default colour for its kind. */
 /**
@@ -268,6 +269,8 @@ export interface SessionEvents {
   social?: (e: SocialEvent) => void;
   /** Ours: quests, from our server (docs/adr/0009-quests.md) */
   quest?: (e: QuestEvent) => void;
+  /** Ours: our companion, from our server (docs/adr/0010-followers.md) */
+  companion?: (e: CompanionEvent) => void;
   offer?: (e: OfferEvent) => void;
   sound?: (e: SoundEvent) => void;
   /** We hurt something, and by how much (combatHit.ts: for damage numbers over its head) */
@@ -1061,6 +1064,10 @@ export class GameSession {
           } else if (uc === UC.QUEST_PROGRESS) {
             // Ours (questbook.kod SendProgress)
             this.events.quest?.({ type: "progress", id: r.u32(), step: r.u8(), count: r.u16() });
+          } else if (uc === UC.COMPANION) {
+            // Ours (companionbook.kod SendStatus, HealthChanged)
+            const e = readCompanion(r, (id) => this.resource(id));
+            if (e) this.events.companion?.(e);
           } else if (uc === UC.FRIENDS || uc === UC.PETS || uc === UC.AMBIENT) {
             // Ours (shards-server util/shardssocial.kod)
             const e = this.readSocial(uc, r);

@@ -6,6 +6,9 @@ import {
   type SocialEvent, type TradeList, type TravelEvent, type TravelPlace, petForKarma, petKind, type AmbientPersonInfo, type QuestEvent, type QuestOffer,
 } from "@shards/world";
 import type { QuestStore } from "./quests.ts";
+import { useCompanion, type CompanionStore } from "./companion.ts";
+import { CompanionPanel } from "./ui/CompanionPanel.tsx";
+import { CompanionLooksDialog } from "./ui/CompanionLooksDialog.tsx";
 import { QuestWays } from "./questWays.ts";
 import { MM_QUEST_NPC } from "./markers.ts";
 import { QuestDialog } from "./ui/QuestDialog.tsx";
@@ -162,6 +165,8 @@ type Modal =
   | { type: "travel"; here: number; places: TravelPlace[] }
   | { type: "quest"; npc: number; offers: QuestOffer[] }
   | { type: "give"; kind: "offer" | "deposit"; target: { id: number; name: string } }
+  // Ours (docs/adr/0010-followers.md 9.3): our companion's looks
+  | { type: "companionLooks" }
   | { type: "amount"; object: ObjectInfo }
   | { type: "suicide" }
   | { type: "quickSlot"; index: number }
@@ -189,7 +194,7 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, companion, offers, serverPrefs, latency,
 }: {
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
@@ -233,6 +238,8 @@ export function GameView({
   /** Ours: our quests, and what an NPC we talked to has for us (docs/adr/0009-quests.md) */
   quests: QuestStore;
   questOffers: (fn: (e: Extract<QuestEvent, { type: "offers" }>) => void) => () => void;
+  /** Ours: our companion (docs/adr/0010-followers.md) */
+  companion: CompanionStore;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
@@ -685,6 +692,30 @@ export function GameView({
   const questWays = useMemo(() => new QuestWays(assets, quests), [assets, quests]);
   const getWay = useCallback(() => questWays.get(sceneRef.current?.roomFile ?? ""), [questWays]);
   const questsPanel = <QuestsPanel store={quests} session={session} maxHealth={petStats.maxHealth} />;
+  // Ours (docs/adr/0010-followers.md 9.2): the Companion tab
+  const companionVersion = useCompanion(companion);
+  // ...and its health under its name (gameScene.ts drawLabels)
+  useEffect(() => {
+    const scene = sceneRef.current;
+    const s = companion.status;
+    if (scene) scene.companion = s && s.id ? { id: s.id, hpPct: s.maxHp ? Math.round((100 * s.hp) / s.maxHp) : 0 } : null;
+  }, [companion, companionVersion, status]);
+  const comp = companion.status;
+  const compObject = comp?.id ? (session.world.objects.get(comp.id)?.info ?? null) : null;
+  const companionPanel = (
+    <CompanionPanel
+      status={comp}
+      icons={icons}
+      object={compObject}
+      onCommand={(line) => session.shardsCommand(line)}
+      onGive={() => comp?.id && setModal({ type: "give", kind: "deposit", target: { id: comp.id, name: comp.name } })}
+      onTake={() => comp?.id && session.requestWithdrawal(comp.id)}
+      onLooks={() => {
+        if (!companion.charInfo) session.requestCharInfo();
+        setModal({ type: "companionLooks" });
+      }}
+    />
+  );
   const petsPanel = (
     <PetsPanel
       key={pet.name}
@@ -1101,13 +1132,20 @@ export function GameView({
   /** gameuser.c GetObjects3D(CLOSE_DISTANCE, flag): the nearest object with the flag. */
   const nearest = (flag: number) => {
     const self = session.world.self;
+    // Ours: our companion answers Deposit and Withdraw too (docs/adr/0010-followers.md 9.4); a
+    // banker or trader near us comes first, and the companion only when there's nobody else
+    const compId = companion.status?.id ?? 0;
     let best: { id: number; d: number } | null = null;
+    let comp: { id: number; d: number } | null = null;
     for (const o of session.world.objects.values()) {
       if (!self || o.id === self.id || !(o.info.flags & flag)) continue;
       const d = Math.hypot(o.x - self.x, o.y - self.y);
-      if (d <= CLOSE_DISTANCE && (!best || d < best.d)) best = { id: o.id, d };
+      if (d > CLOSE_DISTANCE) continue;
+      if (o.id === compId) comp = { id: o.id, d };
+      else if (!best || d < best.d) best = { id: o.id, d };
     }
-    return best ? session.world.objects.get(best.id)! : null;
+    const pick = best ?? comp;
+    return pick ? session.world.objects.get(pick.id)! : null;
   };
 
   /** Keys and typed commands that open panels and dialogs or talk to traders. */
@@ -1139,6 +1177,7 @@ export function GameView({
         return setEmoteMenu((v) => !v);
       case "friends":
       case "pets":
+      case "companion":
         // Ours: tabs beside the inventory's; the key opens and closes the character window on its tab
         return openTab(a, true);
       case "who":
@@ -1573,6 +1612,9 @@ export function GameView({
         return setModal({ type: "password" });
       case "time":
         return session.userCommand(UC.REQ_TIME);
+      case "companion":
+        // Ours: our companion's commands (companionbook.kod CompanionCommand); alone, its status
+        return session.shardsCommand(`companion ${args || "status"}`);
       case "map":
         return setFullMap((v) => !v);
       case "get":
@@ -2172,6 +2214,7 @@ export function GameView({
                 friendsPanel={friendsPanel}
                 petsPanel={petsPanel}
                 questsPanel={questsPanel}
+                companionPanel={companionPanel}
                 onStudy={studyButton}
                 studying={!!studying}
               />
@@ -2260,6 +2303,15 @@ export function GameView({
         )}
         {modal?.type === "quest" && (
           <QuestDialog key={`${modal.npc}:${modal.offers.map((o) => `${o.id}.${o.state}.${o.step}`).join(",")}`} npc={modal.npc} offers={modal.offers} store={quests} session={session} onClose={() => setModal(null)} />
+        )}
+        {modal?.type === "companionLooks" && comp && (
+          <CompanionLooksDialog
+            status={comp}
+            info={companion.charInfo}
+            icons={icons}
+            onCommand={(line) => session.shardsCommand(line)}
+            onClose={() => setModal(null)}
+          />
         )}
         {modal?.type === "give" && (
           <GiveDialog kind={modal.kind} target={modal.target} session={session} icons={icons} onClose={() => setModal(null)} />
@@ -2569,6 +2621,7 @@ export function GameView({
           friendsPanel={friendsPanel}
           petsPanel={petsPanel}
           questsPanel={questsPanel}
+          companionPanel={companionPanel}
           onStudy={studyButton}
           studying={!!studying}
           onEmotes={toggleEmotes}

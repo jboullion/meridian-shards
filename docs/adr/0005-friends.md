@@ -1,6 +1,7 @@
 # ADR 0005: Friends, a relay of our own, and shared ambient life
 
 - **Status:** accepted, 2026-10-12. Parts 1-5 (the relay, keys, the Friends window, follow, health bars: section 7 steps 1-4) built 2026-10-12, and shared ambient life (6) the same day, simplified as below. See "As built" at the end. The arena's fights are no longer shared by seed (6): since [ADR 0007](0007-arena.md) the relay runs one arena for everyone on a server. **Superseded in part, 2026-10-16:** friends, presence, following, health and the shared crowd moved onto our server, and the relay, keys and pairing tell are gone ([ADR 0015](0015-social-on-our-server.md), "As built"). What friends do is unchanged; how it's carried is 0015's.
+  - Note 2026-10-17: "follow" and "followers" here still mean following a friend. The monsters that fight beside a player ([ADR 0010](0010-followers.md)) were built as **companions** so the words don't clash.
 
 ## Context
 

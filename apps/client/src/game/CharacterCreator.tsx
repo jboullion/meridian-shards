@@ -2,22 +2,22 @@
 // charspel.c, charskil.c). Five tabs like the original's "Customize your character":
 //   Name: 3 to 30 legal characters, and a description
 //   Appearance: gender, hair, eyes, nose, mouth, hair colour and skin colour, with the face
-//     drawn from the server's parts (head plus overlays on hotspots 12, 11, 14, 13)
+//     drawn from the server's parts (ui/AppearanceEditor.tsx, shared with the companion's looks)
 //   Statistics: six stats from 1 to 50, starting at 25, with 70 points to spend
 //   Spells and Skills: 45 points shared; Shal'ille and Qor spells can't be mixed
 // OK sends BP_NEW_CHARINFO; the server answers CHARINFO_OK or CHARINFO_NOT_OK.
 // Drawn as the property sheet (charmake.c MakeChar) with each page laid out from its char.rc
 // template, in dialog units, with the Meridian dialog kit.
 
-import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { ANIMATE, GENDER, type CharInfo, type CreatorChoice } from "@shards/protocol";
+import { Fragment, useState, type ReactNode } from "react";
+import { GENDER, type CharInfo, type CreatorChoice } from "@shards/protocol";
 import type { GameSession } from "@shards/world";
 import type { IconRenderer } from "./icons.ts";
 import {
-  Backdrop, Button, Check, Fixed, FlowPage, FlowText, GraphBar, GroupBox, ListBox, MessageBox, Spacer, Tabs, Text, TextArea, TextField, Trackbar, Window, at,
+  Backdrop, Button, Fixed, FlowPage, FlowText, GraphBar, GroupBox, ListBox, MessageBox, Spacer, Tabs, Text, TextArea, TextField, Window, at,
   type Rect,
 } from "./ui/kit.tsx";
-import { ObjIcon } from "./ui/Sidebar.tsx";
+import { AppearanceEditor, facePicks, randomFace } from "./ui/AppearanceEditor.tsx";
 
 const TABS = ["Name", "Appearance", "Statistics", "Spells", "Skills"] as const;
 type TabName = (typeof TABS)[number];
@@ -64,12 +64,8 @@ const SCHOOLS: Record<number, string> = {
 };
 const SS_SHALILLE = 1,
   SS_QOR = 2;
-/** charface.c: hotspots for the mouth, eyes, nose and hair */
-const HS = { mouth: 12, eyes: 11, nose: 14, hair: 13 };
 /** charname.c legal_chars (the Latin-1 letters at the end are accented letters) */
 const LEGAL_NAME = /^[A-Za-z0-9_ '!@$^&*()+=:[\]{};/?|<>À-ÿ]+$/;
-
-const rand = (n: number) => Math.floor(Math.random() * n);
 
 /** charname.c VerifyCharName: trimmed, 3..30 characters, legal characters only. */
 export function verifyCharName(name: string): string | null {
@@ -100,15 +96,6 @@ export function StatRows({ stats, onChange }: { stats: readonly number[]; onChan
   );
 }
 
-/** A right-aligned label (the .rc LTEXTs that end at their control). */
-function Label({ at: r, children }: { at: Rect; children: ReactNode }) {
-  return (
-    <Text at={r} className="right">
-      {children}
-    </Text>
-  );
-}
-
 export function CharacterCreator({
   info, slotId, session, icons, error, onCancel, onClearError,
 }: {
@@ -125,16 +112,7 @@ export function CharacterCreator({
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   // charface.c CharFaceInit: random starting looks
-  const [face, setFace] = useState(() => {
-    const gender = rand(2);
-    const p = info.parts[gender];
-    return {
-      gender, hair: rand(p.hair.length), eyes: rand(p.eyes.length), nose: rand(p.noses.length), mouth: rand(p.mouths.length),
-      hairT: rand(info.hairTranslations.length), faceT: rand(info.faceTranslations.length),
-      // Ours: facial hair starts as none (0); 1.. picks parts.beards[n - 1]
-      beard: 0,
-    };
-  });
+  const [face, setFace] = useState(() => randomFace(info));
   const [stats, setStats] = useState<number[]>(() => STAT_NAMES.map(() => STAT_START));
   const [spells, setSpells] = useState<number[]>([]);
   const [skills, setSkills] = useState<number[]>([]);
@@ -142,38 +120,7 @@ export function CharacterCreator({
   const [confirm, setConfirm] = useState<{ text: string; statsOk: boolean } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
-  const parts = info.parts[face.gender];
-  // CharRecomputeFace: keep choices in range when the gender changes
-  const pick = (i: number, n: number) => (n ? ((i % n) + n) % n : 0);
-  const sel = {
-    hair: parts.hair[pick(face.hair, parts.hair.length)],
-    eyes: parts.eyes[pick(face.eyes, parts.eyes.length)],
-    nose: parts.noses[pick(face.nose, parts.noses.length)],
-    mouth: parts.mouths[pick(face.mouth, parts.mouths.length)],
-    // Ours: none, or one of the server's facial hair choices
-    beard: (() => {
-      const i = pick(face.beard, parts.beards.length + 1);
-      return i === 0 ? 0 : parts.beards[i - 1];
-    })(),
-  };
-  const hairT = info.hairTranslations[pick(face.hairT, info.hairTranslations.length)] ?? 0;
-  const faceT = info.faceTranslations[face.faceT] ?? 0;
-  const none = { type: ANIMATE.NONE, group: 1 };
-  const faceObject = useMemo(
-    () => ({
-      iconRes: parts.head, animation: none, translation: faceT,
-      overlays: [
-        { iconRes: sel.mouth, hotspot: HS.mouth, translation: faceT, effect: 0, animation: none },
-        { iconRes: sel.eyes, hotspot: HS.eyes, translation: faceT, effect: 0, animation: none },
-        { iconRes: sel.nose, hotspot: HS.nose, translation: faceT, effect: 0, animation: none },
-        // Ours (player.kod SendOverlays): facial hair on the mouth's hotspot, in the hair colour
-        ...(sel.beard ? [{ iconRes: sel.beard, hotspot: HS.mouth, translation: hairT, effect: 0, animation: none }] : []),
-        { iconRes: sel.hair, hotspot: HS.hair, translation: hairT, effect: 0, animation: none },
-      ],
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [parts.head, sel.mouth, sel.eyes, sel.nose, sel.hair, sel.beard, faceT, hairT],
-  );
+  const sel = facePicks(info, face);
 
   const statPoints = STAT_POINTS - stats.reduce((a, v) => a + (v - STAT_START), 0);
   const costOf = (list: CreatorChoice[], ids: number[]) => ids.reduce((a, id) => a + (list.find((c) => c.id === id)?.cost ?? 0), 0);
@@ -201,8 +148,6 @@ export function CharacterCreator({
     setStats(stats.map((s, j) => (j === i ? next : s)));
   };
 
-  const step = (key: "hair" | "eyes" | "nose" | "mouth" | "beard" | "hairT", d: number) => setFace({ ...face, [key]: face[key] + d });
-
   /** charmake.c VerifySettings, then BP_NEW_CHARINFO */
   const done = (statsOk = false, spellsOk = false) => {
     const n = verifyCharName(name);
@@ -222,8 +167,8 @@ export function CharacterCreator({
     session.createCharacter({
       id: slotId, name: n, description: desc, gender: face.gender === 0 ? GENDER.MALE : GENDER.FEMALE,
       // Ours: a 6th part only with facial hair (player.kod PlayerNewCharInfo takes 5 or 6)
-      faceParts: [parts.head, sel.hair, sel.eyes, sel.nose, sel.mouth, ...(sel.beard ? [sel.beard] : [])],
-      hairTranslation: hairT, skinTranslation: faceT, stats, spells, skills,
+      faceParts: [sel.parts.head, sel.hair, sel.eyes, sel.nose, sel.mouth, ...(sel.beard ? [sel.beard] : [])],
+      hairTranslation: sel.hairT, skinTranslation: sel.faceT, stats, spells, skills,
     });
   };
 
@@ -261,50 +206,11 @@ export function CharacterCreator({
       </FlowPage>
     );
   } else if (tab === "Appearance") {
-    // char.rc IDD_CHARAPPEARANCE
-    const arrows = (y: number, text: string, key: "hair" | "eyes" | "nose" | "mouth" | "beard" | "hairT") => (
-      <>
-        <Label at={[140, y + 1, 55, 8]}>{text}</Label>
-        <Button at={[213, y, 17, 11]} onClick={() => step(key, -1)} title={`Previous ${text.slice(0, -1).toLowerCase()}`}>
-          &lt;
-        </Button>
-        <Button at={[230, y, 17, 11]} onClick={() => step(key, 1)} title={`Next ${text.slice(0, -1).toLowerCase()}`}>
-          &gt;
-        </Button>
-      </>
-    );
+    // char.rc IDD_CHARAPPEARANCE (ui/AppearanceEditor.tsx)
     page = (
-      <div style={at(INNER)}>
-        <GroupBox at={[3, 0, 150, 158]} label="Face" />
-        <div className="mk-face" style={at([14, 18, 127, 127])}>
-          <ObjIcon icons={icons} object={faceObject} className="face" />
-        </div>
-        <Text at={[175, 3, 135, 18]} wrap>
-          Choose your character's appearance.
-        </Text>
-        <Label at={[140, 22, 55, 8]}>Gender:</Label>
-        <Check at={[213, 21, 45, 10]} radio name="gender" label="Male" checked={face.gender === 0} onChange={() => setFace({ ...face, gender: 0 })} />
-        <Check at={[263, 21, 45, 10]} radio name="gender" label="Female" checked={face.gender === 1} onChange={() => setFace({ ...face, gender: 1 })} />
-        <Label at={[140, 42, 55, 8]}>Skin color:</Label>
-        <Trackbar
-          at={[213, 35, 90, 15]}
-          label="Skin color"
-          min={0}
-          max={Math.max(0, info.faceTranslations.length - 1)}
-          value={face.faceT}
-          onChange={(v) => setFace({ ...face, faceT: v })}
-        />
-        <Text at={[215, 55, 20, 8]}>Light</Text>
-        <Text at={[287, 55, 20, 8]}>Dark</Text>
-        {/* Ours: rows 13 apart (the original's 15) to fit Beard above Prev / Next */}
-        {arrows(66, "Hair:", "hair")}
-        {arrows(79, "Hair color:", "hairT")}
-        {arrows(92, "Eyes:", "eyes")}
-        {arrows(105, "Nose:", "nose")}
-        {arrows(118, "Mouth:", "mouth")}
-        {parts.beards.length > 0 && arrows(131, "Beard:", "beard")}
+      <AppearanceEditor info={info} face={face} onChange={setFace} icons={icons} at={INNER}>
         {prevNext(146)}
-      </div>
+      </AppearanceEditor>
     );
   } else if (tab === "Statistics") {
     // char.rc IDD_CHARSTATS

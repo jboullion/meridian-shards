@@ -4233,6 +4233,72 @@ canvas.server-wait {
   opacity: 0.4;
 }
 
+/* Ours (docs/adr/0010-followers.md 9.2): the Companion tab */
+.companion-preview {
+  cursor: default;
+}
+
+.companion-preview .obj-icon img {
+  max-width: 80px;
+  max-height: 80px;
+  image-rendering: pixelated;
+}
+
+.companion-kind {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.companion-state {
+  font-size: 12px;
+  color: rgb(120, 240, 150);
+}
+
+.companion-state.s3 {
+  color: rgb(240, 110, 90);
+}
+
+.companion-state.s2,
+.companion-state.s4 {
+  color: rgb(214, 190, 140);
+}
+
+.companion-bar {
+  display: grid;
+  grid-template-columns: 64px 1fr max-content;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.companion-bar i {
+  display: block;
+  height: 8px;
+  border: 1px solid #000;
+  background: linear-gradient(to right, var(--fill) var(--pct, 0%), rgba(10, 10, 10, 0.7) var(--pct, 0%));
+}
+
+.companion-bar .companion-hp {
+  --fill: rgb(40, 190, 70);
+}
+
+.companion-bar .companion-bond {
+  --fill: rgb(214, 170, 60);
+}
+
+.companion-stances button {
+  min-width: 60px;
+}
+
+/* Our companion's health under its name (gameScene.ts drawLabels), as a friend's */
+.name-label .companion-hp {
+  display: block;
+  height: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.85);
+  background: linear-gradient(to right, rgb(214, 170, 60) var(--hp, 0%), rgba(40, 30, 10, 0.75) var(--hp, 0%));
+}
+
 /* Ours: the townsfolk's inspect window (LookDialogs.tsx AmbientPersonDialog) */
 /* Labels as wide as the longest ("Favourite weapon", an arena fighter's), each on one line */
 .ambient-facts {

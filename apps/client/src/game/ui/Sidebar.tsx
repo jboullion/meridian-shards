@@ -30,7 +30,7 @@ export const STAT_HP = 1,
   STAT_XP = 4;
 export const MIN_VIGOR = 10; // statmain.h: below this you can't run; the bar turns red
 
-export type Tab = "inventory" | "stats" | "spells" | "skills" | "quests" | "friends" | "pets";
+export type Tab = "inventory" | "stats" | "spells" | "skills" | "quests" | "friends" | "pets" | "companion";
 /** The tabs: the original's stat groups (stats.c), then ours, drawn with an icon of our own (no group, no bitmap) */
 export const TABS: { tab: Tab; group: number | null; bitmap: string | null; label: string }[] = [
   { tab: "inventory", group: STAT_GROUP.INVENTORY, bitmap: "statbtn_left_invent.bmp", label: "Inventory" },
@@ -41,6 +41,8 @@ export const TABS: { tab: Tab; group: number | null; bitmap: string | null; labe
   // Ours: docs/adr/0005-friends.md and 0006-pets.md
   { tab: "friends", group: null, bitmap: null, label: "Friends" },
   { tab: "pets", group: null, bitmap: null, label: "Pets" },
+  // Ours: docs/adr/0010-followers.md
+  { tab: "companion", group: null, bitmap: null, label: "Companion" },
 ];
 
 /**
@@ -51,6 +53,8 @@ export const TABS: { tab: Tab; group: number | null; bitmap: string | null; labe
 const TAB_ART: Partial<Record<Tab, string>> = {
   friends: "mtlshld.bgf",
   pets: "spdrby.bgf",
+  // The knight's helm, as a soldier at your side
+  companion: "khelm.bgf",
 };
 
 export function ObjIcon({
@@ -264,7 +268,7 @@ export function HudEnchantments({
 
 export function Sidebar({
   session, icons, assets, getRoom, tab, onTab, settings, onLookItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, target, selecting, onSelectObject, onCast,
-  annotations, onAnnotate, friendsPanel, petsPanel, questsPanel, getWay, onStudy, studying, onEmotes,
+  annotations, onAnnotate, friendsPanel, petsPanel, questsPanel, companionPanel, getWay, onStudy, studying, onEmotes,
 }: {
   /** Ours: a click on our face, when not picking a target, shows the Quick Emotes (Q) */
   onEmotes?: () => void;
@@ -278,6 +282,8 @@ export function Sidebar({
   petsPanel: ReactNode;
   /** Ours (docs/adr/0009-quests.md 4): the Quests tab's page, in place of the original's list */
   questsPanel: ReactNode;
+  /** Ours (docs/adr/0010-followers.md 9.2): the Companion tab's page */
+  companionPanel: ReactNode;
   /** The room's map annotations (annotate.c), drawn with Map annotations on */
   annotations: readonly MapAnnotation[];
   /** A right click on the minimap, in room coordinates: add or edit an annotation */
@@ -418,6 +424,8 @@ export function Sidebar({
           friendsPanel
         ) : tab === "pets" ? (
           petsPanel
+        ) : tab === "companion" ? (
+          companionPanel
         ) : tab === "quests" ? (
           questsPanel
         ) : (

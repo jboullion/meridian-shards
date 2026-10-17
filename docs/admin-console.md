@@ -168,6 +168,30 @@ send object <qb> AdminState who object <player>
 
 `AdminReset` with id 0 forgets every quest. `AdminState` returns a list (`show list <n>`): the log (`[id, step, count, deadline]` each) and the quests done (`[id, times, when]`).
 
+### Companions
+
+Ours ([ADR 0010](adr/0010-followers.md)). Players ask a faction leader (or Kraanan's priestess) for one from 50 health; the dashboard skips the rules.
+
+**The dashboard's Companions tab** (`admin.html`, development only), for the character in the game tab:
+- **Give me one** of a kind (the Duke's soldier, the Princess's knight, a rebel fencer, Kraanan's warrior-priest), whatever the rules.
+- **Set bond** to a number, or **Tier 1-5** (bond 0, 300, 1000, 2500, 5000): its health, fighting and gear follow.
+- **Bring here** (from limbo or its hall), **Kill it** (leaves a corpse for Restore Companion for 10 minutes, then it recovers at its leader's hall), **Revive** (back beside you, full health), **Recover now** (ready to fetch at its hall), **Remove** (its pack comes to you; the bond is lost).
+
+**On the maintenance port**, for a player (`<book>` from `send object 0 GetCompanionBook`; each returns 1 or 0):
+
+```text
+send object <book> AdminGrant who object <player> kind int 1
+send object <book> AdminSetBond who object <player> points int 1000
+send object <book> AdminBringHere who object <player>
+send object <book> AdminKill who object <player>
+send object <book> AdminRevive who object <player>
+send object <book> AdminRecoverNow who object <player>
+send object <book> AdminRemove who object <player>
+send object <book> AdminState who object <player>
+```
+
+`AdminState` returns a list (`show list <n>`): state (0 none, 1 with its owner, 2 waiting, 3 fallen, 4 recovering), kind, bond, tier, health, maximum, room number (0 in limbo) and how many things its pack holds.
+
 ### The Debug tab
 
 Admin characters get a **Debug** tab in the chat window, beside Server. It's the client's own log, for tracking things down. For now it lists every sound as it starts:
