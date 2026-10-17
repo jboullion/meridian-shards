@@ -163,6 +163,12 @@ All of these run on the VM, in `~/meridian-shards`:
 
 blakserv saves every 30 minutes (`[Auto] SavePeriod`). Run "save game" before stopping the VM or redeploying.
 
+**Old saves are pruned every hour.** blakserv writes a whole save set each time (`accounts`, `dynarscs`, `gameuser` and `striings`, named by the save's time) and never deletes one: by 2026-10-17 the volume held 474 sets, 1.7 GB. `deploy/prune-saves.sh` keeps the newest 48 (a day's), the last of each day for 14 days, and always the one `lastsave.txt` names; it touches nothing else in the volume (`old-world/`). Cron runs it as root at :17, clear of the saves:
+- Set it up once (done on 2026-10-17): `echo "17 * * * * root sh /home/shards/meridian-shards/deploy/prune-saves.sh >> /var/log/meridian-shards-saves.log 2>&1" | sudo tee /etc/cron.d/meridian-shards-saves`.
+- Each deploy brings the script up to date, as it's in `deploy/`.
+- `sudo DRY_RUN=1 sh deploy/prune-saves.sh` says what it would remove; `KEEP_RECENT` and `KEEP_DAYS` change how much stays. `/var/log/meridian-shards-saves.log` has a line per run.
+- To go further back than 14 days, back the game up (above) and keep the copy off the VM.
+
 **A save the new Kod can't load starts a new world.** If any saved object's class is gone from the Kod, blakserv's `LoadGame` fails. It then starts a fresh world with the old accounts but no characters (`blakserv/loadall.c`), and its next save overwrites the old world.
 - **After Kod changes that remove classes,** try the VM's save on a copy first. Copy the latest `accounts`, `dynarscs`, `gameuser` and `striings` files and `lastsave.txt` into the `savegame/` of a copy of the local run folder. Change its ports, start it, and look for `LoadObject can't find class name` in `channel/error.txt`.
 - **After a fresh start,** give each account its character slots again with `create user <account>`, four each.
