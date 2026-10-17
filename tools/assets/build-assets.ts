@@ -44,6 +44,8 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { buildItemSlots, buildItemTypes } from "./itemSlots.ts";
 import { buildSpellTimes } from "./spellTimes.ts";
+import { generateFrom, readSources } from "../quests/generate.ts";
+import { worldFrom } from "../quests/world.ts";
 import { buildRoomExits, buildRoomLinks, buildRoomList, buildRoomTerrain } from "./roomLinks.ts";
 import { parseRoo } from "../../packages/formats/src/index.ts";
 import { buildNavGrid, encodeNavGrid } from "../../packages/world/src/navGrid.ts";
@@ -242,6 +244,14 @@ if (existsSync(join(KOD, "object")) && existsSync(join(KOD, "include"))) {
   writeFileSync(join(OUT, "spelltimes.json"), times);
   files["spelltimes.json"] = { size: times.length, hash: createHash("sha1").update(times).digest("hex").slice(0, 16), mtime: 0 };
   console.log(`spelltimes.json: ${Object.keys(JSON.parse(times.toString()) as object).length} spells`);
+  // The quest catalogue, for the offer window, the Quests tab and the tracker (ours,
+  // docs/adr/0009-quests.md 6): the same quests server/build.cmd generates the Kod from
+  const quests = generateFrom(readSources(join(SERVER, "quests")), worldFrom(kodFiles, khd));
+  if (quests.errors.length) console.warn(`!! quests.json: ${quests.errors.length} problem(s) (npm run quests says which); left out`);
+  const questJson = Buffer.from(JSON.stringify(quests.errors.length ? { hash: 0, quests: [] } : quests.catalog));
+  writeFileSync(join(OUT, "quests.json"), questJson);
+  files["quests.json"] = { size: questJson.length, hash: createHash("sha1").update(questJson).digest("hex").slice(0, 16), mtime: 0 };
+  console.log(`quests.json: ${quests.quests.length} quests`);
 } else {
   console.warn("!! no Kod source in server/src/kod; the client won't load neighbouring rooms ahead");
 }

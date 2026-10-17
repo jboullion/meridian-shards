@@ -102,5 +102,67 @@ export async function parseBgf(data: Uint8Array, inflate: Inflate = inflateZlib)
   return { name, version, shrink, bitmaps, groups };
 }
 
+export type Deflate = (data: Uint8Array) => Promise<Uint8Array>;
+
+/** zlib (RFC 1950) deflate with the platform CompressionStream (browsers and Node 18+). */
+export const deflateZlib: Deflate = async (data) => {
+  const stream = new Blob([data as BlobPart]).stream().pipeThrough(new CompressionStream("deflate"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+};
+
+/** The inverse of parseBgf (shards-server tools/iconforge/bgf.py to_bytes): pixels are
+ *  always written zlib-compressed and maxIndices is taken from the groups. */
+export async function encodeBgf(bgf: Bgf, deflate: Deflate = deflateZlib): Promise<Uint8Array> {
+  const packed = await Promise.all(
+    bgf.bitmaps.map((b) => {
+      if (b.pixels.length !== b.width * b.height) {
+        throw new Error(`bitmap is ${b.width}x${b.height} but has ${b.pixels.length} pixels`);
+      }
+      return deflate(b.pixels);
+    }),
+  );
+  let size = 4 + 4 + 32 + 16;
+  bgf.bitmaps.forEach((b, i) => (size += 16 + 1 + b.hotspots.length * 9 + 1 + 4 + packed[i].length));
+  for (const g of bgf.groups) size += 4 + g.length * 4;
+
+  const out = new Uint8Array(size);
+  const dv = new DataView(out.buffer);
+  let p = 0;
+  const i32 = (v: number) => {
+    dv.setInt32(p, v, true);
+    p += 4;
+  };
+  out.set([0x42, 0x47, 0x46, 0x11], 0);
+  p = 4;
+  i32(bgf.version || 10);
+  for (let i = 0; i < 31 && i < bgf.name.length; i++) out[p + i] = bgf.name.charCodeAt(i) & 0xff;
+  p += 32;
+  i32(bgf.bitmaps.length);
+  i32(bgf.groups.length);
+  i32(Math.max(0, ...bgf.groups.map((g) => g.length)));
+  i32(bgf.shrink);
+  bgf.bitmaps.forEach((b, i) => {
+    i32(b.width);
+    i32(b.height);
+    i32(b.xOffset);
+    i32(b.yOffset);
+    out[p++] = b.hotspots.length;
+    for (const h of b.hotspots) {
+      dv.setInt8(p++, h.number);
+      i32(h.x);
+      i32(h.y);
+    }
+    out[p++] = 1;
+    i32(packed[i].length);
+    out.set(packed[i], p);
+    p += packed[i].length;
+  });
+  for (const g of bgf.groups) {
+    i32(g.length);
+    for (const idx of g) i32(idx);
+  }
+  return out;
+}
+
 /** Texture file name the client uses for a grid (wall/floor) texture number (GetGridPdib). */
 export const gridTextureName = (id: number): string => `grd${String(id).padStart(5, "0")}.bgf`;

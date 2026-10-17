@@ -15,6 +15,7 @@ import { useAsyncImage, useWorld } from "./hooks.ts";
 import { useKeyedHalves, useKeyedImage } from "./keyed.ts";
 import type { Settings } from "../settings.ts";
 import { MiniMap } from "./MiniMap.tsx";
+import type { MapWay } from "../questWays.ts";
 import type { MapAnnotation } from "../annotations.ts";
 import { DRAG_SPELL } from "../quickSlots.ts";
 import { Button } from "./kit.tsx";
@@ -263,7 +264,7 @@ export function HudEnchantments({
 
 export function Sidebar({
   session, icons, assets, getRoom, tab, onTab, settings, onLookItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, target, selecting, onSelectObject, onCast,
-  annotations, onAnnotate, friendsPanel, petsPanel, onStudy, studying, onEmotes,
+  annotations, onAnnotate, friendsPanel, petsPanel, questsPanel, getWay, onStudy, studying, onEmotes,
 }: {
   /** Ours: a click on our face, when not picking a target, shows the Quick Emotes (Q) */
   onEmotes?: () => void;
@@ -272,7 +273,11 @@ export function Sidebar({
   studying?: boolean;
   /** Ours: the Friends and Pets tabs' pages (GameView makes them) */
   friendsPanel: ReactNode;
+  /** Ours (docs/adr/0009-quests.md 5): tracked quests' areas and the way to them, for the map */
+  getWay?: () => MapWay | null;
   petsPanel: ReactNode;
+  /** Ours (docs/adr/0009-quests.md 4): the Quests tab's page, in place of the original's list */
+  questsPanel: ReactNode;
   /** The room's map annotations (annotate.c), drawn with Map annotations on */
   annotations: readonly MapAnnotation[];
   /** A right click on the minimap, in room coordinates: add or edit an annotation */
@@ -377,6 +382,8 @@ export function Sidebar({
             annotationIcon={assets.url("ui/annotate.bmp")}
             onAnnotate={onAnnotate}
             tooltips={settings.tooltips}
+            questMarkers={settings.questMarkers}
+            getWay={settings.showWay ? getWay : undefined}
           />
         ) : (
           <div className="minimap off" style={{ backgroundImage: `url(${assets.url("ui/mapbkgnd.bmp")})` }} />
@@ -411,6 +418,8 @@ export function Sidebar({
           friendsPanel
         ) : tab === "pets" ? (
           petsPanel
+        ) : tab === "quests" ? (
+          questsPanel
         ) : (
           <StatList
             session={session}

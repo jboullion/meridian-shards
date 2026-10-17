@@ -1,6 +1,6 @@
 # ADR 0009: Quests you can find
 
-- **Status:** proposed, 2026-10-15. Not built. Like [ADR 0008](0008-player-homes.md), it goes well past [ADR 0001](0001-direction.md)'s "Kod changes allowed later but kept minimal", and it uses 0008's spoken command channel (0008 section 8).
+- **Status:** accepted 2026-10-15; build steps 1-6 (10) built 2026-10-16 and 2026-10-17, the QuestEngine switched off, with an admin dashboard tab for making quests; the new guide quests (8) are still to do. See "As built" at the end. Like [ADR 0008](0008-player-homes.md), it goes well past [ADR 0001](0001-direction.md)'s "Kod changes allowed later but kept minimal", and it uses 0008's spoken command channel (0008 section 8).
   - Changed 2026-10-15 ([ADR 0015](0015-social-on-our-server.md)): our client sends its `#` commands as `UC_SHARDS` lines, the same words without the `#`, instead of speaking them. Nothing is spoken, so there are no lines to hide.
 
 ## Context
@@ -196,14 +196,18 @@ The user decided these on 2026-10-15:
 
 ### 8. The guide
 
-New quests by health band and region, written as data:
-- Raza (20)
-- Tos, Marion and Jasper (30 to 50)
-- Barloque and Cor Noth (50 to 90)
-- Ko'catan (90 to 120)
-- Brax (100 and up)
+New quests by health band and region, written as data. What a band's quests send you to kill or collect suits it, judged by the creatures' Kod `viLevel` and hit points. Which quests, exactly, is settled as they're written.
 
-What a band's quests send you to kill or collect suits it, judged by the creatures' Kod `viLevel` and hit points. Rewards are XP, shillings and items, scaled by band; never health directly. Which quests, exactly, is settled as they're written.
+**Decided 2026-10-17** (this replaces the first band list):
+- **XP is how quests level you.** On our server XP buys health (`Player.AddXP`: past `GetXPForLevel` of the next point, `TryGainBaseMaxHealth`), so no reward gives health directly, but every main (gold) quest gives XP, scaled by the quest's band, so that **about a third of a character's levelling comes from quests** and two thirds from killing.
+- **Hubs and a spine:** each town is a hub; a couple of its quests done, it sends you on to the next one (shape (c): a thin chain through the hubs, with local quests at each).
+- **Early game, 20 to 50, the same for everyone:** Raza, then Marion, then Cor Noth. Their elders and innkeepers give the quests.
+- **Mid game, 50 to 100, the faction hubs:** after Cor Noth the world opens; the hubs follow the faction: Jasper for Jonas's rebels, Barloque for the Princess, Tos for the Duke. Barloque's quests are mostly in the sewers, Tos's in the mountains around Castle Victoria, Jasper's in its forests and mountains. For now the faction leaders give them; other faction members split them up later. Places like the sewers are for killing quests.
+- **Late game, about 90 to 130:** each faction has reasons to send its people into the orc caves and to the island, and the island (Ko'catan) is a hub for about 90 to 130; each also sends them to Brax for about 90 to 130.
+- **Dailies:** from 50, each faction has a daily, and a player has at least one daily open to them all the way to 130. A daily from 100 to 150 (mollusks or other mainland creatures that can carry a character very high) is not about factions or story.
+- **130 to 150** is for later, probably high dungeons.
+- **Spawns follow:** once the bands are in, monster spawns are moved to suit them. Today a few maps are where everyone levels; quests that give XP should spread levelling over more places.
+- **Text:** first drafts are plain story descriptions, cleaned up later, likely in the dashboard's Quests tab.
 
 ### 9. Other ideas, not decided
 
@@ -242,3 +246,162 @@ What a band's quests send you to kill or collect suits it, judged by the creatur
   - `docs/admin-console.md` (granting and resetting quests)
   - `docs/research/protocol.md` (`UC_QUEST_*`)
   - the website's wiki
+
+## As built (2026-10-16)
+
+Build steps 1-4 (10): the data and the generator, the engine, the markers, the commands, the quest window, the Quests tab and the tracker, and areas on the maps. Step 5 (the guide chains) and the hunts, errands and story quests of step 6 followed the same day (below, "Porting"); the system quests and switching the QuestEngine off on 2026-10-17 (below, "The system quests"). The new guide quests (8) are still to do.
+
+**The data** (shards-server `quests/`):
+- `<key>.json` per quest: id, key, name, giver, band, prerequisites (quests, karma), repeat cooldown, time limit, text (offer, progress, complete), steps and rewards (XP, shillings, items). A step can have a `brief`, what the giver says as it starts.
+- `givers.json`: placed givers (below). `retired.json`: ids never used again.
+- An NPC is `{ "class": "TosInnKeeper" }` (every NPC of the class) or `{ "placed": "<key>" }`.
+
+**The generator** (`tools/quests/`, tested): checks the shape, that every class exists and is the right kind (an NPC, a monster that isn't an NPC, an item), that rooms exist, that ids are unique and not retired, and that the server's text is Latin-1 without `\` or `%`. It writes `kod/util/questdefs.kod` (`QuestDefs`: the tables as literal lists, their text as resources, and the catalogue's hash) and `dist/assets/quests.json`. `server\build.cmd` runs it first; `npm run assets` writes the catalogue too.
+
+**The engine** (`util/questbook.kod`, `QuestBook is QuestDefs`, `SYS@GetQuestBook`):
+- The tables are cached on it and read again whenever the hash changes (a rebuild).
+- **Per player:** `User.plQuestLog` (`[id, step, count, deadline]`) and `plQuestDone` (`[id, times, when]`), and `poQuestNpc`.
+- **Talking to an NPC is activating it.** Kod can't turn a number in a text command back into an object, so `Monster.TryActivate` (for `AI_NPC`) calls `NpcActivated`: within 4 squares, the player gets `UC_QUEST_OFFERS` and the NPC is remembered. `quest accept <id>` and `quest turnin <id>` act on it, checked again (still in the room, still near).
+- **Steps:** kill (from `Monster.Killed`, outside arenas, for the killer and everyone in the room's builder group with them; `IsClass` unless exact), collect (counted from what's carried, bags too; on pickup from `User.NewHold`; taken at the hand-in), talk, deliver (a `QuestParcel` named by the quest, given at the step's start, taken at the hand-in), visit (from `Player.NewOwner`). Each count sends a line ("Small rats slain: 7/20") and `UC_QUEST_PROGRESS`.
+- **Rewards:** `AddXP`, shillings and items, into the pack or at the player's feet.
+- **The cap** is 10 active quests. A deadline is checked on each command and at logon; a quest whose id is gone (retired) is dropped at logon.
+- **Admin messages** for the dashboard: `AdminGrant`, `AdminSetStep`, `AdminFinishStep`, `AdminComplete`, `AdminReset`, `AdminState`.
+
+**Placed givers:** `QuestGiver is Towns` (`monster/towns/questgiver.kod`), one per row of `givers.json`, placed by `room.kod Constructed` (`PlaceGivers`), with its own name and description and a picture borrowed from another NPC class.
+
+**Markers:** `MM_QUEST_OFFER` 0x4000, `MM_QUEST_TURNIN` 0x8000, `MM_QUEST_SOON` 0x10000, `MM_QUEST_TARGET` 0x20000, and `MM_QUEST_PENDING` 0x100000 for the grey "?". `MarkerFor` ORs one onto `MM_NPC`, or `MM_QUEST_TARGET` onto `MM_MONSTER`. `RefreshMarkers` re-sends the room's NPCs and monsters to the player after any change, and after a health gain.
+
+**The command channel:** `quest accept | turnin | offers | abandon | log` over `UC_SHARDS`; `UC_QUEST_OFFERS` (106), `UC_QUEST_LOG` (107) and `UC_QUEST_PROGRESS` (108) back ([protocol.md](../research/protocol.md), "Ours").
+
+**Our client:**
+- `game/quests.ts` (`QuestStore`): the catalogue, the log and what's tracked (up to 3, in `localStorage`; a quest taken on is tracked while there's room). A log whose hash isn't the catalogue's fetches the catalogue again; if it still differs, the game data is out of date.
+- `ui/QuestDialog.tsx`: the quest window. Several quests are listed first. An offer has the band, the story, the objectives with where they are, the reward, Accept and Decline; a step ready shows Hand in (or Complete), then the next step's brief (or the completion and reward).
+- `ui/QuestsPanel.tsx`: the Quests tab (Going, with objectives, time left, Track and Abandon; Suggested for you, by our maximum health; Done) in place of stat group 5's list, and the tracker under the Modern map.
+- `game/markers.ts`: the gold "!" and "?", grey for not yet, over heads and on the minimap, and a gold ring round a target monster's dot. Options, Show Quest Markers.
+- Double-clicking someone with a marker talks to them (before their shop for a gold "!" or "?"); so do the Use key and the Look window's Activate.
+
+**The admin dashboard's Quests tab** (`apps/client/src/admin/QuestsTab.tsx`, `tools/dev/questApi.ts`): edit and save quests, place and move givers where you stand, apply (generate, build, `reload system`, rebuild the givers' rooms; files go back if it fails), retire, and try a quest on your own character. [docs/admin-console.md](../admin-console.md), "Quests".
+
+**Tried on our server:**
+- Rats in the Cellar end to end by typed commands (`tools/headless/quest.ts`): the offer, accepting, 20 kills (sent to `MonsterKilled` from the maintenance port), the "?", three hand-ins and the rewards.
+- A placed giver made and placed from the dashboard's API, and a quest made there with talk, collect and visit steps, played through; a deliver quest, then retired.
+- In the browser: the "!" and "?" over Paddock and on the minimap, refreshing as the quest changed; the quest window, accepting and handing in; the tracker; the Quests tab.
+
+**Areas (5), built the same day:**
+- **The generator** works out a kill step's area from the rooms whose spawn lists (`plMonsters`, a parent class's when the room has none) make the monster or one of its kinds, and the rooms whose Kod creates one (a boss: `Create(&GiantRatKing)`). The survival rooms are left out. A step's `rooms` replace that (kill or collect; a collect's area is never guessed), and `exclude` leaves rooms out. The area is in the catalogue (`CatalogStep.rooms`), not the Kod, which needs only a visit's rooms.
+- **The way** (`packages/world/src/questWay.ts`, tested): while a step counts up, its area is the destination; once counted, and for talk and deliver, the rooms where it's handed in (the room Kod placing the NPC, or the placed giver's room). From the room we're in, a breadth-first path over `roomexits.json` (doors and sides), and the exits out of this room toward it. No path, no mark.
+- **The maps** (`ui/MiniMap.tsx`, so the minimap and the full map; `game/questWays.ts` works it out per room and quest change): in a tracked step's area room the paper is washed gold under the objects; outside, a gold chevron on each exit to take that's on the map, or one at the map's rim toward the nearest. Options, Show The Way, on by default.
+- **The dashboard** shows each step's area, and kill and collect steps have Where and Leave out.
+- **Rats in the Cellar:** the small rats are in the cellar; the rat soldiers in the rat caves (`ratcave1.roo`, `ratcave2.roo`) and the rat king in the second, both reached from the cellar through `toshidden.roo`. The king also turns up in two Bergen caves (`Create` in `berg8.kod` and `golem_dungeon.kod`); `exclude` would leave them out.
+- **Tried in the browser:** the arrow at the rim toward the cellar door from Familiars, the wash and the rat's ring in the cellar, and the chevron on the cellar's door back once the step was counted.
+
+**Porting (7), built the same day.** The user decided on 2026-10-16:
+- **this round** ports the ten guide chains and switches the old guide system off, and ports the hunts, the trade errands and the story quests; the quests that drive game systems stay on the QuestEngine, which keeps running until a later round gives the new engine their rewards;
+- **each guide chain is given by the NPC it sent you to first**, and is one quest whose travel and action steps are done by themselves;
+- **markers take the quest's tier's colour:** gold for the main and levelling chains, silver for story quests, bronze for trade errands and other repeatable, common quests.
+
+- **What the engine gained:**
+  - **tiers** (`tier`: main, story, errand), sent as `MM_QUEST_SILVER` 0x200000 and `MM_QUEST_BRONZE` 0x400000 (gold has neither); each kind of mark takes the best tier among its quests;
+  - **auto steps** (`auto`), done as soon as they're counted, with no hand-in (the default for the action kinds); their turn-in NPCs never show "?";
+  - **step rewards** (`rewards` on a step) and **training points**, at the step or the end;
+  - **a random pick** (`rewards.oneOf`): one of a list, as the old prize lists;
+  - **the guide chains' kinds:** `cast` (`Spell.CastSpell`, any spell), `deposit` and `stash` (the banker's and vault keeper's `User.MadeMoneyDeposit` / `MadeItemDeposit`), `buy` (`User.BoughtAnItem`), `equip` (`User.NewUsing`, any item), `health` (a base health), `hometown` (`User.CanChangeHomeroom` no longer), `nodes` (`Player.NumManaNodes`, checked on each node bonded); a deposit's or purchase's area is where its NPC stands;
+  - **a faction requirement** (`requires.faction`: neutral, duke, princess, rebel, or any but neutral);
+  - **NPCs by kind:** an NPC reference matches the class and its kinds (`IsClass`), so "any citizen of Ko'catan" is `KocatanTown`; a reference can name `rooms` when no room Kod creates the NPC (the faction leaders and the councillors, placed by the parliament: their rooms were asked of the running server);
+  - **`replaces`:** old `QST_ID_`s and `HP*_CHAIN`s, written as `QuestDefs.GetReplaced`;
+  - **chat lines:** our client says a step's `brief` as the quest moves on to it, as the old guide quests did.
+- **The guide chains** (quests 10-20, `quests/guide-*.json`; names and text the old quests' own): Raza (Rodric, 10), the road through the towns (Priestess Xiana, 15 steps, 11), the Marion crypt (Ran er'Hoth, 12), Castle Victoria (Paddock, 13), the powers of Meridian (Princess Kateriina, neutral players, 14), the mana nodes (Esseldi, 15), the soldier's shield (one quest per faction leader for their own faction, 16-18), Ko'catan (the Duke, 19), and Brax (Paddock again, once Castle Victoria is done, 20). "Say this phrase" became "talk to them (double-click)".
+- **The keepers** (quests 30-63, silver or bronze): the five Underworld key hunts and Aid in the War, the Bone Priestess, the eight trade errands (ore, apothecary, bar restock, catering, identify potion and wand, Ko'catan ale and arrows) and fourteen story quests (chicken soup, Frisconar's ailments, gems to polish, the stunted dwarf, the missing dress pattern, Moxal's two schemes, the council and war letters, the necklace of Jala, the lute, the aphrodisiac, both necromancer warnings).
+  - **One giver each:** where the old quest drew an NPC from a list, one was chosen (the old lists would put a "!" on half a town).
+  - **Couriers carry quest parcels,** not the old goods, so the outlaw penalties for keeping them are gone.
+  - **Repeating:** errands and hunts every 2-3 hours, the keys every 12, story quests daily, the stunted dwarf once.
+- **Switched off:** each ported template has `pbDisabled = TRUE` (rebuilt with `RecreateQuestEngine` and `RecreateQuestNodes` on a running server); `GameQuestMaintenance.EvaluatePlayer` returns at once.
+- **Players' history** (`QuestBook.MigrateOld`, at logon): a finished old guide chain or QuestEngine quest counts as its new quest done (no rewards); the old guide quests are deleted and their lists emptied.
+- **Left on the QuestEngine** (until the next round, below): joining and loyalty to the factions, the soldier ranks, the disciple and offering quests, the pupil quests, the insignia, raising the necromancer guild, taxes, murders, chess, the trading post and bowmaker, abstaining from PvP, the truth spell, the love letters, the guild shields, the mad scientist.
+- **Found on the way:**
+  - a Kod list literal holds at most 40 elements, so the generated tables come in groups of 30 (`QuestBook.Flatten`);
+  - `IsClass` on a class (not an object) is always FALSE: stacked rewards made one item per count until the item was made first;
+  - Kod names ignore case, so a parameter `spell` clashed with the class `Spell`, and `jasperTown` is `JasperTown` (the generator's class reader now resolves parents that way).
+- **Tried on our server:** the road chain end to end (casts, the bank, the vaults, Rook, Barloque's smith, Paddock, a zombie, the Hall, the hometown) with every step's reward; tier bits on the errand givers (bronze "!" and "?") and silver on a story giver in the browser; a random pick (one stack of shillings, silver arrows); a Ko'catan citizen taking the "any citizen" step; an equip step; a finished old Raza chain counted as quest 10 at logon, and an old failure not counted.
+
+**The system quests, and the QuestEngine off (2026-10-17).** The user decided:
+- **factions:** the join quests are ported and make you a member; **membership no longer lapses** (no service timer, no resigning for a missed loyalty quest); the loyalty quests become optional favours a liege asks of members, still what a liege wants done before teaching;
+- **dropped:** chess, the mad scientist, the outlaw penalties (couriers carry quest parcels), the boons (the offering chants' stat changes), and abstaining from PvP;
+- **kept as rewards:** disciple robes made for the temple's school, guild shield insignia, and raising the necromancer guild;
+- **the QuestEngine is switched off** altogether.
+
+- **What the engine gained:**
+  - **requirements** (`requires.intriguing`, `guildMaster`, `guildShield`, `noGuild`): `QB_NEEDS` bits checked by `QuestBook.MeetsNeeds` (`Player.PlayerIsIntriguing`, the guild's master with colours, `PossessesA GuildShield`, `GetGuild`);
+  - **special rewards** (`rewards.joinFaction`, `insignia`, `necroGuild`), a sixth field of a reward list (`QBR_SPECIAL`, `QuestBook.AwardSpecial`): joining posts `ResignFaction` then `JoinFaction` as the old prize did; an insignia goes on the shield in use, else an unmarked one in the pack (`FindGuildShield`, `ChangeGuildInsignia`); the guild is raised by posting `DeadLich.EstablishNecromancerGuild` (the dead Lich in the Inner Sanctum);
+  - **items made for a school** (`school` on an item: `[ class, count, SS_* ]`, `Create(..., #school=)`), for the disciple robes;
+  - **teaching:** `Monster.HasDoneLearnQuest` also asks `QuestBook.HasDoneReplacing`: the quest that replaced the teacher's `viQuestID` done counts (the temples' disciple quests, the lieges' favours, the pupil quests);
+  - **wandering NPCs** (the Minstrel, Maleval: `Wanderer`) have no room for the maps, though the god room's Kod makes them;
+  - **the dashboard** edits the faction and the requirement boxes, the special rewards and an item's school; saving keeps `oneOf` and a faction-only `requires` (it dropped both before).
+- **The quests** (70-112, `quests/faction-*`, `soldier-*`, `disciple-*`, `offering-*`, `insignia-*`, `pupil-*`, `guild-shield`, `necromancer-guild`, `errand-*`):
+  - **main (gold):** joining each faction (70-72: a ruby for the Duke, a letter to Priestess Xiana for the Princess, a scimitar for Jonas; neutral, intriguing players), the soldier shields (76-78: one enemy soldier of each other side at the flagpoles), the four disciples (79-82: robes by school), raising Queen Venya'cyr (98, players in no guild), and the five pupils (99-103: Dementia, Fade, Sporeburst, the scimitar, the songs of Jala);
+  - **story (silver):** the lieges' favours (73-75, every 12 hours), the five offerings (83-87, daily; Shal'ille for good karma, Qor for evil), the insignia (88-93 a tithe of reagents to each temple, Jala's to the Jala priestess in Bergholt rather than the wandering Minstrel; 94-96 a liege's spy errand for members), the guild shield for guild masters (97);
+  - **errand (bronze):** the three tax couriers (104-106), the two love letters (107-108), the Ko'catan trading post and bow maker for good and evil karma (109-112);
+  - where the old quest drew a target or cargo at random, one was chosen; talk and deliver steps name their NPC (the giver when it's the same one).
+- **Factions** (`player.kod`): `FactionServiceRenew` returns before any timer or resign; `JoinFaction` and `ResignFaction` no longer touch the QuestEngine (the Princess's and the rebels' `DrawDefense`/`DrawOffense` stay).
+- **The QuestEngine off** (`util/questengine.kod`): `RecreateQuestNodes` still builds the templates (players' old history reads them) but cancels any running quest, suspends the engine and starts no timer; `OnQuestTimer`, `OnQuestDeadlineTimer` and `ScheduleQuest` do nothing while it's suspended. On a running server: `RecreateClearQuests` and `ClearAllQuests` on the engine, `RecreateQuestEngine` on System, then `RecreateQuestNodes` on the engine (`piActive` 0, no timers). `DeadLich.Delete` no longer swaps an old quest node to the raised Lich. The old templates are left as they are (no `pbDisabled` needed with nothing scheduled).
+- **Tried on our server:** the Shal'ille disciple quest (Xiana, Zuxana, back; a Shal'ille robe, `piSchool` 1; Xiana then teaches, Zuxana doesn't); joining the Duke as an intriguing player (faction 1, no faction timer); the Duke's insignia on a carried guild shield (`piInsigniaType` 7); a step's item reward (the Bone Priestess's feather) counting at once for the next step; the live QuestEngine rebuilt switched off.
+
+**The guide's early game (2026-10-17).** Following section 8's decisions:
+- **The monster table:** `npm run quests:bands` (`tools/quests/bands.ts`) writes [docs/research/monster-bands.md](../research/monster-bands.md) from the Kod: the XP each 10-health band costs and a third of it, every spawn room under the hub its exits reach first, and every monster with its level and the health it's worth fighting at (a kill gives about its `viLevel` in XP, only while your base health is below it).
+- **XP that scales:** `rewards.xpPoints` (quest or step) is XP worth that many points of health at the quest's band minimum, `round(points × (min+1)²)` (`tools/quests/xp.ts`), added to `xp`. **The generator refuses a main quest that gives no XP**; the 22 main quests without any got `xpPoints` (0.75 for the disciples, 1 for the tours, joins and pupils, 1.5 for the soldiers and the necromancer guild).
+- **The quests** (120-133, `quests/raza-*`, `marion-*`, `cornoth-*`), first-draft text, all main (gold):
+  - **Raza (20-30):** Marcus the innkeeper's giant rats and the Farol road's centipedes; Rodric's restless graves (mummies in the mausoleum), which now lead to the old Shadow Mummy quest (10), then his letter to Ran er'Hoth in Marion;
+  - **Marion (30-40):** Ran's spectral mummies in the crypt's first chamber, which lead to the old crypt tour (12), then the spiders of Farol and his report to Sergeant Rook; Morrigan the innkeeper's slimes on the shore and fungus in the Valley of Ileria;
+  - **Cor Noth (40-50):** Cor Noth has no elder, so Sergeant Rook gives the elder's quests: spiders on the merchant way, orc raiders, then **Choosing a Side** (hear out the Duke, the Princess and Jonas, and come back): the faction split; D'Franco the innkeeper's fungus at the river's source and red ants in the hills.
+  - **The hand-offs don't gate:** a hub's quests need only that hub's earlier ones, so a character who arrives another way isn't locked out; the letters are pointers.
+  - **XP:** each hub's main quests come to about a third of its band (Raza 2,397 of 2,195; Marion 4,868 of 4,228; Cor Noth 6,459 of 6,928, counting the old tours there).
+- **The dashboard** has an *XP worth* field (points of health at the band minimum), showing the XP it comes to.
+- **Tried on our server:** Rats in the Stores from Marcus with kills counted (12), 331 XP and 50 shillings at the hand-in; Rodric then offering Restless Graves, with Word to Marion grey ("soon") below its band.
+
+**Spawns for the mid game (2026-10-17).** The first spawn changes for the bands (`kod/object/active/holder/room/monsroom/`):
+- **The sewers of Barloque** were giant rats and Lupoggs (125); they now level 50 to 90 with rats: the first room rat soldiers (60) with a few dusk rats (90) and giant rats, the second dusk rats and rat soldiers with a rare rat king (60, 700 hit points), the deepest mostly dusk rats with a few rat kings and Lupoggs. **The sewers of Jasper** got the same three rooms' rats the same day. The Lupogg King's crossing beyond both is unchanged.
+- **The troll lands** (the Cragged Mountains both sides, the border of the Badlands, the Twisted Wood, Ukgoth) gain mutant ants (`RedAnt`, 65) at a fifth to a quarter of their spawns; Seafarer's Peak and the Hills had them already.
+- **The Marion crypts** are left alone: they become high dungeons (130 and up).
+- **Tried on our server:** the rooms rebuilt (`Recreate`) and visited: the deepest sewer made dusk rats, the first a mix of dusk rats, rat soldiers and a giant rat, the Twisted Wood trolls and mutant ants, Ukgoth mostly trolls with mutant ants; Jasper's sewers rat soldiers in the first room, dusk rats, rat soldiers and a rat king in the second, dusk rats in the deepest.
+
+**The road to the island, and Ko'catan (2026-10-17).**
+- **The orc caves start at 70, not 90** (the user's choice): their cave orcs and orc wizards are level 80, so they give XP only below 80; at 90 nothing in the caves but the pit boss (115) and the deep rooms' Shadowbeasts and Ogres (200) is worth fighting. Stronger orcs or raising the cave orcs were the other choices.
+- **Each faction's cave chain** (main, faction members only, from the faction leader): 15 cave orcs then 10 orc wizards (70), then the orc pit boss (80; `RID_ORC_PIT`, a boss room, so the step names it). The Duke's (140-141) ends in the old Ko'catan tour, "The Descendants of Konima" (19), left open to everyone so players without a faction have a way to the island; the Princess's (142-143) in a letter to Cital ko'Manca (146), Jonas's (144-145) in a message to Xacal ko'Ixca (147). Each has its own story: the Duke's lost patrols, the Princess's mages sensing the orc wizards' magic, Jonas following the orcs' steel.
+- **Ko'catan, 90-130** (150-155; no elder, so the captains, the innkeeper and the weapons master give them; the hand-offs don't gate them): Moxal's dragonflies on the cliffs (90) then the hive's queens (110); Cital's warrior avars (90) then the chieftains (115); Xacal's avar shamans (95); Kochtal's kriipa (125, after the chieftains).
+- **XP:** a faction's cave chain comes to 18,789, about 43% of a third of 70-90 (the faction hubs are to give the rest); the island's to 87,481, about 53% of a third of 90-130 (Brax is to give the rest).
+- **Tried on our server:** the Princess's letter carried to Cital (5,547 XP; Cital then offering the warrior avars and the old avar war), and Moxal's dragonflies at 95 health with 15 kills counted (8,281 XP). A character's health given by hand must have the XP to match, or the next XP reward sets health back from the XP total (`Player.AddXP`).
+- **Object numbers move:** a `reload system` can renumber objects (the QuestBook was 6350, then 6325), so maintenance commands look objects up again after each reload.
+
+**Brax (2026-10-17), 90-130.** The user decided Brax's quests start with the faction leaders for now, who send their people to Tendrath, the hunter ghost who sells spells outside Brax; he is the Brax hub.
+- **The faction leaders** (160-162, faction members, 95): each sends you to Tendrath in the Cragged Mountains, for their own reasons (the Duke for Brax's treasure, the Princess for her people, Jonas for the people's memory).
+- **The way down** (163, any faction): Brax is reached by G9's puzzle (walls of lightning on the pillars and the nine levers raise the platform, `monsroom/g9.kod`) and G8's far side into the Winding Caverns. Tendrath sends you to cast Lightning Wall (he teaches it) and to reach the Winding Caverns, and to come back.
+- **Brax's dead** (164-168, Tendrath, after the way down): tusked skeletons in the Decaying City (95), Narthyl worms in the graveyard and city (100), daemon skeletons in the graveyard and on the castle walls (110), the Queen's necromancers in the castle ruins and dungeon (120), dark angels in the Inner Sanctum (125).
+- **Tendrath lives in G8 now** (and since, `Room.Recreate` keeps any wanderer standing in a rebuilt room): he was a wanderer made in the god room who walked to G8 (his only destination), so rebuilding G8 (for the travel portal there) had deleted him. `g8.kod CreateStandardObjects` makes him at 38,38, and the god room no longer does. Any wanderer standing in a room that's rebuilt is lost the same way (the Minstrel, Maleval and the others wander several rooms); not fixed here.
+- **The generator** no longer drops wanderers' rooms; it drops the god room from every NPC's rooms, so Tendrath's area is G8 and the Minstrel and Maleval still have none.
+- **XP:** the Brax chain comes to 83,708; with the island's 87,481 that's 171,189, about 4% over a third of 90-130.
+- **Tried on our server:** the Duke offering the start (with the cave chain and the old tours), Tendrath taking it (4,608 XP) and offering the way down; its cast step finished by `AdminFinishStep`, the Winding Caverns reached, the hand-in (9,216 XP, a point of health at 100), and Tendrath then offering the tusked dead and the worms.
+
+**Jixa, the bandits, Berg, and 130-150 (2026-10-17).** As the user laid out:
+- **The engine gained** two things:
+  - `inRooms` on a kill step: only kills in its rooms count (the step's `QBS_EXACT` gets bit 2 and its rooms are written; `KillMatches` takes the room, the killer's for a kill and the monster's for its marker). For the bone faction's avar leaders, which are avar chieftains of one clan by room (`viAvar_clan`), the minotaurs of the crumbling ruins, the Valley of Death's daemon skeletons apart from Brax's;
+  - `requires.notQuests`: not offered once any of those is done or going (`QB_EXCLUDES`, field 22), for the same errand from three givers.
+  - The dashboard edits both.
+- **Jixa (70):** the innkeepers of Tos, Barloque and Jasper (180-182) each send a letter to Jorgan Yesjor, the innkeeper of Jixa; doing one hides the others.
+- **The bandits and Berg (100+):** each faction leader: fifteen bandits and ten snipers around the camps (100), five captains (115), and a letter to King Aaron Leone of Berg (100) (184-192). Plain bandits are level 100, so at 100 the snipers (120) and captains (140) are the ones worth fighting.
+- **Berg's lands** (200-205): Bastiane the innkeeper's ranuculus in the Marsh (100) and giant eyes in the Desolate Mire (110); Roderick the smith's spinebeasts in the Jagged Hills (100); King Aaron's daemon skeletons in the Valley of Death (125), minotaurs of the wasteland (135) and of the crumbling ruins (145).
+- **130-150:**
+  - Tendrath: **Queen Venya'cyr** (169, after the Inner Sanctum): kill the `Lich`. She is in the sanctum only while raised, that is, while the necromancer guild stands (`DeadLich.EstablishNecromancerGuild` swaps the ghost for her); otherwise the quest can't be finished. Friends recommended.
+  - Each faction leader: the thrashers of the Marion crypts' depths (210-212, 130) and Waylay Oasis's xeochicatl and golems across the desert (213-215, 135). Friends recommended.
+  - The island: Cital's daily war on the noble avars' chieftains (170), Xacal's three leaders of the bone faction in the Chasm and the bone priestess's lair (171), Moxal's ogres of Chuk Creek (172), Kochtal's shadowbeasts in the orc caves' hollows (173) and daily kriipa hunt (174).
+- **XP:** one player's 130-150 path (one faction, no dailies) comes to 142,493, about 8% over a third. 90-130 now offers 248,546 across the island, Brax, the bandits and Berg, against a third of 164,580: a player who does all of it levels faster than planned.
+- **Tried on our server:** the Jixa letter from Paddock hiding Pritchett's (his marker bronze for his errands while it's going, gold once it's reset); a bone faction leader's kill not counted in Ko'catan town and counted in the bone priestess's lair.
+
+**The Queen always, Castle Victoria, the mollusk daily (2026-10-17).**
+- **90-130 keeps its plenty:** most players spend most of their time there, and the user wants variety (not everyone wants Brax or the island all the time), so its quests offer more than a third on purpose.
+- **No necromancer guild:** Queen Venya'cyr (`Lich`) is always in the Inner Sanctum, like Far'Nohl's ghost in the throne room: `innersanc.kod` no longer makes the ghostly remains (`DeadLich`); `SpawnQueen` makes her when someone enters if she isn't there, and while anyone is in the room looks again every `QUEEN_CYCLE` (600 s, give or take 10%; Far'Nohl's is 120 s). The guild quest (98) is retired (`retired.json`), so nothing establishes the guild; the `necroGuild` reward and `DeadLich.EstablishNecromancerGuild` stay in the code, unused. Tendrath's Queen quest (169) can always be finished.
+- **Castle Victoria** (Drechx, the councillor who sells Second Wind, room 2; 220-223): fifteen skeletons in the castle's halls (50), ten of Far'Nohl's undead knights in his chambers (95), ten tusked skeletons in the antechamber (100), and Far'Nohl's ghost (130, level 220, friends recommended). Each counts only in its rooms.
+- **The mollusk daily** (230, Fehr'loi Qan, the smith of south Barloque, 130+, bronze): six mollusks deep in the Forest of Farol and its underground lake, every day.
+- **Dailies are bronze:** the island's two dailies (170, 174) moved from main to errand, the user's tier for repeatable, common quests.
+- **Tried on our server:** the Inner Sanctum rebuilt: the remains gone, `SpawnQueen` making the Queen once (a second call finding her) and setting its timer; no necromancer guild stood on our server; Drechx showing a gold "!" to a 50-health character.
+
+**Not yet tried:** fighting the Queen (it changes the world: tried by reading, the dead Lich is a talkable NPC), the offering and soldier quests end to end, kills by real fighting (only `MonsterKilled` sent by hand), shared kills in a builder group, a time limit running out, the dashboard's form driven by hand end to end in the browser (its routes were), and a save from before quests on the hosted server (new `User` properties: a copy first, 0008 3.3).

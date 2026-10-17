@@ -109,7 +109,7 @@ Friends, following and health bars ([ADR 0005](adr/0005-friends.md), kept by our
 | `BP_ROUNDTRIP1` | blakserv never sends it. `BP_SECTOR_ANIMATE` isn't sent either, but it's handled. |
 | Blur and waver over the hands | The D3D client blurs the whole frame, hands and screen flashes included; ours blurs the 3D view, since the hands are drawn on a 2D canvas over it. |
 | Sector flicker (`BP_SECTOR_LIGHT`, `SF_FLICKER`) | The D3D client keeps the sector's own light while flickering, so it's parsed and has no effect, as there. |
-| The DM module | Staff tools (BGF editor, quest editor, G-Channel); staff use the maintenance port. |
+| The DM module | Staff tools (BGF editor, quest editor, G-Channel); staff use the maintenance port. Our quests are made in the admin dashboard's Quests tab instead ([ADR 0009](adr/0009-quests.md)). |
 | The intro's logo and splash | The original fades in `logo.bmp` (Near Death Studios' logo), then shows `splash.bgf`, which in the Server 104 files names that server. We skip the logo. Behind the login dialog, which is open from the start (no "Click here to log on!" button, 2026-10-12), our pictures of the game's places fade one into the next, with the original's music (2026-10-13). Without them in the game files, it's `xsplash.bgf`, the original Meridian 59 splash. |
 | One desktop app at a time | The original ran as many clients as you liked. Ours share one profile (storage, the asset cache), so a second start brings the first forward (`requestSingleInstanceLock`). |
 | `/H` and `/P` | The original connects to that host and port; our desktop app takes the listed server with that host (and port), else `https://host:port` (http for localhost), or a whole origin, for this run only. |

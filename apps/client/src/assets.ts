@@ -3,7 +3,7 @@
 // cached by name; the manifest hash busts the browser cache when a file changes.
 
 import { parseBgf, parsePaletteBin, parseRoo, parseRsb, type Bgf, type Palette, type Room, type RsbBundle } from "@shards/formats";
-import type { AmbientExits } from "@shards/world";
+import { EMPTY_CATALOG, type AmbientExits, type QuestCatalog } from "@shards/world";
 
 interface Manifest {
   /** When the asset build ran: a new value means the server has new files */
@@ -139,6 +139,12 @@ export class AssetStore {
   async roomTerrain(): Promise<Record<string, string[]>> {
     if (!this.has("roomterrain.json")) return {};
     return JSON.parse(new TextDecoder().decode(await this.download("roomterrain.json"))) as Record<string, string[]>;
+  }
+
+  /** Ours (docs/adr/0009-quests.md 6): the quest catalogue (quests.json from the asset build, tools/quests); empty without one */
+  async questCatalog(): Promise<QuestCatalog> {
+    if (!this.has("quests.json")) return EMPTY_CATALOG;
+    return JSON.parse(new TextDecoder().decode(await this.download("quests.json"))) as QuestCatalog;
   }
 
   /** Every room by number, with its name and file (rooms.json from the asset build), for the admin console; empty without one */

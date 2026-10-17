@@ -224,6 +224,21 @@ button.link {
   pointer-events: none;
   animation: world-marker-bob 1.6s ease-in-out infinite;
 }
+/* Ours: a story quest's marks are silver, an errand's bronze (the main chains' are gold, above) */
+.world-marker.silver {
+  color: rgb(222 228 238);
+  text-shadow: 0 0 2px rgb(20 24 34), 0 0 6px rgb(20 24 34), 0 0 12px rgb(200 215 255 / 0.5);
+}
+.world-marker.bronze {
+  color: rgb(214 138 66);
+  text-shadow: 0 0 2px rgb(40 18 4), 0 0 6px rgb(40 18 4), 0 0 12px rgb(230 130 40 / 0.5);
+}
+/* Ours (docs/adr/0009-quests.md 2): a quest not ready yet, or one we nearly qualify for */
+.world-marker.grey {
+  color: rgb(185 185 185);
+  text-shadow: 0 0 2px rgb(20 20 20), 0 0 6px rgb(20 20 20);
+  animation: none;
+}
 @keyframes world-marker-bob {
   50% {
     margin-top: -6px;
@@ -4607,4 +4622,104 @@ canvas.server-wait {
 
 .hud-legend b {
   color: #fff;
+}
+
+
+/* ---- Quests (ours, docs/adr/0009-quests.md): the quest window (ui/QuestDialog.tsx), the Quests
+   tab (ui/QuestsPanel.tsx) and the tracker under the Modern interface's map ---- */
+
+.quest-dialog .mk-body p {
+  margin: 4px 2px;
+  white-space: normal;
+}
+
+.quest-dialog h4 {
+  margin: 8px 2px 2px;
+  font: bold 13px Georgia, "Times New Roman", serif;
+  color: rgb(240, 208, 25);
+}
+
+.quest-band,
+.quest-later {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.quest-story {
+  font-style: italic;
+}
+
+.quest-objectives {
+  margin: 2px 0 4px;
+  padding-left: 18px;
+}
+
+.quest-objectives li.done {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.quest-objectives li.current {
+  color: rgb(255, 230, 150);
+}
+
+.quest-objectives small,
+.quest-suggested small,
+.quest-done small {
+  opacity: 0.75;
+}
+
+.quest-reward {
+  color: rgb(255, 210, 90);
+}
+
+.mk-list li.quest-later {
+  opacity: 0.6;
+}
+
+.quests-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px;
+  font: 13px Georgia, "Times New Roman", serif;
+  color: rgb(231, 231, 231);
+}
+
+.quests-panel .mk-edit.list {
+  display: block;
+  height: 90px;
+}
+
+.quest-suggested,
+.quest-done {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.quest-stale {
+  color: rgb(255, 170, 120);
+}
+
+.quest-tracker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  font: 13px Georgia, "Times New Roman", serif;
+  color: rgb(231, 231, 231);
+  text-shadow: 1px 1px 0 #000, 0 0 4px #000;
+  pointer-events: none;
+}
+
+.quest-tracked b {
+  color: rgb(240, 208, 25);
+}
+
+.quest-tracked .ready {
+  color: rgb(255, 230, 150);
+}
+
+.quest-step-reward {
+  color: rgb(255, 210, 90);
 }

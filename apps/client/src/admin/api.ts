@@ -172,3 +172,173 @@ export function useDevLink(): { state: DevState; game: GameReport | null; set: (
   };
   return { state, game, set };
 }
+
+// ---------------------------------------------------------------- quests (tools/dev/questApi.ts)
+
+export type NpcRef = { class: string } | { placed: string };
+
+/** A quest as its file in shards-server quests/ holds it (tools/quests/schema.ts Quest) */
+export type QuestTierName = "main" | "story" | "errand";
+
+export type SchoolName = "shalille" | "qor" | "kraanan" | "faren" | "riija" | "jala";
+export type InsigniaName = SchoolName | "duke" | "princess" | "rebel";
+export type FactionName = "neutral" | "duke" | "princess" | "rebel" | "any";
+
+export interface QuestRewardsFile {
+  xp?: number;
+  /** More XP: worth this many points of health at the quest's band minimum */
+  xpPoints?: number;
+  shillings?: number;
+  trainingPoints?: number;
+  items?: { class: string; count?: number; school?: SchoolName }[];
+  oneOf?: { class: string; count?: number; school?: SchoolName }[];
+  joinFaction?: "duke" | "princess" | "rebel";
+  insignia?: InsigniaName;
+  necroGuild?: boolean;
+}
+
+export interface QuestFile {
+  id: number;
+  key: string;
+  name: string;
+  tier?: QuestTierName;
+  replaces?: string[];
+  giver: NpcRef;
+  band: { min: number; max: number };
+  requires?: {
+    quests?: number[];
+    notQuests?: number[];
+    karmaMin?: number | null;
+    karmaMax?: number | null;
+    faction?: FactionName;
+    intriguing?: boolean;
+    guildMaster?: boolean;
+    guildShield?: boolean;
+    noGuild?: boolean;
+  };
+  repeat?: { cooldownHours: number } | null;
+  timeLimitMinutes?: number | null;
+  text: { offer: string; progress?: string; complete: string };
+  steps: QuestStepFile[];
+  rewards: QuestRewardsFile;
+}
+
+export interface QuestStepFile {
+  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes";
+  auto?: boolean;
+  rewards?: QuestRewardsFile;
+  spell?: string;
+  with?: string;
+  amount?: number;
+  items?: string[];
+  objective?: string;
+  brief?: string;
+  target?: string;
+  exact?: boolean;
+  /** kill: only kills in the step's rooms count */
+  inRooms?: boolean;
+  item?: string;
+  count?: number;
+  rooms?: (string | number)[];
+  exclude?: (string | number)[];
+  parcel?: string;
+  turnin?: NpcRef;
+}
+
+export interface GiverFile {
+  key: string;
+  id: number;
+  name: string;
+  look: string;
+  rid: string | number;
+  row: number;
+  col: number;
+  fineRow?: number;
+  fineCol?: number;
+  angle: string;
+  desc?: string;
+}
+
+export interface QuestNpc {
+  className: string;
+  name: string;
+  icon: string | null;
+  rooms: { rid: number; name: string }[];
+}
+
+export interface QuestList {
+  quests: QuestFile[];
+  givers: GiverFile[];
+  retired: number[];
+  errors: string[];
+  /** Each step's area on the map (room names), by quest id */
+  areas: Record<number, string[][]>;
+  nextId: number;
+  npcs: QuestNpc[];
+  rooms: { rid: number; name: string; ridName: string | null }[];
+}
+
+export interface PlayerQuests {
+  log: { id: number; step: number; count: number; deadline: number }[];
+  done: { id: number; times: number; last: number }[];
+}
+
+export async function loadQuests(): Promise<QuestList> {
+  const res = await fetch("/__admin/quests");
+  const out = (await res.json()) as QuestList & { error?: string };
+  if (out.error) throw new Error(out.error);
+  return out;
+}
+export const saveQuest = (quest: QuestFile, apply: boolean) => post<{ id: number; steps: string[] }>("/__admin/quests/save", { quest, apply });
+export const retireQuest = (id: number) => post<{ steps: string[] }>("/__admin/quests/retire", { id });
+export const applyQuests = () => post<{ steps: string[] }>("/__admin/quests/apply");
+/** A placed giver changed; with place, moved to where the player stands (a new one must be placed) */
+export const saveGiver = (giver: Partial<GiverFile> & { key: string }, playerId?: number, place = false) =>
+  post<{ giver: GiverFile; steps: string[] }>("/__admin/quests/giver", { giver, playerId, place });
+export const deleteGiver = (key: string) => post<{ steps: string[] }>("/__admin/quests/giver/delete", { key });
+/** QuestBook's admin messages on a player: state, grant, step, finish, complete, reset, resetAll */
+export const questPlayer = (playerId: number, action: string, id?: number, step?: number) => post<PlayerQuests>("/__admin/quests/player", { playerId, action, id, step });
+
+// ---------------------------------------------------------------- sprites (tools/dev/spriteApi.ts)
+
+export interface SpriteEntry {
+  name: string;
+  size: number;
+  hash: string;
+  /** A copy of ours in shards-server's resource/graphics/shards */
+  override: boolean;
+  /** A classic copy a revert brings back */
+  original: boolean;
+}
+export interface SpriteStyles {
+  hair: string[];
+  beard: string[];
+  hairColours: { name: string; id: number }[];
+}
+
+export async function loadSprites(): Promise<SpriteEntry[]> {
+  const res = await fetch("/__admin/sprites/list");
+  const out = (await res.json()) as SpriteEntry[] | { error: string };
+  if (!Array.isArray(out)) throw new Error(out.error);
+  return out;
+}
+/** A .bgf's bytes as dist/assets has them now (never cached) */
+export async function spriteBytes(name: string): Promise<Uint8Array> {
+  const res = await fetch(`/__admin/sprites/file?name=${encodeURIComponent(name)}`);
+  if (!res.ok) throw new Error(((await res.json()) as { error: string }).error);
+  return new Uint8Array(await res.arrayBuffer());
+}
+export async function loadSpriteStyles(): Promise<SpriteStyles> {
+  const res = await fetch("/__admin/sprites/registered");
+  const out = (await res.json()) as SpriteStyles & { error?: string };
+  if (out.error) throw new Error(out.error);
+  return out;
+}
+export function saveSprite(name: string, data: Uint8Array): Promise<{ hash: string; backup: string | null; path: string }> {
+  let bin = "";
+  for (let i = 0; i < data.length; i += 0x8000) bin += String.fromCharCode(...data.subarray(i, i + 0x8000));
+  return post("/__admin/sprites/save", { name, data: btoa(bin) });
+}
+export const revertSprite = (name: string) => post<{ hash: string; backup: string }>("/__admin/sprites/revert", { name });
+export const registerStyle = (kind: "hair" | "beard", file: string, label: string) =>
+  post<{ resource: string; ok: boolean; tail: string; steps: string[] }>("/__admin/sprites/register", { kind, file, label });

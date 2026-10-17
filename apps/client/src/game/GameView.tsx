@@ -3,8 +3,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { CF, SAY, STAT_GROUP, UA, UC, objId, type ObjectInfo } from "@shards/protocol";
 import {
   PROFANITY_WARNING, isNumberItem, type SpellRefusal, OBSERVER, WHITE, BLACK, decodeBoard, type GuildEvent, type MinigameEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
-  type SocialEvent, type TradeList, type TravelEvent, type TravelPlace, petForKarma, petKind, type AmbientPersonInfo,
+  type SocialEvent, type TradeList, type TravelEvent, type TravelPlace, petForKarma, petKind, type AmbientPersonInfo, type QuestEvent, type QuestOffer,
 } from "@shards/world";
+import type { QuestStore } from "./quests.ts";
+import { QuestWays } from "./questWays.ts";
+import { MM_QUEST_NPC } from "./markers.ts";
+import { QuestDialog } from "./ui/QuestDialog.tsx";
+import { QuestsPanel, QuestTracker } from "./ui/QuestsPanel.tsx";
 import type { AssetStore } from "../assets.ts";
 import type { AudioPreview, GameAudio } from "./audio.ts";
 import { GameScene, type GameSceneStatus, type TouchMove, type ViewMode } from "./gameScene.ts";
@@ -155,6 +160,7 @@ const CHAT_HISTORY = 20;
 type Modal =
   | { type: "trade"; list: TradeList }
   | { type: "travel"; here: number; places: TravelPlace[] }
+  | { type: "quest"; npc: number; offers: QuestOffer[] }
   | { type: "give"; kind: "offer" | "deposit"; target: { id: number; name: string } }
   | { type: "amount"; object: ObjectInfo }
   | { type: "suicide" }
@@ -183,7 +189,7 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, offers, serverPrefs, latency,
 }: {
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
@@ -224,6 +230,9 @@ export function GameView({
   travel: (fn: (e: TravelEvent) => void) => () => void;
   /** Ours: friends, pets and the shared crowd from our server (docs/adr/0015-social-on-our-server.md) */
   socialEvents: (fn: (e: SocialEvent) => void) => () => void;
+  /** Ours: our quests, and what an NPC we talked to has for us (docs/adr/0009-quests.md) */
+  quests: QuestStore;
+  questOffers: (fn: (e: Extract<QuestEvent, { type: "offers" }>) => void) => () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
@@ -672,6 +681,10 @@ export function GameView({
       onFollow={followFriend}
     />
   );
+  // Ours (docs/adr/0009-quests.md 5): our tracked quests' areas and the way to them, for the maps
+  const questWays = useMemo(() => new QuestWays(assets, quests), [assets, quests]);
+  const getWay = useCallback(() => questWays.get(sceneRef.current?.roomFile ?? ""), [questWays]);
+  const questsPanel = <QuestsPanel store={quests} session={session} maxHealth={petStats.maxHealth} />;
   const petsPanel = (
     <PetsPanel
       key={pet.name}
@@ -767,6 +780,25 @@ export function GameView({
       }),
     [travel],
   );
+  // Ours (docs/adr/0009-quests.md 3.3): an NPC we talked to has quests for us (none: the server says so)
+  useEffect(
+    () =>
+      questOffers((e) => {
+        if (e.offers.length) setModal({ type: "quest", npc: e.npc, offers: e.offers });
+      }),
+    [questOffers],
+  );
+  // Development: the admin dashboard changed the quests (tools/dev/questApi.ts); read them again
+  useEffect(() => {
+    const hot = import.meta.hot;
+    if (!hot) return;
+    const onQuests = () => {
+      void quests.loadCatalog(true);
+      session.shardsCommand("quest log");
+    };
+    hot.on("shards:quests", onQuests);
+    return () => hot.off("shards:quests", onQuests);
+  }, [quests, session]);
   // game.c ResetUserData: AbortLookList; the description and pick lists hold stale ids
   useEffect(
     () =>
@@ -1557,7 +1589,11 @@ export function GameView({
         const self = world.self;
         const near = [...world.objects.values()].filter(
           (o) =>
-            self && o.id !== self.id && o.info.flags & (OF_ACTIVATABLE | OF_CONTAINER) && !(o.info.flags & OF_PLAYER) && Math.hypot(o.x - self.x, o.y - self.y) <= CLOSE_DISTANCE,
+            self &&
+            o.id !== self.id &&
+            (o.info.flags & (OF_ACTIVATABLE | OF_CONTAINER) || o.info.minimapFlags & MM_QUEST_NPC) &&
+            !(o.info.flags & OF_PLAYER) &&
+            Math.hypot(o.x - self.x, o.y - self.y) <= CLOSE_DISTANCE,
         );
         const activate = (oid: number) => {
           const o = world.objects.get(oid);
@@ -1662,7 +1698,8 @@ export function GameView({
     if (o && self && Math.hypot(o.x - self.x, o.y - self.y) <= CLOSE_DISTANCE) {
       const f = o.info.flags;
       if (f & OF_CONTAINER) buttons |= DESC.INSIDE;
-      if (f & OF_ACTIVATABLE && !(f & OF_PLAYER)) buttons |= DESC.ACTIVATE;
+      // Ours: someone with a quest marker is talked to by activating them (docs/adr/0009-quests.md 3.3)
+      if ((f & OF_ACTIVATABLE || o.info.minimapFlags & MM_QUEST_NPC) && !(f & OF_PLAYER)) buttons |= DESC.ACTIVATE;
       if (f & OF_GETTABLE) {
         buttons |= DESC.GET;
         if (!(f & OF_ACTIVATABLE)) buttons |= DESC.USE;
@@ -2028,6 +2065,8 @@ export function GameView({
               onAnnotate={annotateAt}
               onClick={modern ? () => setFullMap(false) : undefined}
               tooltips={settings.tooltips}
+              questMarkers={settings.questMarkers}
+              getWay={settings.showWay ? getWay : undefined}
             />
             <FriendsMapHint link={social} />
           </div>
@@ -2097,6 +2136,8 @@ export function GameView({
               onLook={(id) => lookAt(id, DESC.NONE)}
               onZoom={(dir) => handleAction(dir > 0 ? "mapZoomIn" : "mapZoomOut")}
               onMap={() => setFullMap((v) => !v)}
+              tracker={<QuestTracker store={quests} />}
+              getWay={getWay}
             />
             <ActionBar
               cooldown={cooldown}
@@ -2130,6 +2171,7 @@ export function GameView({
                 onCast={castSpell}
                 friendsPanel={friendsPanel}
                 petsPanel={petsPanel}
+                questsPanel={questsPanel}
                 onStudy={studyButton}
                 studying={!!studying}
               />
@@ -2215,6 +2257,9 @@ export function GameView({
         )}
         {modal?.type === "travel" && (
           <TravelDialog here={modal.here} places={modal.places} pvpUntil={pvpUntil} session={session} onClose={() => setModal(null)} />
+        )}
+        {modal?.type === "quest" && (
+          <QuestDialog key={`${modal.npc}:${modal.offers.map((o) => `${o.id}.${o.state}.${o.step}`).join(",")}`} npc={modal.npc} offers={modal.offers} store={quests} session={session} onClose={() => setModal(null)} />
         )}
         {modal?.type === "give" && (
           <GiveDialog kind={modal.kind} target={modal.target} session={session} icons={icons} onClose={() => setModal(null)} />
@@ -2501,6 +2546,7 @@ export function GameView({
       </div>
       {!modern && (
         <Sidebar
+          getWay={getWay}
           session={session}
           icons={icons}
           assets={assets}
@@ -2522,6 +2568,7 @@ export function GameView({
           onAnnotate={annotateAt}
           friendsPanel={friendsPanel}
           petsPanel={petsPanel}
+          questsPanel={questsPanel}
           onStudy={studyButton}
           studying={!!studying}
           onEmotes={toggleEmotes}

@@ -774,6 +774,12 @@ export class ObjectsView {
     if (e.shadow) this.shadows.remove(e.shadow);
   }
 
+  /** Pictures changed under us (the admin dashboard's sprite editor): every object is composited again */
+  forgetComposites(): void {
+    this.composites.clear();
+    for (const e of this.entries.values()) e.key = "";
+  }
+
   dispose(): void {
     for (const e of this.entries.values()) this.disposeEntry(e);
     this.entries.clear();

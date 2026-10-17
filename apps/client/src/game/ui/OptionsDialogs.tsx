@@ -403,6 +403,8 @@ const ENHANCED_TITLE =
 const AMBIENT_TITLE = "Townsfolk walking the streets and patrons in the inns, seen by you alone";
 const PETS_TITLE = "Other players' pets following them (your own always shows: choose No pet in the Pets tab to hide it)";
 const PET_NAMES_TITLE = "The names under pets";
+const SHOW_WAY_TITLE = "On the map, a gold wash where a tracked quest sends you, and gold arrows on the way there";
+const QUEST_MARKERS_TITLE = 'A gold "!" over people with a quest for you, "?" where you can hand one in, and rings round what you\'re to hunt';
 const CRITTERS_TITLE = "Rats, spiders, centipedes and other small creatures scurrying about, killed with a click; seen by you alone, with no experience or loot";
 const FLYERS_TITLE = "Flocks of birds crossing the sky by day, and bats in caves (and out at night); seen by you alone";
 const GROUND_TITLE = "Tufts of grass, flowers, pebbles and stones on the ground outdoors and in caves";
@@ -558,6 +560,8 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
                   <AmbientSoundsOption d={d} set={set} />
                   <Check label="Show Pets" title={PETS_TITLE} checked={d.showPets} onChange={(v) => set({ showPets: v })} />
                   <Check label="Show Pet Names" title={PET_NAMES_TITLE} checked={d.showPetNames} onChange={(v) => set({ showPetNames: v })} />
+                  <Check label="Show Quest Markers" title={QUEST_MARKERS_TITLE} checked={d.questMarkers} onChange={(v) => set({ questMarkers: v })} />
+                  <Check label="Show The Way" title={SHOW_WAY_TITLE} checked={d.showWay} onChange={(v) => set({ showWay: v })} />
                 </GroupBox>
                 <GroupBox label="Interface" className="flow">
                   {/* Ours: the HUD over the whole view, or the original's interface column */}
@@ -1017,6 +1021,8 @@ export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Se
         <AmbientSoundsOption d={d} set={set} />
         <Check label="Show Pets" title={PETS_TITLE} checked={d.showPets} onChange={(v) => set({ showPets: v })} />
         <Check label="Show Pet Names" title={PET_NAMES_TITLE} checked={d.showPetNames} onChange={(v) => set({ showPetNames: v })} />
+        <Check label="Show Quest Markers" title={QUEST_MARKERS_TITLE} checked={d.questMarkers} onChange={(v) => set({ questMarkers: v })} />
+        <Check label="Show The Way" title={SHOW_WAY_TITLE} checked={d.showWay} onChange={(v) => set({ showWay: v })} />
         <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
         <Check label="Attack On Target" checked={d.attackOnTarget} onChange={(v) => set({ attackOnTarget: v })} />
         <div className="touch-config-buttons">
@@ -1038,6 +1044,8 @@ export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Se
                 groundDetail: d.groundDetail,
                 showPets: d.showPets,
                 showPetNames: d.showPetNames,
+                questMarkers: d.questMarkers,
+                showWay: d.showWay,
                 damageNumbers: d.damageNumbers,
                 attackOnTarget: d.attackOnTarget,
               });

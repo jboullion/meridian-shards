@@ -132,7 +132,7 @@ function Figure({ session, icons }: { session: GameSession; icons: IconRenderer 
 
 export function CharacterWindow({
   session, icons, assets, settings, itemSlots, tab, onTab, onClose, onLookItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, selecting, onSelectObject, onCast,
-  friendsPanel, petsPanel, onStudy, studying,
+  friendsPanel, petsPanel, questsPanel, onStudy, studying,
 }: {
   /** Ours: the Spells tab's Study button (StatList) */
   onStudy?: () => void;
@@ -140,6 +140,8 @@ export function CharacterWindow({
   /** Ours: the Friends and Pets tabs' pages (GameView makes them) */
   friendsPanel: ReactNode;
   petsPanel: ReactNode;
+  /** Ours (docs/adr/0009-quests.md 4): the Quests tab's page, in place of the original's list */
+  questsPanel: ReactNode;
   session: GameSession;
   icons: IconRenderer;
   assets: AssetStore;
@@ -328,7 +330,9 @@ export function CharacterWindow({
               friendsPanel
             ) : tab === "pets" ? (
               petsPanel
-            ) : (
+            ) : tab === "quests" ? (
+          questsPanel
+        ) : (
               <StatList
                 session={session}
                 icons={icons}

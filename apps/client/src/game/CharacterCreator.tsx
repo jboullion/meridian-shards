@@ -131,6 +131,8 @@ export function CharacterCreator({
     return {
       gender, hair: rand(p.hair.length), eyes: rand(p.eyes.length), nose: rand(p.noses.length), mouth: rand(p.mouths.length),
       hairT: rand(info.hairTranslations.length), faceT: rand(info.faceTranslations.length),
+      // Ours: facial hair starts as none (0); 1.. picks parts.beards[n - 1]
+      beard: 0,
     };
   });
   const [stats, setStats] = useState<number[]>(() => STAT_NAMES.map(() => STAT_START));
@@ -148,6 +150,11 @@ export function CharacterCreator({
     eyes: parts.eyes[pick(face.eyes, parts.eyes.length)],
     nose: parts.noses[pick(face.nose, parts.noses.length)],
     mouth: parts.mouths[pick(face.mouth, parts.mouths.length)],
+    // Ours: none, or one of the server's facial hair choices
+    beard: (() => {
+      const i = pick(face.beard, parts.beards.length + 1);
+      return i === 0 ? 0 : parts.beards[i - 1];
+    })(),
   };
   const hairT = info.hairTranslations[pick(face.hairT, info.hairTranslations.length)] ?? 0;
   const faceT = info.faceTranslations[face.faceT] ?? 0;
@@ -159,11 +166,13 @@ export function CharacterCreator({
         { iconRes: sel.mouth, hotspot: HS.mouth, translation: faceT, effect: 0, animation: none },
         { iconRes: sel.eyes, hotspot: HS.eyes, translation: faceT, effect: 0, animation: none },
         { iconRes: sel.nose, hotspot: HS.nose, translation: faceT, effect: 0, animation: none },
+        // Ours (player.kod SendOverlays): facial hair on the mouth's hotspot, in the hair colour
+        ...(sel.beard ? [{ iconRes: sel.beard, hotspot: HS.mouth, translation: hairT, effect: 0, animation: none }] : []),
         { iconRes: sel.hair, hotspot: HS.hair, translation: hairT, effect: 0, animation: none },
       ],
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [parts.head, sel.mouth, sel.eyes, sel.nose, sel.hair, faceT, hairT],
+    [parts.head, sel.mouth, sel.eyes, sel.nose, sel.hair, sel.beard, faceT, hairT],
   );
 
   const statPoints = STAT_POINTS - stats.reduce((a, v) => a + (v - STAT_START), 0);
@@ -192,7 +201,7 @@ export function CharacterCreator({
     setStats(stats.map((s, j) => (j === i ? next : s)));
   };
 
-  const step = (key: "hair" | "eyes" | "nose" | "mouth" | "hairT", d: number) => setFace({ ...face, [key]: face[key] + d });
+  const step = (key: "hair" | "eyes" | "nose" | "mouth" | "beard" | "hairT", d: number) => setFace({ ...face, [key]: face[key] + d });
 
   /** charmake.c VerifySettings, then BP_NEW_CHARINFO */
   const done = (statsOk = false, spellsOk = false) => {
@@ -212,7 +221,8 @@ export function CharacterCreator({
     }
     session.createCharacter({
       id: slotId, name: n, description: desc, gender: face.gender === 0 ? GENDER.MALE : GENDER.FEMALE,
-      faceParts: [parts.head, sel.hair, sel.eyes, sel.nose, sel.mouth],
+      // Ours: a 6th part only with facial hair (player.kod PlayerNewCharInfo takes 5 or 6)
+      faceParts: [parts.head, sel.hair, sel.eyes, sel.nose, sel.mouth, ...(sel.beard ? [sel.beard] : [])],
       hairTranslation: hairT, skinTranslation: faceT, stats, spells, skills,
     });
   };
@@ -252,7 +262,7 @@ export function CharacterCreator({
     );
   } else if (tab === "Appearance") {
     // char.rc IDD_CHARAPPEARANCE
-    const arrows = (y: number, text: string, key: "hair" | "eyes" | "nose" | "mouth" | "hairT") => (
+    const arrows = (y: number, text: string, key: "hair" | "eyes" | "nose" | "mouth" | "beard" | "hairT") => (
       <>
         <Label at={[140, y + 1, 55, 8]}>{text}</Label>
         <Button at={[213, y, 17, 11]} onClick={() => step(key, -1)} title={`Previous ${text.slice(0, -1).toLowerCase()}`}>
@@ -286,11 +296,13 @@ export function CharacterCreator({
         />
         <Text at={[215, 55, 20, 8]}>Light</Text>
         <Text at={[287, 55, 20, 8]}>Dark</Text>
-        {arrows(69, "Hair:", "hair")}
-        {arrows(84, "Hair color:", "hairT")}
-        {arrows(99, "Eyes:", "eyes")}
-        {arrows(114, "Nose:", "nose")}
-        {arrows(129, "Mouth:", "mouth")}
+        {/* Ours: rows 13 apart (the original's 15) to fit Beard above Prev / Next */}
+        {arrows(66, "Hair:", "hair")}
+        {arrows(79, "Hair color:", "hairT")}
+        {arrows(92, "Eyes:", "eyes")}
+        {arrows(105, "Nose:", "nose")}
+        {arrows(118, "Mouth:", "mouth")}
+        {parts.beards.length > 0 && arrows(131, "Beard:", "beard")}
         {prevNext(146)}
       </div>
     );

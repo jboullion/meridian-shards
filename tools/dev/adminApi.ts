@@ -7,6 +7,8 @@
 //   POST /__admin/kod/build      server\build.cmd Bkod -> { ok, tail }
 //   POST /__admin/tuning/save    { values: { <table id>: { <key>: number } } } -> { written }
 //   POST /__admin/travel/here    { playerId } -> where they stand, and the room's travel points
+//   /__admin/quests/...          the quests (tools/dev/questApi.ts)
+//   /__admin/sprites/...         the sprite editor's files (tools/dev/spriteApi.ts)
 //   POST /__admin/travel/move    { playerId, id, part: "portal" | "arrival" } -> point id moved there:
 //                                travelnet.kod rewritten, the Kod built, reload system, and for
 //                                the portal the room recreated (it places its portals when built)
@@ -23,7 +25,11 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join, resolve } from "node:path";
 import type { ViteDevServer } from "vite";
+import { descendants, lookup, readClasses } from "../assets/kodClasses.ts";
+import type { KodFile } from "../assets/roomLinks.ts";
 import { maint } from "../maint/maintClient.ts";
+import { questApi } from "./questApi.ts";
+import { spriteApi } from "./spriteApi.ts";
 import { movePoint, nearestAngle, readHistoricLinks, readPoints, readRids, strayLines, withLinks, type TravelPoint } from "./travelPoints.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -62,76 +68,22 @@ export interface SpellEntry extends CatalogEntry {
   sid: number;
 }
 
-interface KodClassInfo {
-  parent: string;
-  props: Map<string, string>;
-  rscs: Map<string, string>;
-}
-
-function kodFiles(dir: string): string[] {
+function kodFiles(dir: string): KodFile[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir, { withFileTypes: true, recursive: true })
     .filter((e) => e.isFile() && e.name.endsWith(".kod"))
-    .map((e) => join(e.parentPath, e.name));
+    .map((e) => join(e.parentPath, e.name))
+    .map((path) => ({ path, text: readFileSync(path, "latin1") }));
 }
 
-/** Every class under these folders: its parent, its `name = value` lines and its resources */
-function readClasses(dirs: string[]): Map<string, KodClassInfo> {
-  const out = new Map<string, KodClassInfo>();
-  for (const file of dirs.flatMap((d) => kodFiles(join(KOD, d)))) {
-    const text = readFileSync(file, "latin1").replace(/\/\/[^\n]*/g, "");
-    const head = /^\s*(\w+)\s+is\s+(\w+)/m.exec(text);
-    if (!head) continue;
-    const props = new Map<string, string>();
-    const rscs = new Map<string, string>();
-    for (const m of text.matchAll(/^\s*(\w+)\s*=\s*(.+?)\s*$/gm)) {
-      const [, k, v] = m as unknown as [string, string, string];
-      props.set(k.toLowerCase(), v);
-      if (/^".*"$/.test(v)) rscs.set(k.toLowerCase(), v.slice(1, -1));
-      else if (/^[\w-]+\.bgf$/i.test(v)) rscs.set(k.toLowerCase(), v.toLowerCase());
-    }
-    out.set(head[1]!, { parent: head[2]!, props, rscs });
-  }
-  return out;
-}
-
-/** A property through the class's parents, and the resource it names */
-function lookup(classes: Map<string, KodClassInfo>, cls: string, prop: string): string | null {
-  for (let c: string | undefined = cls, n = 0; c && n < 30; n++) {
-    const info = classes.get(c);
-    if (!info) return null;
-    const v = info.props.get(prop);
-    if (v !== undefined) return info.rscs.get(v.toLowerCase()) ?? findRsc(classes, v.toLowerCase()) ?? null;
-    c = info.parent;
-  }
-  return null;
-}
-
-function findRsc(classes: Map<string, KodClassInfo>, rsc: string): string | null {
-  for (const info of classes.values()) {
-    const v = info.rscs.get(rsc);
-    if (v !== undefined) return v;
-  }
-  return null;
-}
-
-function descendants(classes: Map<string, KodClassInfo>, root: string): string[] {
-  const isA = (c: string): boolean => {
-    for (let x: string | undefined = c, n = 0; x && n < 30; n++) {
-      if (x === root) return true;
-      x = classes.get(x)?.parent;
-    }
-    return false;
-  };
-  return [...classes.keys()].filter((c) => c !== root && isA(c));
-}
+const readKod = (dirs: string[]) => readClasses(dirs.flatMap((d) => kodFiles(join(KOD, d))));
 
 function catalog(): { monsters: CatalogEntry[]; items: ItemEntry[]; spells: SpellEntry[] } {
-  const battlers = readClasses(["object/active/holder/nomoveon/battler"]);
+  const battlers = readKod(["object/active/holder/nomoveon/battler"]);
   const monsters = descendants(battlers, "Monster")
     .map((c) => ({ className: c, name: lookup(battlers, c, "vrname") ?? "", icon: lookup(battlers, c, "vricon") }))
     .filter((m) => m.name && m.icon);
-  const passives = readClasses(["object/passive", "object/item"]);
+  const passives = readKod(["object/passive", "object/item"]);
   const stacks = new Set(descendants(passives, "NumberItem"));
   const items = descendants(passives, "Item")
     .map((c) => ({ className: c, name: lookup(passives, c, "vrname") ?? "", icon: lookup(passives, c, "vricon"), stack: stacks.has(c) }))
@@ -319,6 +271,8 @@ export function adminApi(server: ViteDevServer): void {
     }),
   );
   server.middlewares.use("/__admin/catalog", route(async () => catalog()));
+  questApi(server, { buildKod, standing: travelHere }, route, body);
+  spriteApi(server, { buildKod, route, body });
   server.middlewares.use(
     "/__admin/kod/build",
     route(async () => buildKod()),

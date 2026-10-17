@@ -4,6 +4,7 @@
 //                  here; the server keeps them, so a reloaded game tab gets them back
 //   shards:game    to the dev server, for the dashboard: who we are and where, every 2 s and on
 //                  each room change
+//   shards:sprite  from the dev server: { name } a sprite the dashboard saved, loaded again here
 // Started by GameScene in development builds, stopped when it's disposed.
 
 import type { AmbientRoomSpec, GameSession } from "@shards/world";
@@ -46,6 +47,8 @@ export interface BridgeScene {
   /** Tuning changed: what was worked out from the old values starts over */
   retune(): void;
   readonly roomFile: string;
+  /** A sprite's file changed: load it again and draw it anew */
+  spriteChanged(file: string): Promise<void>;
 }
 
 export function startDevBridge(scene: BridgeScene, session: GameSession): () => void {
@@ -71,6 +74,8 @@ export function startDevBridge(scene: BridgeScene, session: GameSession): () => 
   };
   const onState = (state: DevState) => apply(state);
   hot.on("shards:state", onState);
+  const onSprite = ({ name }: { name: string }) => void scene.spriteChanged(name);
+  hot.on("shards:sprite", onSprite);
   hot.send("shards:game-hello", {});
 
   const report = (): void => {
@@ -97,5 +102,6 @@ export function startDevBridge(scene: BridgeScene, session: GameSession): () => 
     clearInterval(timer);
     offEvent();
     hot.off("shards:state", onState);
+    hot.off("shards:sprite", onSprite);
   };
 }

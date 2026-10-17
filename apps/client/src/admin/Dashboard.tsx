@@ -5,6 +5,8 @@
 //   Spells   cast at what's in our room (the dummies), as us
 //   Rooms    every room: go there, rebuild it on the server, open it in the room editor
 //   World    the server's time of day; our client's hour, weather, terrain and crowd
+//   Quests   write quests and place their givers, then try them out on you (QuestsTab.tsx)
+//   Sprites  paint and fix the game's sprites, hair and facial hair, import pictures (SpritesTab.tsx)
 //   Tuning   ambient life's numbers, live in the game tabs; saved back to the source
 //   Server   build and reload the Kod, save, and any maintenance command
 // The server side is tools/dev/adminApi.ts; the game tab's side is game/devBridge.ts.
@@ -18,8 +20,10 @@ import {
   buildKod, castSpell, findRoom, giveItem, loadCatalog, maint, objectsHere, provingGrounds, PROVING_GROUNDS_RID, saveTuning, spawnBeside, travelHere, travelMove,
   useDevLink, type Catalog, type CatalogEntry, type GameReport, type TravelHere, type TravelPoint,
 } from "./api.ts";
+import { QuestsTab } from "./QuestsTab.tsx";
+import { SpritesTab } from "./SpritesTab.tsx";
 
-const TABS = ["Spawn", "Items", "Spells", "Rooms", "World", "Tuning", "Server"] as const;
+const TABS = ["Spawn", "Items", "Spells", "Rooms", "World", "Quests", "Sprites", "Tuning", "Server"] as const;
 type Tab = (typeof TABS)[number];
 
 // ---------------------------------------------------------------- pictures from the game files
@@ -93,6 +97,8 @@ export function Dashboard() {
   else if (tab === "Spells") page = <SpellsPanel catalog={catalog} act={act} needMe={needMe} me={me} />;
   else if (tab === "Rooms") page = <RoomsPanel act={act} needMe={needMe} />;
   else if (tab === "World") page = <WorldPanel act={act} needMe={needMe} me={me} scene={link.state.scene} setScene={(scene) => link.set({ scene })} />;
+  else if (tab === "Quests") page = <QuestsTab act={act} needMe={needMe} me={me} catalog={catalog} />;
+  else if (tab === "Sprites") page = <SpritesTab say={say} />;
   else if (tab === "Tuning") page = <TuningPanel act={act} tuning={link.state.tuning} setTuning={(tuning) => link.set({ tuning })} />;
   else page = <ServerPanel act={act} say={say} />;
 

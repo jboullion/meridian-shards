@@ -10,7 +10,8 @@ import { FINENESS, type Room } from "@shards/formats";
 import { DRAWFX, OF } from "@shards/render";
 import type { WorldState } from "@shards/world";
 import { currentSocial } from "../social.ts";
-import { markerFor } from "../markers.ts";
+import { markerFor, TIER_COLOR, type MarkerTier } from "../markers.ts";
+import type { MapWay } from "../questWays.ts";
 
 /** include/proto.h MM_* */
 const MM = {
@@ -49,8 +50,12 @@ const MIN_ARROW = 9;
 const OBJECT_RADIUS = FINENESS / 4;
 
 export function MiniMap({
-  world, getRoom, zoom, paper, annotations, annotationIcon, onAnnotate, onClick, tooltips = false,
+  world, getRoom, zoom, paper, annotations, annotationIcon, onAnnotate, onClick, tooltips = false, questMarkers = true, getWay,
 }: {
+  /** Ours (docs/adr/0009-quests.md 5): our tracked quests' area here (a gold wash) and the way out toward them; none with Show the way off */
+  getWay?: () => MapWay | null;
+  /** Ours (docs/adr/0009-quests.md 2): quests' "!" and "?" and the rings round their targets */
+  questMarkers?: boolean;
   /** Ours (the Modern interface): a left click on the map, which opens or closes the full map */
   onClick?: () => void;
   world: WorldState;
@@ -70,6 +75,8 @@ export function MiniMap({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const zoomRef = useRef(zoom);
   const annotationsRef = useRef(annotations);
+  const questMarkersRef = useRef(questMarkers);
+  const getWayRef = useRef(getWay);
   // Callers pass a new getRoom on every render (typing, zooming); keeping it in a ref stops
   // the drawing loop restarting, which dropped the paper for a frame or two.
   const getRoomRef = useRef(getRoom);
@@ -80,7 +87,9 @@ export function MiniMap({
     zoomRef.current = zoom;
     annotationsRef.current = annotations;
     getRoomRef.current = getRoom;
-  }, [zoom, annotations, getRoom]);
+    questMarkersRef.current = questMarkers;
+    getWayRef.current = getWay;
+  }, [zoom, annotations, getRoom, questMarkers, getWay]);
   /** MapScreenToRoom with bMiniMap */
   const toRoom = (e: { clientX: number; clientY: number }): [number, number] | null => {
     const m = mapping.current;
@@ -151,6 +160,13 @@ export function MiniMap({
       }
       ctx.stroke();
 
+      // Ours (docs/adr/0009-quests.md 5.2): a tracked quest's area, washed gold, under the objects
+      const way = getWayRef.current?.() ?? null;
+      if (way?.wash) {
+        ctx.fillStyle = "rgba(255,196,40,0.18)";
+        ctx.fillRect(0, 0, w, h);
+      }
+
       // Annotations (MapDrawAnnotations): annotate.bmp, at least 14 pixels across
       const notes = annotationsRef.current;
       if (notes && icon) {
@@ -176,13 +192,18 @@ export function MiniMap({
         if (o.info.drawingType === DRAWFX.INVISIBLE || mm === 0) continue;
         const x = xo + o.x * scale,
           y = yo + o.y * scale;
-        // Ours (markers.ts): travel portals, with a gold "!" until we attune to them
-        const marker = markerFor(mm);
-        if (marker) {
-          if (marker.map === "exclaim") exclaim(ctx, x, y, Math.max(7, 3.2 * radius));
-          else portalSign(ctx, x, y, Math.max(3, 1.6 * radius));
+        // Ours (markers.ts): travel portals, with a gold "!" until we attune to them; quests'
+        // "!" and "?" in place of the NPC's dot, and a gold ring round a monster we're to kill
+        const marker = markerFor(mm, questMarkersRef.current);
+        if (marker?.map === "glyph" && marker.glyph) {
+          glyphMark(ctx, marker.glyph, marker.grey, marker.tier, x, y, Math.max(7, 3.2 * radius));
           continue;
         }
+        if (marker?.map === "portal") {
+          portalSign(ctx, x, y, Math.max(3, 1.6 * radius));
+          continue;
+        }
+        if (marker?.map === "ring") targetRing(ctx, x, y, Math.max(3, 2.4 * radius));
         if (o.info.flags & OF.PLAYER) {
           if (mm & MM.BUILDER_GROUP) dot(COLOR.builder, COLOR.player, 2.6 * radius, x, y);
           if (mm & MM.FRIEND) dot(COLOR.friend, COLOR.player, 1.6 * radius, x, y, 4);
@@ -213,6 +234,35 @@ export function MiniMap({
           const o = world.objects.get(id);
           if (o) pin(ctx, xo + o.x * scale, yo + o.y * scale, Math.max(5, 2.2 * radius));
         }
+
+      // Ours (5.3): the way out toward a tracked quest's rooms: a gold chevron on each exit to take
+      // that's on the map, else an arrow at the map's rim toward the nearest
+      if (way?.marks.length) {
+        const cx0 = xo + px * scale,
+          cy0 = yo + py * scale;
+        const rim = Math.min(w, h) / 2 - 9;
+        const points = way.marks.map((m) => {
+          const [tx, ty] =
+            m.kind === "door"
+              ? [(m.col - 0.5) * 1024, (m.row - 0.5) * 1024]
+              : m.side === "N"
+                ? [px, 0]
+                : m.side === "S"
+                  ? [px, room.height]
+                  : m.side === "W"
+                    ? [0, py]
+                    : [room.width, py];
+          return { x: xo + tx * scale, y: yo + ty * scale };
+        });
+        const onMap = points.filter((p) => Math.hypot(p.x - w / 2, p.y - h / 2) <= rim);
+        const size = Math.max(6, 2.6 * radius);
+        for (const p of onMap) chevron(ctx, p.x, p.y, Math.atan2(p.y - cy0, p.x - cx0), size);
+        if (!onMap.length) {
+          const p = points.reduce((a, b) => (Math.hypot(b.x - cx0, b.y - cy0) < Math.hypot(a.x - cx0, a.y - cy0) ? b : a));
+          const ang = Math.atan2(p.y - cy0, p.x - cx0);
+          chevron(ctx, w / 2 + Math.cos(ang) * rim, h / 2 + Math.sin(ang) * rim, ang, size * 1.3);
+        }
+      }
 
       // The player. Ours: a filled arrowhead, outlined, at fractional pixels. The original's
       // (MapDrawPlayer: a line through us with a head in front) rounded each point on its own,
@@ -267,6 +317,25 @@ export function MiniMap({
   );
 }
 
+/** Ours (docs/adr/0009-quests.md 5.3): a gold chevron pointing the way (angle in radians, 0 east) */
+function chevron(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number, size: number): void {
+  const c = Math.cos(angle),
+    s = Math.sin(angle);
+  const at = (d: number, side: number) => [x + d * c - side * s, y + d * s + side * c] as const;
+  ctx.beginPath();
+  ctx.moveTo(...at(size, 0));
+  ctx.lineTo(...at(-size * 0.6, size * 0.75));
+  ctx.lineTo(...at(-size * 0.15, 0));
+  ctx.lineTo(...at(-size * 0.6, -size * 0.75));
+  ctx.closePath();
+  ctx.fillStyle = "rgb(255,200,40)";
+  ctx.fill();
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "rgb(40,20,0)";
+  ctx.stroke();
+}
+
 /** Ours: a friend's pin, its point on them */
 function pin(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
   ctx.beginPath();
@@ -299,18 +368,28 @@ function star(ctx: CanvasRenderingContext2D, size: number, x: number, y: number)
   ctx.stroke();
 }
 
-/** Ours (markers.ts): a gold "!" standing on the spot, outlined to read on any floor */
-function exclaim(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+/** Ours (markers.ts): a gold "!" or "?" standing on the spot (grey: not yet), outlined to read on any floor */
+function glyphMark(ctx: CanvasRenderingContext2D, glyph: string, grey: boolean, tier: MarkerTier, x: number, y: number, size: number): void {
   ctx.save();
   ctx.font = `bold ${Math.round(size * 1.6)}px sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
   ctx.lineWidth = 3;
-  ctx.strokeStyle = "rgb(40,20,0)";
-  ctx.strokeText("!", x, y + size * 0.6);
-  ctx.fillStyle = "rgb(255,200,40)";
-  ctx.fillText("!", x, y + size * 0.6);
+  const [fill, outline] = TIER_COLOR[tier];
+  ctx.strokeStyle = grey ? "rgb(30,30,30)" : outline;
+  ctx.strokeText(glyph, x, y + size * 0.6);
+  ctx.fillStyle = grey ? "rgb(170,170,170)" : fill;
+  ctx.fillText(glyph, x, y + size * 0.6);
   ctx.restore();
+}
+
+/** Ours (markers.ts): a gold ring round a monster that counts for one of our quest steps */
+function targetRing(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.lineWidth = Math.max(1.5, r / 3);
+  ctx.strokeStyle = "rgb(255,200,40)";
+  ctx.stroke();
 }
 
 /** Ours (markers.ts): an attuned travel portal, a small purple ring */

@@ -11,6 +11,7 @@
 // The Classic interface draws the same things in the original's column (Sidebar.tsx).
 
 import type { ReactNode } from "react";
+import type { MapWay } from "../questWays.ts";
 import type { Room } from "@shards/formats";
 import type { GameSession } from "@shards/world";
 import type { AssetStore } from "../../assets.ts";
@@ -151,8 +152,12 @@ function MapButton({ label, className, onClick, children }: {
 }
 
 export function MapCluster({
-  session, icons, assets, settings, buttons, getRoom, roomName, annotations, onAnnotate, onLook, onZoom, onMap,
+  session, icons, assets, settings, buttons, getRoom, roomName, annotations, onAnnotate, onLook, onZoom, onMap, tracker, getWay,
 }: {
+  /** Ours (docs/adr/0009-quests.md 5): tracked quests' areas and the way to them, for the map */
+  getWay?: () => MapWay | null;
+  /** Ours (docs/adr/0009-quests.md 4.2): the quest tracker, under the map */
+  tracker?: ReactNode;
   /** The toolbar's Rest/Stand and mailbox, at the map's top corners (none with Show toolbar off) */
   buttons?: ToolbarButton[];
   session: GameSession;
@@ -185,6 +190,8 @@ export function MapCluster({
             onAnnotate={onAnnotate}
             onClick={onMap}
             tooltips={settings.tooltips}
+            questMarkers={settings.questMarkers}
+            getWay={settings.showWay ? getWay : undefined}
           />
         ) : (
           <div className="minimap off clickable" style={{ backgroundImage: `url(${paper})` }} onClick={onMap} />
@@ -201,6 +208,7 @@ export function MapCluster({
       </div>
       {roomName && <div className="map-room-name">{roomName}</div>}
       <Enchantments session={session} icons={icons} kind="room" tooltips={settings.tooltips} onLook={onLook} />
+      {tracker}
     </div>
   );
 }

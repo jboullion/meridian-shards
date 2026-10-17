@@ -62,7 +62,10 @@ export interface NewCharInfo {
   name: string;
   description: string;
   gender: number;
-  /** Face part resource ids: head, hair, eyes, nose, mouth. Empty = server default face. */
+  /**
+   * Face part resource ids: head, hair, eyes, nose, mouth, and (ours) an optional 6th, the facial
+   * hair. Empty = server default face.
+   */
   faceParts: number[];
   hairTranslation: number;
   skinTranslation: number;
@@ -383,6 +386,8 @@ export interface FaceParts {
   eyes: number[];
   noses: number[];
   mouths: number[];
+  /** Ours (Meridian Shards): facial hair, drawn on the mouth's hotspot in the hair colour; [] for none offered */
+  beards: number[];
 }
 
 /** A spell or skill the creator offers (char.h Spell / Skill): `id` is the Kod number, not an object. */
@@ -422,7 +427,7 @@ export function readCharInfo(r: ByteReader): CharInfo {
   const face = (): FaceParts => {
     const hair = ids();
     const head = r.u32();
-    return { hair, head, eyes: ids(), noses: ids(), mouths: ids() };
+    return { hair, head, eyes: ids(), noses: ids(), mouths: ids(), beards: [] as number[] };
   };
   const parts: [FaceParts, FaceParts] = [face(), face()];
   const choices = () => {
@@ -432,7 +437,14 @@ export function readCharInfo(r: ByteReader): CharInfo {
     return out;
   };
   const spells = choices();
-  return { hairTranslations, faceTranslations, parts, spells, skills: choices() };
+  const skills = choices();
+  // Ours (system.kod SendCharInfo): the facial hair choices follow, male then female; servers that
+  // don't send them end here
+  if (r.remaining >= 8) {
+    parts[0].beards = ids();
+    parts[1].beards = ids();
+  }
+  return { hairTranslations, faceTranslations, parts, spells, skills };
 }
 
 /** BP_CHARACTERS (module/char/char.c HandleCharacters). */
@@ -767,6 +779,8 @@ export const UC = {
   // Ours (Meridian Shards, docs/adr/0015-social-on-our-server.md 1): a command line to our Kod
   // (user.kod ShardsCommand), and what our features send back
   SHARDS: 100, TRAVEL_LIST: 101, PVP_UNTIL: 102, FRIENDS: 103, PETS: 104, AMBIENT: 105,
+  // Ours (docs/adr/0009-quests.md 3): quests (shards-server util/questbook.kod)
+  QUEST_OFFERS: 106, QUEST_LOG: 107, QUEST_PROGRESS: 108,
 } as const;
 
 /**

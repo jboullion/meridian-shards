@@ -10,6 +10,7 @@ On the local development server there's also the **admin dashboard**, at http://
 - **Spells:** cast at what's in your room.
 - **Rooms:** go to any room, rebuild it, or edit it.
 - **World:** the server's time, and your client's weather, terrain and crowd.
+- **Sprites:** a pixel editor for the game's sprites. Hair and facial hair are shown on a head in every hair colour. It can import a PNG and offer a new style in the character creator. Saves go to shards-server's `resource/graphics/shards` and show in game tabs straight away.
 - **Tuning:** ambient life's numbers, live.
 - **Server:** build and reload the Kod, and any maintenance command.
 
@@ -134,6 +135,38 @@ set object <player> piTimeAttackedByPlayer int 0
   - **If the build fails,** the file goes back as it was.
   - **Commit it:** the change is a source edit in shards-server.
 - **Admins are immortal,** so fighting never locks them out. `set object <you> pbImmortal int 0` to try the lockout, and `int 1` after.
+
+### Quests
+
+Ours ([ADR 0009](adr/0009-quests.md)): quests are data, shards-server's `quests/<key>.json`, generated into `kod/util/questdefs.kod` (`npm run quests`; `server\build.cmd` runs it too) and into our client's `dist/assets/quests.json`. Players talk to a giver by activating them (double-click).
+
+**The dashboard's Quests tab** (`admin.html`, development only) is the quick way to make them:
+- **New quest / Edit:** the name, the giver (an NPC class, with where the room Kod places it, or a placed giver), the health band, a time limit, repeating, quests needed first, what the giver says (the offer, while it's going, on completing), the steps and the rewards.
+  - **Steps:** kill N of a monster (its kinds count too, unless *This class only*), collect N of an item, talk to someone, deliver a parcel to someone, or visit a room (**This room** adds the one you're in). Each is handed in to the quest's giver unless you pick someone else. A step after the first can have what the giver says as it starts.
+  - **More step kinds** (the guide chains'): cast a spell, deposit shillings with a banker, leave something with a vault keeper, buy from someone, use one of some items, reach a base health, choose a hometown, bond with every mana node. These are **done by themselves** (no handing in); any step can be made so with its tick box. A step can have its own reward (experience, shillings, training points).
+  - **Only kills in its rooms count** (a kill step's box): for a region's own monsters, set with the step's rooms. **Not offered once any of these is done or going:** for the same errand from several givers.
+  - **XP worth:** the quest's XP as points of health at its band minimum (shown as the XP it comes to), so it scales with the quest's level; a main quest must give XP. A hub's main quests should come to about a third of its band's levelling ([monster-bands.md](research/monster-bands.md) has the numbers).
+  - **Who can take it:** a faction (or neutral players only), and boxes for players of interest to the court (who can join a faction), guild masters, players carrying a guild shield, and players in no guild. **Special rewards:** joining a faction, an insignia on the player's guild shield, raising the necromancer guild; a reward item can be made for a school (the disciple robes). A quest's random pick (`oneOf`) is kept when saving but edited in the file.
+  - **Tier:** the markers' colour: Main (gold) for the levelling chains, Story (silver), Errand (bronze) for repeatable, common quests. **Replaces from before** names old `QST_ID_` or `HP*_CHAIN` constants: players who finished those have this quest done.
+  - **Areas:** each step shows its *Area on the map*: for a kill, the rooms where the monster spawns or is created, worked out from the Kod. **Where** replaces it (a collect step has an area only if you give one); **Leave out of the area** drops rooms from a kill's. Players see the area washed gold on their map, and gold arrows on the exits toward it (Options, Show The Way).
+  - **Save** writes the file; **Save and apply** also builds the Kod and runs `reload system` (saving the game). Text only our client shows (the offer, the briefs) needs no build. Commit the files in shards-server.
+  - **Retire** deletes the file and adds its id to `quests/retired.json`: ids are never used again. Players who had it lose it at their next logon.
+- **Placed givers:** **New giver** takes a name, a look (an NPC whose picture it borrows) and a description, and **Place giver here** stands it on your square, facing your way. **Move here** moves one. They're `quests/givers.json`, placed by `room.kod Constructed` (`QuestBook.PlaceGivers`), so their room is rebuilt when they change.
+- **Try it out (you):** pick a quest, then **Give me it**, **Go to step**, **Count step done** (fills a kill count or a visit; a collect step counts what you carry), **Complete it** (with its rewards), **Forget it** or **Forget all**. You still hand steps in at the NPC.
+- **If the generator or the build fails,** every file goes back as it was, and the problems are listed.
+
+**On the maintenance port**, for a player (`<qb>` from `send object 0 GetQuestBook`):
+
+```text
+send object <qb> AdminGrant who object <player> id int 1
+send object <qb> AdminSetStep who object <player> id int 1 step int 2
+send object <qb> AdminFinishStep who object <player> id int 1
+send object <qb> AdminComplete who object <player> id int 1
+send object <qb> AdminReset who object <player> id int 0
+send object <qb> AdminState who object <player>
+```
+
+`AdminReset` with id 0 forgets every quest. `AdminState` returns a list (`show list <n>`): the log (`[id, step, count, deadline]` each) and the quests done (`[id, times, when]`).
 
 ### The Debug tab
 

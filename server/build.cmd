@@ -7,6 +7,8 @@ if not exist "%VSDEVCMD%" (
   echo VsDevCmd.bat not found at "%VSDEVCMD%". Edit server\build.cmd for your Visual Studio install.
   exit /b 1
 )
+rem The quests (src\quests\*.json) become src\kod\util\questdefs.kod first (docs/adr/0009-quests.md 6)
+node "%~dp0..\tools\quests\generate.ts" || exit /b 1
 call "%VSDEVCMD%" -arch=x86 -host_arch=x64 >nul || exit /b 1
 cd /d "%~dp0src" || exit /b 1
 rem The source targets VS2015; newer MSVC raises new warnings and common.mak has /WX.

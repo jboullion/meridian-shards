@@ -27,7 +27,7 @@ import type { AssetStore } from "../assets.ts";
 import { gameSocketUrl } from "../host.ts";
 import { RoomCache } from "../render/roomCache.ts";
 import { sceneTune } from "./sceneTuning.ts";
-import { markerFor } from "./markers.ts";
+import { markerFor, MM_OURS, MM_QUEST_NPC } from "./markers.ts";
 import { startDevBridge } from "./devBridge.ts";
 import { loadSkybox, type LoadedRoom } from "../render/roomLoader.ts";
 import { ORIGINAL_FOV } from "../viewer/roomScene.ts";
@@ -221,7 +221,7 @@ export class GameScene {
   private readonly session: GameSession;
   private readonly assets: AssetStore;
   private readonly labelsEl: HTMLElement;
-  /** Ours: the "!" markers' elements (drawMarkers), reused frame to frame */
+  /** Ours: the "!" and "?" markers' elements (drawMarkers), reused frame to frame */
   private readonly markerPool: HTMLElement[] = [];
   private readonly canvas: HTMLCanvasElement;
   private palette: THREE.Texture | null = null;
@@ -784,6 +784,28 @@ export class GameScene {
   /** Tuning changed (the admin dashboard, tuning.ts): the crowd, critters and the rest start over with it */
   retune(): void {
     this.forgetRoomCaches();
+  }
+
+  /**
+   * A sprite's file changed (the admin dashboard's sprite editor saved it): loaded again, the old
+   * picture kept on show until the new one is in, then every object composited anew.
+   */
+  async spriteChanged(file: string): Promise<void> {
+    await this.assets.refresh();
+    const name = file.toLowerCase();
+    const loads: Promise<void>[] = [];
+    for (const id of this.bgfLoads.keys()) {
+      const res = localResName(id) ?? this.session.resource(id);
+      if (res?.toLowerCase() !== name) continue;
+      const p = this.assets.bgf(res).then(
+        (b) => void this.bgfs.set(id, b),
+        () => {},
+      );
+      this.bgfLoads.set(id, p);
+      loads.push(p);
+    }
+    await Promise.all(loads);
+    if (loads.length) this.objects?.forgetComposites();
   }
 
   /** The current room's terrain (roomterrain.json), unless setTestRoom says otherwise */
@@ -2233,7 +2255,7 @@ export class GameScene {
     }
   }
 
-  /** Ours (markers.ts): a "!" over objects that ask for one (an unattuned travel portal), hidden by walls as names are */
+  /** Ours (markers.ts): a "!" or "?" over objects that ask for one (an unattuned travel portal, a quest giver), hidden by walls as names are */
   private drawMarkers(): void {
     const w = this.canvas.clientWidth,
       h = this.canvas.clientHeight;
@@ -2242,7 +2264,8 @@ export class GameScene {
     const eye = this.camera.position;
     let n = 0;
     for (const o of this.session.world.objects.values()) {
-      const glyph = markerFor(o.info.minimapFlags)?.glyph;
+      const marker = markerFor(o.info.minimapFlags, this.settings.questMarkers);
+      const glyph = marker?.glyph;
       const top = glyph ? this.objects?.topOf(o.id) : null;
       if (!glyph || !top) continue;
       v.copy(top).project(this.camera);
@@ -2256,7 +2279,7 @@ export class GameScene {
       }
       const el = this.markerPool[n] ?? this.labelsEl.appendChild(document.createElement("div"));
       this.markerPool[n++] = el;
-      el.className = "world-marker";
+      el.className = marker.grey ? "world-marker grey" : marker.tier === "gold" ? "world-marker" : `world-marker ${marker.tier}`;
       if (el.textContent !== glyph) el.textContent = glyph;
       el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -150%)`;
       el.style.display = "";
@@ -2575,6 +2598,8 @@ export class GameScene {
    * them, as typing "buy" or "withdraw" does; someone who only takes things (OF_OFFERABLE, not
    * attackable: a banker) opens Deposit, as typing "deposit" does. The phone has no other way.
    * At any distance: the server doesn't check it (user.kod), and they often stand behind a counter.
+   * Ours (docs/adr/0009-quests.md 3.3): someone with a quest marker is talked to (activated: the
+   * server sends what they have for us), before their shop when the marker is a gold "!" or "?".
    */
   private readonly onDoubleClick = (e: MouseEvent) => {
     // A double tap is the touch handlers' (the browser still sends a dblclick for it)
@@ -2589,14 +2614,18 @@ export class GameScene {
         !(o.info.flags & OF_PLAYER) &&
         (((o.info.flags & (OF_ACTIVATABLE | OF_CONTAINER)) !== 0 && this.distanceTo(o.id) <= CLOSE_DISTANCE) ||
           (o.info.flags & OF_BUYABLE) !== 0 ||
-          (o.info.flags & (OF_OFFERABLE | OF_ATTACKABLE)) === OF_OFFERABLE),
+          (o.info.flags & (OF_OFFERABLE | OF_ATTACKABLE)) === OF_OFFERABLE ||
+          (o.info.minimapFlags & MM_QUEST_NPC) !== 0),
     );
     this.choose("Activate", ids, (id) => {
       const o = this.session.world.objects.get(id);
+      const quest = o ? o.info.minimapFlags & MM_QUEST_NPC : 0;
       if (o && o.info.flags & OF_CONTAINER) this.onContents?.(id);
       else if (o && o.info.flags & OF_ACTIVATABLE) this.session.activate(id);
+      else if (quest & (MM_OURS.QUEST_OFFER | MM_OURS.QUEST_TURNIN)) this.session.activate(id);
       else if (o && o.info.flags & OF_BUYABLE) this.onBuy?.(id);
       else if (o && o.info.flags & OF_OFFERABLE) this.onDeposit?.(id);
+      else if (quest) this.session.activate(id);
     });
   }
 

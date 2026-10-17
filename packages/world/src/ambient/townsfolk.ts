@@ -35,9 +35,10 @@ export function twoColorXlat(cloth: number, skin: number): number {
 
 /** system.kod SendCharInfo: the skin translations for faces (PT_BLUE_TO_SKIN1..4), and the body's skin colour for each (player.kod ConvertSkinColorToXLAT) */
 const SKINS: [number, number][] = [[0x01, C.SKIN1], [0x02, C.SKIN1], [0x03, C.SKIN2], [0x04, C.SKIN4]];
-/** system.kod SendCharInfo's hair colours, natural ones more often */
+/** system.kod GetHairTranslations: the hair colours, natural ones more often, dyed ones (blue, purple, green) rarely */
 const HAIR_COLORS: [number, number][] = [
   [0x2c, 4], [0x22, 4], [0x1d, 3], [0x1e, 3], [0x2f, 3], [0x30, 2], [0x2a, 2], [0x2b, 2], [0x1a, 1], [0x1b, 1], [0x1c, 1], [0x0a, 1], [0x12, 1],
+  [0x2d, 3], [0x2e, 3], [0x19, 1], [0x10, 1], [0x28, 1], [0x11, 0.15], [0x0f, 0.15], [0x14, 0.15],
 ];
 
 interface FaceParts {
@@ -46,22 +47,37 @@ interface FaceParts {
   eyes: string[];
   noses: string[];
   mouths: string[];
+  /** system.kod GetAllowedBeardIcons, weighted; "" is clean-shaven */
+  beards: [string, number][];
 }
-/** system.kod GetAllowed*Icons (no mohawks in town, mostly); "" is bald */
+/**
+ * system.kod GetAllowed*Icons (no mohawks in town, mostly); "" is bald. Then Meridian Shards' new
+ * styles (pts*.bgf), weighted to suit each, and its facial hair (pbd*.bgf), on most men none.
+ */
 const FACES: Record<"male" | "female", FaceParts> = {
   male: {
     head: "phax.bgf",
-    hair: [["ptad.bgf", 4], ["ptbb.bgf", 3], ["ptac.bgf", 2], ["ptba.bgf", 1], ["ptxa.bgf", 2], ["", 2], ["ptcd.bgf", 0.3]],
+    hair: [
+      ["ptad.bgf", 4], ["ptbb.bgf", 3], ["ptac.bgf", 2], ["ptba.bgf", 1], ["ptxa.bgf", 2], ["", 2], ["ptcd.bgf", 0.3],
+      ["ptsa.bgf", 1], ["ptsb.bgf", 3], ["ptsc.bgf", 2], ["ptsd.bgf", 1.5], ["ptse.bgf", 2], ["ptsf.bgf", 0.6],
+      ["ptsg.bgf", 1], ["ptsh.bgf", 0.4], ["ptsi.bgf", 0.4], ["ptsl.bgf", 1],
+    ],
     eyes: ["peax.bgf", "pebx.bgf", "pecx.bgf", "pedx.bgf"],
     noses: ["pnax.bgf", "pnbx.bgf", "pncx.bgf"],
     mouths: ["pmax.bgf", "pmbx.bgf", "pmcx.bgf"],
+    beards: [["", 9], ["pbda.bgf", 2], ["pbdb.bgf", 1], ["pbdc.bgf", 1.2], ["pbdd.bgf", 1.2], ["pbde.bgf", 0.5], ["pbdf.bgf", 0.4]],
   },
   female: {
     head: "phkx.bgf",
-    hair: [["ptca.bgf", 3], ["ptbc.bgf", 3], ["ptdc.bgf", 3], ["ptcb.bgf", 3], ["ptbd.bgf", 2], ["ptdb.bgf", 2], ["ptxb.bgf", 2], ["ptdr.bgf", 1], ["ptcd.bgf", 0.2]],
+    hair: [
+      ["ptca.bgf", 3], ["ptbc.bgf", 3], ["ptdc.bgf", 3], ["ptcb.bgf", 3], ["ptbd.bgf", 2], ["ptdb.bgf", 2], ["ptxb.bgf", 2], ["ptdr.bgf", 1], ["ptcd.bgf", 0.2],
+      ["ptsa.bgf", 0.3], ["ptsb.bgf", 1], ["ptsc.bgf", 1.5], ["ptsd.bgf", 3], ["ptse.bgf", 1], ["ptsg.bgf", 2],
+      ["ptsh.bgf", 2], ["ptsi.bgf", 3], ["ptsj.bgf", 2.5], ["ptsk.bgf", 2.5], ["ptsl.bgf", 1.5],
+    ],
     eyes: ["pekx.bgf", "pelx.bgf", "pemx.bgf"],
     noses: ["pnkx.bgf", "pnlx.bgf", "pnmx.bgf"],
     mouths: ["pmkx.bgf", "pmlx.bgf", "pmmx.bgf"],
+    beards: [["", 1]],
   },
 };
 
@@ -169,6 +185,8 @@ export interface Appearance {
   /** "" when bald */
   hair: string;
   hairXlat: number;
+  /** Facial hair, "" for none: on the mouth's hotspot in the hair colour (player.kod SendOverlays) */
+  beard: string;
   skinXlat: number;
   gear?: Gear;
 }
@@ -214,6 +232,7 @@ export function randomAppearance(rand: () => number): Appearance {
     hair: weighted(rand, face.hair),
     hairXlat: weighted(rand, HAIR_COLORS),
     skinXlat,
+    beard: weighted(rand, face.beards),
   };
 }
 
@@ -283,6 +302,8 @@ export function lookFor(a: Appearance, pose: Pose, torch = false, cheerFrame = 0
     overlay(a.eyes, HS.EYES, a.skinXlat, none(1)),
     overlay(a.nose, HS.NOSE, a.skinXlat, none(1)),
   ];
+  // Facial hair before the hair, as the server sends it; helmets don't hide it
+  if (a.beard) overlays.push(overlay(a.beard, HS.MOUTH, a.hairXlat, none(1)));
   if (a.hair && !gear.hat?.hidesHair) overlays.push(overlay(a.hair, HS.TOUPEE, a.hairXlat, none(1)));
   // Held and worn items come last (player.kod: plOverlays after the body's own)
   if (gear.hat) overlays.push(overlay(gear.hat.file, HS.TOUPEE, 0, none(1)));
@@ -310,12 +331,13 @@ export function setTorch(o: WorldObject, a: Appearance, pose: Pose, torch: boole
 // ---- dressed for a part ----
 
 /** A face, hair and skin, as anyone's (randomAppearance's) */
-function person(rand: () => number, female: boolean): Pick<Appearance, "female" | "head" | "eyes" | "nose" | "mouth" | "hair" | "hairXlat" | "skinXlat"> & { skin: number } {
+function person(rand: () => number, female: boolean): Pick<Appearance, "female" | "head" | "eyes" | "nose" | "mouth" | "hair" | "hairXlat" | "skinXlat" | "beard"> & { skin: number } {
   const face = FACES[female ? "female" : "male"];
   const [skinXlat, skin] = pick(rand, SKINS);
   return {
     female, head: face.head, eyes: pick(rand, face.eyes), nose: pick(rand, face.noses), mouth: pick(rand, face.mouths),
     hair: weighted(rand, face.hair), hairXlat: weighted(rand, HAIR_COLORS), skinXlat, skin,
+    beard: weighted(rand, face.beards),
   };
 }
 
@@ -497,6 +519,7 @@ export function townsfolkArt(): string[] {
   for (const f of Object.values(FACES)) {
     out.add(f.head);
     for (const [h] of f.hair) if (h) out.add(h);
+    for (const [b] of f.beards) if (b) out.add(b);
     for (const p of [...f.eyes, ...f.noses, ...f.mouths]) out.add(p);
   }
   for (const s of [0, 1]) {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CharInfo, CharacterSlot } from "@shards/protocol";
 import { SAY } from "@shards/protocol";
 import {
-  GameSession, type ChatLine, type ContainerContents, type DamageDealt, type LookResult, type OfferEvent, type SessionPhase, type SocialEvent, type TradeList, type TravelEvent,
+  GameSession, type ChatLine, type ContainerContents, type DamageDealt, type LookResult, type OfferEvent, type QuestEvent, type SessionPhase, type SocialEvent, type TradeList, type TravelEvent,
   type MailNewsEvent, type GuildEvent, type MinigameEvent, localResName } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
@@ -17,6 +17,7 @@ import { Framed } from "./TitleBar.tsx";
 import { getSettings } from "./settings.ts";
 import { filterIncoming, loadProfanity } from "./profanity.ts";
 import { IconRenderer } from "./icons.ts";
+import { QuestStore } from "./quests.ts";
 import { ConnectingScreen, LoginScreen, rememberName } from "./LoginScreen.tsx";
 
 /** A tiny event relay: session events that arrive before (or without) a listener are dropped. */
@@ -42,6 +43,12 @@ interface Live {
   travel: Relay<TravelEvent>;
   /** Ours: friends, pets and the shared crowd from our server (docs/adr/0015) */
   social: Relay<SocialEvent>;
+  /**
+   * Ours (docs/adr/0009-quests.md): our quests, kept from the first log at logon (before the game
+   * view is there to listen), and what an NPC we talked to has for us
+   */
+  quests: QuestStore;
+  questOffers: Relay<Extract<QuestEvent, { type: "offers" }>>;
   offers: Relay<OfferEvent>;
   looks: Relay<LookResult>;
   contents: Relay<ContainerContents>;
@@ -173,6 +180,10 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     const trades = new Relay<TradeList>();
     const travel = new Relay<TravelEvent>();
     const social = new Relay<SocialEvent>();
+    // The session is made below; the store only speaks once the game has begun
+    let speak: (text: string) => void = () => {};
+    const quests = new QuestStore(assets, (text) => speak(text));
+    const questOffers = new Relay<Extract<QuestEvent, { type: "offers" }>>();
     const offers = new Relay<OfferEvent>();
     const looks = new Relay<LookResult>();
     const contents = new Relay<ContainerContents>();
@@ -235,17 +246,19 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
         trade: trades.emit,
         travel: travel.emit,
         social: social.emit,
+        quest: (e) => (e.type === "offers" ? questOffers.emit(e) : quests.handle(e)),
         offer: offers.emit,
         sound: (e) => audio.handle(e),
         damageDealt: damage.emit,
       },
     );
+    speak = (text) => s.localMessage(text);
     // srvrstr.c: the profanity filter on every line shown
     s.textFilter = filterIncoming;
     s.setLanguage(getSettings().language);
     void loadProfanity(assets);
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, quests, questOffers, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
   };
 
   const logout = () => {
@@ -347,6 +360,8 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       trades={live.trades.on}
       travel={live.travel.on}
       socialEvents={live.social.on}
+      quests={live.quests}
+      questOffers={live.questOffers.on}
       offers={live.offers.on}
       phase={phase}
       chat={chat}

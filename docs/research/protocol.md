@@ -273,6 +273,7 @@ Our client and our server change together (ADR 0001 decision 4), so these are ou
     - `friend list | request <name> | accept <name> | decline <name> | cancel <name> | remove <name> | options <flags> | search <text> | follow <name> | unfollow | stopfollower <name> | hp`: friends (`util/shardssocial.kod FriendCommand`, ADR 0015). A name always ends a command, so it may hold spaces. `options` takes the `SF_*` bits: 1 hide our location, 2 hide us in search, 4 refuse followers. `hp` asks the server to send our health to friends in our room.
     - `pet list | set <kind> <colour> [<name>] | clear`: our pet, and the room's (`PetCommand`).
     - `ambient`: our room's shared crowd (`AmbientCommand`).
+    - `quest accept <id> | turnin <id> | offers | abandon <id> | log`: quests (`util/questbook.kod QuestCommand`, ADR 0009). Accept, turnin and offers act on the NPC the player last activated (talking to an NPC is activating it: `Monster.TryActivate` -> `QuestBook.NpcActivated`, which sends `UC_QUEST_OFFERS` and remembers the NPC in `User.poQuestNpc`), so no object number travels in the text. The server checks again that the NPC is still in the room and within 4 squares.
 - **`UC_TRAVEL_LIST` (101), server to client** (`user.kod SendTravelList`): where the portal we touched can take us, sent when an attuned player touches a travel portal.
   - The fields: the portal's own point id DWORD, the PvP lockout's seconds left DWORD, a BYTE count, then each place's point id DWORD and name resource DWORD.
   - Places come newest first; the client reverses them.
@@ -291,6 +292,11 @@ Our client and our server change together (ADR 0001 decision 4), so these are ou
   - **5, search results** (`SendSearch`): a WORD count, each a name STRING.
 - **`UC_PETS` (104), server to client** (`SendRoomPets`, `PetChanged`): a WORD count, then each player's object DWORD, whether they have a pet BYTE, and if so its kind STRING, colour BYTE and name STRING. A room's list always includes the player asking.
 - **`UC_AMBIENT` (105), server to client** (`AmbientCommand`, `Room.GetAmbientCrowd`): the room's crowd seed DWORD, the milliseconds since it began DWORD, and the game hour it began in BYTE.
+- **Quests** (`util/questbook.kod`, ADR 0009). Only ids and numbers: the names and text are in our client's catalogue, `dist/assets/quests.json`.
+  - **`UC_QUEST_OFFERS` (106), server to client** (`SendOffers`, after activating an NPC or `quest offers`): the NPC's object DWORD, a BYTE count, then each quest's id DWORD, state BYTE (1 offered, 2 a step ready to hand in, 3 a step in progress, 4 offered once we have a little more health) and step BYTE. Steps to hand in come first.
+  - **`UC_QUEST_LOG` (107), server to client** (`SendLog`, at logon and on every change): the catalogue's hash DWORD (`QuestDefs.GetCatalogHash`, the same as `quests.json`'s `hash`); a BYTE count of active quests, each its id DWORD, step BYTE (from 1), count WORD and seconds left DWORD (-1 for no limit); then a WORD count of quests done, each its id DWORD and times WORD.
+  - **`UC_QUEST_PROGRESS` (108), server to client** (`SendProgress`): a quest's id DWORD, step BYTE and count WORD, as a kill, find or visit counts.
+  - **Minimap bits** (`QuestBook.MarkerFor`, from `User.BuildMinimapDotFlag`): `MM_QUEST_OFFER` 0x4000 ("!"), `MM_QUEST_TURNIN` 0x8000 ("?"), `MM_QUEST_SOON` 0x10000 (grey "!"), `MM_QUEST_TARGET` 0x20000 (a monster that counts for one of our steps) and `MM_QUEST_PENDING` 0x100000 (grey "?"). An NPC gets one of them, ORed onto `MM_NPC`.
 
 ## Sources
 

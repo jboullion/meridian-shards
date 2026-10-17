@@ -444,6 +444,10 @@ export interface Settings {
   /** Ours (docs/adr/0006-pets.md 4): other players' pets, and the names under pets */
   showPets: boolean;
   showPetNames: boolean;
+  /** Ours (docs/adr/0009-quests.md 2): quests' "!" and "?" over NPCs and on the map, and the rings round their targets */
+  questMarkers: boolean;
+  /** Ours (docs/adr/0009-quests.md 5.4): tracked quests' areas washed gold on the map, and the way out toward them */
+  showWay: boolean;
   /**
    * Ours, Ambient Sounds: the townsfolk's chatter, the arena's crowd, thunder, birds, critters and
    * the like (game/ambientSounds.ts), and how loud, 0-100, under the Sound Volume
@@ -541,6 +545,8 @@ export const DEFAULT_SETTINGS: Settings = {
   groundDetail: true,
   showPets: true,
   showPetNames: true,
+  questMarkers: true,
+  showWay: true,
   ambientSounds: true,
   ambientVolume: 70,
   frameLimit: true,

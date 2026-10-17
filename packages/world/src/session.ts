@@ -177,6 +177,35 @@ export interface TravelPlace {
  */
 export type TravelEvent = { type: "list"; here: number; pvpSeconds: number; places: TravelPlace[] } | { type: "pvp"; seconds: number };
 
+/** What an NPC has for us (UC_QUEST_OFFERS): QO_* in questbook.kod */
+export const QUEST_OFFER = { OFFER: 1, READY: 2, PENDING: 3, SOON: 4 } as const;
+
+export interface QuestOffer {
+  id: number;
+  /** QUEST_OFFER */
+  state: number;
+  step: number;
+}
+
+/** A quest in our log (UC_QUEST_LOG): its step (from 1), the step's count, seconds left (-1 none) */
+export interface QuestLogEntry {
+  id: number;
+  step: number;
+  count: number;
+  secondsLeft: number;
+}
+
+/**
+ * Ours (docs/adr/0009-quests.md 3): our server's quests (shards-server util/questbook.kod). Only
+ * ids and numbers: the text is in the catalogue (dist/assets/quests.json), whose hash the log carries.
+ */
+export type QuestEvent =
+  /** What the NPC we just talked to has for us; the steps to hand in come first */
+  | { type: "offers"; npc: number; offers: QuestOffer[] }
+  | { type: "log"; hash: number; active: QuestLogEntry[]; done: { id: number; times: number }[] }
+  /** A step's count went up */
+  | { type: "progress"; id: number; step: number; count: number };
+
 /** A friend as our server lists them (UC_FRIENDS FR_LIST) */
 export interface ServerFriend {
   name: string;
@@ -237,6 +266,8 @@ export interface SessionEvents {
   travel?: (e: TravelEvent) => void;
   /** Ours: friends, pets and the shared crowd, from our server (docs/adr/0015-social-on-our-server.md) */
   social?: (e: SocialEvent) => void;
+  /** Ours: quests, from our server (docs/adr/0009-quests.md) */
+  quest?: (e: QuestEvent) => void;
   offer?: (e: OfferEvent) => void;
   sound?: (e: SoundEvent) => void;
   /** We hurt something, and by how much (combatHit.ts: for damage numbers over its head) */
@@ -1013,6 +1044,23 @@ export class GameSession {
           } else if (uc === UC.PVP_UNTIL) {
             // Ours (user.kod SendPvPUntil)
             this.events.travel?.({ type: "pvp", seconds: r.i32() });
+          } else if (uc === UC.QUEST_OFFERS) {
+            // Ours (questbook.kod SendOffers): the NPC, then id, state and step each
+            const npc = objId(r.u32());
+            const offers: QuestOffer[] = [];
+            for (let i = r.u8(); i > 0; i--) offers.push({ id: r.u32(), state: r.u8(), step: r.u8() });
+            this.events.quest?.({ type: "offers", npc, offers });
+          } else if (uc === UC.QUEST_LOG) {
+            // Ours (questbook.kod SendLog): the catalogue's hash, the active quests, the quests done
+            const hash = r.u32();
+            const active: QuestLogEntry[] = [];
+            for (let i = r.u8(); i > 0; i--) active.push({ id: r.u32(), step: r.u8(), count: r.u16(), secondsLeft: r.i32() });
+            const done: { id: number; times: number }[] = [];
+            for (let i = r.u16(); i > 0; i--) done.push({ id: r.u32(), times: r.u16() });
+            this.events.quest?.({ type: "log", hash, active, done });
+          } else if (uc === UC.QUEST_PROGRESS) {
+            // Ours (questbook.kod SendProgress)
+            this.events.quest?.({ type: "progress", id: r.u32(), step: r.u8(), count: r.u16() });
           } else if (uc === UC.FRIENDS || uc === UC.PETS || uc === UC.AMBIENT) {
             // Ours (shards-server util/shardssocial.kod)
             const e = this.readSocial(uc, r);
