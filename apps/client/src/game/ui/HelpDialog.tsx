@@ -475,8 +475,8 @@ function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }
           <dd>A pet that follows you, seen by other Meridian Shards players. More open up as your maximum health grows.</dd>
           <dt>Companion (C)</dt>
           <dd>
-            A companion who fights at your side and carries a pack for you, sworn to you from 50 health by your faction's leader (or Kraanan's priestess,
-            for her disciples). Its stance, its pack, its looks, dismissing it and fetching it. Double-click it to give it things.
+            A companion who fights at your side and carries a pack for you, sworn to you from 50 health by your faction's leader, or by the priestess of Shal'ille, Qor,
+            Faren or Kraanan once you're her disciple (a healer, a dark caster, a mage, a warrior-priest). Its stance, its pack, its looks, dismissing it and fetching it. Double-click it to give it things.
           </dd>
         </dl>
       </section>

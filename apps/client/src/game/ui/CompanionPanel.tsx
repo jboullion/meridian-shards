@@ -31,7 +31,7 @@ export function CompanionPanel({
       <div className="pets-panel companion-panel">
         <PanelSection title="Companion">
           <p className="panel-note">
-            You have no companion. From 50 health, a faction leader swears one to their members, and Kraanan's priestess to her proven disciples.
+            You have no companion. From 50 health, a faction leader swears one to their members, and the priestesses of Shal'ille, Qor, Faren and Kraanan to their proven disciples.
             Stand close to them and ask.
           </p>
           <div className="panel-row">

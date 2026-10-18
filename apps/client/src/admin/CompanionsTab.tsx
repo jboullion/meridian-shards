@@ -9,7 +9,10 @@ import { companionPlayer, type GameReport, type PlayerCompanion } from "./api.ts
 type Act = (what: string, fn: () => Promise<string | void>) => () => void;
 
 /** blakston.khd COMPANION_* */
-const KINDS = ["The Duke's soldier", "The Princess's knight", "A rebel fencer", "Kraanan's warrior-priest"];
+const KINDS = [
+  "The Duke's soldier", "The Princess's knight", "A rebel fencer", "Kraanan's warrior-priest",
+  "Shal'ille's healer", "Qor's dark caster", "Faren's mage",
+];
 /** blakston.khd COMP_* */
 const STATES = ["none", "with its owner", "waiting at its hall", "fallen", "recovering at its hall"];
 /** companionkinds.kod TierFloor */

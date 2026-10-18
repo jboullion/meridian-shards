@@ -173,14 +173,14 @@ send object <qb> AdminState who object <player>
 Ours ([ADR 0010](adr/0010-followers.md)). Players ask a faction leader (or Kraanan's priestess) for one from 50 health; the dashboard skips the rules.
 
 **The dashboard's Companions tab** (`admin.html`, development only), for the character in the game tab:
-- **Give me one** of a kind (the Duke's soldier, the Princess's knight, a rebel fencer, Kraanan's warrior-priest), whatever the rules.
+- **Give me one** of a kind (the Duke's soldier, the Princess's knight, a rebel fencer, Kraanan's warrior-priest, Shal'ille's healer, Qor's dark caster, Faren's mage), whatever the rules.
 - **Set bond** to a number, or **Tier 1-5** (bond 0, 300, 1000, 2500, 5000): its health, fighting and gear follow.
 - **Bring here** (from limbo or its hall), **Kill it** (leaves a corpse for Restore Companion for 10 minutes, then it recovers at its leader's hall), **Revive** (back beside you, full health), **Recover now** (ready to fetch at its hall), **Remove** (its pack comes to you; the bond is lost).
 
 **On the maintenance port**, for a player (`<book>` from `send object 0 GetCompanionBook`; each returns 1 or 0):
 
 ```text
-send object <book> AdminGrant who object <player> kind int 1
+send object <book> AdminGrant who object <player> kind int 1    (1-7)
 send object <book> AdminSetBond who object <player> points int 1000
 send object <book> AdminBringHere who object <player>
 send object <book> AdminKill who object <player>

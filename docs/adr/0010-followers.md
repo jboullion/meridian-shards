@@ -1,6 +1,6 @@
 # ADR 0010: Companions (proposed as Followers)
 
-- **Status:** accepted 2026-10-17 and built the same day for the fighting kinds (the Duke's, the Princess's, the rebels' and Kraanan's); the casters are still to do. Built under the name **Companion**, since "follow" already means following a friend (ADR 0005). See "As built" at the end, which overrides the sections above where they differ. Proposed 2026-10-15. A big Kod change, like [ADR 0008](0008-player-homes.md) and [ADR 0009](0009-quests.md), using 0009's channel: hidden spoken `#` commands from our client, `BP_USERCOMMAND` `UC_*` packets back.
+- **Status:** accepted 2026-10-17 and built the same day for the fighting kinds (the Duke's, the Princess's, the rebels' and Kraanan's) and, in a second round, the casters of Shal'ille, Qor and Faren; Riija's and Jala's are left for later. Built under the name **Companion**, since "follow" already means following a friend (ADR 0005). See "As built" at the end, which overrides the sections above where they differ. Proposed 2026-10-15. A big Kod change, like [ADR 0008](0008-player-homes.md) and [ADR 0009](0009-quests.md), using 0009's channel: hidden spoken `#` commands from our client, `BP_USERCOMMAND` `UC_*` packets back.
   - Changed 2026-10-15 ([ADR 0015](0015-social-on-our-server.md)): our client sends its `#` commands as `UC_SHARDS` lines, the same words without the `#`, instead of speaking them. Nothing is spoken, so there are no lines to hide.
 
 ## Context
@@ -311,4 +311,16 @@ The user decided these on 2026-10-15:
 
 **Tried on our server:** getting one (by Ask's checks and by the dashboard), following through exits and teleports, logoff and logon, death, the corpse and Restore Companion, recovering at the hall, both dismissals, every kind's gear at every tier (shields included), the pack's Give and Take, the looks by command and from the dialog, the tab, the C key, the guide quest's step. **Not yet tried:** its health bar over its head in the browser, PvP with a second player, Ask's faction and disciple refusals with a 50-health character.
 
-**Still to do:** the casters (5 more kinds), the website's wiki page, Restore Companion's own icon, a whole-figure preview in the looks dialog.
+**Still to do:** Riija's and Jala's companions, the website's wiki page, Restore Companion's own icon, a whole-figure preview in the looks dialog.
+
+### The casters (2026-10-17, second round)
+
+**Decided with the user:** Shal'ille's healer, Qor's dark caster and Faren's mage; no Riija or Jala companions for now. Damage spells only (no Hold, Blind or spells that hit an area), so companions can't lock players down in PvP. The healer heals its owner first, then itself, then the owner's groupmates in the room. Each school's head asks for its disciple quest (79 Shal'ille, 80 Qor, 81 Faren, 82 Kraanan) or the old one it replaced; karma was suggested as a further rule, but Server 104 removed karma in 2023 (`Player.GetKarma` is always 0).
+
+**Kod:**
+- `companionkinds.kod`: kinds 5-7 (`COMPANION_SHALILLE`, `_QOR`, `_FAREN`) with their priestesses, halls (Shal'ille's temple, Qor's temple, the badlands where Faren's priestess stands), names and palettes; `GetSchool`, `IsCaster`, `GetDiscipleQuest` / `GetOldDisciple` (so `Ask`'s school rule is general); `GetSpellBook` per tier (Qor: Poison, Vampiric Drain, Splash of Acid; Faren: Shocking Fury, Fireball, Ice Shard, Lightning Bolt, Blast of Fire; Shal'ille: Holy Blaze from tier 3), `GetHeals` (Minor Heal, and Major Heal from tier 3), `GetCasterNumbers` (chance to cast, spell power 40 + 12 a tier, mana 40 + half its owner's health). Gear: a robe in its first colour and an apprentice's wand, then the school's disciple robe, a circlet, a master's wand, and the Qormas helm for Qor at tier 5.
+- `companion.kod`: `ApplyCaster` (from `Rescale`), `CastAt` (Monster.MonsterCastSpell's checks: mana, the spell's `CanPayMonsterCosts`, the room's `ReqSpellCast`), at most one cast every 2 seconds. `MonsterCastSpell` casts in reach as well as from afar; `TryAttack` tries a spell before the wand. `SupportTimer` every 2.5 s: heal the owner below 70%, itself below 50%, or the neediest groupmate below 70% (`Room.AreGroupedHere`), the big heal below half. `GainMaxHealth` does nothing (a circlet's trade of health for mana would undo `Rescale`); `GainHealthNormal` returns what it gained and `GainHealth` is its alias, for `heal.kod` and Vampiric Drain.
+- `heal.kod`: a companion may heal itself.
+- Guide quests 244-246 (`companion-shalille`, `-qor`, `-faren`), from each priestess to her disciples.
+
+**Tried on our server:** every caster's gear, spell book and numbers at every tier; Faren, Qor and Shal'ille attack spells landing on a monster, one every 2 seconds; the healer healing itself and its owner with both heals. **Not yet tried:** healing a groupmate; the Ivy Circlet was dropped from Faren's gear because it asks its wearer for Shal'ille spells.

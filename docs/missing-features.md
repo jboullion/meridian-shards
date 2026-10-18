@@ -96,11 +96,11 @@ Friends, following and health bars ([ADR 0005](adr/0005-friends.md), kept by our
 
 ## Companions (ours)
 
-Companions ([ADR 0010](adr/0010-followers.md)) have no counterpart in the original. The four fighting kinds are built; what's left:
+Companions ([ADR 0010](adr/0010-followers.md)) have no counterpart in the original. The four fighting kinds and three casters (Shal'ille, Qor, Faren) are built; what's left:
 
 | What | What it needs |
 |---|---|
-| The casters' companions | Shal'ille's healer, Qor's dark caster, Faren's mage, Riija's illusionist, Jala's bard: monsters that heal and buff their allies, which Kod's monsters can't do yet. |
+| Riija's and Jala's companions | An illusionist and a bard, left for later: their spells buff allies and confuse foes, and those schools have no disciple quest to ask for yet. |
 | Restore Companion's icon | It borrows Raise Dead's (`irasdead.bgf`) until it has its own. |
 | A whole-figure preview | The looks dialog shows the face, not the figure in its colours (ADR 0010 9.3). |
 
