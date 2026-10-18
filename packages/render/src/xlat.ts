@@ -51,6 +51,33 @@ const YELLOW_SKIN = [0xd0, 0xd0, 0xb0, 0xb0, 0xb1, 0xb2, 0xb3, 0xc0, 0xc6, 0xc9,
 // Guild colours and fabric/skin ramps; must be eleven ramps.
 const RAMPS = [0x10, 0x20, 0x30, 0x40, 0x50, 0x70, 0x90, 0xa0, 0xc0, 0xd0, 0xe0];
 
+/**
+ * Ours (docs/adr/0012-cosmetics.md): a dye arrives as ANIMATE_DYE's WORD, kept as the translation
+ * DYE_BASE | code so it never meets a real xlat id. The code is three fields: the cloth (the art's
+ * red ramp, 0x10) in bits 0-5, the trim (its grey ramp, 0xd0) in 6-11, each a target ramp
+ * (bits 2-5, ramp << 4) and a shade (bits 0-1: 0 undyed, 1 light, 2 full, 3 dark); and the
+ * wearer's skin (its dark-blue ramp, 0x90) in bits 12-15, 1 + a clothing colour (RAMPS index).
+ */
+export const DYE_BASE = 0x10000;
+export const DYE_SHADE = { NONE: 0, LIGHT: 1, FULL: 2, DARK: 3 } as const;
+
+/** A dye field from a target ramp (1-15: palette entries ramp * 16 ..) and a shade */
+export function dyeField(ramp: number, shade: number): number {
+  return ((ramp & 0xf) << 2) | (shade & 3);
+}
+
+/** ANIMATE_DYE's WORD from its parts (skin -1 for none) */
+export function encodeDye(main: number, trim = 0, skin = -1): number {
+  return (main & 0x3f) | ((trim & 0x3f) << 6) | (((skin + 1) & 0xf) << 12);
+}
+
+/** The palette entry a dye field's swatch shows: the middle of what it maps onto */
+export function dyeSwatchIndex(field: number): number {
+  const base = ((field >> 2) & 0xf) << 4;
+  const shade = field & 3;
+  return base | (shade === DYE_SHADE.LIGHT ? 3 : shade === DYE_SHADE.DARK ? 11 : 7);
+}
+
 export class XlatTable {
   private readonly tables = new Map<number, Uint8Array>();
   private readonly composed = new Map<number, Uint8Array>();
@@ -70,7 +97,32 @@ export class XlatTable {
 
   /** The 256-entry table for an xlat id (identity for unknown ids, like a NULL xlat). */
   get(id: number): Uint8Array {
-    return this.tables.get(id) ?? this.tables.get(XLAT.IDENTITY)!;
+    const t = this.tables.get(id);
+    if (t) return t;
+    if (id >= DYE_BASE && id < DYE_BASE * 2) return this.dye(id - DYE_BASE);
+    return this.tables.get(XLAT.IDENTITY)!;
+  }
+
+  /** Ours: the table for an ANIMATE_DYE code (see DYE_BASE), made the first time it's seen */
+  dye(code: number): Uint8Array {
+    const id = DYE_BASE + (code & 0xffff);
+    const cached = this.tables.get(id);
+    if (cached) return cached;
+    const t = this.identity();
+    this.dyeRamp(t, 0x10, code & 0x3f);
+    this.dyeRamp(t, 0xd0, (code >> 6) & 0x3f);
+    const skin = (code >> 12) & 0xf;
+    if (skin > 0 && skin <= RAMPS.length) this.ramp(t, 0xf0, 0x90, RAMPS[skin - 1]);
+    return this.set(id, t);
+  }
+
+  /** One dye field onto the art's ramp `from` (a light or dark shade is half a ramp, as GRAYTOL / GRAYTOK) */
+  private dyeRamp(t: Uint8Array, from: number, field: number): void {
+    const shade = field & 3;
+    if (shade === DYE_SHADE.NONE) return;
+    const to = ((field >> 2) & 0xf) << 4;
+    if (shade === DYE_SHADE.FULL) this.ramp(t, 0xf0, from, to);
+    else this.halfRamp(t, 0xf0, from, to, shade === DYE_SHADE.LIGHT ? 0 : 8);
   }
 
   /**
@@ -78,7 +130,8 @@ export class XlatTable {
    * change it): the same table for the same pair lets colorTexture.ts reuse a part's copy.
    */
   compose(xlat0: number, xlat1: number): Uint8Array {
-    const key = xlat0 * 65536 + xlat1;
+    // Dyes (DYE_BASE + code) go past 16 bits
+    const key = xlat0 * DYE_BASE * 2 + xlat1;
     let out = this.composed.get(key);
     if (out) return out;
     const a = this.get(xlat0),

@@ -3,7 +3,7 @@
 // from the server's parts (head plus overlays on hotspots 12, 11, 14, 13). Shared by the
 // character creator and, ours, our companion's looks (docs/adr/0010-followers.md 9.3).
 
-import { useMemo, type ReactNode } from "react";
+import { Fragment, useMemo, type ReactNode } from "react";
 import { ANIMATE, type CharInfo } from "@shards/protocol";
 import type { IconRenderer } from "../icons.ts";
 import { Button, Check, GroupBox, Text, Trackbar, at, type Rect } from "./kit.tsx";
@@ -80,9 +80,16 @@ function Label({ at: r, children }: { at: Rect; children: ReactNode }) {
 
 type Step = "hair" | "eyes" | "nose" | "mouth" | "beard" | "hairT";
 
+/** The editor's rows; a barber shows only hair, facial hair and hair colour */
+export type AppearanceRow = "gender" | "skin" | Step;
+const ALL_ROWS: readonly AppearanceRow[] = ["gender", "skin", "hair", "hairT", "eyes", "nose", "mouth", "beard"];
+const STEP_LABELS: [Step, string][] = [
+  ["hair", "Hair:"], ["hairT", "Hair color:"], ["eyes", "Eyes:"], ["nose", "Nose:"], ["mouth", "Mouth:"], ["beard", "Beard:"],
+];
+
 /** The page: laid out in a 316 x 232 DLU rect (`at`), as the creator's sheet has it */
 export function AppearanceEditor({
-  info, face, onChange, icons, at: r, intro = "Choose your character's appearance.", children,
+  info, face, onChange, icons, at: r, intro = "Choose your character's appearance.", rows = ALL_ROWS, children,
 }: {
   info: CharInfo;
   face: Face;
@@ -90,6 +97,8 @@ export function AppearanceEditor({
   icons: IconRenderer;
   at: Rect;
   intro?: string;
+  /** Ours: the rows to show (all by default); the arrows close up under the ones kept */
+  rows?: readonly AppearanceRow[];
   /** More controls on the page (the creator's Prev and Next) */
   children?: ReactNode;
 }) {
@@ -133,27 +142,33 @@ export function AppearanceEditor({
       <Text at={[175, 3, 135, 18]} wrap>
         {intro}
       </Text>
-      <Label at={[140, 22, 55, 8]}>Gender:</Label>
-      <Check at={[213, 21, 45, 10]} radio name="gender" label="Male" checked={face.gender === 0} onChange={() => onChange({ ...face, gender: 0 })} />
-      <Check at={[263, 21, 45, 10]} radio name="gender" label="Female" checked={face.gender === 1} onChange={() => onChange({ ...face, gender: 1 })} />
-      <Label at={[140, 42, 55, 8]}>Skin color:</Label>
-      <Trackbar
-        at={[213, 35, 90, 15]}
-        label="Skin color"
-        min={0}
-        max={Math.max(0, info.faceTranslations.length - 1)}
-        value={face.faceT}
-        onChange={(v) => onChange({ ...face, faceT: v })}
-      />
-      <Text at={[215, 55, 20, 8]}>Light</Text>
-      <Text at={[287, 55, 20, 8]}>Dark</Text>
-      {/* Ours: rows 13 apart (the original's 15) to fit Beard above Prev / Next */}
-      {arrows(66, "Hair:", "hair")}
-      {arrows(79, "Hair color:", "hairT")}
-      {arrows(92, "Eyes:", "eyes")}
-      {arrows(105, "Nose:", "nose")}
-      {arrows(118, "Mouth:", "mouth")}
-      {p.parts.beards.length > 0 && arrows(131, "Beard:", "beard")}
+      {rows.includes("gender") && (
+        <>
+          <Label at={[140, 22, 55, 8]}>Gender:</Label>
+          <Check at={[213, 21, 45, 10]} radio name="gender" label="Male" checked={face.gender === 0} onChange={() => onChange({ ...face, gender: 0 })} />
+          <Check at={[263, 21, 45, 10]} radio name="gender" label="Female" checked={face.gender === 1} onChange={() => onChange({ ...face, gender: 1 })} />
+        </>
+      )}
+      {rows.includes("skin") && (
+        <>
+          <Label at={[140, 42, 55, 8]}>Skin color:</Label>
+          <Trackbar
+            at={[213, 35, 90, 15]}
+            label="Skin color"
+            min={0}
+            max={Math.max(0, info.faceTranslations.length - 1)}
+            value={face.faceT}
+            onChange={(v) => onChange({ ...face, faceT: v })}
+          />
+          <Text at={[215, 55, 20, 8]}>Light</Text>
+          <Text at={[287, 55, 20, 8]}>Dark</Text>
+        </>
+      )}
+      {/* Ours: rows 13 apart (the original's 15) to fit Beard above Prev / Next; with gender and
+          skin hidden they start higher */}
+      {STEP_LABELS.filter(([k]) => rows.includes(k) && (k !== "beard" || p.parts.beards.length > 0)).map(([k, label], i) => (
+        <Fragment key={k}>{arrows((rows.includes("gender") || rows.includes("skin") ? 66 : 30) + 13 * i, label, k)}</Fragment>
+      ))}
       {children}
     </div>
   );

@@ -11,13 +11,14 @@
 //   step:  [ kind, class, count, exact (1; 2: only kills in its rooms count),  turn-in class, turn-in placed id, objective, rooms, parcel,
 //            turn-in's name, auto, rewards ([ xp, shillings, training points, items, one of, special ] or $),
 //            with (an NPC class), classes (equip's), amount ]
-//   giver: [ id, name, icon, desc, room, row, col, fine row, fine col, angle ]
+//   giver: [ id, name, icon, desc, room, row, col, fine row, fine col, angle, service ]
 //   replaced: [ 1 (an old QuestEngine template) or 2 (a guide chain), its QST_ID or chain number, quest id ]
 //
 // A Kod list literal holds at most 40 elements, so each table is a list of groups of rows
 // (GROUP at a time), which QuestBook flattens when it reads them.
 
 import { FACTION_NUM, KIND_NUM, TIER_NUM, type ResolvedGiver, type ResolvedQuest, type ResolvedRewards } from "./validate.ts";
+import { SERVICE_NUM } from "./schema.ts";
 
 const kodString = (s: string) => `"${s.replace(/"/g, '\\"').replace(/\r?\n/g, "\\n")}"`;
 
@@ -97,7 +98,7 @@ export function writeQuestDefs(quests: ResolvedQuest[], givers: ResolvedGiver[],
     rsc.push(resource(`qg_${g.id}_desc`, g.desc?.trim() || GIVER_DESC));
     rsc.push(`   qg_${g.id}_icon = ${g.icon}`);
     giverRows.push(
-      `         [ ${g.id}, qg_${g.id}_name, qg_${g.id}_icon, qg_${g.id}_desc, ${g.ridNum}, ${g.row}, ${g.col}, ${g.fineRow ?? 32}, ${g.fineCol ?? 32}, ${g.angle} ]`,
+      `         [ ${g.id}, qg_${g.id}_name, qg_${g.id}_icon, qg_${g.id}_desc, ${g.ridNum}, ${g.row}, ${g.col}, ${g.fineRow ?? 32}, ${g.fineCol ?? 32}, ${g.angle}, ${g.service ? SERVICE_NUM[g.service] : 0} ]`,
     );
   }
 

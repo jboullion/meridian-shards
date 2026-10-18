@@ -152,6 +152,7 @@ Ours ([ADR 0009](adr/0009-quests.md)): quests are data, shards-server's `quests/
   - **Save** writes the file; **Save and apply** also builds the Kod and runs `reload system` (saving the game). Text only our client shows (the offer, the briefs) needs no build. Commit the files in shards-server.
   - **Retire** deletes the file and adds its id to `quests/retired.json`: ids are never used again. Players who had it lose it at their next logon.
 - **Placed givers:** **New giver** takes a name, a look (an NPC whose picture it borrows) and a description, and **Place giver here** stands it on your square, facing your way. **Move here** moves one. They're `quests/givers.json`, placed by `room.kod Constructed` (`QuestBook.PlaceGivers`), so their room is rebuilt when they change.
+  - Ours ([ADR 0012](adr/0012-cosmetics.md)): a giver's optional `"service": "barber"` or `"tailor"` (set in the file; moving it keeps it) makes it cut hair or dye clothes. Pellam the barber, in Madelia's shop in Barloque, is one.
 - **Try it out (you):** pick a quest, then **Give me it**, **Go to step**, **Count step done** (fills a kill count or a visit; a collect step counts what you carry), **Complete it** (with its rewards), **Forget it** or **Forget all**. You still hand steps in at the NPC.
 - **If the generator or the build fails,** every file goes back as it was, and the problems are listed.
 

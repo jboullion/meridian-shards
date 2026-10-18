@@ -113,7 +113,7 @@ Object fields, in order:
 1. `u32 id`. The top 4 bits are a tag; tag 1 means an `u32 amount` follows.
 2. `u32 icon_rsc, u32 name_rsc, u32 flags, u8 drawing_type, u32 minimap_flags, u32 name_color, u8 object_type, u8 moveon_type`
 3. Light: `u16 flags`, plus `u8 intensity, u16 color` only if `flags != 0`.
-4. Optional palette prefix: a `u8 9` (translation) or `u8 10` (effect) followed by `u8 value`. Any other byte isn't consumed.
+4. Optional palette prefix: a `u8 9` (translation) or `u8 10` (effect) followed by `u8 value`; ours, `u8 11` (`ANIMATE_DYE`) followed by a `u16` dye code (ADR 0012 "As built": cloth bits 0-5, trim 6-11, skin 12-15; our client keeps it as translation `0x10000 | code`). Any other byte isn't consumed.
 5. Animation: `u8 type`, then
    - `NONE`: `u16 group`
    - `CYCLE`: `u32 period, u16 low, u16 high`
@@ -301,6 +301,11 @@ Our client and our server change together (ADR 0001 decision 4), so these are ou
 - **`UC_COMPANION` (109), server to client** (`util/companionbook.kod`, ADR 0010): a kind BYTE, then:
   - **1, the status** (`SendStatus`, at logon and on every change): the state BYTE (0 none, and nothing follows; 1 active, 2 waiting at its hall, 3 fallen, 4 recovering); flags BYTE (1 left behind, 2 dismiss forever said once, 4 ready to fetch); its object DWORD (0 while it's not in a room); its name and its kind's name, resource DWORDs; the kind BYTE (1 Duke, 2 Princess, 3 rebel, 4 Kraanan, 5 Shal'ille, 6 Qor, 7 Faren); health and maximum WORDs; bond DWORD; tier BYTE (1-5), the tier's floor DWORD and the next tier's DWORD (0 at the top); stance BYTE (1 follow, 2 defend, 3 stay, 4 passive); the room's name resource DWORD (0 in limbo); seconds until it can be fetched DWORD and the fee DWORD; the pack's count, bulk and the owner's bulk maximum, WORDs; its look, 10 BYTEs in `look`'s order; then a BYTE count of palette colours, each an `XLAT_TO_*` BYTE.
   - **2, health** (`HealthChanged`, whenever it takes damage or heals): health and maximum WORDs.
+- **`UC_COSMETICS` (110), server to client** (`util/cosmeticsbook.kod`, ADR 0012), when a tailor or barber is activated: a kind BYTE, then:
+  - **1, a tailor's menu** (`SendTailorMenu`, and again after each dye): the NPC DWORD, the dye price DWORD and the price to take one off DWORD, a BYTE count of dyes, each its dye field BYTE and name resource DWORD, then a BYTE count of our dyeable things (worn first), each its object DWORD, dye ramp BYTE (1 cloth, 2 grey art), current dye field BYTE (0 none) and worn BYTE. The commands name a thing by its place in this list, from 1.
+  - **2, the barber's menu** (`SendBarberMenu`): the NPC DWORD, the price DWORD, then our look as BYTEs: gender (0 male, 1 female), hair, beard (0 none, else its place + 1), hair colour, head, eyes, nose, mouth, skin (places in `BP_CHARINFO`'s lists).
+  - The commands back (`UC_SHARDS`): `tailor dye <place> <dye field>`, `tailor undye <place>`, `tailor` (the menu again), `barber <hair> <beard> <hair colour>`, `barber`.
+  - **Minimap bit** `MM_SERVICE` 0x00800000 on a tailor or barber (`User.BuildMinimapDotFlag`).
 
 ## Sources
 

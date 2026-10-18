@@ -235,6 +235,8 @@ export function questApi(server: ViteDevServer, deps: QuestDeps, route: (fn: Rou
         col: old?.col ?? 1,
         angle: old?.angle ?? "ANGLE_SOUTH",
         ...(giver.desc !== undefined || old?.desc ? { desc: giver.desc ?? old?.desc } : {}),
+        // Ours: a barber or tailor stays one when it's moved (docs/adr/0012-cosmetics.md)
+        ...(giver.service !== undefined || old?.service ? { service: giver.service ?? old?.service } : {}),
       };
       if (place) {
         if (!Number.isInteger(playerId)) throw new Error("playerId: a number");

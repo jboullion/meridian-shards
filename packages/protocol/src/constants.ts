@@ -228,6 +228,8 @@ export const ANIMATE = {
   CEILING_LIFT: 5,
   TRANSLATION: 9,
   EFFECT: 10,
+  /** Ours (docs/adr/0012-cosmetics.md): a dye WORD in place of a translation byte (render xlat.ts DYE_BASE) */
+  DYE: 11,
 } as const;
 
 /** Server angle units per full circle. */

@@ -106,7 +106,7 @@ describe("the quest generator", () => {
     expect(kod).toContain("[ 5, $, 1, 0, &TosInnKeeper, 0, qd_1_s3, [ 53 ], $, qd_1_t3,\r\n               0, $, $, $, 0 ]");
     expect(kod).toContain("[ 4, $, 1, 0, $, 3, qd_1_s4, $, qd_1_p4, qd_1_t4,\r\n               0, $, $, $, 0 ]");
     expect(kod).toContain("300, 50, [ [ &OrcTooth, 2 ] ], 0, 2, $, $, 0, $, $ ]");
-    expect(kod).toContain("[ 3, qg_3_name, qg_3_icon, qg_3_desc, 53, 4, 5, 32, 32, ANGLE_WEST ]");
+    expect(kod).toContain("[ 3, qg_3_name, qg_3_icon, qg_3_desc, 53, 4, 5, 32, 32, ANGLE_WEST, 0 ]");
     expect(kod).toContain("   qg_3_icon = tsinnk.bgf");
     expect(kod).toContain('   qd_1_p4 = "a sealed letter"');
     expect(kod).not.toMatch(/[^\r]\n/);

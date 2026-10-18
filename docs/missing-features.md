@@ -94,6 +94,18 @@ Friends, following and health bars ([ADR 0005](adr/0005-friends.md), kept by our
 | Walking to a friend in another room | Following starts only in the same room (ADR 0005 4.7). |
 | Pet colours | [ADR 0006](adr/0006-pets.md) 6.4: every pet kind is in its own colours; recoloured ones come once each is looked at in the game. |
 
+## Cosmetics (ours)
+
+Dyes, tailors and Barloque's barber ([ADR 0012](adr/0012-cosmetics.md)) are built. What's left:
+
+| What | What it needs |
+|---|---|
+| Decals | Hotspot 51 added to the shirt torsos, then the emblems and insignia as overlays (ADR 0012 2). |
+| New clothes | `garmentforge`, an art pipeline for dresses and shirts drawn from every angle (ADR 0012 5). |
+| Trim colours | The dye code carries a trim colour, but only new garments will have a trim ramp to dye. |
+| True colour | RGB dyes instead of palette ramps (ADR 0012 6.4). |
+| A figure preview at the tailor's | The window draws the chosen thing in its dye, not our whole figure. |
+
 ## Companions (ours)
 
 Companions ([ADR 0010](adr/0010-followers.md)) have no counterpart in the original. The four fighting kinds and three casters (Shal'ille, Qor, Faren) are built; what's left:

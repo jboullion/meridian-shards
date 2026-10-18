@@ -163,6 +163,8 @@ export interface Giver {
   /** ANGLE_ name */
   angle: string;
   desc?: string;
+  /** Ours (docs/adr/0012-cosmetics.md): it also cuts hair or dyes clothes (util/cosmeticsbook.kod) */
+  service?: GiverService;
 }
 
 export const ANGLES = [
@@ -317,5 +319,11 @@ export function checkGiverShape(g: unknown, where: string): string[] {
   for (const k of ["fineRow", "fineCol"] as const) if (g[k] !== undefined && !isInt(g[k], 0, 63)) errs.push(`${where}: ${k}: 0 to 63`);
   if (!ANGLES.includes(g.angle as (typeof ANGLES)[number])) errs.push(`${where}: angle: one of ${ANGLES.join(", ")}`);
   if (g.desc !== undefined && typeof g.desc !== "string") errs.push(`${where}: desc: text`);
+  if (g.service !== undefined && !GIVER_SERVICES.includes(g.service as GiverService)) errs.push(`${where}: service: one of ${GIVER_SERVICES.join(", ")}`);
   return errs;
 }
+
+/** What a placed giver can do besides quests (blakston.khd SERVICE_*: tailor 1, barber 2) */
+export const GIVER_SERVICES = ["tailor", "barber"] as const;
+export type GiverService = (typeof GIVER_SERVICES)[number];
+export const SERVICE_NUM: Record<GiverService, number> = { tailor: 1, barber: 2 };

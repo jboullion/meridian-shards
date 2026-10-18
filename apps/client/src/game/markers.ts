@@ -21,6 +21,8 @@ export const MM_OURS = {
   /** The quest's tier, for the mark's colour: silver (story), bronze (errands); neither is gold (the main chains) */
   QUEST_SILVER: 0x200000,
   QUEST_BRONZE: 0x400000,
+  /** A tailor or barber (docs/adr/0012-cosmetics.md): a double-click talks to them, not their shop */
+  SERVICE: 0x800000,
 } as const;
 
 /** A mark's colour: a quest's tier, or gold for a portal */
@@ -28,6 +30,9 @@ export type MarkerTier = "gold" | "silver" | "bronze";
 
 /** Any quest bit on an NPC: activating it opens the quest window */
 export const MM_QUEST_NPC = MM_OURS.QUEST_OFFER | MM_OURS.QUEST_TURNIN | MM_OURS.QUEST_SOON | MM_OURS.QUEST_PENDING;
+
+/** An NPC worth activating: one with quests, or a tailor or barber */
+export const MM_TALK_NPC = MM_QUEST_NPC | MM_OURS.SERVICE;
 
 export interface Marker {
   /** What's drawn over the object in the view: "!" (something for you here), "?" (hand it in), or null */

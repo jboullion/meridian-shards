@@ -1,6 +1,6 @@
 # ADR 0012: Cosmetics
 
-- **Status:** proposed, 2026-10-15. Not built. It uses [ADR 0009](0009-quests.md)'s channel: hidden spoken `#` commands from our client, `BP_USERCOMMAND` `UC_*` packets back. Its windows build on [ADR 0010](0010-followers.md)'s `AppearanceEditor`.
+- **Status:** accepted; round 1 built 2026-10-17: the dye code, tailors and a barber (see "As built" at the end, which overrides the sections above where they differ). Decals, new clothes and true colour are later rounds; the Tailoring skill was dropped. Proposed 2026-10-15. It uses [ADR 0009](0009-quests.md)'s channel: hidden spoken `#` commands from our client, `BP_USERCOMMAND` `UC_*` packets back. Its windows build on [ADR 0010](0010-followers.md)'s `AppearanceEditor`.
   - Changed 2026-10-15 ([ADR 0015](0015-social-on-our-server.md)): our client sends its `#` commands as `UC_SHARDS` lines, the same words without the `#`, instead of speaking them. Nothing is spoken, so there are no lines to hide.
 
 ## Context
@@ -249,3 +249,23 @@ The user decided these on 2026-10-15:
   - `docs/research/protocol.md` (`ANIMATE_DYE`, `UC_TAILOR_*`)
   - iconforge's README (garmentforge)
   - the website's wiki
+
+## As built (2026-10-17, round 1)
+
+**Decided with the user:** this round is the dye system (fixed, and widened by a 16-bit dye code), tailors who dye through a window, and one barber, in Barloque. **No Tailoring skill** (3.3 is dropped): cosmetics are an NPC service; dye bottles stay usable by players. Decals (2), new clothes (5) and true colour (6.4) are later rounds.
+
+**The dye code** (`ANIMATE_DYE` = 11, a WORD in place of the translation byte; 1.3 as built):
+- Bits 0-5 the cloth (the art's red ramp, 0x10), 6-11 the trim (its grey ramp, 0xd0), 12-15 the wearer's skin (its dark-blue ramp, 0x90; 1 + a clothing colour). A dye field is self-describing: a palette ramp (bits 2-5) and a shade (bits 0-1: 0 undyed, 1 light, 2 full, 3 dark), so our client needs no dye list: `XlatTable.get` builds the table for any translation ≥ `DYE_BASE` (0x10000) from `ramp` / `halfRamp` (`packages/render/src/xlat.ts`, tested).
+- Kod: `SYS EncodeDye`, `MakeDye` (`util.kod`). Items keep `piDye` (`Item.SetDye`, `GetDyeField`, `AddColour` at every colour send of items, armour, helmets, shields, weapons and bows). Each family's `viDyeRamp`: cloth for shirts, pants and robes; the grey art for armour, helmets, shields and weapons; none for disciple robes, leather armour, bows, fist weapons, wands, circlets, wizard hats and the special shields.
+- Worn: `Item.SetIcon` / `SetArms` / `SetLegs` and `ShirtBase.SetIcon` pass the dye to `Player.SetPlayerIcon` / `SetPlayerArms` / `SetPlayerLegs` (`piDyeBody`, `piDyeArms`, `piDyeLegs`); `Player.AddPartColour` sends them with our skin, and the logoff ghost copies them. Undyed things send their byte as before.
+- **The 39 dyes** (`CosmeticsBook.GetDyes`): 13 ramps in three shades, from the palette: scarlet / crimson / maroon, sand / tan / taupe, copper / brown / chestnut, rust / umber / sepia, amber / orange / bronze, sage / olive / moss, emerald / green / forest green, seafoam / teal / deep teal, cobalt / royal blue / navy, violet / purple / plum, yellow / gold / ochre, silver / grey / charcoal, sky / steel / midnight blue.
+- **The old dye system, fixed:** a bottle maps its colour to a dye (`DyeBottle.GetDyeField`) and calls `SetDye`, so the wearer's skin and the item's other flags are kept and a worn thing is redrawn; it dyes whatever has a dye ramp (shirts and robes now too). The remover takes a dye off (`IsColored` counts `piDye`).
+
+**Tailors and the barber** (`util/cosmeticsbook.kod`, `CosmeticsBook`, `SYS@GetCosmeticsBook`):
+- `Monster.GetShardsService` (0; `SERVICE_TAILOR` 1 on Madelia, Hester, Tepal and the Rainbow Forge; a placed giver's `service` in `quests/givers.json`, so the barber is **Pellam**, a placed giver in Madelia's shop, `castle2e` row 7 col 3). Such an NPC has the per-viewer minimap bit `MM_SERVICE` (0x00800000), and our client activates it on a double-click rather than opening its shop.
+- Activating one (`QuestBook.NpcActivated`) sends `UC_COSMETICS` (110): a tailor's menu (the dyes, prices, and our dyeable things, remembered on the player as `plServiceItems`, because Kod can't turn an object number in a command back into an object) or the barber's (price and our look as places in `BP_CHARINFO`'s lists). An NPC with quests too opens the quest window, which gains a Tailor… or Barber… button.
+- Commands (`UC_SHARDS`): `tailor dye <slot> <dye>`, `tailor undye <slot>`, `barber <hair> <beard> <hair colour>`, each checked (still near, still ours, a known dye or part, can pay). Prices: a dye 250 shillings, taking one off 50, a cut 500 (`COSMETIC_*`).
+
+**Our client:** `packages/world/src/cosmetics.ts` (tested); `ui/TailorDialog.tsx` (our things, worn first, with their dyes; swatches from the palette; the chosen thing drawn in the chosen dye; Dye, Remove dye, Shop); `ui/BarberDialog.tsx` (`AppearanceEditor` with its new `rows` option showing hair, hair colour and beard). Help has a line for both.
+
+**Tried:** a worn shirt, pants and helmet dyed on our figure and in the equipment slots; dyeing from the tailor's window opened through Madelia's quest window; the barber's cut from the window; the old bottles and the remover; refusals headless. **Not yet tried:** another player seeing our dyes (the same packets, untested), a dyed shirt under armour, the logoff ghost's dyes.

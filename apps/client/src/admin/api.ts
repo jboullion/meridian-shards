@@ -257,6 +257,8 @@ export interface GiverFile {
   fineCol?: number;
   angle: string;
   desc?: string;
+  /** Ours (docs/adr/0012-cosmetics.md): it also cuts hair or dyes clothes */
+  service?: "tailor" | "barber";
 }
 
 export interface QuestNpc {

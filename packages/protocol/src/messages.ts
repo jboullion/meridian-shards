@@ -209,6 +209,8 @@ function readTranslation(r: ByteReader): { translation: number; effect: number }
   const start = r.pos;
   const t = r.u8();
   if (t === ANIMATE.TRANSLATION) return { translation: r.u8(), effect: 0 };
+  // Ours: a dye, kept as 0x10000 | code (packages/render/src/xlat.ts DYE_BASE)
+  if (t === ANIMATE.DYE) return { translation: 0x10000 | r.u16(), effect: 0 };
   if (t === ANIMATE.EFFECT) return { translation: 0, effect: r.u8() };
   r.pos = start;
   return { translation: 0, effect: 0 };
@@ -783,6 +785,8 @@ export const UC = {
   QUEST_OFFERS: 106, QUEST_LOG: 107, QUEST_PROGRESS: 108,
   // Ours (docs/adr/0010-followers.md): our companion (shards-server util/companionbook.kod)
   COMPANION: 109,
+  /** Ours: a tailor's or barber's menu (docs/adr/0012-cosmetics.md) */
+  COSMETICS: 110,
 } as const;
 
 /**

@@ -47,14 +47,17 @@ function Objectives({ quest, from = 0, step, count }: { quest: CatalogQuest; fro
 }
 
 export function QuestDialog({
-  npc, offers, store, session, onClose,
+  npc, offers, store, session, onClose, service,
 }: {
   npc: number;
   offers: QuestOffer[];
   store: QuestStore;
   session: GameSession;
   onClose: () => void;
+  /** Ours (docs/adr/0012-cosmetics.md): the NPC is also a tailor or barber; its window */
+  service?: { label: string; open: () => void };
 }) {
+  const serviceButton = service ? <Button onClick={service.open}>{service.label}</Button> : null;
   const [view, setView] = useState<View>(offers.length === 1 ? { kind: "quest", id: offers[0]!.id } : { kind: "list" });
   const [picked, setPicked] = useState<number | null>(offers[0]?.id ?? null);
   const [from] = useState(() => {
@@ -92,6 +95,7 @@ export function QuestDialog({
           <Button isDefault disabled={picked === null} onClick={() => picked !== null && setView({ kind: "quest", id: picked })}>
             Open
           </Button>
+          {serviceButton}
           <Button onClick={onClose}>Close</Button>
         </div>
       </Window>
@@ -181,6 +185,7 @@ export function QuestDialog({
           </Button>
         )}
         {back && <Button onClick={back}>Back</Button>}
+        {serviceButton}
         <Button onClick={onClose}>{state === QUEST_OFFER.OFFER ? "Decline" : "Close"}</Button>
       </div>
     </Window>

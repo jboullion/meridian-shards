@@ -3,14 +3,16 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { CF, SAY, STAT_GROUP, UA, UC, objId, type ObjectInfo } from "@shards/protocol";
 import {
   PROFANITY_WARNING, isNumberItem, type SpellRefusal, OBSERVER, WHITE, BLACK, decodeBoard, type GuildEvent, type MinigameEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
-  type SocialEvent, type TradeList, type TravelEvent, type TravelPlace, petForKarma, petKind, type AmbientPersonInfo, type QuestEvent, type QuestOffer,
+  type SocialEvent, type TradeList, type TravelEvent, type TravelPlace, petForKarma, petKind, type AmbientPersonInfo, type QuestEvent, type QuestOffer, type CosmeticsEvent,
 } from "@shards/world";
 import type { QuestStore } from "./quests.ts";
 import { useCompanion, type CompanionStore } from "./companion.ts";
 import { CompanionPanel } from "./ui/CompanionPanel.tsx";
 import { CompanionLooksDialog } from "./ui/CompanionLooksDialog.tsx";
+import { TailorDialog } from "./ui/TailorDialog.tsx";
+import { BarberDialog } from "./ui/BarberDialog.tsx";
 import { QuestWays } from "./questWays.ts";
-import { MM_QUEST_NPC } from "./markers.ts";
+import { MM_TALK_NPC } from "./markers.ts";
 import { QuestDialog } from "./ui/QuestDialog.tsx";
 import { QuestsPanel, QuestTracker } from "./ui/QuestsPanel.tsx";
 import type { AssetStore } from "../assets.ts";
@@ -163,7 +165,9 @@ const CHAT_HISTORY = 20;
 type Modal =
   | { type: "trade"; list: TradeList }
   | { type: "travel"; here: number; places: TravelPlace[] }
-  | { type: "quest"; npc: number; offers: QuestOffer[] }
+  | { type: "quest"; npc: number; offers: QuestOffer[]; service?: CosmeticsEvent }
+  // Ours (docs/adr/0012-cosmetics.md): a tailor's or barber's window
+  | { type: "cosmetics"; menu: CosmeticsEvent }
   | { type: "give"; kind: "offer" | "deposit"; target: { id: number; name: string } }
   // Ours (docs/adr/0010-followers.md 9.3): our companion's looks
   | { type: "companionLooks" }
@@ -194,7 +198,7 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, companion, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, cosmetics, companion, offers, serverPrefs, latency,
 }: {
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
@@ -238,6 +242,8 @@ export function GameView({
   /** Ours: our quests, and what an NPC we talked to has for us (docs/adr/0009-quests.md) */
   quests: QuestStore;
   questOffers: (fn: (e: Extract<QuestEvent, { type: "offers" }>) => void) => () => void;
+  /** Ours: a tailor's or barber's menu (docs/adr/0012-cosmetics.md) */
+  cosmetics: (fn: (e: CosmeticsEvent) => void) => () => void;
   /** Ours: our companion (docs/adr/0010-followers.md) */
   companion: CompanionStore;
 }) {
@@ -818,6 +824,16 @@ export function GameView({
         if (e.offers.length) setModal({ type: "quest", npc: e.npc, offers: e.offers });
       }),
     [questOffers],
+  );
+  // Ours (docs/adr/0012-cosmetics.md): a tailor's or barber's menu. Their quests come first: the
+  // quest window gains a button for it. A new menu from the same NPC (after dyeing) refreshes it.
+  useEffect(
+    () =>
+      cosmetics((e) => {
+        if (e.type === "barber" && !companion.charInfo) session.requestCharInfo();
+        setModal((m) => (m?.type === "quest" && m.npc === e.npc ? { ...m, service: e } : { type: "cosmetics", menu: e }));
+      }),
+    [cosmetics, companion, session],
   );
   // Development: the admin dashboard changed the quests (tools/dev/questApi.ts); read them again
   useEffect(() => {
@@ -1633,7 +1649,7 @@ export function GameView({
           (o) =>
             self &&
             o.id !== self.id &&
-            (o.info.flags & (OF_ACTIVATABLE | OF_CONTAINER) || o.info.minimapFlags & MM_QUEST_NPC) &&
+            (o.info.flags & (OF_ACTIVATABLE | OF_CONTAINER) || o.info.minimapFlags & MM_TALK_NPC) &&
             !(o.info.flags & OF_PLAYER) &&
             Math.hypot(o.x - self.x, o.y - self.y) <= CLOSE_DISTANCE,
         );
@@ -1741,7 +1757,7 @@ export function GameView({
       const f = o.info.flags;
       if (f & OF_CONTAINER) buttons |= DESC.INSIDE;
       // Ours: someone with a quest marker is talked to by activating them (docs/adr/0009-quests.md 3.3)
-      if ((f & OF_ACTIVATABLE || o.info.minimapFlags & MM_QUEST_NPC) && !(f & OF_PLAYER)) buttons |= DESC.ACTIVATE;
+      if ((f & OF_ACTIVATABLE || o.info.minimapFlags & MM_TALK_NPC) && !(f & OF_PLAYER)) buttons |= DESC.ACTIVATE;
       if (f & OF_GETTABLE) {
         buttons |= DESC.GET;
         if (!(f & OF_ACTIVATABLE)) buttons |= DESC.USE;
@@ -2302,7 +2318,46 @@ export function GameView({
           <TravelDialog here={modal.here} places={modal.places} pvpUntil={pvpUntil} session={session} onClose={() => setModal(null)} />
         )}
         {modal?.type === "quest" && (
-          <QuestDialog key={`${modal.npc}:${modal.offers.map((o) => `${o.id}.${o.state}.${o.step}`).join(",")}`} npc={modal.npc} offers={modal.offers} store={quests} session={session} onClose={() => setModal(null)} />
+          <QuestDialog
+            key={`${modal.npc}:${modal.offers.map((o) => `${o.id}.${o.state}.${o.step}`).join(",")}`}
+            npc={modal.npc}
+            offers={modal.offers}
+            store={quests}
+            session={session}
+            onClose={() => setModal(null)}
+            service={
+              modal.service
+                ? { label: modal.service.type === "tailor" ? "Tailor…" : "Barber…", open: () => setModal({ type: "cosmetics", menu: modal.service! }) }
+                : undefined
+            }
+          />
+        )}
+        {modal?.type === "cosmetics" && modal.menu.type === "tailor" && (
+          <TailorDialog
+            name={session.resource(session.world.objects.get(modal.menu.npc)?.info.nameRes ?? 0) ?? "The tailor"}
+            menu={modal.menu}
+            session={session}
+            assets={assets}
+            icons={icons}
+            onCommand={(line) => session.shardsCommand(line)}
+            onShop={() => {
+              const npc = modal.menu.npc;
+              setModal(null);
+              askTrader(npc);
+            }}
+            onClose={() => setModal(null)}
+          />
+        )}
+        {modal?.type === "cosmetics" && modal.menu.type === "barber" && (
+          <BarberDialog
+            name={session.resource(session.world.objects.get(modal.menu.npc)?.info.nameRes ?? 0) ?? "The barber"}
+            price={modal.menu.price}
+            look={modal.menu.look}
+            info={companion.charInfo}
+            icons={icons}
+            onCommand={(line) => session.shardsCommand(line)}
+            onClose={() => setModal(null)}
+          />
         )}
         {modal?.type === "companionLooks" && comp && (
           <CompanionLooksDialog

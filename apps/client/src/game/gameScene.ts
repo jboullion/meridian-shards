@@ -2628,7 +2628,7 @@ export class GameScene {
         (((o.info.flags & (OF_ACTIVATABLE | OF_CONTAINER)) !== 0 && this.distanceTo(o.id) <= CLOSE_DISTANCE) ||
           (o.info.flags & OF_BUYABLE) !== 0 ||
           (o.info.flags & (OF_OFFERABLE | OF_ATTACKABLE)) === OF_OFFERABLE ||
-          (o.info.minimapFlags & MM_QUEST_NPC) !== 0),
+          (o.info.minimapFlags & (MM_QUEST_NPC | MM_OURS.SERVICE)) !== 0),
     );
     this.choose("Activate", ids, (id) => {
       const o = this.session.world.objects.get(id);
@@ -2636,6 +2636,8 @@ export class GameScene {
       if (o && o.info.flags & OF_CONTAINER) this.onContents?.(id);
       else if (o && o.info.flags & OF_ACTIVATABLE) this.session.activate(id);
       else if (quest & (MM_OURS.QUEST_OFFER | MM_OURS.QUEST_TURNIN)) this.session.activate(id);
+      // Ours: a tailor or barber opens their window, which has a Shop button (docs/adr/0012-cosmetics.md)
+      else if (o && o.info.minimapFlags & MM_OURS.SERVICE) this.session.activate(id);
       else if (o && o.info.flags & OF_BUYABLE) this.onBuy?.(id);
       else if (o && o.info.flags & OF_OFFERABLE) this.onDeposit?.(id);
       else if (quest) this.session.activate(id);
