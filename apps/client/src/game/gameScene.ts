@@ -12,7 +12,7 @@
 import * as THREE from "three";
 import { FINENESS, SF, ceilingHeightAt, floorHeightAt, gridTextureName, leafAt, skyboxForBackground, type Bgf, type Room } from "@shards/formats";
 import {
-  DRAWFX, Flyers, GroundCover, Lightning, Nature, OF, ObjectsView, Puddles, type PuddleRoom, type GroundKind, type GroundRoom, type NatureRoom, type RockArt, PARTICLE_STEPS_PER_SECOND, PostFx, RoomView, SkyOverlaysView, TrailBlur, WeatherParticles, XlatTable, type ParticleRoom, disposeSkybox, objectBrightness, paletteTexture, postFxActive, type LightSource,
+  DRAWFX, Flyers, GroundCover, Lightning, Nature, OF, ObjectsView, Puddles, type PuddleRoom, type GroundKind, type GroundRoom, type NatureRoom, type RockArt, PARTICLE_STEPS_PER_SECOND, PostFx, RoomView, SkyOverlaysView, TrailBlur, WeatherParticles, XlatTable, type ParticleRoom, disposeSkybox, fogEnd, objectBrightness, paletteTexture, postFxActive, type LightSource,
   type PostFxOptions,
   type NameLabel, type ViewObject, type SpriteMood, moodUniforms, renderTune, sunAt, effectUniforms, roomSurfaceTextures,
 } from "@shards/render";
@@ -1773,6 +1773,7 @@ export class GameScene {
     }
     const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     cover.setProjection(buffer.y, this.camera.fov);
+    cover.setFog(this.fog);
     // Ours (Seasons): the tufts take the season, and the snow
     cover.setSeason(this.seasonHere(), this.settings.seasons ? this.snowCover : 0);
     cover.update(dt, { x: this.mover.x, y: this.mover.y });
@@ -1931,6 +1932,12 @@ export class GameScene {
         const [r, g, b] = objectBrightness({ x, y, z }, sectorLight, lighting.playerLight, lighting.ambient, []);
         // The ground faces up: it takes the sun by its height (the moods)
         return this.moodLit([r, g, b], room, x, y, Math.max(0, this.moodFrame?.sunDir[2] ?? 0));
+      },
+      // The floor's distance fog, so the tufts fade with it
+      fogEnd: (x, y) => {
+        const leaf = leafAt(room, x, y);
+        const lighting = this.session.world.lighting;
+        return fogEnd(leaf?.sector ? room.sectors[leaf.sector - 1].light : 0, lighting.playerLight, lighting.ambient);
       },
     };
   }

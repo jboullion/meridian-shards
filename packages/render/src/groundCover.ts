@@ -5,13 +5,14 @@
 // it's there again when you come back. The tufts are drawn here; the rocks are the game's own rock
 // ornaments (setRockArt), mostly much smaller than they're drawn as objects. They're points like
 // the weather's, alpha-tested and opaque so they need no sorting, never picked, and drawn black in
-// the glow pass.
+// the glow pass. They fade into the distance fog and the mood's haze as the floor under them does
+// (each point's fog end from its sector's light, d3drender.c D3DRenderFogEndCalc).
 //
 // Positions are client fine units (x east, y south, z up).
 
 import * as THREE from "three";
 import { FINENESS } from "@shards/formats";
-import { glowPass } from "./lighting.ts";
+import { glowPass, moodFogGlsl, moodUniforms } from "./lighting.ts";
 import { renderTune } from "./tuning.ts";
 import { seasonTint } from "./surfaceEffects.ts";
 
@@ -84,6 +85,8 @@ export interface GroundRoom {
   spot(x: number, y: number): GroundSpot | null;
   /** How lit a point is, 0..1 each (the sector's light and the hour; no torches) */
   light(x: number, y: number, z: number): [number, number, number];
+  /** Where the distance fog is total at a point, fine units of view depth (objectLighting.ts fogEnd); none: no fog */
+  fogEnd?(x: number, y: number): number;
 }
 
 interface Piece {
@@ -101,6 +104,8 @@ interface Piece {
   lr: number;
   lg: number;
   lb: number;
+  /** Its fog end, refreshed with its light */
+  fog: number;
 }
 
 /** A fixed pseudo-random number 0..1 for a cell, a salt and the room */
@@ -219,18 +224,34 @@ function rockAtlas(rocks: RockArt[], palette: Uint8Array): THREE.DataTexture {
   return tex;
 }
 
+/** The room's distance fog and the mood's haze (lighting.ts), at the point's own fog end (0: none) */
+const fogGlsl = /* glsl */ `
+uniform float uFog;
+${moodFogGlsl}
+vec3 fogged(vec3 c) {
+  if (uFog < 0.5 || vFogEnd <= 0.0) return c;
+  return moodFog(c, clamp((vFogEnd - vDepth) / vFogEnd, 0.0, 1.0), vDepth);
+}
+`;
+
+/** One fog switch for both layers */
+const fogOn = { value: 1 };
+
 const rockFragment = /* glsl */ `
 precision highp float;
 in vec2 vCell;
 in vec3 vColor;
+in float vDepth;
+in float vFogEnd;
 out vec4 fragColor;
 uniform sampler2D uAtlas;
 uniform float uGlowPass;
+${fogGlsl}
 void main() {
   vec4 t = texture(uAtlas, vec2((vCell.y + gl_PointCoord.x) / ${ROCK_COLS}.0, (vCell.x + gl_PointCoord.y) / ${ROCK_ROWS}.0));
   if (t.a < 0.5) discard;
   // The rock's own colours, in the light where it lies
-  fragColor = vec4(uGlowPass > 0.5 ? vec3(0.0) : t.rgb * vColor, 1.0);
+  fragColor = vec4(uGlowPass > 0.5 ? vec3(0.0) : fogged(t.rgb * vColor), 1.0);
 }
 `;
 
@@ -238,8 +259,11 @@ const vertex = /* glsl */ `
 in vec2 aCell;
 in float aSize;
 in vec3 aColor;
+in float aFogEnd;
 out vec2 vCell;
 out vec3 vColor;
+out float vDepth;
+out float vFogEnd;
 uniform float uScale;
 void main() {
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
@@ -247,6 +271,9 @@ void main() {
   gl_Position = projectionMatrix * mv;
   vCell = aCell;
   vColor = aColor;
+  // View depth in client fine units, as the room shader's
+  vDepth = -mv.z * ${FINENESS}.0;
+  vFogEnd = aFogEnd;
 }
 `;
 
@@ -254,16 +281,19 @@ const fragment = /* glsl */ `
 precision highp float;
 in vec2 vCell;
 in vec3 vColor;
+in float vDepth;
+in float vFogEnd;
 out vec4 fragColor;
 uniform sampler2D uAtlas;
 uniform float uGlowPass;
+${fogGlsl}
 void main() {
   vec4 t = texture(uAtlas, vec2((vCell.y + gl_PointCoord.x) / ${COLS}.0, (vCell.x + gl_PointCoord.y) / ${ROWS}.0));
   if (t.a < 0.5) discard;
   // Grey up to 1 is the floor's colour, shaded; past it (flower petals) toward white
   float g = t.r * (255.0 / 128.0);
   vec3 rgb = g <= 1.0 ? vColor * g : mix(vColor, vec3(1.0, 0.95, 0.85) * max(vColor.r, max(vColor.g, vColor.b)) * 1.6, g - 1.0);
-  fragColor = vec4(uGlowPass > 0.5 ? vec3(0.0) : rgb, 1.0);
+  fragColor = vec4(uGlowPass > 0.5 ? vec3(0.0) : fogged(rgb), 1.0);
 }
 `;
 
@@ -274,6 +304,7 @@ class Layer {
   readonly cell = new Float32Array(MAX_POINTS * 2);
   readonly size = new Float32Array(MAX_POINTS);
   readonly color = new Float32Array(MAX_POINTS * 3);
+  readonly fogEnd = new Float32Array(MAX_POINTS);
   n = 0;
 
   constructor(fragmentShader: string, atlasTexture: THREE.Texture | null) {
@@ -282,19 +313,29 @@ class Layer {
     g.setAttribute("aCell", new THREE.BufferAttribute(this.cell, 2));
     g.setAttribute("aSize", new THREE.BufferAttribute(this.size, 1));
     g.setAttribute("aColor", new THREE.BufferAttribute(this.color, 3));
+    g.setAttribute("aFogEnd", new THREE.BufferAttribute(this.fogEnd, 1));
     g.setDrawRange(0, 0);
     const material = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
       vertexShader: vertex,
       fragmentShader,
-      uniforms: { uAtlas: { value: atlasTexture }, uScale: { value: 1 }, uGlowPass: glowPass },
+      uniforms: {
+        uAtlas: { value: atlasTexture },
+        uScale: { value: 1 },
+        uGlowPass: glowPass,
+        uFog: fogOn,
+        uMoodOn: moodUniforms.uMoodOn,
+        uFogColor: moodUniforms.uFogColor,
+        uHazeColor: moodUniforms.uHazeColor,
+        uHaze: moodUniforms.uHaze,
+      },
     });
     this.points = new THREE.Points(g, material);
     this.points.frustumCulled = false;
     this.points.raycast = () => {}; // never picked
   }
 
-  put(x: number, y: number, z: number, row: number, col: number, size: number, r: number, g: number, b: number): void {
+  put(x: number, y: number, z: number, row: number, col: number, size: number, r: number, g: number, b: number, fog: number): void {
     const n = this.n;
     if (n >= MAX_POINTS) return;
     this.pos[n * 3] = x / FINENESS;
@@ -306,12 +347,13 @@ class Layer {
     this.color[n * 3] = r;
     this.color[n * 3 + 1] = g;
     this.color[n * 3 + 2] = b;
+    this.fogEnd[n] = fog;
     this.n++;
   }
 
   done(): void {
     const g = this.points.geometry;
-    for (const name of ["position", "aCell", "aSize", "aColor"]) g.getAttribute(name).needsUpdate = true;
+    for (const name of ["position", "aCell", "aSize", "aColor", "aFogEnd"]) g.getAttribute(name).needsUpdate = true;
     g.setDrawRange(0, this.n);
   }
 
@@ -385,6 +427,11 @@ export class GroundCover {
     this.at = null;
   }
 
+  /** The distance fog on or off, as the room's (RoomView's fog: off in the room viewer) */
+  setFog(on: boolean): void {
+    fogOn.value = on ? 1 : 0;
+  }
+
   /** Nothing drawn (the option off) until the next update */
   clear(): void {
     this.at = null;
@@ -436,7 +483,7 @@ export class GroundCover {
       const [rock, index] = rocks[Math.floor(h(4) * rocks.length) % rocks.length];
       // Mostly small (pebbles), now and then a stone half a square across; never bigger than the ornament
       const width = renderTune("rockSize") * Math.min(rock.width, 70 + 380 * h(6) ** 2.2);
-      p = { x, y, floor: spot.floor, art, variant: index, size: width / rock.fw, r: 1, g: 1, b: 1, lr: 1, lg: 1, lb: 1 };
+      p = { x, y, floor: spot.floor, art, variant: index, size: width / rock.fw, r: 1, g: 1, b: 1, lr: 1, lg: 1, lb: 1, fog: 0 };
     } else {
       const sizes: Record<Exclude<Art, "rock">, [number, number]> = { tuft: [128, 225], flower: [120, 180], dry: [112, 195] };
       let [lo, hi] = sizes[art];
@@ -449,7 +496,7 @@ export class GroundCover {
       p = {
         x, y, floor: spot.floor, art, variant: Math.floor(h(4) * ART[art].length) % ART[art].length, size: lo + h(6) * (hi - lo),
         r: Math.min(1, r * lift * vary), g: Math.min(1, g * lift * vary), b: Math.min(1, b * lift * (art === "dry" ? 0.8 : 1) * vary),
-        lr: 1, lg: 1, lb: 1,
+        lr: 1, lg: 1, lb: 1, fog: 0,
       };
     }
     this.light(p);
@@ -464,6 +511,7 @@ export class GroundCover {
     p.lr = (p.r + (0.88 - p.r) * s) * lr;
     p.lg = (p.g + (0.9 - p.g) * s) * lg;
     p.lb = (p.b + (0.94 - p.b) * s) * lb;
+    p.fog = this.room!.fogEnd?.(p.x, p.y) ?? 0;
   }
 
   private write(v: { x: number; y: number }): void {
@@ -486,10 +534,10 @@ export class GroundCover {
         // The point's middle half its size up: its picture stands on the floor (a hair sunk in)
         const z = p.floor + size * 0.47;
         if (p.art === "rock") {
-          rocks.put(p.x, p.y, z, Math.floor(p.variant / ROCK_COLS), p.variant % ROCK_COLS, size, p.lr, p.lg, p.lb);
+          rocks.put(p.x, p.y, z, Math.floor(p.variant / ROCK_COLS), p.variant % ROCK_COLS, size, p.lr, p.lg, p.lb, p.fog);
         } else {
           const [row, col] = ART[p.art][p.variant];
-          tufts.put(p.x, p.y, z, row, col, size, p.lr, p.lg, p.lb);
+          tufts.put(p.x, p.y, z, row, col, size, p.lr, p.lg, p.lb, p.fog);
         }
       }
     tufts.done();
