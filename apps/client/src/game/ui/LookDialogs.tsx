@@ -12,7 +12,7 @@ import { ANIMATE, DF, type ObjectInfo } from "@shards/protocol";
 import { DRAWFX } from "@shards/render";
 import { isNumberItem, type AmbientPersonInfo, type LookResult } from "@shards/world";
 import { neutralPose, type IconRenderer } from "../icons.ts";
-import { Button, Window } from "./kit.tsx";
+import { Button, scrollRowIntoList, Window } from "./kit.tsx";
 import { ObjIcon } from "./Sidebar.tsx";
 import { useTurnDrag } from "./hooks.ts";
 
@@ -273,7 +273,7 @@ export function LookListDialog({
     if (!hit) return;
     setCaret(hit.object.id);
     if (!multiple) setChosen([hit.object.id]);
-    listRef.current?.querySelector(`[data-id="${hit.object.id}"]`)?.scrollIntoView({ block: "nearest" });
+    scrollRowIntoList(listRef.current, listRef.current?.querySelector(`[data-id="${hit.object.id}"]`));
   };
   const toggle = (id: number) =>
     setChosen((c) => (multiple ? (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]) : [id]));

@@ -141,6 +141,10 @@ const LONG_PRESS_MS = 500;
 /** A second tap this soon and this close is a double tap (activate); ms, px */
 const DOUBLE_TAP_MS = 350;
 const DOUBLE_TAP_SLOP = 40;
+/** Ours: a tap that misses a creature's sprite still takes it within this many CSS pixels (a fingertip) */
+const TAP_REACH = 24;
+/** Ours: the phone's Target button pressed again within this long goes on to the next target */
+const TARGET_CYCLE_MS = 2500;
 /** Dragging on the view turns this much more than the mouse does per pixel (doubled, then 10% more, after phone tests) */
 const TOUCH_LOOK = 1.76;
 
@@ -3023,9 +3027,31 @@ export class GameScene {
   /** The full map is over the view: the joystick and the movement keys move by the map's directions. */
   mapMode = false;
 
-  /** An on-screen button: the action its key would do. */
+  /**
+   * An on-screen button: the action its key would do. Ours: the phone's Target button takes the
+   * closest creature in view, and presses close together go on to the next.
+   */
   press(a: Action): void {
+    if (a === "targetNext") return this.targetClosest();
     this.trigger(a);
+  }
+
+  /** When the phone's Target button last chose a target: within TARGET_CYCLE_MS, the next press cycles */
+  private lastTargetPress = 0;
+
+  /**
+   * Ours (the phone's Target button): the closest attackable thing in view, monsters before
+   * players; pressed again soon after, the next one, nearest first, as Target Next does.
+   */
+  private targetClosest(): void {
+    const now = performance.now();
+    const cycling = now - this.lastTargetPress < TARGET_CYCLE_MS;
+    this.lastTargetPress = now;
+    const all = this.visibleObjects(OF_ATTACKABLE);
+    const list = [...all.filter((o) => !(o.info.flags & OF_PLAYER)), ...all.filter((o) => o.info.flags & OF_PLAYER)];
+    if (!list.length) return this.setTarget(null);
+    const i = cycling && this.target !== null ? list.findIndex((o) => o.id === this.target) : -1;
+    this.setTarget(list[i < 0 || i + 1 === list.length ? 0 : i + 1].id);
   }
 
   private readonly onPointerDown = (e: PointerEvent) => {
@@ -3085,6 +3111,8 @@ export class GameScene {
     this.lastTap = { x, y, at: now };
     if (this.selecting) {
       this.updateHover();
+      // As below: a target just beside the fingertip counts
+      if (this.hovered === null && this.withinReach(x, y, () => true)) this.updateHover();
       if (this.hovered !== null) this.select(this.hovered);
       return;
     }
@@ -3093,9 +3121,33 @@ export class GameScene {
       this.activateUnderCursor();
       return;
     }
-    if (this.objectsUnderCursor((o) => (o.info.flags & OF_ATTACKABLE) !== 0).length || this.critterUnderCursor() !== null) return this.selectHovered();
+    // Ours: a fingertip is wider than a rat's sprite, so a creature just beside the tap counts too
+    const attackable = (o: WorldObject) => (o.info.flags & OF_ATTACKABLE) !== 0;
+    const reached = this.withinReach(x, y, attackable);
+    if (reached) {
+      this.mouse = reached;
+      return this.selectHovered();
+    }
+    this.mouse = { x, y };
+    if (this.critterUnderCursor() !== null) return this.selectHovered();
     const near = this.objectsUnderCursor((o) => (o.info.flags & (OF_GETTABLE | OF_CONTAINER)) !== 0 && this.distanceTo(o.id) <= CLOSE_DISTANCE);
     if (near.length) this.choose("Get", near, (id) => this.getOrOpen(id));
+  }
+
+  /**
+   * Ours: the nearest point to (x, y), within TAP_REACH, with an object passing `test` drawn
+   * under it: the point itself first, then rings around it. Leaves `this.mouse` moved.
+   */
+  private withinReach(x: number, y: number, test: (o: WorldObject) => boolean): { x: number; y: number } | null {
+    for (let r = 0; r <= TAP_REACH; r += 8) {
+      const steps = r === 0 ? 1 : 8 + r / 2;
+      for (let k = 0; k < steps; k++) {
+        const a = (k / steps) * Math.PI * 2;
+        this.mouse = { x: x + Math.cos(a) * r, y: y + Math.sin(a) * r };
+        if (this.objectsUnderCursor(test).length) return this.mouse;
+      }
+    }
+    return null;
   }
 
   private readonly onKeyDown = (e: KeyboardEvent) => {

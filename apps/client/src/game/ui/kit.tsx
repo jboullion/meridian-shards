@@ -459,6 +459,19 @@ export interface ListItem<K> {
 }
 
 /**
+ * Ours: scroll `list` just enough to show `row`, as scrollIntoView({ block: "nearest" }) does,
+ * but the list alone: scrollIntoView scrolls every box around it too, the game's included,
+ * which brought the phone's drawer in from off the screen.
+ */
+export function scrollRowIntoList(list: HTMLElement | null, row: Element | null | undefined): void {
+  if (!list || !row) return;
+  const l = list.getBoundingClientRect();
+  const r = row.getBoundingClientRect();
+  if (r.top < l.top) list.scrollTop -= l.top - r.top;
+  else if (r.bottom > l.bottom) list.scrollTop += Math.min(r.bottom - l.bottom, r.top - l.top);
+}
+
+/**
  * LISTBOX, owner-drawn like the client's lists (ownerdrw.c): Times on black, the selection
  * black on white (color.c COLOR_LISTFGD/BGD, COLOR_LISTSELFGD/BGD). Enter or a double click
  * activates the selected row.
@@ -481,7 +494,7 @@ export function ListBox<K extends string | number>({
     if (autoFocus) ref.current?.focus();
   }, [autoFocus]);
   useEffect(() => {
-    ref.current?.querySelector(".selected")?.scrollIntoView({ block: "nearest" });
+    scrollRowIntoList(ref.current, ref.current?.querySelector(".selected"));
   }, [selected]);
   const onKey = (e: ReactKeyboardEvent) => {
     const go = (i: number) => {

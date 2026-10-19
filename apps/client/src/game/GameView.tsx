@@ -2132,6 +2132,13 @@ export function GameView({
     <div
       className={`game${touch ? " touch-ui" : ""}${modern ? " modern-ui" : ""}${classic ? " classic-ui" : ""}${classic && chatFocused ? " chat-focused" : ""}${hudHidden ? " hud-hidden" : ""}${touch && chatOpen ? " chat-open" : ""}${touch && drawerOpen ? " drawer-open" : ""}`}
       ref={gameRef}
+      // A phone browser's long press opens its own menu (an image's "open, save, share" over the
+      // Attack button's weapon): never in the game, but in text fields. Our own handlers (examine)
+      // have already run, as this is the root
+      onContextMenu={touch ? (e) => {
+        const t = e.target as HTMLElement;
+        if (!t.closest("input, textarea, [contenteditable]")) e.preventDefault();
+      } : undefined}
       style={
         {
           "--chat-height": `${dragHeight ?? settings.chatHeight}px`,

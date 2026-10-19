@@ -2597,8 +2597,11 @@ canvas.server-wait {
    controls sit on the view (ui/TouchControls.tsx). */
 .game.touch-ui {
   position: relative;
-  /* The drawer waits off the right edge: it mustn't widen the page (the browser would zoom out to fit it) */
+  /* The drawer waits off the right edge: it mustn't widen the page (the browser would zoom out to fit it).
+     clip, not hidden: a hidden box can still be scrolled by a script (scrollIntoView, focus), which
+     slid the drawer in over the view when a quest's update reselected a row in its list */
   overflow: hidden;
+  overflow: clip;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   /* No blue flash over what's tapped (Android's default tap highlight), the view above all */
@@ -2756,6 +2759,13 @@ canvas.server-wait {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+/* A finger held on a picture (the Attack button's weapon, a slot's icon) holds the button under it,
+   never the picture: no image menu or drag */
+.touch-controls img {
+  pointer-events: none;
+  -webkit-user-drag: none;
 }
 
 .touch-hud {
