@@ -11,9 +11,19 @@
 import { TRANSPARENT_INDEX, type Bgf, type BgfBitmap } from "@shards/formats";
 import type { XlatTable } from "./xlat.ts";
 
-/** Hotspot draw layers (clientd3d/object3d.h), back to front by the D3D z-bias. */
-const LAYER = { UNDERUNDER: 1, UNDER: 3, UNDEROVER: 6, BASE: 10, HELM: 10.5, OVERUNDER: 11, OVER: 13, OVEROVER: 15 } as const;
+/** Hotspot draw layers (clientd3d/object3d.h), back to front by the D3D z-bias. OVERFIGURE is ours. */
+const LAYER = { UNDERUNDER: 1, UNDER: 3, UNDEROVER: 6, BASE: 10, OVERFIGURE: 10.25, HELM: 10.5, OVERUNDER: 11, OVER: 13, OVEROVER: 15 } as const;
 const HS_HELM = 2;
+
+/**
+ * Ours: a part whose frames carry a hotspot with this number is drawn over the figure, under a
+ * helm, wherever it hangs. Facial hair needs it: it hangs from the head, which hangs under the
+ * body (so the collar covers the neck), but a beard reaches down over the collar. The classic
+ * client ignores the hotspot (nothing hangs from it). shards-server tools/iconforge hair.py
+ * writes it into every frame of a beard.
+ */
+export const HS_OVER_FIGURE = 127;
+const overFigure = (b: BgfBitmap) => b.hotspots.some((h) => h.number === HS_OVER_FIGURE);
 
 export interface SpritePart {
   bgf: Bgf;
@@ -172,7 +182,7 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
     // overlay offsets are scaled by the base's shrink in the C code
     const x = hs.x + ob.xOffset;
     const y = hs.y + ob.yOffset;
-    const layer = hs.helm ? LAYER.HELM : hs.over ? LAYER.OVER : LAYER.UNDER;
+    const layer = overFigure(ob) ? LAYER.OVERFIGURE : hs.helm ? LAYER.HELM : hs.over ? LAYER.OVER : LAYER.UNDER;
     placed.push({ bmp: ob, x, y, scale: s / part.bgf.shrink, layer, xlat: xlatFor(part.translation), hotspot: part.hotspot });
     firstLevel.push({ part, bmp: ob, x: hs.x, y: hs.y, over: hs.over });
   }
@@ -186,7 +196,9 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
       // base hotspot + parent offsets (base shrink) + parent hotspot and our offsets (parent's shrink)
       const x = parent.x + parent.bmp.xOffset + (hs2.x + ob.xOffset) * ps;
       const y = parent.y + parent.bmp.yOffset + (hs2.y + ob.yOffset) * ps;
-      const layer = hs2.over
+      const layer = overFigure(ob)
+        ? LAYER.OVERFIGURE
+        : hs2.over
         ? parent.over
           ? LAYER.OVEROVER
           : LAYER.UNDEROVER

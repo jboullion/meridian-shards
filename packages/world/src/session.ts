@@ -7,7 +7,7 @@ import {
   buildReqAttack, buildReqBuy, buildReqBuyItems, buildReqCast, buildReqDeposit, buildReqGame, buildReqLook, buildReqMove,
   buildReqCounteroffer, buildReqOffer, buildReqTurn, buildReqWithdrawal, buildReqWithdrawalItems, buildSay, buildSayGroup, buildSendEnchantments,
   buildSendSkills, buildSendSpells, buildChangeDescription, buildChangeUrl, buildReqApply,
-  buildReqGetFromContainer, buildReqObjectContents, buildReqPut, buildSendStatGroups, buildSendStats, buildSimple, buildUseCharacter, buildUserCommand, buildShardsCommand,
+  buildReqGetFromContainer, buildReqObjectContents, buildReqPut, buildSendStatGroups, buildSendStats, buildSimple, buildUseCharacter, buildUserCommand, buildShardsCommand, buildShardsObjectCommand,
   buildSendCharInfo, buildDeleteMail, buildDeleteNews, buildPostArticle, buildReqArticle, buildReqArticles, buildReqGetMail,
   buildReqLookupNames, buildSendMail, buildChangedStats, readStatChange, readGuildInfo, readGuildList, readGuildShield, readGuildShields,
   readGuildHalls, type GuildInfo, readArticles, readLookNewsgroup, readLookupNames, readMailHeader, type NewsArticle, buildAction, buildAppeal, buildChangePassword, buildReqInventoryMove, buildSayBlocked, UC, objId, passwordDigest, readBuyList, readCharInfo, readCharacters, readObject, readObjectList, readOffer, readPlayWave, STAT_GROUP,
@@ -21,6 +21,7 @@ import { readDamageDealt, type DamageDealt } from "./combatHit.ts";
 import { readSpellRefusal, type SpellRefusal } from "./spellRefusal.ts";
 import { readCompanion, type CompanionEvent } from "./companion.ts";
 import { readCosmetics, type CosmeticsEvent } from "./cosmetics.ts";
+import { readAppraisal, readTraining, type Appraisal, type TrainingCost } from "./training.ts";
 
 /** A line for the chat window, with the original client's default colour for its kind. */
 /**
@@ -206,7 +207,17 @@ export type QuestEvent =
   | { type: "offers"; npc: number; offers: QuestOffer[] }
   | { type: "log"; hash: number; active: QuestLogEntry[]; done: { id: number; times: number }[] }
   /** A step's count went up */
-  | { type: "progress"; id: number; step: number; count: number };
+  | { type: "progress"; id: number; step: number; count: number }
+  /** Ours: the signet rings we carry, to return (UC_SIGNETS): shown as bronze quests */
+  | { type: "signets"; rings: SignetRing[] };
+
+/** A signet ring we carry (UC_SIGNETS): the ring, whose it is, and where they stand ("" and 0 for nowhere) */
+export interface SignetRing {
+  id: number;
+  owner: string;
+  room: string;
+  rid: number;
+}
 
 /** A friend as our server lists them (UC_FRIENDS FR_LIST) */
 export interface ServerFriend {
@@ -274,6 +285,10 @@ export interface SessionEvents {
   companion?: (e: CompanionEvent) => void;
   /** Ours: a tailor's or barber's menu (docs/adr/0012-cosmetics.md) */
   cosmetics?: (e: CosmeticsEvent) => void;
+  /** Ours: the abilities we can train, and what 1% of each costs (docs/adr/0016-abilities.md) */
+  training?: (list: TrainingCost[]) => void;
+  /** Ours: whether an item of ours can be appraised for the citizen's market, and its price (docs/adr/0016-abilities.md) */
+  appraisal?: (a: Appraisal) => void;
   offer?: (e: OfferEvent) => void;
   sound?: (e: SoundEvent) => void;
   /** We hurt something, and by how much (combatHit.ts: for damage numbers over its head) */
@@ -618,6 +633,11 @@ export class GameSession {
   /** UC_SHARDS (ours): a command line for our server's Kod, such as "travel 2" (user.kod ShardsCommand) */
   shardsCommand(line: string): void {
     this.send(buildShardsCommand(line));
+  }
+
+  /** UC_SHARDS_OBJECT (ours): a command line about one object, such as "vault" on an item (user.kod ShardsObjectCommand) */
+  shardsObject(id: number, line: string): void {
+    this.send(buildShardsObjectCommand(id, line));
   }
 
   /** Ours: UC_FRIENDS, UC_PETS or UC_AMBIENT (shards-server util/shardssocial.kod), as an event */
@@ -1067,6 +1087,16 @@ export class GameSession {
           } else if (uc === UC.QUEST_PROGRESS) {
             // Ours (questbook.kod SendProgress)
             this.events.quest?.({ type: "progress", id: r.u32(), step: r.u8(), count: r.u16() });
+          } else if (uc === UC.SIGNETS) {
+            // Ours (questbook.kod SendSignets): each ring, its owner's name, their room's name and number
+            const rings: SignetRing[] = [];
+            for (let n = r.u8(); n > 0; n--) {
+              const id = objId(r.u32());
+              const owner = this.resource(r.u32()) ?? "";
+              const room = this.resource(r.u32()) ?? "";
+              rings.push({ id, owner, room, rid: r.u32() });
+            }
+            this.events.quest?.({ type: "signets", rings });
           } else if (uc === UC.COMPANION) {
             // Ours (companionbook.kod SendStatus, HealthChanged)
             const e = readCompanion(r, (id) => this.resource(id));
@@ -1075,6 +1105,12 @@ export class GameSession {
             // Ours (cosmeticsbook.kod SendTailorMenu, SendBarberMenu)
             const e = readCosmetics(r, (id) => this.resource(id));
             if (e) this.events.cosmetics?.(e);
+          } else if (uc === UC.TRAINING) {
+            // Ours (shardsabilities.kod SendTraining)
+            this.events.training?.(readTraining(r));
+          } else if (uc === UC.APPRAISAL) {
+            // Ours (shardsabilities.kod SendAppraisal)
+            this.events.appraisal?.(readAppraisal(r));
           } else if (uc === UC.FRIENDS || uc === UC.PETS || uc === UC.AMBIENT) {
             // Ours (shards-server util/shardssocial.kod)
             const e = this.readSocial(uc, r);

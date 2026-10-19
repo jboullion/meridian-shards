@@ -32,6 +32,48 @@
 /** Shared by every room and sprite material: 1 while postFx.ts draws the glow pass */
 export const glowPass = { value: 0 };
 
+/**
+ * Ours (Enhanced Lighting's moods, moods.ts, docs/adr/0017-lighting-moods.md): shared by every
+ * room material, and the sprites' fog and haze, so a frame sets them once. uMoodOn 0 is the
+ * original's lighting.
+ */
+export const moodUniforms = {
+  uMoodOn: { value: 0 },
+  /** Toward the sun (or moon), client axes, unit; and its colour times its strength */
+  uSunDir: { value: [0, 0, 1] as [number, number, number] },
+  uSunColor: { value: [0, 0, 0] as [number, number, number] },
+  /** Tints the original light; under open sky it's also scaled */
+  uAmbientColor: { value: [1, 1, 1] as [number, number, number] },
+  uAmbientScale: { value: 1 },
+  /** What the original's distance fog fades to */
+  uFogColor: { value: [0, 0, 0] as [number, number, number] },
+  /** Distance haze: its colour, and (density per fine unit, start in fine units, most) */
+  uHazeColor: { value: [0, 0, 0] as [number, number, number] },
+  uHaze: { value: [0, 0, 0.85] as [number, number, number] },
+  /** Light maps (flames) scaled */
+  uFlameScale: { value: 1 },
+  /** The floors' sun map (sunShadow.ts): this hour in red, the next in green, mixed by uSunMix */
+  uSunMap: { value: null as unknown },
+  uSunRect: { value: [0, 0, 1, 1] as [number, number, number, number] },
+  uSunMix: { value: 0 },
+  /** How dark the sun's shadows are (0: no map yet, or none) */
+  uSunShadow: { value: 0 },
+};
+
+/** Ours: a mood's fog colour and haze over the original's fog (the room and sprite shaders) */
+export const moodFogGlsl = /* glsl */ `
+uniform float uMoodOn;
+uniform vec3 uFogColor;
+uniform vec3 uHazeColor;
+uniform vec3 uHaze;
+vec3 moodFog(vec3 c, float fog, float depth) {
+  if (uMoodOn < 0.5) return c * fog;
+  c = mix(uFogColor, c, fog);
+  float haze = min(uHaze.z, 1.0 - exp(-uHaze.x * max(0.0, depth - uHaze.y)));
+  return mix(c, uHazeColor, haze);
+}
+`;
+
 export const lightingUniforms = () => ({
   uPalette: { value: null as unknown },
   uMap: { value: null as unknown },
@@ -65,6 +107,7 @@ export const lightingUniforms = () => ({
   uAo: { value: 0 },
   uAoMap: { value: null as unknown },
   uAoRect: { value: [0, 0, 1, 1] as [number, number, number, number] },
+  ...moodUniforms,
 });
 
 export const roomVertexShader = /* glsl */ `
@@ -75,6 +118,10 @@ in float aMask1;
 // Ours: x = 0 wall, 1 floor, 2 ceiling; y, z = the floor and ceiling heights in front (roomAo.ts surfaceInfo)
 in vec3 aSurface;
 out vec3 vSurface;
+// Ours (moods): the face normal (client axes), and 1 under open sky (RoomView skyInfo)
+in vec4 aSky;
+out vec4 vSky;
+uniform float uMoodOn;
 out vec2 vUv;
 flat out int vMask0;
 flat out int vMask1;
@@ -92,7 +139,8 @@ void main() {
   vUv = uv + uScroll;
   vLight = aLight;
   float scale = 1024.0;
-  if (aShade.z > 0.5 && uShade > 0.0) {
+  // The original's sun shading (a mood's sun takes its place)
+  if (aShade.z > 0.5 && uShade > 0.0 && uMoodOn < 0.5) {
     float ls = floor(dot(aShade.xy * 1024.0, uSun * 1024.0) / 1024.0);
     ls = floor((ls + 1024.0) / 2.0);
     ls = (1024.0 - uShade) + floor(ls * uShade / 1024.0);
@@ -107,6 +155,7 @@ void main() {
   vMask0 = int(aMask0);
   vMask1 = int(aMask1);
   vSurface = aSurface;
+  vSky = aSky;
   gl_Position = projectionMatrix * mv;
 }
 `;
@@ -122,6 +171,7 @@ in vec2 vNormal2;
 flat in int vMask0;
 flat in int vMask1;
 in vec3 vSurface;
+in vec4 vSky;
 out vec4 fragColor;
 uniform float uGlowPass;
 uniform float uAo;
@@ -138,6 +188,16 @@ uniform sampler2D uPalette;
 uniform float uViewerLight;
 uniform float uAmbient;
 uniform float uFog;
+uniform vec3 uSunDir;
+uniform vec3 uSunColor;
+uniform vec3 uAmbientColor;
+uniform float uAmbientScale;
+uniform float uFlameScale;
+uniform sampler2D uSunMap;
+uniform vec4 uSunRect;
+uniform float uSunMix;
+uniform float uSunShadow;
+${moodFogGlsl}
 
 float lightIndex(float light, float scale) {
   float idx;
@@ -198,6 +258,27 @@ void main() {
     ? 16384.0 + light * 1024.0 + uViewerLight * 64.0
     : 32768.0 + max(0.0, light - 192.0) * 1024.0 + uViewerLight * 64.0 + uAmbient * 1024.0;
   float fog = uFog > 0.5 ? clamp((fogEnd - vDepth) / fogEnd, 0.0, 1.0) : 1.0;
+  // Ours (moods): the original light tinted, and under open sky the sun on what faces it
+  vec3 ambient = vec3(grey);
+  vec3 sun = vec3(0.0);
+  if (uMoodOn > 0.5) {
+    float sky = vSky.w;
+    ambient *= uAmbientColor * mix(1.0, uAmbientScale, sky);
+    float facing = sky > 0.5 && vSurface.x < 1.5 ? dot(normalize(vSky.xyz), uSunDir) : 0.0;
+    if (facing > 0.0) {
+      float inSun = 1.0;
+      if (uSunShadow > 0.0) {
+        // Floors: the sun map. Walls: the map on the floor in front, fading out up the wall
+        bool onFloor = vSurface.x > 0.5;
+        vec2 at = onFloor ? vClient.xy : vClient.xy + normalize(vSky.xy) * 96.0;
+        vec2 m = texture(uSunMap, (at - uSunRect.xy) * uSunRect.zw).rg;
+        inSun = mix(m.r, m.g, uSunMix);
+        if (!onFloor) inSun = mix(inSun, 1.0, smoothstep(0.0, 1536.0, vClient.z - vSurface.y));
+        inSun = 1.0 - uSunShadow * (1.0 - inSun);
+      }
+      sun = uSunColor * facing * inSun;
+    }
+  }
   // Light maps (d3dlighting.c D3DRenderLMapPost*Add): each light adds
   // radial(in-plane distance) * falloff(distance off the plane) * colour * texel.
   vec3 added = vec3(0.0);
@@ -220,10 +301,9 @@ void main() {
     float k = max(0.0, 1.0 - radial / reach) * falloff;
     added += k * uLightColor[i];
   }
-  if (uSoftLight > 0.5) {
-    fragColor = vec4(softHighlight(rgb * grey, rgb * grey + rgb * added) * fog, 1.0);
-  } else {
-    fragColor = vec4(min(vec3(1.0), rgb * grey + rgb * added) * fog, 1.0);
-  }
+  if (uMoodOn > 0.5) added *= uFlameScale;
+  vec3 lit = rgb * ambient + rgb * sun + rgb * added;
+  vec3 c = uSoftLight > 0.5 ? softHighlight(rgb * ambient, lit) : min(vec3(1.0), lit);
+  fragColor = vec4(moodFog(c, fog, vDepth), 1.0);
 }
 `;

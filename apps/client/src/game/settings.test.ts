@@ -17,7 +17,7 @@ describe("settings", () => {
 
   it("migrates version 2 settings: one mouse speed, right click looks", () => {
     const s = migrate({ version: 2, preset: "modern", mouseSpeed: 2, rightClickLooks: true, musicVolume: 40 } as never);
-    expect(s.version).toBe(14);
+    expect(s.version).toBe(15);
     expect(s.mouseXScale).toBe(30);
     expect(s.mouseYScale).toBe(30);
     expect(s.keys.examine).toEqual([{ code: "Mouse1" }]);
@@ -58,6 +58,14 @@ describe("settings", () => {
     expect(migrate({ version: 13, preset: "modern" } as never).keys.companion).toEqual([{ code: "KeyC" }]);
     expect(migrate({ version: 13, preset: "modern", keys: { map: [{ code: "KeyC" }] } } as never).keys.companion).toEqual([]);
     expect(migrate({ version: 13, preset: "original" } as never).keys.companion).toEqual([]);
+  });
+
+  it("G gets (version 15) beside F, unless G was already taken", () => {
+    const interact = (s: object) => migrate({ preset: "modern", ...s } as never).keys.interact;
+    expect(interact({ version: 14, keys: { interact: [{ code: "KeyF" }] } })).toEqual([{ code: "KeyG" }, { code: "KeyF" }]);
+    expect(interact({ version: 14, keys: { interact: [{ code: "KeyF" }], map: [{ code: "KeyG" }] } })).toEqual([{ code: "KeyF" }]);
+    expect(interact({ version: 15, keys: { interact: [{ code: "KeyF" }] } })).toEqual([{ code: "KeyF" }]);
+    expect(PRESETS.modern.interact[0]).toEqual({ code: "KeyG" });
   });
 
   it("Enhanced Lighting on by default; the test builds' graphics options are dropped", () => {

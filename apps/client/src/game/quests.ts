@@ -7,7 +7,7 @@
 // Which quests the tracker shows (up to TRACK_MAX) is ours alone, kept in localStorage.
 
 import { useEffect, useState } from "react";
-import { EMPTY_CATALOG, questById, type CatalogQuest, type QuestCatalog, type QuestEvent, type QuestLogEntry } from "@shards/world";
+import { EMPTY_CATALOG, questById, type CatalogQuest, type QuestCatalog, type QuestEvent, type QuestLogEntry, type SignetRing } from "@shards/world";
 
 export const TRACK_MAX = 3;
 
@@ -27,6 +27,8 @@ export class QuestStore {
   catalog: QuestCatalog = EMPTY_CATALOG;
   active: QuestLogEntry[] = [];
   done: { id: number; times: number }[] = [];
+  /** Ours: the signet rings we carry, shown as bronze quests to return them (UC_SIGNETS) */
+  signets: SignetRing[] = [];
   /** The server's quests aren't the catalogue we have, even fetched again: reload the page */
   stale = false;
   /** When the log arrived (performance.now()), for its seconds left */
@@ -97,6 +99,9 @@ export class QuestStore {
     } else if (e.type === "progress") {
       this.active = this.active.map((a) => (a.id === e.id ? { ...a, step: e.step, count: e.count } : a));
       this.changed();
+    } else if (e.type === "signets") {
+      this.signets = e.rings;
+      this.changed();
     }
   }
 
@@ -154,3 +159,9 @@ export function useQuests(store: QuestStore | null): number {
   useEffect(() => store?.onChange(() => setV((n) => n + 1)), [store]);
   return v;
 }
+
+/** Ours: a signet ring we carry, as the quest logs show it (bronze, like errands) */
+export const SIGNET_QUEST_NAME = "A Lost Signet Ring";
+
+/** "Return it to Rodric d'Stane (Raza)": the line for a signet ring we carry */
+export const signetObjective = (r: SignetRing): string => `Return it to ${r.owner}${r.room ? ` (${r.room})` : ""}`;

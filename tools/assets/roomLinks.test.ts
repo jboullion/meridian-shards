@@ -103,6 +103,49 @@ describe("room links", () => {
     expect(exits["razainn.roo"]).toEqual({ doors: [], edges: [], arrivals: [[8, 6]] });
   });
 
+  it("reads the areas a room's SomethingMoved sends players on from, as doors at their inner corners", () => {
+    const khd = `${KHD}\n   RID_MARION = 200\n   RID_C4 = 534\n   RID_C5 = 535\n`;
+    const marion = `
+resources:
+   room_marion = marion.roo
+classvars:
+   piRoom_num = RID_MARION
+messages:
+   SomethingMoved(what = $,new_row = $, new_col = $)
+   {
+      if (new_row < 32) AND (new_col > 66)
+      {
+         Send(SYS,@UtilGoNearSquare,#what=what,
+               #where=Send(SYS,@FindRoomByNum,#num=RID_C4),
+               #new_row=34,#new_col=5,#new_angle=ANGLE_NORTH_EAST);
+         return;
+      }
+      if (new_col >= 48) and (new_row > 83)
+      {
+         Send(SYS,@UtilGoNearSquare,#what=what,
+               #where=Send(SYS,@FindRoomByNum,#num=RID_C5),
+               #new_row=3,#new_col = 23,#new_angle=ANGLE_SOUTH_WEST);
+         return;
+      }
+      propagate;
+   }
+
+   CreateStandardExits()
+   {
+      plEdge_Exits = Cons([ LEAVE_WEST, RID_RAZA, 55, 93, ROTATE_NONE ],plEdge_Exits);
+      Send(SYS,@UtilGoNearSquare,#what=what,#where=Send(SYS,@FindRoomByNum,#num=RID_RAZA_INN));
+   }
+`;
+    const c4 = `resources:\n   room_c4 = c4.roo\nclassvars:\n   piRoom_num = RID_C4\n`;
+    const exits = buildRoomExits([{ path: "marion.kod", text: marion }, { path: "c4.kod", text: c4 }, { path: "raza.kod", text: RAZA }], khd);
+    expect(exits["marion.roo"]!.doors).toEqual([
+      [31, 67, "c4.roo"],
+      [84, 48, null],
+    ]);
+    expect(exits["c4.roo"]!.arrivals).toEqual([[34, 5]]);
+    expect(buildRoomLinks([{ path: "marion.kod", text: marion }, { path: "c4.kod", text: c4 }], khd)["marion.roo"]).toEqual(["c4.roo"]);
+  });
+
   it("reads each room's terrain, over continued lines too", () => {
     const terrain = buildRoomTerrain(
       [

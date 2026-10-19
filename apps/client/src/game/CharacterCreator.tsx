@@ -1,6 +1,7 @@
 // The character creator (module/char: charmake.c, charname.c, charface.c, charstat.c,
 // charspel.c, charskil.c). Five tabs like the original's "Customize your character":
-//   Name: 3 to 30 legal characters, and a description
+//   Name: 3 to 30 legal characters, and a description; ours: Skip the tutorial, to start in a
+//     city of the player's choosing (startCity.ts) rather than Raza
 //   Appearance: gender, hair, eyes, nose, mouth, hair colour and skin colour, with the face
 //     drawn from the server's parts (ui/AppearanceEditor.tsx, shared with the companion's looks)
 //   Statistics: six stats from 1 to 50, starting at 25, with 70 points to spend
@@ -13,8 +14,10 @@ import { Fragment, useState, type ReactNode } from "react";
 import { GENDER, type CharInfo, type CreatorChoice } from "@shards/protocol";
 import type { GameSession } from "@shards/world";
 import type { IconRenderer } from "./icons.ts";
+import { gameSocketUrl } from "../host.ts";
+import { START_CITIES, rememberStartCity, type StartCity } from "./startCity.ts";
 import {
-  Backdrop, Button, Fixed, FlowPage, FlowText, GraphBar, GroupBox, ListBox, MessageBox, Spacer, Tabs, Text, TextArea, TextField, Window, at,
+  Backdrop, Button, Check, Fixed, FlowPage, FlowText, GraphBar, GroupBox, ListBox, MessageBox, Select, Spacer, Tabs, Text, TextArea, TextField, Window, at,
   type Rect,
 } from "./ui/kit.tsx";
 import { AppearanceEditor, facePicks, randomFace } from "./ui/AppearanceEditor.tsx";
@@ -111,6 +114,9 @@ export function CharacterCreator({
   const [tab, setTab] = useState<TabName>("Name");
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
+  /** Ours: Skip the tutorial, and the city to start in */
+  const [skipTutorial, setSkipTutorial] = useState(false);
+  const [startCity, setStartCity] = useState<StartCity>("marion");
   // charface.c CharFaceInit: random starting looks
   const [face, setFace] = useState(() => randomFace(info));
   const [stats, setStats] = useState<number[]>(() => STAT_NAMES.map(() => STAT_START));
@@ -164,6 +170,8 @@ export function CharacterCreator({
       setConfirm({ text: "You have some points remaining to allocate to spells and skills; are you sure you want to discard these points?", statsOk: true });
       return;
     }
+    // Ours: sent as the character first enters the game (GameView)
+    rememberStartCity(localStorage, gameSocketUrl(), n, skipTutorial ? startCity : null);
     session.createCharacter({
       id: slotId, name: n, description: desc, gender: face.gender === 0 ? GENDER.MALE : GENDER.FEMALE,
       // Ours: a 6th part only with facial hair (player.kod PlayerNewCharInfo takes 5 or 6)
@@ -197,7 +205,15 @@ export function CharacterCreator({
         <Fixed y={28} h={174}>
           <TextField at={[2, 30, 108, 16]} value={name} onChange={setName} maxLength={30} autoFocus />
           <Text at={[2, 54, 200, 8]}>Enter a description of your character here:</Text>
-          <TextArea at={[2, 66, 302, 136]} value={desc} onChange={setDesc} maxLength={1000} />
+          <TextArea at={[2, 66, 302, 112]} value={desc} onChange={setDesc} maxLength={1000} />
+          <Check
+            at={[2, 186, 104, 10]}
+            label="Skip the tutorial, start in"
+            title="Begin at 30 health with leather armor, a small round shield and 1,000 shillings, as a citizen of the city you choose, instead of starting out in Raza"
+            checked={skipTutorial}
+            onChange={setSkipTutorial}
+          />
+          <Select at={[108, 184, 70, 14]} value={startCity} options={START_CITIES} onChange={setStartCity} />
         </Fixed>
         <Spacer />
         <Fixed y={212} h={16}>

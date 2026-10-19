@@ -61,6 +61,8 @@ interface Manifest {
   equipment?: string[];
   /** A copy of each picture for the game to show: WebP at this quality (0-1), each client's no wider than `width` */
   web?: { quality: number; width?: Partial<Record<Client, number>> };
+  /** Settings (settings.ts) over the run's own, e.g. { "enhanced": false } to compare with the original's lighting */
+  settings?: Record<string, unknown>;
   shots: Shot[];
 }
 
@@ -133,6 +135,7 @@ function settingsFor(client: Client) {
     // The same sky everywhere: no rain or snow, and no frame counter in the picture
     weather: false,
     showFps: false,
+    ...manifest.settings,
   };
 }
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
-  BP, ByteReader, Connection, FrameDecoder, RandomStreams, ServerToken, buildReqMove, crc32, encodeFrame, md5,
+  BP, ByteReader, Connection, UC, buildShardsObjectCommand, FrameDecoder, RandomStreams, ServerToken, buildReqMove, crc32, encodeFrame, md5,
   passwordDigest, readMove,
   BEACON, CLIENT_ACK, SERVER_HELLO,
 } from "../src/index.ts";
@@ -154,4 +154,12 @@ test("connection: a bad frame in the game tells the server (BP_RESYNC) and resyn
   assert.equal(sent.at(-2)![7], BP.RESYNC);
   assert.deepEqual([...sent.at(-1)!], [...BEACON]);
   conn.close();
+});
+
+test("UC_SHARDS_OBJECT: the object without its number tag, then the line", () => {
+  const b = buildShardsObjectCommand(0x10000000 | 6461, "train 2");
+  assert.deepEqual([...b.slice(0, 2)], [BP.USERCOMMAND, UC.SHARDS_OBJECT]);
+  assert.equal(new DataView(b.buffer, b.byteOffset).getUint32(2, true), 6461);
+  assert.equal(new DataView(b.buffer, b.byteOffset).getUint16(6, true), 7);
+  assert.equal(new TextDecoder().decode(b.slice(8)), "train 2");
 });

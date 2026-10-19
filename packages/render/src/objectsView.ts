@@ -7,7 +7,7 @@ import { FINENESS, SF, ceilingHeightAt, floorHeightAt, leafAt, type Bgf, type Ro
 import { compositeSprite, frameFor, type Composite, type SpritePart } from "./sprites.ts";
 import type { XlatTable } from "./xlat.ts";
 import { colorTexture, compositeToRgba } from "./colorTexture.ts";
-import { glowPass } from "./lighting.ts";
+import { glowPass, moodFogGlsl, moodUniforms } from "./lighting.ts";
 import { MAX_LIGHTS, dlightScale, fixedSin, flashStep, flicker, fogEnd, highlightScale, isFireColor, isHighlightLight, lightColor, objectBrightness, type LightSource } from "./objectLighting.ts";
 
 /** Object flags (include/proto.h OF_*) and draw effects (DRAWFX_*). */
@@ -76,7 +76,27 @@ export interface ObjectViewContext {
   /** Ours (Enhanced lighting): flames flicker, by this clock (ms) */
   flicker?: boolean;
   timeMs?: number;
+  /** Ours (Enhanced Lighting's moods): the light's tint, and the sun on figures under open sky */
+  mood?: SpriteMood;
 }
+
+/** Ours (moods.ts): what a mood does to figures */
+export interface SpriteMood {
+  /** Tints the original light (sector light and flames' base); under open sky it's also scaled */
+  ambientColor: readonly [number, number, number];
+  ambientScale: number;
+  /** Toward the sun, client axes, unit; its colour times its strength */
+  sunDir: readonly [number, number, number];
+  sunColor: readonly [number, number, number];
+  /** How sunlit the floor is at (x, y): RoomView.sunlitAt */
+  sunlitAt: (x: number, y: number) => number;
+  /** How dark the sun's shadows are (0 while there's no sun map) */
+  shadow: number;
+}
+
+/** Billboards have no normal: a figure takes this much of the sun, more lit from in front */
+const SPRITE_SUN = 0.6;
+const SPRITE_SUN_FRONT = 0.3;
 
 export interface NameLabel {
   id: number;
@@ -113,6 +133,7 @@ uniform float uFogEnd;
 uniform float uFog;
 // Ours: the glow pass (postFx.ts) draws only what shines, flames and spells, by brightness
 uniform float uGlowPass;
+${moodFogGlsl}
 uniform float uEmissive;
 // Ours: a face finer than its figure (sprites.ts Composite.face), drawn over its box
 // (left, top, right, bottom in uv) from images of its own
@@ -144,15 +165,17 @@ void main() {
     fragColor = vec4(rgb * glow * fog, 1.0);
     return;
   }
-  fragColor = vec4(rgb * uBrightness * fog, uAlpha);
+  fragColor = vec4(uFog > 0.5 ? moodFog(rgb * uBrightness, fog, vDepth) : rgb * uBrightness, uAlpha);
 }
 `;
 
 /**
- * The target halo (d3drender.c, isTargeted chunks): the sprite's shape, stretched 96 /
+ * The target halo (d3drender.c, isTargeted chunks): the sprite's shape, stretched HALO_GROW /
  * shrink fine units further on each side, drawn behind it in one colour (red by
  * default, config.halocolor) at twice the object's light.
  */
+/** Ours: 64, two bitmap pixels thinner than the original's 96 (6 bitmap pixels each side) */
+const HALO_GROW = 64;
 const haloFragment = /* glsl */ `
 precision highp float;
 in vec2 vUv;
@@ -256,6 +279,8 @@ interface Entry {
   bounceTime: number;
   /** ViewObject.scale */
   scale: number;
+  /** Ours (moods): how much in the sun it stands now (0 in shade, indoors, or with no mood) */
+  inSun: number;
 }
 
 export class ObjectsView {
@@ -430,6 +455,10 @@ export class ObjectsView {
             uFogEnd: { value: 100000 },
             uFog: { value: 1 },
             uGlowPass: glowPass,
+            uMoodOn: moodUniforms.uMoodOn,
+            uFogColor: moodUniforms.uFogColor,
+            uHazeColor: moodUniforms.uHazeColor,
+            uHaze: moodUniforms.uHaze,
             uEmissive: { value: 0 },
             uFaceOn: { value: 0 },
             uFaceRect: { value: new THREE.Vector4() },
@@ -443,7 +472,7 @@ export class ObjectsView {
         this.group.add(mesh);
         e = {
           mesh, halo: null, key: "", composite: null, cached: null, texture: null, colorTexture: null, faceTexture: null, faceColorTexture: null, shadow: null,
-          x, y, z: 0, flashTime: 0, lightAdjust: 0, bounceTime: 0, scale: 1,
+          x, y, z: 0, flashTime: 0, lightAdjust: 0, bounceTime: 0, scale: 1, inSun: 0,
         };
         this.entries.set(o.id, e);
       }
@@ -503,14 +532,17 @@ export class ObjectsView {
 
       // Lighting (D3DObjectLightingCalc) and draw effects
       const leaf = leafAt(ctx.room, x, y);
-      const sectorLight = leaf?.sector ? ctx.room.sectors[leaf.sector - 1].light : 0;
+      const sector = leaf?.sector ? ctx.room.sectors[leaf.sector - 1] : null;
+      const sectorLight = sector?.light ?? 0;
       const u = e.mesh.material.uniforms;
       const dt = o.info.drawingType;
-      const [r, g, b] = o.fullBright
+      let [r, g, b] = o.fullBright
         ? [1, 1, 1]
         : dt === DRAWFX.BLACK
           ? [0, 0, 0]
           : objectBrightness({ x, y, z: e.z }, sectorLight, ctx.viewerLight, ctx.ambient, lights, e.lightAdjust);
+      e.inSun = 0;
+      if (ctx.mood && !o.fullBright && dt !== DRAWFX.BLACK) [r, g, b] = this.moodLight(ctx, ctx.mood, e, [r, g, b], sector?.ceilingType === 0);
       (u.uBrightness.value as THREE.Vector3).set(r, g, b);
       u.uFogEnd.value = fogEnd(sectorLight, ctx.viewerLight, ctx.ambient);
       u.uFog.value = ctx.fog && !o.fullBright ? 1 : 0;
@@ -613,6 +645,26 @@ export class ObjectsView {
     this.target = id;
   }
 
+  /**
+   * Ours (moods): a figure's light tinted, and under open sky the sun on it, by how sunlit the
+   * floor is where it stands; lit more from in front (the sun behind the viewer), less backlit.
+   */
+  private moodLight(ctx: ObjectViewContext, m: SpriteMood, e: Entry, [r, g, b]: number[], sky: boolean): [number, number, number] {
+    const scale = sky ? m.ambientScale : 1;
+    r *= m.ambientColor[0] * scale;
+    g *= m.ambientColor[1] * scale;
+    b *= m.ambientColor[2] * scale;
+    if (!sky || m.sunDir[2] <= 0) return [r, g, b];
+    const lit = 1 - m.shadow * (1 - m.sunlitAt(e.x, e.y));
+    e.inSun = lit;
+    const vx = ctx.viewer.x - e.x,
+      vy = ctx.viewer.y - e.y;
+    const vl = Math.hypot(vx, vy) || 1;
+    const front = (vx * m.sunDir[0] + vy * m.sunDir[1]) / vl;
+    const k = lit * (SPRITE_SUN + SPRITE_SUN_FRONT * front);
+    return [r + m.sunColor[0] * k, g + m.sunColor[1] * k, b + m.sunColor[2] * k];
+  }
+
   /** Ours (shadows under figures): the disc under someone standing on the floor. */
   private updateShadow(e: Entry, o: ViewObject, ctx: ObjectViewContext, alpha: number): void {
     const c = e.composite;
@@ -632,7 +684,21 @@ export class ObjectsView {
     const floor = this.ground(o, e.x, e.y, ctx);
     const r = (shadowRadius(c.widthFine) * e.scale) / FINENESS;
     e.shadow.position.set(e.x / FINENESS, (floor + 2) / FINENESS, e.y / FINENESS);
-    e.shadow.scale.set(r, 1, r);
+    // Ours (moods): standing in the sun, it falls away from it, longer as the sun sinks
+    const sun = ctx.mood?.sunDir;
+    const horiz = sun ? Math.hypot(sun[0], sun[1]) : 0;
+    if (sun && e.inSun > 0.05 && sun[2] > 0.05 && horiz > 1e-3) {
+      const long = 1 + e.inSun * (Math.min(3, horiz / sun[2]) - 1) * 0.6;
+      const ax = -sun[0] / horiz,
+        ay = -sun[1] / horiz;
+      e.shadow.position.x += ax * r * (long - 1);
+      e.shadow.position.z += ay * r * (long - 1);
+      e.shadow.rotation.set(0, Math.atan2(-ay, ax), 0);
+      e.shadow.scale.set(r * long, 1, r * 0.85);
+    } else {
+      e.shadow.rotation.set(0, 0, 0);
+      e.shadow.scale.set(r, 1, r);
+    }
   }
 
   private updateHalo(e: Entry, on: boolean, light: number): void {
@@ -664,7 +730,7 @@ export class ObjectsView {
     if (!e.halo || !c) return;
     e.halo.material.uniforms.uMap.value = e.texture;
     const shrink = (16 * c.width) / c.resolution / c.widthFine; // the base's, not the finer image's
-    const grow = 96 / shrink;
+    const grow = HALO_GROW / shrink;
     const l = (c.left - grow) / FINENESS,
       r = (c.left + c.widthFine + grow) / FINENESS;
     const t = (c.top + grow) / FINENESS,

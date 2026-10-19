@@ -35,6 +35,8 @@ const WORLD = worldFrom(
     kod("ratking.kod", "RatKing is GiantRat\n"),
     kod("spell.kod", "Spell is PassiveObject\n"),
     kod("phase.kod", "Phase is Spell\nresources:\n   phase_name_rsc = \"phase\"\nclassvars:\n   vrName = phase_name_rsc\n"),
+    kod("skill.kod", "Skill is PassiveObject\n"),
+    kod("block.kod", "Block is Skill\nresources:\n   block_name_rsc = \"block\"\nclassvars:\n   vrName = block_name_rsc\n"),
   ],
   "   RID_TOS_INN = 52\n   RID_TOS_INN_CELLAR = 53\n   RID_RAT_CAVE = 60\n   QST_ID_FAMS_RATS = 76\n   HP20_RAZA_CHAIN = 0\n",
 );
@@ -105,7 +107,7 @@ describe("the quest generator", () => {
     expect(kod).toContain("[ 1, &SmallRat, 20, 0, &TosInnKeeper, 0, qd_1_s1, $, $, qd_1_t1,\r\n               0, $, $, $, 0 ]");
     expect(kod).toContain("[ 5, $, 1, 0, &TosInnKeeper, 0, qd_1_s3, [ 53 ], $, qd_1_t3,\r\n               0, $, $, $, 0 ]");
     expect(kod).toContain("[ 4, $, 1, 0, $, 3, qd_1_s4, $, qd_1_p4, qd_1_t4,\r\n               0, $, $, $, 0 ]");
-    expect(kod).toContain("300, 50, [ [ &OrcTooth, 2 ] ], 0, 2, $, $, 0, $, $ ]");
+    expect(kod).toContain("300, 50, [ [ &OrcTooth, 2 ] ], 0, 2, $, $, 0, $, $, $ ]");
     expect(kod).toContain("[ 3, qg_3_name, qg_3_icon, qg_3_desc, 53, 4, 5, 32, 32, ANGLE_WEST, 0 ]");
     expect(kod).toContain("   qg_3_icon = tsinnk.bgf");
     expect(kod).toContain('   qd_1_p4 = "a sealed letter"');
@@ -136,7 +138,7 @@ describe("the quest generator", () => {
     expect(g.kod).toContain("[ 10, $, 1, 0, &TosInnKeeper, 0, qd_1_s4, $, $, qd_1_t4,\r\n               0, $, $, [ &OrcTooth ], 0 ]");
     expect(g.kod).toContain("[ 13, $, 1, 0, &TosInnKeeper, 0, qd_1_s6, $, $, qd_1_t6,\r\n               1, $, $, $, 12 ]");
     expect(g.kod).toContain("1, [ 0, 10, 600, [ [ &OrcTooth, 1 ] ], $, $ ], $, $, 0 ]");
-    expect(g.kod).toContain("0, 0, $, 1000, 1, $, $, 0, $, $ ]");
+    expect(g.kod).toContain("0, 0, $, 1000, 1, $, $, 0, $, $, $ ]");
     expect(g.kod).toContain("[ 1, 76, 1 ],\r\n            [ 2, 0, 1 ]");
     const steps = g.catalog.quests[0]!.steps;
     expect(steps.map((s) => s.objective)).toEqual([
@@ -151,6 +153,23 @@ describe("the quest generator", () => {
     // A deposit or purchase is done where its NPC stands
     expect(steps[1]!.rooms.map((r) => r.rid)).toEqual([52]);
     expect(g.catalog.quests[0]).toMatchObject({ tier: "main", rewards: { trainingPoints: 1000 } });
+  });
+
+  it("writes the convey kind (sending a stack to the vault, docs/adr/0016-abilities.md)", () => {
+    const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "convey" }] }]), WORLD);
+    expect(g.errors).toEqual([]);
+    expect(g.kod).toContain("[ 15, $, 1, 0, &TosInnKeeper, 0, qd_1_s1, $, $, qd_1_t1,\r\n               1, $, $, $, 0 ]");
+    expect(g.catalog.quests[0]!.steps[0]!.objective).toBe("Send something to your vault");
+  });
+
+  it("writes the learn and attune kinds: the skills as the step's classes, the travel point as its amount", () => {
+    const w = WORLD;
+    const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "learn", skills: ["Block"] }, { kind: "attune", point: 3 }] }]), w);
+    expect(g.errors).toEqual([]);
+    expect(g.kod).toContain("[ 16, $, 1, 0, &TosInnKeeper, 0, qd_1_s1, $, $, qd_1_t1,\r\n               1, $, $, [ &Block ], 0 ]");
+    expect(g.kod).toContain("[ 17, $, 1, 0, &TosInnKeeper, 0, qd_1_s2, $, $, qd_1_t2,\r\n               1, $, $, $, 3 ]");
+    expect(g.catalog.quests[0]!.steps.map((s) => s.objective)).toEqual(["Learn block", "Attune to the portal"]);
+    expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "learn", skills: ["OrcTooth"] }] }]), w).errors.join()).toMatch(/OrcTooth isn't a skill class/);
   });
 
   it("writes long tables in groups, as a Kod list literal holds at most 40 elements", () => {
@@ -171,7 +190,7 @@ describe("the quest generator", () => {
     };
     const g = generateFrom(sources([q]), WORLD);
     expect(g.errors).toEqual([]);
-    expect(g.kod).toContain("0, 0, [ [ &OrcTooth, 1, 2 ] ], 0, 2, $, $, 5, [ [ 1, 1 ], [ 2, 8 ] ], $ ]");
+    expect(g.kod).toContain("0, 0, [ [ &OrcTooth, 1, 2 ] ], 0, 2, $, $, 5, [ [ 1, 1 ], [ 2, 8 ] ], $, $ ]");
     expect(g.catalog.quests[0]!.rewards.special).toEqual(["a place in the service of Duke Akardius", "the sign of Shal'ille on your guild shield"]);
     expect(g.catalog.quests[0]!.rewards.items[0]!.name).toBe("orc tooth (Qor)");
     const bad = { ...RATS, requires: { guildMaster: "yes" }, rewards: { joinFaction: "king", insignia: "none", items: [{ class: "OrcTooth", school: "x" }] } };
@@ -197,10 +216,29 @@ describe("the quest generator", () => {
     const g = generateFrom(sources([q, other]), WORLD);
     expect(g.errors).toEqual([]);
     expect(g.kod).toContain("[ 1, &SmallRat, 3, 2, &TosInnKeeper, 0, qd_1_s1, [ 53 ], $, qd_1_t1,");
-    expect(g.kod).toContain(", [ 2 ] ]");
+    expect(g.kod).toContain(", [ 2 ], $ ]");
     const noRooms = { ...RATS, steps: [{ kind: "kill", target: "SmallRat", inRooms: true }] };
     expect(generateFrom(sources([noRooms]), WORLD).errors).toEqual(["cellar-rats.json: step 1: inRooms: a kill step with rooms"]);
     expect(generateFrom(sources([{ ...RATS, requires: { notQuests: [9] } }]), WORLD).errors).toEqual(["cellar-rats.json: requires.notQuests: quest 9 isn't there"]);
+  });
+
+  it("writes a health cap on offers, above the band's min", () => {
+    const g = generateFrom(sources([{ ...RATS, band: { min: 20, max: 30 }, requires: { healthBelow: 30 }, repeat: { cooldownHours: 0 } }]), WORLD);
+    expect(g.errors).toEqual([]);
+    // A cooldown of 0 hours: offered again at once
+    expect(g.kod).toMatch(/\[ 1, qd_1_name, &TosInnKeeper, 0, 20, 30, \$,\s+\$, \$, 0, \$,/);
+    expect(g.kod).toContain("0, 2, $, $, 0, $, $, 30 ]");
+    const low = { ...RATS, band: { min: 20, max: 30 }, requires: { healthBelow: 20 } };
+    expect(generateFrom(sources([low]), WORLD).errors).toEqual(["cellar-rats.json: requires.healthBelow: a health above the band's min"]);
+  });
+
+  it("writes a paused quest as never offered, and says so in the catalogue only for it", () => {
+    const g = generateFrom(sources([{ ...RATS, paused: true }, { ...RATS, id: 2, key: "other" }]), WORLD);
+    expect(g.errors).toEqual([]);
+    expect(g.kod).toContain("0, 2, $, $, 16, $, $, $ ]");
+    expect(g.catalog.quests[0]!.paused).toBe(true);
+    expect("paused" in g.catalog.quests[1]!).toBe(false);
+    expect(generateFrom(sources([{ ...RATS, paused: "yes" }]), WORLD).errors).toEqual(["cellar-rats.json: paused: true or false"]);
   });
 
   it("refuses an auto talk step and unknown replacements", () => {

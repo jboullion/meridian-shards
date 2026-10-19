@@ -114,3 +114,10 @@ describe("say.c FilterSayMessage", () => {
     expect(filterSayMessage("   ")).toBeNull();
   });
 });
+
+describe("train (ours)", () => {
+  test("opens the Train window, with words to search for", () => {
+    expect(parseCommand("train")).toEqual({ id: "train", args: "" });
+    expect(parseCommand("train fire")).toEqual({ id: "train", args: "fire" });
+  });
+});

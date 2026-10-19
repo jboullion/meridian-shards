@@ -11,10 +11,10 @@ import {
 
 type Act = (what: string, fn: () => Promise<string | void>) => () => void;
 
-const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion"];
+const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune"];
 
 /** The kinds that happen once by doing something: done by themselves unless Auto is unticked */
-const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion"];
+const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune"];
 
 const TIER_LABEL = { main: "Main (gold)", story: "Story (silver)", errand: "Errand (bronze)" } as const;
 
@@ -258,6 +258,15 @@ function QuestForm({
           to <input type="number" value={q.band.max} onChange={(e) => set({ band: { ...q.band, max: num(e.target.value) ?? 0 } })} />
         </label>
         <label>
+          Offered below health{" "}
+          <input
+            type="number"
+            value={q.requires?.healthBelow ?? ""}
+            placeholder="always"
+            onChange={(e) => set({ requires: { ...q.requires, healthBelow: num(e.target.value) ?? undefined } })}
+          />
+        </label>
+        <label>
           Time limit (minutes) <input type="number" value={q.timeLimitMinutes ?? ""} placeholder="none" onChange={(e) => set({ timeLimitMinutes: num(e.target.value) })} />
         </label>
       </div>
@@ -315,6 +324,9 @@ function QuestForm({
             <input type="checkbox" checked={!!q.requires?.[k]} onChange={(e) => set({ requires: { ...q.requires, [k]: e.target.checked || undefined } })} /> {label}
           </label>
         ))}
+        <label className="check" title="Never offered while paused; a player who has it going can still finish it">
+          <input type="checkbox" checked={!!q.paused} onChange={(e) => set({ paused: e.target.checked || undefined })} /> Paused (not offered)
+        </label>
       </div>
       <label>
         Offer: what the giver says <textarea rows={3} value={q.text.offer} onChange={(e) => set({ text: { ...q.text, offer: e.target.value } })} />
@@ -397,6 +409,18 @@ function QuestForm({
             <label>
               Any one of these items{" "}
               <input list="quest-items" value={(s.items ?? []).join(" ")} placeholder="item classes, spaces between" onChange={(e) => setStep(i, { items: e.target.value.split(/\s+/).filter(Boolean) })} />
+            </label>
+          )}
+          {s.kind === "learn" && (
+            <label>
+              Any one of these skills{" "}
+              <input value={(s.skills ?? []).join(" ")} placeholder="skill classes, spaces between (Block Punch)" onChange={(e) => setStep(i, { skills: e.target.value.split(/\s+/).filter(Boolean) })} />
+            </label>
+          )}
+          {s.kind === "attune" && (
+            <label>
+              Travel point{" "}
+              <input type="number" value={s.point ?? 1} onChange={(e) => setStep(i, { point: num(e.target.value) ?? 1 })} />
             </label>
           )}
           {(s.kind === "health" || s.kind === "nodes") && (
@@ -623,6 +647,7 @@ function move<T>(xs: T[], from: number, to: number): T[] {
 function clean(q: QuestFile): QuestFile {
   return {
     ...q,
+    paused: q.paused || undefined,
     requires: cleanRequires(q.requires),
     text: { offer: q.text.offer, ...(q.text.progress ? { progress: q.text.progress } : {}), complete: q.text.complete },
     steps: q.steps.map((s) => {
@@ -634,6 +659,8 @@ function clean(q: QuestFile): QuestFile {
       if ((s.kind === "deposit" || s.kind === "stash" || s.kind === "buy") && s.with) out.with = s.with;
       if ((s.kind === "stash" || s.kind === "buy") && s.item) out.item = s.item;
       if (s.kind === "equip") out.items = s.items;
+      if (s.kind === "learn") out.skills = s.skills;
+      if (s.kind === "attune") out.point = s.point ?? 1;
       if (s.kind === "deposit" || s.kind === "health" || (s.kind === "nodes" && s.amount !== undefined && s.amount !== 12)) out.amount = s.amount ?? (s.kind === "health" ? 50 : 1);
       if (s.auto !== undefined && s.auto !== ACTION_KINDS.includes(s.kind) && s.kind !== "talk" && s.kind !== "deliver") out.auto = s.auto;
       const sr = cleanRewards(s.rewards ?? {});
@@ -656,6 +683,7 @@ function cleanRequires(r: QuestFile["requires"]): QuestFile["requires"] {
   const out: NonNullable<QuestFile["requires"]> = {
     ...(r.quests?.length ? { quests: r.quests } : {}),
     ...(r.notQuests?.length ? { notQuests: r.notQuests } : {}),
+    ...(r.healthBelow ? { healthBelow: r.healthBelow } : {}),
     ...(r.karmaMin != null ? { karmaMin: r.karmaMin } : {}),
     ...(r.karmaMax != null ? { karmaMax: r.karmaMax } : {}),
     ...(r.faction ? { faction: r.faction } : {}),

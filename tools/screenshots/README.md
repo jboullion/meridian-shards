@@ -76,6 +76,7 @@ To put them on the login screen, run `npm run assets`. It copies the WebP copies
 | `"viewports"` | Each client's window: `{ "width", "height", "deviceScaleFactor" }` |
 | no `"equipment"` | The character isn't given anything (the hands aren't in the picture anyway) |
 | `"web"` | `{ "quality", "width": { "<client>": <max width> } }`: a WebP copy of each picture for the game, made after the shots in the same browser (no image library) |
+| `"settings"` | Client settings over the run's own (`settings.ts`), e.g. `{ "enhanced": false }` to take the same shots in the original's lighting |
 
 | Shot field | What it does |
 |---|---|

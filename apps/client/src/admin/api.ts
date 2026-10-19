@@ -208,6 +208,8 @@ export interface QuestFile {
   requires?: {
     quests?: number[];
     notQuests?: number[];
+    /** Offered only while base health is under this (tools/quests/schema.ts) */
+    healthBelow?: number;
     karmaMin?: number | null;
     karmaMax?: number | null;
     faction?: FactionName;
@@ -218,19 +220,25 @@ export interface QuestFile {
   };
   repeat?: { cooldownHours: number } | null;
   timeLimitMinutes?: number | null;
+  /** Not offered for now; one going can be finished (tools/quests/schema.ts) */
+  paused?: boolean;
   text: { offer: string; progress?: string; complete: string };
   steps: QuestStepFile[];
   rewards: QuestRewardsFile;
 }
 
 export interface QuestStepFile {
-  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion";
+  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune";
   auto?: boolean;
   rewards?: QuestRewardsFile;
   spell?: string;
   with?: string;
   amount?: number;
   items?: string[];
+  /** learn: skill classes */
+  skills?: string[];
+  /** attune: the travel point */
+  point?: number;
   objective?: string;
   brief?: string;
   target?: string;

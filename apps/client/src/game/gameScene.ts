@@ -14,7 +14,7 @@ import { FINENESS, SF, ceilingHeightAt, floorHeightAt, gridTextureName, leafAt, 
 import {
   DRAWFX, Flyers, GroundCover, Lightning, Nature, OF, ObjectsView, Puddles, type PuddleRoom, type GroundKind, type GroundRoom, type NatureRoom, type RockArt, PARTICLE_STEPS_PER_SECOND, PostFx, RoomView, SkyOverlaysView, TrailBlur, WeatherParticles, XlatTable, type ParticleRoom, disposeSkybox, objectBrightness, paletteTexture, postFxActive, type LightSource,
   type PostFxOptions,
-  type NameLabel, type ViewObject,
+  type NameLabel, type ViewObject, type SpriteMood, moodUniforms, sunAt,
 } from "@shards/render";
 import {
   AMBIENT_ROOMS, AMBIENT_SCALE, type AmbientRoomSpec, AmbientLife, LiveRoom, MOVEON, PlayerMover, REMOTE_VIEW, animStep, isAmbientId, localRes, localResName, townsfolkArt,
@@ -29,6 +29,7 @@ import { RoomCache } from "../render/roomCache.ts";
 import { sceneTune } from "./sceneTuning.ts";
 import { markerFor, MM_OURS, MM_QUEST_NPC } from "./markers.ts";
 import { startDevBridge } from "./devBridge.ts";
+import { MoodDirector, type MoodFrame } from "./mood.ts";
 import { loadSkybox, type LoadedRoom } from "../render/roomLoader.ts";
 import { ORIGINAL_FOV } from "../viewer/roomScene.ts";
 import { AmbientSounds } from "./ambientSounds.ts";
@@ -102,6 +103,12 @@ const ARM_START = 3 * FINENESS;
 /** Ours, Enhanced: how strongly flames glow, and how dark the vignette makes the corners (postFx.ts) */
 const GLOW_STRENGTH = 1.4;
 const VIGNETTE = 0.28;
+/** Ours, the moods: a lightning strike brightens the view this much more at its flash (PostFx's exposure) */
+const LIGHTNING_EXPOSURE = 0.25;
+/** The most a mood's haze hides (moods.json fog_max_opacity) */
+const HAZE_MAX = 0.85;
+/** How much of the sun the ground and the hands take (a figure's is objectsView.ts SPRITE_SUN) */
+const HANDS_SUN = 0.6;
 const ARM_MIN = 0.8 * FINENESS;
 const ARM_MAX = 5 * FINENESS;
 /** A wheel notch moves the camera this much nearer or farther (fine units) */
@@ -178,6 +185,10 @@ const CLOSE_DISTANCE = 5 * FINENESS;
 const SHAKE_AMPLITUDE = FINENESS / 4;
 /** A wall within this many squares of a label's anchor doesn't hide it: signs hang on walls */
 const LABEL_OCCLUSION_SLACK = 0.1;
+/** Ours: a quest's "!" and "?" grow as we near them: to this many times their CSS size within MARKER_NEAR squares, from MARKER_FAR in */
+const MARKER_NEAR_SCALE = 1.4;
+const MARKER_NEAR = 2;
+const MARKER_FAR = 8;
 /** Damage numbers (ours): how long one shows, how far it rises on screen, and when it starts to fade (0..1) */
 const DAMAGE_LIFE_MS = 1200;
 const DAMAGE_RISE_PX = 48;
@@ -318,6 +329,9 @@ export class GameScene {
   private blur: TrailBlur | null = null;
   /** Ours: Anti Aliasing, glowing flames and the vignette (postFx.ts), made when first needed */
   private postFx: PostFx | null = null;
+  /** Ours, Enhanced: the lighting's moods (mood.ts), and this frame's (null with Enhanced off) */
+  private readonly moods = new MoodDirector();
+  private moodFrame: MoodFrame | null = null;
   /** Grid textures a change asked for that are loading */
   private textureLoads = new Set<number>();
   /** This room and the ones next to it, loaded ahead */
@@ -950,28 +964,35 @@ export class GameScene {
     const rv = remote?.view.flags ?? 0;
     const still = world.effects.paralyzed || world.waiting || this.resting || (remote !== null && (rv & REMOTE_VIEW.CONTROL || !(rv & REMOTE_VIEW.MOVE)));
     // The keys and the on-screen joystick add up, as two keys for the same move would
-    let tm = this.touchMove;
-    // With the map open (ours, the phone layout), the joystick moves by the map's directions, up
-    // being north: we turn to face that way and walk forward, so the server sees plain turns
-    if (this.mapMode && (tm.forward || tm.strafe) && !still && !remote) {
-      const facing = Math.round((Math.atan2(-tm.forward, tm.strafe) * 4096) / (2 * Math.PI)) & 4095;
-      const diff = ((facing - this.mover.angle + 6144) % 4096) - 2048;
-      if (diff) this.mover.turnBy(diff);
-      tm = { forward: 1, strafe: 0, run: tm.run };
-    }
+    const tm = this.touchMove;
     const clamp1 = (v: number) => Math.max(-1, Math.min(1, v));
-    let forward = still ? 0 : clamp1(held("forward") - held("backward") + tm.forward);
-    let strafe = still ? 0 : clamp1(held("strafeRight") - held("strafeLeft") + tm.strafe);
+    // With the full map open (ours), the joystick and the keys move by the map's directions: up
+    // (Forward) north, Backward south, the slides and turns west and east. We turn to face that
+    // way and walk forward, so the server sees plain turns and steps
+    let mapWalk = false;
+    if (this.mapMode && !still && !remote) {
+      const north = clamp1(held("forward") - held("backward") + tm.forward);
+      const east = clamp1(held("strafeRight") - held("strafeLeft") + held("turnRight") - held("turnLeft") + tm.strafe);
+      if (north || east) {
+        const facing = Math.round((Math.atan2(-north, east) * 4096) / (2 * Math.PI)) & 4095;
+        const diff = ((facing - this.mover.angle + 6144) % 4096) - 2048;
+        if (diff) this.mover.turnBy(diff);
+        mapWalk = true;
+      }
+    }
+    let forward = still ? 0 : mapWalk ? 1 : clamp1(held("forward") - held("backward") + tm.forward);
+    let strafe = still || mapWalk ? 0 : clamp1(held("strafeRight") - held("strafeLeft") + tm.strafe);
     // The chase view: the keys point the way to go as the camera sees it; we turn to face that way
     // and walk forward, so the server sees plain turns and steps (as the map mode above)
-    if (this.viewMode === "chase" && (forward || strafe) && !remote) {
+    if (this.viewMode === "chase" && !mapWalk && (forward || strafe) && !remote) {
       const facing = (this.chaseAngle + Math.round((Math.atan2(strafe, forward) * 4096) / (2 * Math.PI))) & 4095;
       const diff = ((facing - this.mover.angle + 6144) % 4096) - 2048;
       if (diff) this.mover.turnBy(diff);
       forward = 1;
       strafe = 0;
     }
-    let turn = remote && !(rv & REMOTE_VIEW.TURN) ? 0 : held("turnRight") - held("turnLeft");
+    // On the full map the turn keys point west and east instead (above)
+    let turn = this.mapMode || (remote && !(rv & REMOTE_VIEW.TURN)) ? 0 : held("turnRight") - held("turnLeft");
     // Following a friend (ours): moving or turning ourselves stops it; else it walks for us
     let followRun: boolean | null = null;
     if (this.follow) {
@@ -1045,6 +1066,8 @@ export class GameScene {
     const lighting = world.lighting;
     // Enhanced Lighting (the Bind Editor's Options), or the original's
     const enhanced = this.settings.enhanced;
+    // Its moods: the sun, the light's tint, haze and grading (mood.ts)
+    const mood = enhanced ? this.applyMood(room, now, dt) : this.noMood();
     const ctx = {
       room,
       roomFlags: world.player?.roomFlags ?? 0,
@@ -1057,6 +1080,7 @@ export class GameScene {
       dt,
       flicker: enhanced,
       timeMs: now,
+      mood: mood ? this.spriteMood(mood) : undefined,
     };
     // The arena's spell walls animate themselves (ArenaView.update)
     const drawn = [...world.objects.values(), ...ambient, ...(this.arena?.fields() ?? []), ...this.projectileViews()];
@@ -1084,9 +1108,13 @@ export class GameScene {
     this.camera.updateMatrixWorld();
     // drawbsp.c doDrawBackground: no sun or moon when blind
     this.skyOverlays?.update(
-      [...world.bgOverlays.values()].map((b) => ({
-        id: b.info.id, bgf: this.bgf(b.info.iconRes), group: b.look.anim.group, angle: b.info.angle, height: b.info.height,
-      })),
+      [...world.bgOverlays.values()].map((b) => {
+        // With a mood, the sun moves smoothly between the server's hours, where its light comes from (sunPath.ts)
+        const smooth = mood && this.session.resource(b.info.iconRes)?.toLowerCase() === "sun.bgf" ? sunAt(mood.hour) : null;
+        // (a negative height is below the horizon: drawn as Kod's are, a WORD past 32767)
+        const at = smooth ? { angle: smooth.angle, height: smooth.height < 0 ? 0xffff : Math.round(smooth.height) } : b.info;
+        return { id: b.info.id, bgf: this.bgf(b.info.iconRes), group: b.look.anim.group, angle: at.angle, height: at.height };
+      }),
       this.camera,
       !world.effects.blind,
     );
@@ -1099,7 +1127,10 @@ export class GameScene {
     this.updateStorm(dt, room);
     this.updateAmbientSounds(dt);
     // Enhanced's glow and vignette draw through PostFx; without them, straight to the screen
-    const post: PostFxOptions = { bloom: enhanced ? GLOW_STRENGTH : 0, vignette: enhanced ? VIGNETTE : 0 };
+    const flash = this.lightning?.flash ?? 0;
+    const post: PostFxOptions = mood
+      ? { bloom: mood.mood.bloom, vignette: mood.mood.vignette, grade: { ...mood.grade, exposure: mood.grade.exposure * (1 + LIGHTNING_EXPOSURE * flash) } }
+      : { bloom: enhanced ? GLOW_STRENGTH : 0, vignette: enhanced ? VIGNETTE : 0 };
     if (postFxActive(post))
       (this.postFx ??= new PostFx()).render(this.renderer, this.scene, this.camera, post, [this.sky, this.skyOverlays?.group, this.weather?.group, this.flyers?.group, this.objects.shadows, this.puddles?.group]);
     else this.renderer.render(this.scene, this.camera);
@@ -1476,8 +1507,92 @@ export class GameScene {
   /** The game hour, from where the server puts the sun (hourFromSun), or null before it's sent */
   private gameHour(): number | null {
     if (this.ambientHour !== null) return this.ambientHour;
-    for (const b of this.session.world.bgOverlays.values()) if (this.session.resource(b.info.iconRes)?.toLowerCase() === "sun.bgf") return hourFromSun(b.info.angle);
+    const sun = this.skyBody("sun.bgf");
+    return sun ? hourFromSun(sun.angle) : null;
+  }
+
+  /** The sun's or the moon's background overlay (by its art), if the server has sent it */
+  private skyBody(art: string): { angle: number; height: number } | null {
+    for (const b of this.session.world.bgOverlays.values()) if (this.session.resource(b.info.iconRes)?.toLowerCase() === art) return b.info;
     return null;
+  }
+
+  /** Dev tools: this frame's mood (mood.ts), with Enhanced Lighting on */
+  get mood(): MoodFrame | null {
+    return this.moodFrame;
+  }
+
+  /** Ours, Enhanced: this frame's mood, handed to the room's shader (moodUniforms) */
+  private applyMood(room: Room, now: number, dt: number): MoodFrame {
+    const fx = this.session.world.effects;
+    const view = this.roomView!;
+    const shadows = view.sunShadows;
+    const m = this.moods.frame({
+      room,
+      file: this.roomFile,
+      terrain: this.terrainHere(),
+      serverHour: this.gameHour(),
+      pinnedHour: this.ambientHour,
+      moon: this.skyBody("moon.bgf"),
+      raining: this.settings.weather && fx.raining,
+      snowing: this.settings.weather && fx.snowing,
+      sunMapReady: !!shadows,
+      nowMs: now,
+      dtMs: dt,
+    });
+    view.setSunHour(m.hour);
+    const u = moodUniforms;
+    u.uMoodOn.value = 1;
+    u.uSunDir.value = m.sunDir;
+    u.uSunColor.value = [...m.sunColor];
+    u.uAmbientColor.value = [...m.ambientColor];
+    u.uAmbientScale.value = m.mood.ambientScale;
+    u.uFogColor.value = [...m.mood.fogColor];
+    u.uHazeColor.value = [...m.mood.hazeColor];
+    u.uHaze.value = [m.hazeDensity, m.mood.hazeStart, HAZE_MAX];
+    u.uFlameScale.value = m.mood.flameScale;
+    u.uSunMap.value = shadows?.texture ?? null;
+    if (shadows) u.uSunRect.value = shadows.rect;
+    u.uSunMix.value = m.hour - Math.floor(m.hour);
+    u.uSunShadow.value = shadows ? m.shadow : 0;
+    this.moodFrame = m;
+    return m;
+  }
+
+  /** Enhanced off: the original's lighting, no mood */
+  private noMood(): null {
+    moodUniforms.uMoodOn.value = 0;
+    this.roomView?.setSunHour(null);
+    this.moodFrame = null;
+    return null;
+  }
+
+  /** What the mood does to figures (objectsView.ts) */
+  private spriteMood(m: MoodFrame): SpriteMood {
+    return {
+      ambientColor: m.ambientColor,
+      ambientScale: m.mood.ambientScale,
+      sunDir: m.sunDir,
+      sunColor: m.sunColor,
+      sunlitAt: (x, y) => this.roomView?.sunlitAt(x, y) ?? 1,
+      shadow: moodUniforms.uSunShadow.value,
+    };
+  }
+
+  /**
+   * Ours, the moods: a brightness from objectBrightness (the ground's, the hands') tinted, and
+   * under open sky the sun on it; `facing` is how much of the sun it takes.
+   */
+  private moodLit(rgb: [number, number, number], room: Room, x: number, y: number, facing: number): [number, number, number] {
+    const m = this.moodFrame;
+    if (!m) return rgb;
+    const leaf = leafAt(room, x, y);
+    const sky = !!leaf?.sector && room.sectors[leaf.sector - 1].ceilingType === 0;
+    const s = sky ? m.mood.ambientScale : 1;
+    const out: [number, number, number] = [rgb[0] * m.ambientColor[0] * s, rgb[1] * m.ambientColor[1] * s, rgb[2] * m.ambientColor[2] * s];
+    if (!sky || m.sunDir[2] <= 0) return out;
+    const k = facing * (1 - m.shadow * (1 - (this.roomView?.sunlitAt(x, y) ?? 1)));
+    return [out[0] + m.sunColor[0] * k, out[1] + m.sunColor[1] * k, out[2] + m.sunColor[2] * k];
   }
 
   /** Room objects that block movement (move.c MoveObjectAllowed's MOVEON_NO), but us */
@@ -1645,8 +1760,13 @@ export class GameScene {
     // A storm's sky is darker, but for the lightning
     this.overcast += ((raining ? 1 : 0) - this.overcast) * Math.min(1, dt / 8000);
     const sky = 1 - OVERCAST * this.overcast + 1.6 * f;
+    // A mood tints the sky and darkens it in a storm itself (moods.ts STORM_OVERLAYS)
+    const m = this.moodFrame?.mood;
     this.sky?.traverse((o) => {
-      if (o instanceof THREE.Mesh) (o.material as THREE.MeshBasicMaterial).color.setScalar(sky);
+      if (!(o instanceof THREE.Mesh)) return;
+      const color = (o.material as THREE.MeshBasicMaterial).color;
+      if (m) color.setRGB(...(m.skyTint.map((c) => c * m.skyBrightness * (1 + 1.6 * f)) as [number, number, number]));
+      else color.setScalar(sky);
     });
     if (this.flashEl) this.flashEl.style.opacity = f ? (f * LIGHTNING_FLASH).toFixed(3) : "0";
   }
@@ -1739,7 +1859,8 @@ export class GameScene {
         const sectorLight = leaf?.sector ? room.sectors[leaf.sector - 1].light : 0;
         const lighting = this.session.world.lighting;
         const [r, g, b] = objectBrightness({ x, y, z }, sectorLight, lighting.playerLight, lighting.ambient, []);
-        return [r, g, b];
+        // The ground faces up: it takes the sun by its height (the moods)
+        return this.moodLit([r, g, b], room, x, y, Math.max(0, this.moodFrame?.sunDir[2] ?? 0));
       },
     };
   }
@@ -1766,8 +1887,9 @@ export class GameScene {
     const lighting = this.session.world.lighting;
     const leaf = leafAt(room, this.mover.x, this.mover.y);
     const sectorLight = leaf?.sector ? room.sectors[leaf.sector - 1].light : 0;
-    const [r, g, b] = objectBrightness({ x: this.mover.x, y: this.mover.y, z: this.mover.z }, sectorLight, lighting.playerLight, lighting.ambient, this.lights);
-    return Math.max(r, g, b);
+    const lit = objectBrightness({ x: this.mover.x, y: this.mover.y, z: this.mover.z }, sectorLight, lighting.playerLight, lighting.ambient, this.lights);
+    const [r, g, b] = this.moodLit(lit, room, this.mover.x, this.mover.y, HANDS_SUN);
+    return Math.min(1, Math.max(r, g, b));
   }
 
   /** The room under particles and flyers (client3d.c GetPointFloor and friends) */
@@ -1868,7 +1990,7 @@ export class GameScene {
     const light: [number, number, number] =
       dt === DRAWFX.BLACK
         ? [0, 0, 0]
-        : objectBrightness({ x: this.mover.x, y: this.mover.y, z: this.mover.z }, sectorLight, lighting.playerLight, lighting.ambient, this.lights);
+        : this.moodLit(objectBrightness({ x: this.mover.x, y: this.mover.y, z: this.mover.z }, sectorLight, lighting.playerLight, lighting.ambient, this.lights), room, this.mover.x, this.mover.y, HANDS_SUN);
     const alpha = dt === DRAWFX.TRANSLUCENT25 ? 0.25 : dt === DRAWFX.TRANSLUCENT75 ? 0.75 : dt === DRAWFX.TRANSLUCENT50 || dt === DRAWFX.DITHERTRANS || dt === DRAWFX.DITHERINVIS || dt === DRAWFX.DITHERGREY ? 0.5 : dt === DRAWFX.INVISIBLE ? 0.2 : 1;
     // Show your pain (config.pain) off: no red flash when hurt
     const effects = this.settings.pain ? world.effects : { ...world.effects, pain: 0 };
@@ -2272,9 +2394,9 @@ export class GameScene {
       if (!glyph || !top) continue;
       v.copy(top).project(this.camera);
       if (v.z > 1 || v.z < -1) continue;
+      dir.subVectors(top, eye);
+      const dist = dir.length();
       if (this.roomView) {
-        dir.subVectors(top, eye);
-        const dist = dir.length();
         this.labelRay.set(eye, dir.divideScalar(dist));
         this.labelRay.far = dist - LABEL_OCCLUSION_SLACK;
         if (this.labelRay.far > 0 && this.roomView.occludes(this.labelRay)) continue;
@@ -2283,7 +2405,10 @@ export class GameScene {
       this.markerPool[n++] = el;
       el.className = marker.grey ? "world-marker grey" : marker.tier === "gold" ? "world-marker" : `world-marker ${marker.tier}`;
       if (el.textContent !== glyph) el.textContent = glyph;
-      el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -150%)`;
+      // Bigger up close: up to MARKER_NEAR_SCALE within MARKER_NEAR squares, the CSS size from MARKER_FAR on
+      const near = Math.min(1, Math.max(0, (MARKER_FAR - dist) / (MARKER_FAR - MARKER_NEAR)));
+      const grow = 1 + (MARKER_NEAR_SCALE - 1) * near;
+      el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -150%) scale(${grow.toFixed(3)})`;
       el.style.display = "";
     }
     for (let i = n; i < this.markerPool.length; i++) this.markerPool[i].style.display = "none";
@@ -2781,7 +2906,7 @@ export class GameScene {
     this.touchMove = m;
   }
 
-  /** The phone layout's map is over the view: the joystick moves by the map's directions. */
+  /** The full map is over the view: the joystick and the movement keys move by the map's directions. */
   mapMode = false;
 
   /** An on-screen button: the action its key would do. */

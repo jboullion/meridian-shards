@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { parseBgf, parsePaletteBin, type Bgf } from "@shards/formats";
 import { XLAT, XlatTable } from "../src/xlat.ts";
-import { compositeSprite, frameFor } from "../src/sprites.ts";
+import { compositeSprite, frameFor, HS_OVER_FIGURE } from "../src/sprites.ts";
 import { compositeToRgba, paletteToRgba } from "../src/colorTexture.ts";
 import { lightIndex, objectBrightness, dlightScale, lightColor } from "../src/objectLighting.ts";
 
@@ -50,6 +50,29 @@ describe("frame selection (draw.c GetObjectPdib)", () => {
     expect(frameFor(eight, 4095, 0)).toBe(eight.bitmaps[0]); // wraps around the front
     expect(frameFor(eight, 2048, 0)).toBe(eight.bitmaps[4]); // back
     expect(frameFor(eight, 0, 3)).toBeNull(); // missing group
+  });
+});
+
+describe("overlay depth", () => {
+  const one = (w: number, h: number, colour: number, hotspots: { number: number; x: number; y: number }[] = []): Bgf => ({
+    name: "t", version: 10, shrink: 1, groups: [[0]],
+    bitmaps: [{ width: w, height: h, xOffset: 0, yOffset: 0, hotspots, pixels: new Uint8Array(w * h).fill(colour) }],
+  });
+  // A body over its head (hotspot -1, like bta.bgf), the head's mouth at 1, 1, and a beard there
+  const body = one(4, 4, 10, [{ number: -1, x: 0, y: 0 }]);
+  const head = one(2, 2, 20, [{ number: 12, x: 1, y: 1 }]);
+  const draw = (beard: Bgf) =>
+    compositeSprite(
+      { base: { bgf: body, group: 0, translation: 0, hotspot: 0 }, overlays: [{ bgf: head, group: 0, translation: 0, hotspot: 1 }, { bgf: beard, group: 0, translation: 0, hotspot: 12 }], viewAngle: 0 },
+      new XlatTable(grayPalette(), null),
+    )!;
+  test("a part on a head under the body is covered by the body", () => {
+    expect(draw(one(1, 1, 30)).pixels[1 * 4 + 1]).toBe(10);
+  });
+  test("facial hair (HS_OVER_FIGURE in its frames) is drawn over the body", () => {
+    const c = draw(one(1, 1, 30, [{ number: HS_OVER_FIGURE, x: 0, y: 0 }]));
+    expect(c.pixels[1 * 4 + 1]).toBe(30);
+    expect(c.pixels[0]).toBe(10); // the head itself stays under
   });
 });
 

@@ -157,20 +157,36 @@ export function addStyle(kod: string, kind: Kind, file: string, label: string): 
   const clean = label.replace(/[\r\n]+/g, " ").trim();
   kod = `${kod.slice(0, at)}\n${last[1]!.replace(/^\n+/, "")}${resource} = ${file}${clean ? `  // ${clean}` : ""}${kod.slice(at)}`;
 
+  // The method's code lines only: its comment string can name resources too
+  const inLists = (name: string, edit: (line: string) => string, problem: string) => {
+    const m = method(kod, name);
+    let changed = 0;
+    const body = kod
+      .slice(m.start, m.end)
+      .split("\n")
+      .map((line) => {
+        if (line.includes('"')) return line;
+        const next = edit(line);
+        if (next !== line) changed++;
+        return next;
+      })
+      .join("\n");
+    if (!changed) throw new Error(problem);
+    kod = kod.slice(0, m.start) + body + kod.slice(m.end);
+  };
   if (kind === "hair") {
-    const m = method(kod, "GetAllowedHairIcons");
-    const body = kod.slice(m.start, m.end);
-    const bald = /(\n[ \t]*)charinfo_hair_bald_icon\]/.exec(body);
-    if (!bald) throw new Error("GetAllowedHairIcons doesn't end with charinfo_hair_bald_icon: list the style by hand");
-    const next = body.replace(bald[0], `${bald[1]}${resource},${bald[0]}`);
-    kod = kod.slice(0, m.start) + next + kod.slice(m.end);
+    // Each gender's list, before bald
+    inLists(
+      "GetAllowedHairIcons",
+      (line) => line.replace(/charinfo_hair_bald_icon/g, `${resource}, charinfo_hair_bald_icon`),
+      "GetAllowedHairIcons has no charinfo_hair_bald_icon to add before: list the style by hand",
+    );
   } else {
-    const m = method(kod, "GetAllowedBeardIcons");
-    const body = kod.slice(m.start, m.end);
-    const list = /(\n([ \t]*)[^\n]*charinfo_beard_\w+_icon)\];/.exec(body);
-    if (!list) throw new Error("GetAllowedBeardIcons has no list of beards: list the style by hand");
-    const next = body.replace(list[0], `${list[1]},\n${list[2]}${resource}];`);
-    kod = kod.slice(0, m.start) + next + kod.slice(m.end);
+    inLists(
+      "GetAllowedBeardIcons",
+      (line) => line.replace(/(charinfo_beard_\w+_icon)\];/, `$1, ${resource}];`),
+      "GetAllowedBeardIcons offers no facial hair now: offer the beards again first, or list the style by hand",
+    );
   }
   return { kod, resource };
 }

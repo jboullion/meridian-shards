@@ -57,11 +57,27 @@ export function findRoute(exits: Exits, from: string, targets: ReadonlySet<strin
   return null;
 }
 
-/** The exits of `room` that lead to `next`: its doors' squares and its sides */
+/**
+ * The exits of `room` that lead to `next`: its doors and its sides. A doorway several squares wide
+ * (the Raza inn's is two) is one mark, at its middle (row and column may then be halves).
+ */
 export function exitsTo(exits: Exits, room: string, next: string): WayMark[] {
   const e = exits[room];
   if (!e) return [];
-  const marks: WayMark[] = e.doors.filter(([, , to]) => to === next).map(([row, col]) => ({ kind: "door", row, col }));
+  // Each square once, then the squares that touch (sides or corners) gathered into doorways
+  const squares = [...new Map(e.doors.filter(([, , to]) => to === next).map(([row, col]) => [`${row},${col}`, [row, col] as const])).values()];
+  const doorways: (readonly [number, number])[][] = [];
+  for (const sq of squares) {
+    const touching = doorways.filter((d) => d.some(([r, c]) => Math.abs(r - sq[0]) <= 1 && Math.abs(c - sq[1]) <= 1));
+    const merged = [sq, ...touching.flat()];
+    for (const d of touching) doorways.splice(doorways.indexOf(d), 1);
+    doorways.push(merged);
+  }
+  const marks: WayMark[] = doorways.map((d) => ({
+    kind: "door",
+    row: d.reduce((s, [r]) => s + r, 0) / d.length,
+    col: d.reduce((s, [, c]) => s + c, 0) / d.length,
+  }));
   for (const edge of e.edges) if (edge.to === next) marks.push({ kind: "edge", side: edge.side });
   return marks;
 }

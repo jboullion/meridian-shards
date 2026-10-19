@@ -9,14 +9,16 @@
 // keeps what was there.
 
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { CF } from "@shards/protocol";
+import { CF, STAT_GROUP, objId } from "@shards/protocol";
 import type { AmbientLevel, GameSession } from "@shards/world";
 import {
   ACTION_LABELS, ACTION_TABS, DEFAULT_SETTINGS, PRESETS, bindingLabel, mouseCode, presetSettings,
   type Action, type ActionTab, type HaloColor, type HotkeyAlias, type KeyBinding, type Settings,
 } from "../settings.ts";
 import type { AudioPreview } from "../audio.ts";
-import { MAX_PROFANE_TERM } from "@shards/world";
+import { MAX_PROFANE_TERM, trainCommand, trainableAmount } from "@shards/world";
+import { STAT_NUM } from "../statRows.ts";
+import { useWorld } from "./hooks.ts";
 import { profanity, saveProfanity } from "../profanity.ts";
 import { Button, Check, GroupBox, ListBox, Select, Tabs, Text, TextField, Trackbar, Window, at, type Rect } from "./kit.tsx";
 import { DEFAULT_REST_REGEN, castsFromReagents, formatDuration, studyEstimate, type StudyConfig, type StudyMemory, type StudySpellInfo } from "../study.ts";
@@ -388,6 +390,97 @@ export function StudyDialog({
         </Button>
         <Button at={[102, 148, 50, 14]} onClick={onClose}>
           Cancel
+        </Button>
+      </form>
+    </DluDialog>
+  );
+}
+
+/** A spell or skill we know, for the Train window: its object (the Spells and Skills lists' id), name and percent */
+export interface TrainAbility {
+  id: number;
+  name: string;
+  percent: number;
+}
+
+/** The spells and skills we know (stat groups 3 and 4), and our training points (group 2) */
+function trainState(session: GameSession): { abilities: TrainAbility[]; points: number } {
+  const stats = session.world.stats;
+  const abilities = [STAT_GROUP.SPELLS, STAT_GROUP.SKILLS].flatMap((g) =>
+    (stats.get(g) ?? []).flatMap((s) => (s.list ? [{ id: objId(s.list.id), name: session.resource(s.nameRes) ?? "", percent: s.list.value }] : [])),
+  );
+  const points = stats.get(STAT_GROUP.STATS)?.find((s) => s.num === STAT_NUM.TRAINING)?.numeric?.value ?? 0;
+  return { abilities, points };
+}
+
+/**
+ * Train (ours, docs/adr/0016-abilities.md): spend training points on a spell or skill we know,
+ * at its own price a percent (UC_TRAINING; shards-server util/shardsabilities.kod). Was the
+ * Meditate spell's spoken trance. `costs` is null until the server has said.
+ */
+export function TrainDialog({
+  session, costs, initialSearch = "", onClose,
+}: {
+  session: GameSession;
+  costs: ReadonlyMap<number, number> | null;
+  /** Typed after the train command */
+  initialSearch?: string;
+  onClose: () => void;
+}) {
+  // Percents and points change as we train: read them afresh
+  useWorld(session.world, ["stats"]);
+  const { abilities, points } = trainState(session);
+  const [picked, setPicked] = useState<number | null>(null);
+  const [amount, setAmount] = useState("1");
+  const [search, setSearch] = useState(initialSearch);
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+  // Only what the server says can be trained, by name
+  const trainable = abilities.filter((a) => (costs?.get(a.id) ?? 0) > 0).sort((a, b) => a.name.localeCompare(b.name));
+  const shown = trainable.filter((a) => words.every((w) => a.name.toLowerCase().includes(w)));
+  const chosen = shown.find((a) => a.id === picked) ?? shown[0];
+  const cost = chosen ? (costs?.get(chosen.id) ?? 0) : 0;
+  const most = chosen ? trainableAmount(chosen.percent, cost, points) : 0;
+  const wanted = Math.max(Number.parseInt(amount, 10) || 0, 0);
+  const gain = Math.min(wanted, most);
+  let note: string;
+  if (costs === null) note = "Asking what you can train…";
+  else if (!chosen) note = trainable.length ? "Nothing you know has that name." : "You know nothing that can be trained yet.";
+  else if (chosen.percent >= 99) note = `You've mastered ${chosen.name} as far as anyone can.`;
+  else if (most === 0) note = `${chosen.name} costs ${cost} training points a percent; you have ${points}.`;
+  else if (wanted === 0) note = "Raise it by how many percent?";
+  else note = `${chosen.name} ${chosen.percent}% → ${chosen.percent + gain}%, for ${gain * cost} of your ${points} training points.`;
+  const ready = !!chosen && gain > 0;
+  return (
+    <DluDialog title="Train" size={[190, 168]} onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (ready && chosen) session.shardsObject(chosen.id, trainCommand(gain));
+        }}
+      >
+        <Text at={[8, 6, 174, 8]}>Spend training points on a spell or skill:</Text>
+        <TextField at={[8, 16, 174, 13]} value={search} onChange={setSearch} maxLength={40} placeholder="Search spells and skills" autoFocus />
+        <ListBox
+          at={[8, 32, 174, 64]}
+          label="Spells and skills"
+          items={shown.map((a) => ({ key: a.id, label: `${a.name}  ${a.percent}%  (${costs?.get(a.id) ?? 0} a percent)` }))}
+          selected={chosen?.id ?? null}
+          onSelect={setPicked}
+        />
+        <Text at={[8, 103, 40, 8]}>Raise it by</Text>
+        <TextField at={[50, 101, 30, 14]} value={amount} onChange={(v) => setAmount(v.replace(/\D/g, ""))} maxLength={2} />
+        <Text at={[84, 103, 20, 8]}>%</Text>
+        <Button at={[110, 101, 72, 14]} onClick={() => setAmount(String(Math.max(most, 1)))} disabled={most === 0}>
+          As far as I can
+        </Button>
+        <Text at={[8, 119, 174, 26]} wrap className="study-note">
+          {note}
+        </Text>
+        <Button at={[38, 148, 50, 14]} type="submit" isDefault disabled={!ready}>
+          Train
+        </Button>
+        <Button at={[102, 148, 50, 14]} onClick={onClose}>
+          Close
         </Button>
       </form>
     </DluDialog>

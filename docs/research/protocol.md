@@ -306,6 +306,13 @@ Our client and our server change together (ADR 0001 decision 4), so these are ou
   - **2, the barber's menu** (`SendBarberMenu`): the NPC DWORD, the price DWORD, then our look as BYTEs: gender (0 male, 1 female), hair, beard (0 none, else its place + 1), hair colour, head, eyes, nose, mouth, skin (places in `BP_CHARINFO`'s lists).
   - The commands back (`UC_SHARDS`): `tailor dye <place> <dye field>`, `tailor undye <place>`, `tailor` (the menu again), `barber <hair> <beard> <hair colour>`, `barber`.
   - **Minimap bit** `MM_SERVICE` 0x00800000 on a tailor or barber (`User.BuildMinimapDotFlag`).
+- **`UC_SHARDS_OBJECT` (111), client to server** (`user.kod ShardsObjectCommand` → `util/shardsabilities.kod`, ADR 0016): an object DWORD (without its number tag), then a STRING command line about it, as `UC_SHARDS`'s line can't name an object (Kod can't turn a number back into one; `blakserv/sprocket.c` parses it like `UC_MINIGAME_STATE`).
+  - On a spell or skill we know: `train <percent>`.
+  - On an item we carry: `appraise <price>`, `appraise clear`, `appraise ask` (`UC_APPRAISAL` back), `vault` (a stack, or a bag's stacks, to our vault for a shilling a unit of bulk: was Conveyance) and `guild` (to our guild hall's chest: was Transference). Our client has no buttons for `vault` and `guild` for now.
+- **`UC_TRAINING` (112), server to client** (`ShardsAbilities.SendTraining`, on `UC_SHARDS` `train list` and after each train): a WORD count, then each spell or skill we know that can be trained, its object DWORD and what 1% costs in training points DWORD (its `GetMeditateRatio`).
+- **`UC_SIGNETS` (114), server to client** (`util/questbook.kod SendSignets`, at logon and whenever a signet ring reaches or leaves us): a BYTE count, then each signet ring we carry: its object DWORD, its owner's name resource DWORD, their room's name resource DWORD and its number DWORD (an empty name and 0 when they stand in no room). Shown as bronze quests.
+- **`start <city>` over `UC_SHARDS`** (ours, `ShardsAbilities.StartCity`): the character creator's Skip the tutorial, sent once as the new character first enters (`marion`, `jasper`, `cornoth`, `barloque`, `tos`). Taken only from a character made within the hour that hasn't chosen (`Player.CanChooseStart`): that city's citizen, at its inn, 30 base health, leather armor and a small round shield worn, its purse topped up to 1000 shillings, and attuned to the Raza and Marion portals (travel points 3 and 2).
+- **`UC_APPRAISAL` (113), server to client** (`ShardsAbilities.SendAppraisal`, on `appraise ask` and after each appraise or clear): an item we carry DWORD, whether it can be appraised BYTE (magical, or a base value of 5,000 or more: `IsAppraisable`) and its price now DWORD (0 for none).
 
 ## Sources
 

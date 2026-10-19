@@ -375,6 +375,67 @@ export function AmountDialog({
   );
 }
 
+/** The most an item can be appraised for (shards-server util/shardsabilities.kod APPRAISE_MAX, as the Appraise spell allowed) */
+export const APPRAISE_MAX = 130_000_000;
+
+/** Ours: the Appraise button's picture, a pair of scales, in the text's colour */
+export function AppraiseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 3v17M7 20h10M5 7h14M12 5l-1 2h2z" />
+      <path d="M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z" />
+    </svg>
+  );
+}
+
+/**
+ * Ours (docs/adr/0016-abilities.md): Appraise, from a valuable item's description. The price it
+ * sells for in the citizen's market (its current one filled in), or Clear to take it off; the
+ * server checks the rest. A listing lasts 30 days, then the item goes back to the vault.
+ */
+export function AppraiseDialog({
+  name, price: current, onAppraise, onClear, onClose,
+}: {
+  name: string;
+  /** Its price now, 0 for none */
+  price: number;
+  onAppraise: (price: number) => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  const [price, setPrice] = useState(current ? String(current) : "");
+  const n = Number.parseInt(price, 10) || 0;
+  const ok = n >= 1 && n <= APPRAISE_MAX;
+  return (
+    // Over the Modern character window, whose inventory it's opened from (as the description is)
+    <div className="mk-modal">
+      <Window title={`Appraise ${name}`} onClose={onClose} className="appraise-dialog">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (ok) onAppraise(n);
+          }}
+        >
+          <p className="appraise-note">
+            The price it sells for in the citizen's market, in shillings. Offer it to Veydran Goldleaf in Barloque to list it; unsold after 30 days, it goes
+            back to your vault.
+          </p>
+          <TextField className="amount-field" autoFocus value={price} onChange={(v) => setPrice(v.replace(/\D/g, ""))} maxLength={9} placeholder="1 to 130,000,000" />
+          <div className="mk-buttons">
+            <Button type="submit" isDefault disabled={!ok}>
+              Appraise
+            </Button>
+            <Button onClick={onClear} title="Take the appraisal off" disabled={!current}>
+              Clear
+            </Button>
+            <Button onClick={onClose}>Cancel</Button>
+          </div>
+        </form>
+      </Window>
+    </div>
+  );
+}
+
 /**
  * merintr.rc IDD_SUICIDE (command.c CommandSuicide): the account's password, checked here,
  * before UC_SUICIDE starts the character over.

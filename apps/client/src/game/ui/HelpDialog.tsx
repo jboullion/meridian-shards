@@ -278,6 +278,7 @@ const HUD_PARTS: HudPart[] = [
   { sel: [".map-tool.top-left", ".classic-toolbar .toolbar-buttons"], title: "Toolbar", text: "Rest or stand (resting brings back health, mana and vigor faster), and your mail. Classic also has Help, Drop and Get." },
   { sel: [".map-room-name"], title: "Room name", text: "Where you are." },
   { sel: [".modern-enchantments.room", ".classic-room-enchantments", ".hud-enchantments.room"], title: "Room enchantments", text: "Spells on the room you're in." },
+  { sel: [".quest-box"], title: "Quests", text: "The quests you're on, tracked ones first, with what to do next. Double-click one for its details; drag its title to move it, its left or bottom edge to resize it, and double-click the title to put it back." },
   { sel: [".action-bar", ".touch-hotbar", ".view .hotbar"], title: "Hotbar", text: "Quick slots: 1 to 0 use them. Drag spells or items onto them; right click (long press) one to change it." },
   { sel: [".chat-tabs"], title: "Chat tabs", text: "All, Chat (what people say), Combat and Server. A mark shows on a tab with new lines." },
   { sel: [".chat-log"], title: "Chat", text: "What's said and what happens. In Modern it fades until you point at it; drag its tab strip to move it, its right or bottom edge to resize it, and double-click the strip to put it back." },
@@ -462,13 +463,16 @@ function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }
         <p className="help-note">{tabsHow}</p>
         <dl className="help-defs">
           <dt>Inventory (I)</dt>
-          <dd>What you carry. Double click to use or wear, right click to look, drag to the view to drop, Sort to tidy.</dd>
+          <dd>
+            What you carry. Double click to use or wear, right click to look, drag to the view to drop, Sort to tidy. A valuable item's look (magical, or
+            worth 5,000 shillings) has a pair of scales: appraise it, then offer it to Veydran Goldleaf in Barloque to sell it on the citizen's market for 30 days.
+          </dd>
           <dt>Statistics</dt>
-          <dd>Your stats, karma, weight and bulk carried, and more.</dd>
+          <dd>Your training points, with Train to spend them on a spell or skill you know (or type train), your stats, your offense, defense and resistances.</dd>
           <dt>Spells and Skills</dt>
           <dd>What you know and how well. Double click a spell to cast it; drag it to the hotbar. Search spells by name; Study practises one while you're away (it rests when your mana's low, and can log off when done).</dd>
           <dt>Quests</dt>
-          <dd>The quests you're on.</dd>
+          <dd>The quests you're on. Double click one for its details. In Modern they're also in the quest box on the right.</dd>
           <dt>Friends (P)</dt>
           <dd>Find players of Meridian Shards and ask them to be friends; see where they are, mark them on the map, follow them.</dd>
           <dt>Pets (N)</dt>
@@ -497,7 +501,7 @@ function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }
           <dt>Containers</dt>
           <dd>Double click a box to see inside and take things out; put stores things in one.</dd>
           <dt>The full map</dt>
-          <dd>Click the map. Notes you write on it stay.</dd>
+          <dd>Click the map. Notes you write on it stay. While it's open, you move by its directions: forward goes north, back south, left west and right east.</dd>
           <dt>Quick Emotes (Q, or click your face)</dt>
           <dd>Wave, point, dance and your mood in one click.</dd>
           <dt>Hotbar slots</dt>

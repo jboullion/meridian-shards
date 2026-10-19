@@ -70,7 +70,43 @@ function parseRoom(file: KodFile, rids: Map<string, number>): RoomClass | null {
     const edgeDest = edge ? rids.get(edge[2]) : undefined;
     if (edge && edgeDest !== undefined) edges.push({ side: edge[1].toUpperCase()[0], dest: edgeDest, ...arrival(edge[3], edge[4]) });
   }
+  for (const a of areaExits(src, rids)) {
+    if (a.dest === null || a.dest === rid) continue;
+    exits.add(a.dest);
+    doors.push(a);
+  }
   return { rid, roo, exits, doors, edges, terrain: terrainOf(src) };
+}
+
+/** A bound on a square: the square just inside it ("new_row < 32": 31) */
+function inside(op: string, n: number): number {
+  return op === "<" ? n - 1 : op === ">" ? n + 1 : n;
+}
+
+/**
+ * Ours: the ways out that a room's SomethingMoved takes when a player walks into an area,
+ * `if (new_row < 32) AND (new_col > 66)` then UtilGoNearSquare to RID_C4 (Marion's ways to the
+ * Ileria woods, the Deep Woods' to the Temple of Shal'ille): each one a door at the area's inner
+ * corner, the square nearest the room's middle that's in it. One bound alone (a side) isn't read.
+ */
+function areaExits(src: string, rids: Map<string, number>): RoomClass["doors"] {
+  const body = /^\s{3}SomethingMoved\s*\([^)]*\)\s*\n([\s\S]*?)(?=^\s{3}\w+\s*\([^)]*\)\s*$|^end\b)/m.exec(src)?.[1];
+  if (!body) return [];
+  const out: RoomClass["doors"] = [];
+  const cond = /\bif\s*\(?\s*new_(row|col)\s*(<=|>=|<|>|=)\s*(\d+)\s*\)?\s*and\s*\(?\s*new_(row|col)\s*(<=|>=|<|>|=)\s*(\d+)\s*\)?/gi;
+  const ifs = [...body.matchAll(cond)];
+  ifs.forEach((m, i) => {
+    if (m[1].toLowerCase() === m[4].toLowerCase()) return;
+    const block = body.slice(m.index, ifs[i + 1]?.index ?? body.length);
+    const to = /#num\s*=\s*(RID_\w+)/.exec(block)?.[1];
+    const dest = to ? rids.get(to) : undefined;
+    if (dest === undefined || !/UtilGoNearSquare/.test(block)) return;
+    const at = { [m[1].toLowerCase()]: inside(m[2], Number(m[3])), [m[4].toLowerCase()]: inside(m[5], Number(m[6])) };
+    const dr = /#new_row\s*=\s*(\d+)/.exec(block)?.[1];
+    const dc = /#new_col\s*=\s*(\d+)/.exec(block)?.[1];
+    out.push({ row: at.row!, col: at.col!, dest, ...arrival(dr, dc) });
+  });
+  return out;
 }
 
 /** viTerrain_type = TERRAIN_CITY | TERRAIN_SHOP (perhaps over lines ending in "\"): the names */

@@ -4,11 +4,11 @@
 
 import { ACTION_KINDS, checkGiverShape, checkQuestShape, INSIGNIA, SCHOOLS, type Faction, type Giver, type NpcRef, type Quest, type QuestRewards, type StepKind, type Tier } from "./schema.ts";
 import { xpForPoints } from "./xp.ts";
-import { classOf, iconOf, isItem, isMonster, isNpc, isNumberItem, isSpell, nameOf, spawnRooms, type World } from "./world.ts";
+import { classOf, iconOf, isItem, isMonster, isNpc, isNumberItem, isSkill, isSpell, nameOf, spawnRooms, type World } from "./world.ts";
 
 /** QuestBook's step kinds (questbook.kod QK_*) */
 export const KIND_NUM: Record<StepKind, number> = {
-  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14,
+  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17,
 };
 
 /** The faction a quest needs, as QuestBook reads it: the FACTION_ number, -1 any but neutral, $ none */
@@ -98,8 +98,10 @@ export interface ResolvedQuest {
   faction: Faction | null;
   /** Quests that, done or going, keep this one from being offered */
   excludes: number[];
-  /** QuestBook's requirement bits (QBQ_*): 1 intriguing, 2 a guild master, 4 a guild shield, 8 no guild */
+  /** QuestBook's requirement bits (QBQ_*): 1 intriguing, 2 a guild master, 4 a guild shield, 8 no guild, 16 paused (never offered) */
   needs: number;
+  /** Offered only while base health is under this (null: no cap) */
+  healthBelow: number | null;
   /** null: once */
   cooldownSeconds: number | null;
   timeLimitSeconds: number | null;
@@ -258,12 +260,13 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
         if (!withCls || !isNpc(w, withCls)) errs.push(`${where}: with: ${s.with} isn't an NPC class`);
       }
       const withName = withCls ? nameOf(w, withCls) : null;
-      const items = (s.kind === "equip" ? (s.items ?? []) : []).map((name) => {
+      // equip's items, or learn's skills: the step's classes (QuestBook QBS_CLASSES)
+      const items = (s.kind === "equip" ? (s.items ?? []) : s.kind === "learn" ? (s.skills ?? []) : []).map((name) => {
         const c = classOf(w, name);
-        if (!c || !isItem(w, c)) errs.push(`${where}: items: ${name} isn't an item class`);
+        if (s.kind === "learn" ? !c || !isSkill(w, c) : !c || !isItem(w, c)) errs.push(`${where}: ${s.kind === "learn" ? "skills" : "items"}: ${name} isn't ${s.kind === "learn" ? "a skill" : "an item"} class`);
         return { cls: c ?? name, name: c ? nameOf(w, c) : name };
       });
-      const amount = s.amount ?? (s.kind === "nodes" ? 12 : s.kind === "deposit" ? 1 : 0);
+      const amount = s.kind === "attune" ? (s.point ?? 0) : (s.amount ?? (s.kind === "nodes" ? 12 : s.kind === "deposit" ? 1 : 0));
       const ridsOf = (list: (string | number)[] | undefined) =>
         (list ?? []).map((r) => {
           const n = typeof r === "number" ? r : w.rids.get(r);
@@ -307,7 +310,13 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
                                 ? "Choose a hometown"
                                 : s.kind === "companion"
                                   ? "Take a companion into your service"
-                                  : "Bond with every mana node");
+                                  : s.kind === "convey"
+                                    ? "Send something to your vault"
+                                    : s.kind === "learn"
+                                      ? `Learn ${items.map((x) => x.name).join(" or ")}`
+                                      : s.kind === "attune"
+                                        ? "Attune to the portal"
+                                        : "Bond with every mana node");
       kodText(objective, `${where}: objective`, errs);
       if (s.parcel) kodText(s.parcel, `${where}: parcel`, errs);
       if (s.brief) clientText(s.brief, `${where}: brief`, errs);
@@ -346,7 +355,8 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
       karmaMax: q.requires?.karmaMax ?? null,
       faction: q.requires?.faction ?? null,
       excludes: q.requires?.notQuests ?? [],
-      needs: (q.requires?.intriguing ? 1 : 0) | (q.requires?.guildMaster ? 2 : 0) | (q.requires?.guildShield ? 4 : 0) | (q.requires?.noGuild ? 8 : 0),
+      needs: (q.requires?.intriguing ? 1 : 0) | (q.requires?.guildMaster ? 2 : 0) | (q.requires?.guildShield ? 4 : 0) | (q.requires?.noGuild ? 8 : 0) | (q.paused ? 16 : 0),
+      healthBelow: q.requires?.healthBelow ?? null,
       cooldownSeconds: q.repeat ? Math.round(q.repeat.cooldownHours * 3600) : null,
       timeLimitSeconds: q.timeLimitMinutes ? q.timeLimitMinutes * 60 : null,
       text: { offer: q.text.offer, progress: q.text.progress ?? "", complete: q.text.complete },

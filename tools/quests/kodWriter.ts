@@ -88,7 +88,7 @@ export function writeQuestDefs(quests: ResolvedQuest[], givers: ResolvedGiver[],
         `         [ ${q.id}, qd_${q.id}_name, ${cls(q.giver.cls)}, ${q.giver.placed}, ${q.band.min}, ${q.band.max}, ${list(q.prereqs.map(String))},`,
         `           ${opt(q.karmaMin)}, ${opt(q.karmaMax)}, ${opt(q.cooldownSeconds)}, ${opt(q.timeLimitSeconds)},`,
         `           [ ${steps.join(",\n             ")} ],`,
-        `           ${q.rewards.xp}, ${q.rewards.shillings}, ${itemList(q.rewards.items)}, ${q.rewards.trainingPoints}, ${TIER_NUM[q.tier]}, ${q.faction === null ? "$" : FACTION_NUM[q.faction]}, ${itemList(q.rewards.oneOf)}, ${q.needs}, ${specialList(q.rewards)}, ${list(q.excludes.map(String))} ]`,
+        `           ${q.rewards.xp}, ${q.rewards.shillings}, ${itemList(q.rewards.items)}, ${q.rewards.trainingPoints}, ${TIER_NUM[q.tier]}, ${q.faction === null ? "$" : FACTION_NUM[q.faction]}, ${itemList(q.rewards.oneOf)}, ${q.needs}, ${specialList(q.rewards)}, ${list(q.excludes.map(String))}, ${opt(q.healthBelow)} ]`,
       ].join("\n"),
     );
   }

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { CF, SAY, STAT_GROUP, UA, UC, objId, type ObjectInfo } from "@shards/protocol";
 import {
   PROFANITY_WARNING, isNumberItem, type SpellRefusal, OBSERVER, WHITE, BLACK, decodeBoard, type GuildEvent, type MinigameEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
-  type SocialEvent, type TradeList, type TravelEvent, type TravelPlace, petForKarma, petKind, type AmbientPersonInfo, type QuestEvent, type QuestOffer, type CosmeticsEvent,
+  type SocialEvent, type TradeList, type TravelEvent, type TravelPlace, petForKarma, petKind, type AmbientPersonInfo, type QuestEvent, type QuestOffer, type CosmeticsEvent, type TrainingCost, type Appraisal,
 } from "@shards/world";
 import type { QuestStore } from "./quests.ts";
 import { useCompanion, type CompanionStore } from "./companion.ts";
@@ -12,9 +12,11 @@ import { CompanionLooksDialog } from "./ui/CompanionLooksDialog.tsx";
 import { TailorDialog } from "./ui/TailorDialog.tsx";
 import { BarberDialog } from "./ui/BarberDialog.tsx";
 import { QuestWays } from "./questWays.ts";
-import { MM_TALK_NPC } from "./markers.ts";
-import { QuestDialog } from "./ui/QuestDialog.tsx";
-import { QuestsPanel, QuestTracker } from "./ui/QuestsPanel.tsx";
+import { MM_OURS, MM_QUEST_NPC, MM_TALK_NPC } from "./markers.ts";
+import { QuestDialog, QuestInfoDialog } from "./ui/QuestDialog.tsx";
+import { QuestBox } from "./ui/QuestBox.tsx";
+import { WelcomeControls } from "./ui/WelcomeControls.tsx";
+import { QuestsPanel } from "./ui/QuestsPanel.tsx";
 import type { AssetStore } from "../assets.ts";
 import type { AudioPreview, GameAudio } from "./audio.ts";
 import { GameScene, type GameSceneStatus, type TouchMove, type ViewMode } from "./gameScene.ts";
@@ -24,6 +26,7 @@ import {
   BAD_COMMAND, defineAlias, filterSayMessage, findSpell, groupAdd, groupDelete, groupNew, interpretLine, resolveTell, type CommandId, type GroupResult,
 } from "./commands.ts";
 import { devPagesEnabled, exitApp, gameSocketUrl, onBackButton } from "../host.ts";
+import { takeStartCity } from "./startCity.ts";
 import { editCurrentRoom } from "./devEditor.ts";
 import { loadMailbox, newMailMessage, nextMailNumber, replyRecipients, replySubject, saveMailbox, type MailMessage } from "./mailbox.ts";
 import { StatChangeDialog } from "./ui/StatChangeDialog.tsx";
@@ -31,11 +34,11 @@ import { GuildCreateDialog, GuildHallsDialog, GuildWindow, legalShield, type Gui
 import { ReadMailDialog, ReadNewsDialog, SendMailDialog, type MailDraft, type Newsgroup } from "./ui/MailNewsDialogs.tsx";
 import type { NewsArticle } from "@shards/protocol";
 import { PvpLockout } from "./ui/PvpLockout.tsx";
-import { AmountDialog, GiveDialog, OfferDialog, PasswordDialog, SuicideDialog, TradeDialog, TravelDialog, reduceOffer } from "./ui/Dialogs.tsx";
-import { AmbientPersonDialog, DESC, DescriptionDialog, LookListDialog, type DescAction, type LookListChoice } from "./ui/LookDialogs.tsx";
+import { AmountDialog, AppraiseDialog, AppraiseIcon, GiveDialog, OfferDialog, PasswordDialog, SuicideDialog, TradeDialog, TravelDialog, reduceOffer } from "./ui/Dialogs.tsx";
+import { AmbientPersonDialog, DESC, DescriptionDialog, LookListDialog, type DescAction, type DescButton, type LookListChoice } from "./ui/LookDialogs.tsx";
 import { MiniMap } from "./ui/MiniMap.tsx";
 import {
-  ActionsDialog, CommandAliasesDialog, ConfigurationDialog, GroupsDialog, HotkeyAliasesDialog, LogoutTimerDialog, PreferencesDialog, StudyDialog, TouchConfigDialog,
+  ActionsDialog, CommandAliasesDialog, ConfigurationDialog, GroupsDialog, HotkeyAliasesDialog, LogoutTimerDialog, PreferencesDialog, StudyDialog, TouchConfigDialog, TrainDialog,
   WhoDialog,
   type ActionWindow, type StudySpell,
 } from "./ui/OptionsDialogs.tsx";
@@ -87,6 +90,8 @@ const VIEW_NOTE_MS = 1500;
 const CHAT_FRESH_MS = 10000;
 /** The admin console: the server's messages this long after a DM command are its answers, ms */
 const DM_ANSWER_MS = 3000;
+/** The first controls (ui/WelcomeControls.tsx) show this long after entering the game, ms */
+const WELCOME_DELAY_MS = 1500;
 /** Its width, dragged by its right edge: at least this */
 const MIN_CHAT_WIDTH = 220;
 /** The Modern chat moved by its tab strip: this much of it stays in the window across, and its strip down, px */
@@ -121,6 +126,8 @@ const OF_GETTABLE = 0x10;
 const OF_CONTAINER = 0x20;
 const OF_ACTIVATABLE = 0x800;
 const OF_APPLYABLE = 0x1000;
+/** include/blakston.khd OF_NPC: a town's or a faction's people */
+const OF_NPC = 0x2000;
 /** include/proto.h: objects you can offer to (sell to, deposit with) and buy from */
 const OF_OFFERABLE = 0x200;
 const OF_BUYABLE = 0x400;
@@ -166,6 +173,8 @@ type Modal =
   | { type: "trade"; list: TradeList }
   | { type: "travel"; here: number; places: TravelPlace[] }
   | { type: "quest"; npc: number; offers: QuestOffer[]; service?: CosmeticsEvent }
+  /** Ours: a quest's details, from a double click in the quest box or the Quests tab */
+  | { type: "questInfo"; id: number }
   // Ours (docs/adr/0012-cosmetics.md): a tailor's or barber's window
   | { type: "cosmetics"; menu: CosmeticsEvent }
   | { type: "give"; kind: "offer" | "deposit"; target: { id: number; name: string } }
@@ -182,6 +191,8 @@ type Modal =
   | { type: "help" }
   /** Study mode's window, with what we know as it opens (study.ts) */
   | { type: "study"; spells: StudySpell[]; carried: Map<string, number>; mana: number; maxMana: number; memory: StudyMemory }
+  /** Ours: spending training points (docs/adr/0016-abilities.md), with what was typed after "train" */
+  | { type: "train"; search: string }
   | { type: "about" }
   | { type: "actions" }
   | { type: "action"; window: ActionWindow }
@@ -198,7 +209,7 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, cosmetics, companion, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, cosmetics, training, appraisal, companion, offers, serverPrefs, latency,
 }: {
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
@@ -244,6 +255,10 @@ export function GameView({
   questOffers: (fn: (e: Extract<QuestEvent, { type: "offers" }>) => void) => () => void;
   /** Ours: a tailor's or barber's menu (docs/adr/0012-cosmetics.md) */
   cosmetics: (fn: (e: CosmeticsEvent) => void) => () => void;
+  /** Ours: the abilities we can train, and what 1% of each costs (docs/adr/0016-abilities.md) */
+  training: (fn: (list: TrainingCost[]) => void) => () => void;
+  /** Ours: whether an item of ours can be appraised, and its price (docs/adr/0016-abilities.md) */
+  appraisal: (fn: (a: Appraisal) => void) => () => void;
   /** Ours: our companion (docs/adr/0010-followers.md) */
   companion: CompanionStore;
 }) {
@@ -292,6 +307,12 @@ export function GameView({
   const [selecting, setSelecting] = useState(false);
   /** The Map key: the map over the whole view (intrface.c A_MAP GraphicsToggleMap) */
   const [fullMap, setFullMap] = useState(false);
+  /** Ours: the first controls (WelcomeControls.tsx, until seenControls) wait a moment after entering, for the room to show first */
+  const [welcomeReady, setWelcomeReady] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setWelcomeReady(true), WELCOME_DELAY_MS);
+    return () => window.clearTimeout(t);
+  }, []);
   /** The phone layout (Touch Controls): the chat and the interface slide out over the view */
   const touch = touchUi(settings);
   /** The Modern interface (ours, desktop only): the view fills the window, the HUD over it (ui/ModernHud.tsx) */
@@ -390,10 +411,10 @@ export function GameView({
   const [chatSeenAt, setChatSeenAt] = useState(() => Date.now());
   const touchMove = useCallback((m: TouchMove) => sceneRef.current?.setTouchMove(m), []);
   const touchPress = useCallback((a: Action) => sceneRef.current?.press(a), []);
-  // The phone layout's map: the joystick moves by its directions while it's open
+  // The full map: the joystick and the movement keys move by its directions while it's open
   useEffect(() => {
-    if (sceneRef.current) sceneRef.current.mapMode = touch && fullMap;
-  }, [touch, fullMap]);
+    if (sceneRef.current) sceneRef.current.mapMode = fullMap;
+  }, [fullMap]);
   const [fps, setFps] = useState<number | null>(null);
   /** Hide Interface just pressed: what it did and how to undo it, for a moment */
   const [hideNote, setHideNote] = useState<{ hidden: boolean; at: number } | null>(null);
@@ -509,6 +530,11 @@ export function GameView({
   const charName = selfInfo ? (session.resource(selfInfo.info.nameRes) ?? "") : "";
   const [quick, setQuick] = useState<{ name: string; slots: QuickSlots }>({ name: "", slots: emptySlots() });
   if (charName && quick.name !== charName) setQuick({ name: charName, slots: loadQuickSlots(localStorage, gameSocketUrl(), charName) });
+  // Ours: the creator's Skip the tutorial (startCity.ts), sent once as the new character first enters
+  useEffect(() => {
+    const city = charName ? takeStartCity(localStorage, gameSocketUrl(), charName) : null;
+    if (city) session.shardsCommand(`start ${city}`);
+  }, [charName, session]);
   const changeSlots = (change: (slots: QuickSlots) => QuickSlots) =>
     setQuick((q) => {
       const slots = change([...q.slots]);
@@ -591,6 +617,30 @@ export function GameView({
       scene.onFollowStop = undefined;
     };
   }, [social, session]);
+  /** Ours (docs/adr/0016-abilities.md): Appraise's price prompt, for an item we carry */
+  const [appraising, setAppraising] = useState<{ id: number; name: string; price: number } | null>(null);
+  /**
+   * Ours (docs/adr/0016-abilities.md): Appraise, as a small scales button, on a valuable item we
+   * carry (magical, or worth 5,000: the server says, UC_APPRAISAL). Send to vault and Send to guild
+   * ("vault", "guild" on a stack) still work on the server but have no buttons for now: fast
+   * travel makes them less needed.
+   */
+  const itemAbilities = (look: LookResult): DescButton[] | undefined => {
+    const item = session.world.inventory.get(look.object.id);
+    const info = item ? appraisals.get(objId(item.id)) : undefined;
+    if (!item || !info?.appraisable) return undefined;
+    return [
+      {
+        label: "Appraise",
+        title: info.price ? `Appraised for ${info.price.toLocaleString()} shillings: change or clear the price` : "Appraise it: set the price it sells for in the citizen's market",
+        icon: <AppraiseIcon />,
+        onClick: () => {
+          setDesc(null);
+          setAppraising({ id: item.id, name: session.resource(item.nameRes) ?? look.name, price: info.price });
+        },
+      },
+    ];
+  };
   /** Ours: Add or Remove friend on another player's description (our server asks them) */
   const friendButton = (look: LookResult) => {
     if (!social || !look.player || look.object.id === session.world.player?.id || !look.name) return undefined;
@@ -660,7 +710,8 @@ export function GameView({
     const read = () => {
       const maxHealth = world.stats.get(STAT_GROUP.MAIN)?.find((x) => x.num === STAT_HP)?.numeric?.currentMax ?? null;
       const karmaStat = world.stats.get(STAT_GROUP.STATS)?.find((x) => x.numeric && session.englishResource(x.nameRes)?.toLowerCase() === "karma");
-      const karma = karmaStat?.numeric?.value ?? null;
+      // Our server no longer sends Karma (always 0: docs/adr/0016-abilities.md): read as 0, the good fey
+      const karma = karmaStat?.numeric?.value ?? 0;
       setPetStats((p) => (p.maxHealth === maxHealth && p.karma === karma ? p : { maxHealth, karma }));
     };
     read();
@@ -697,7 +748,17 @@ export function GameView({
   // Ours (docs/adr/0009-quests.md 5): our tracked quests' areas and the way to them, for the maps
   const questWays = useMemo(() => new QuestWays(assets, quests), [assets, quests]);
   const getWay = useCallback(() => questWays.get(sceneRef.current?.roomFile ?? ""), [questWays]);
-  const questsPanel = <QuestsPanel store={quests} session={session} maxHealth={petStats.maxHealth} />;
+  const openQuestInfo = useCallback((id: number) => setModal({ type: "questInfo", id }), []);
+  const questsPanel = (
+    <QuestsPanel
+      store={quests}
+      session={session}
+      maxHealth={petStats.maxHealth}
+      onOpen={openQuestInfo}
+      showSuggested={settings.questSuggestions}
+      onShowSuggested={(on) => updateSettings({ questSuggestions: on })}
+    />
+  );
   // Ours (docs/adr/0010-followers.md 9.2): the Companion tab
   const companionVersion = useCompanion(companion);
   // ...and its health under its name (gameScene.ts drawLabels)
@@ -835,6 +896,12 @@ export function GameView({
       }),
     [cosmetics, companion, session],
   );
+  // Ours (docs/adr/0016-abilities.md): what we can train, and the prices, as the server last said
+  const [trainCosts, setTrainCosts] = useState<Map<number, number> | null>(null);
+  useEffect(() => training((list) => setTrainCosts(new Map(list.map((t) => [t.id, t.cost])))), [training]);
+  // Ours (docs/adr/0016-abilities.md): which of our items can be appraised, as the server last said
+  const [appraisals, setAppraisals] = useState<ReadonlyMap<number, Appraisal>>(() => new Map());
+  useEffect(() => appraisal((a) => setAppraisals((m) => new Map(m).set(a.id, a))), [appraisal]);
   // Development: the admin dashboard changed the quests (tools/dev/questApi.ts); read them again
   useEffect(() => {
     const hot = import.meta.hot;
@@ -1392,6 +1459,12 @@ export function GameView({
   const studySpell = (key: string) => session.world.spells.find((sp) => englishName(sp.object.nameRes) === key);
 
   /** The Study window, on `spell` (an English name) or the last one studied */
+  /** Ours: the Train window (the Stats tab's Train button, typed train), with the prices asked for afresh */
+  const openTrain = (search = "") => {
+    session.shardsCommand("train list");
+    setModal({ type: "train", search });
+  };
+
   const openStudy = (spell?: string) => {
     if (studyRef.current) return session.localMessage("You're already studying. Stop first (Esc).");
     const memory = spell ? { ...studyMemory(), spell } : studyMemory();
@@ -1614,6 +1687,8 @@ export function GameView({
         if (sp === "ambiguous") return session.localMessage("That spell name is ambiguous.");
         return openStudy(englishName(sp.object.nameRes));
       }
+      case "train":
+        return openTrain(args.trim());
       case "hel":
         return session.localMessage('Type the entire word "help" to open help.');
       case "help":
@@ -1742,6 +1817,9 @@ export function GameView({
 
   /** dialog.c SetDescParams, then RequestLook: the description comes back as BP_LOOK. */
   const lookAt = (id: number, buttons: number) => {
+    // Ours: a shopkeeper's or vault keeper's description has Buy, as a double click on them does
+    const o = session.world.objects.get(id);
+    if (o && o.info.flags & OF_BUYABLE && !(o.info.flags & OF_PLAYER)) buttons |= DESC.BUY;
     descParams.current = buttons;
     session.look(id);
   };
@@ -1757,7 +1835,11 @@ export function GameView({
       const f = o.info.flags;
       if (f & OF_CONTAINER) buttons |= DESC.INSIDE;
       // Ours: someone with a quest marker is talked to by activating them (docs/adr/0009-quests.md 3.3)
-      if ((f & OF_ACTIVATABLE || o.info.minimapFlags & MM_TALK_NPC) && !(f & OF_PLAYER)) buttons |= DESC.ACTIVATE;
+      if ((f & OF_ACTIVATABLE || o.info.minimapFlags & MM_TALK_NPC) && !(f & OF_PLAYER)) {
+        buttons |= DESC.ACTIVATE;
+        // Ours: talking to an NPC is about quests; a tailor's or barber's Use opens their window
+        if ((f & OF_NPC || o.info.minimapFlags & MM_QUEST_NPC) && !(o.info.minimapFlags & MM_OURS.SERVICE)) buttons |= DESC.TALK;
+      }
       if (f & OF_GETTABLE) {
         buttons |= DESC.GET;
         if (!(f & OF_ACTIVATABLE)) buttons |= DESC.USE;
@@ -1774,6 +1856,8 @@ export function GameView({
     if (session.world.inUse.has(o.id)) buttons |= DESC.UNUSE;
     else if (o.flags & OF_APPLYABLE) buttons |= DESC.APPLY;
     else buttons |= DESC.USE;
+    // Ours: whether it can be appraised (UC_APPRAISAL), for its description's Appraise button
+    if (!isNumberItem(o.id)) session.shardsObject(o.id, "appraise ask");
     lookAt(o.id, buttons);
   };
 
@@ -1813,6 +1897,8 @@ export function GameView({
   /** dialog.c DescDialogProc's buttons, on the object the dialog shows. */
   const descAction = (a: DescAction, id: number, buttons: number) => {
     switch (a) {
+      case "buy":
+        return askTrader(id);
       case "get":
         return session.pickUp(id);
       case "inside":
@@ -2194,9 +2280,9 @@ export function GameView({
               onLook={(id) => lookAt(id, DESC.NONE)}
               onZoom={(dir) => handleAction(dir > 0 ? "mapZoomIn" : "mapZoomOut")}
               onMap={() => setFullMap((v) => !v)}
-              tracker={<QuestTracker store={quests} />}
               getWay={getWay}
             />
+            <QuestBox store={quests} settings={settings} onOpen={openQuestInfo} />
             <ActionBar
               cooldown={cooldown}
               session={session}
@@ -2233,6 +2319,7 @@ export function GameView({
                 companionPanel={companionPanel}
                 onStudy={studyButton}
                 studying={!!studying}
+                onTrain={() => openTrain()}
               />
             )}
           </>
@@ -2285,7 +2372,23 @@ export function GameView({
             onAction={(a) => descAction(a, desc.look.object.id, desc.buttons)}
             onSave={(d, u) => descSave(desc.look.object.id, d, u)}
             extra={friendButton(desc.look)}
+            abilities={itemAbilities(desc.look)}
             onClose={() => setDesc(null)}
+          />
+        )}
+        {appraising && (
+          <AppraiseDialog
+            name={appraising.name}
+            price={appraising.price}
+            onAppraise={(price) => {
+              session.shardsObject(appraising.id, `appraise ${price}`);
+              setAppraising(null);
+            }}
+            onClear={() => {
+              session.shardsObject(appraising.id, "appraise clear");
+              setAppraising(null);
+            }}
+            onClose={() => setAppraising(null)}
           />
         )}
         {ambientLook && (
@@ -2332,6 +2435,7 @@ export function GameView({
             }
           />
         )}
+        {modal?.type === "questInfo" && <QuestInfoDialog key={modal.id} id={modal.id} store={quests} session={session} onClose={() => setModal(null)} />}
         {modal?.type === "cosmetics" && modal.menu.type === "tailor" && (
           <TailorDialog
             name={session.resource(session.world.objects.get(modal.menu.npc)?.info.nameRes ?? 0) ?? "The tailor"}
@@ -2462,6 +2566,16 @@ export function GameView({
             onClose={() => setModal(null)}
           />
         )}
+        {welcomeReady && !settings.seenControls && !touch && modal === null && (
+          <WelcomeControls
+            settings={settings}
+            onHelp={() => {
+              updateSettings({ seenControls: true });
+              setModal({ type: "help" });
+            }}
+            onClose={() => updateSettings({ seenControls: true })}
+          />
+        )}
         {modal?.type === "about" && <AboutDialog assets={assets} session={session} icons={icons} audio={audio} onClose={() => setModal(null)} />}
         {modal?.type === "study" && (
           <StudyDialog
@@ -2474,6 +2588,7 @@ export function GameView({
             onClose={() => setModal(null)}
           />
         )}
+        {modal?.type === "train" && <TrainDialog session={session} costs={trainCosts} initialSearch={modal.search} onClose={() => setModal(null)} />}
         {modal?.type === "logoutTimer" && (
           <LogoutTimerDialog settings={settings} iconUrl={assets.url("ui/clock.ico")} onApply={updateSettings} onClose={() => setModal(null)} />
         )}
@@ -2679,6 +2794,7 @@ export function GameView({
           companionPanel={companionPanel}
           onStudy={studyButton}
           studying={!!studying}
+          onTrain={() => openTrain()}
           onEmotes={toggleEmotes}
         />
       )}

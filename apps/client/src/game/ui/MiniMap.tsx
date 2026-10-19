@@ -47,6 +47,8 @@ const PLAYER_WIDTH = (31 * 64) / 4; // game.c player.width
  * room fills a phone's map.
  */
 const MIN_ARROW = 9;
+/** Ours: the quest way's chevrons stop growing with the zoom here (pixels from the tip to the middle) */
+const CHEVRON_MAX = 9;
 const OBJECT_RADIUS = FINENESS / 4;
 
 export function MiniMap({
@@ -255,7 +257,8 @@ export function MiniMap({
           return { x: xo + tx * scale, y: yo + ty * scale };
         });
         const onMap = points.filter((p) => Math.hypot(p.x - w / 2, p.y - h / 2) <= rim);
-        const size = Math.max(6, 2.6 * radius);
+        // Capped: a small room's map is zoomed right in, and the chevrons grew to cover it
+        const size = Math.min(CHEVRON_MAX, Math.max(6, 2.6 * radius));
         for (const p of onMap) chevron(ctx, p.x, p.y, Math.atan2(p.y - cy0, p.x - cx0), size);
         if (!onMap.length) {
           const p = points.reduce((a, b) => (Math.hypot(b.x - cx0, b.y - cy0) < Math.hypot(a.x - cx0, a.y - cy0) ? b : a));

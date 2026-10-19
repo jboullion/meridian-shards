@@ -13,6 +13,8 @@ import { MAX_LIGHTS, type LightSource } from "./objectLighting.ts";
 import { colorTexture, sharedPaletteToRgba } from "./colorTexture.ts";
 import { triangleVisibility, wallsNear } from "./lightOcclusion.ts";
 import { bakeAoSteps, surfaceInfo, type AoMap } from "./roomAo.ts";
+import { bakeSunMapSteps, heightGridSteps, roomHasOpenSky, sunMapAt, type SunHeightGrid, type SunMap } from "./sunShadow.ts";
+import { sunAt } from "./sunPath.ts";
 
 export function paletteTexture(p: Palette): THREE.DataTexture {
   const tex = new THREE.DataTexture(paletteRgba(p), 256, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
@@ -55,6 +57,8 @@ const NO_ENHANCEMENTS: EnhancedLighting = { softLights: false, lightsStopAtWalls
 
 /** Every light bit set: no light is kept from any surface */
 const ALL_LIGHTS = 0xffff;
+/** Ours (moods' sun shadows): a wall texture more see-through than this casts none */
+const SEE_THROUGH = 0.45;
 
 export class RoomView {
   readonly group = new THREE.Group();
@@ -87,6 +91,24 @@ export class RoomView {
   private maskKey = "";
   /** Gone: prepare() and allTextures() leave it alone */
   private gone = false;
+  /**
+   * Ours (moods): the sun's shadows on the floors (sunShadow.ts). The game hour they're wanted
+   * for (null: none), the room's grid, the maps by whole hour (this one and the next), the one
+   * being baked, and the texture of the two (red this hour, green the next).
+   */
+  private sunHour: number | null = null;
+  /** The room's heights as built (heightsKey): the sun maps are baked for these */
+  private builtHeights = "";
+  /** Whether the room has any open sky (only those have sun maps) */
+  private openSky = false;
+  /** Grid textures by whether they're solid enough to cast the sun's shadows (mostlySolid) */
+  private readonly solidTextures = new Map<number, boolean>();
+  private sunKey = "";
+  private sunGrid: SunHeightGrid | null = null;
+  private sunGridJob: Generator<void, SunHeightGrid> | null = null;
+  private readonly sunMaps = new Map<number, SunMap>();
+  private sunJob: { hour: number; steps: Generator<void, SunMap> } | null = null;
+  private sunTexture: { texture: THREE.DataTexture; hours: string; rect: [number, number, number, number] } | null = null;
 
   constructor(room: Room, textures: Map<number, Bgf>, palette: THREE.Texture) {
     this.textures = textures;
@@ -176,10 +198,127 @@ export class RoomView {
    * while it's being baked (update() bakes it, then turns the corners on).
    */
   private cornerMap(): { texture: THREE.DataTexture; rect: [number, number, number, number] } | null {
-    const key = this.room.sectors.map((s) => [s.floorHeight, s.ceilingHeight, s.slopedFloor?.d ?? "", s.slopedCeiling?.d ?? ""].join(",")).join("|");
+    const key = this.heightsKey();
     if (this.ao?.key === key) return this.ao;
     if (this.aoJob?.key !== key) this.aoJob = { key, steps: bakeAoSteps(this.room) };
     return null;
+  }
+
+  /** Every sector's heights: what the corner and sun maps are baked for */
+  private heightsKey(): string {
+    return this.room.sectors.map((s) => [s.floorHeight, s.ceilingHeight, s.slopedFloor?.d ?? "", s.slopedCeiling?.d ?? ""].join(",")).join("|");
+  }
+
+  /**
+   * Ours (moods): the sun's shadows are wanted for this game hour (fractional; null: none). The
+   * maps for its whole hour and the next are baked over the following updates, 3 ms a frame.
+   */
+  setSunHour(hour: number | null): void {
+    this.sunHour = hour === null ? null : ((hour % 24) + 24) % 24;
+  }
+
+  /** Bakes the sun's maps for up to `budgetMs` (the grid first, then this hour's, then the next). */
+  private bakeSun(budgetMs: number): void {
+    if (this.sunHour === null || !this.openSky) return;
+    const until = performance.now() + budgetMs;
+    // The heights are worked out when the room is built (build): not every frame
+    const key = this.builtHeights;
+    if (key !== this.sunKey) {
+      this.sunKey = key;
+      this.sunGrid = null;
+      this.sunGridJob = null;
+      this.sunMaps.clear();
+      this.sunJob = null;
+    }
+    const run = <T>(steps: Generator<void, T>): T | null => {
+      let r = steps.next();
+      while (!r.done && performance.now() < until) r = steps.next();
+      return r.done ? r.value : null;
+    };
+    if (!this.sunGrid) {
+      this.sunGridJob ??= heightGridSteps(this.room, this.sunCasters());
+      this.sunGrid = run(this.sunGridJob);
+      if (!this.sunGrid) return;
+      this.sunGridJob = null;
+    }
+    const h0 = Math.floor(this.sunHour) % 24,
+      h1 = (h0 + 1) % 24;
+    for (const h of [...this.sunMaps.keys()]) if (h !== h0 && h !== h1) this.sunMaps.delete(h);
+    const need = [h0, h1].find((h) => !this.sunMaps.has(h));
+    if (need !== undefined && performance.now() < until) {
+      if (this.sunJob?.hour !== need) this.sunJob = { hour: need, steps: bakeSunMapSteps(this.room, sunAt(need).dir, this.sunGrid) };
+      const map = run(this.sunJob.steps);
+      if (map) {
+        this.sunMaps.set(need, map);
+        this.sunJob = null;
+      }
+    }
+    // The texture of this hour's and the next's (the next is this hour's until it's baked)
+    const m0 = this.sunMaps.get(h0);
+    if (!m0) return;
+    const m1 = this.sunMaps.get(h1) ?? m0;
+    const hours = `${h0}:${m1 === m0 ? h0 : h1}`;
+    if (this.sunTexture?.hours === hours) return;
+    const data = new Uint8Array(m0.width * m0.height * 2);
+    for (let i = 0; i < m0.data.length; i++) {
+      data[i * 2] = m0.data[i];
+      data[i * 2 + 1] = m1.data[i];
+    }
+    this.sunTexture?.texture.dispose();
+    const texture = new THREE.DataTexture(data, m0.width, m0.height, THREE.RGFormat, THREE.UnsignedByteType);
+    texture.magFilter = texture.minFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false;
+    texture.unpackAlignment = 1;
+    texture.colorSpace = THREE.NoColorSpace;
+    texture.needsUpdate = true;
+    this.sunTexture = { texture, hours, rect: [m0.x0, m0.y0, 1 / (m0.width * m0.texel), 1 / (m0.height * m0.texel)] };
+  }
+
+  /**
+   * What casts the sun's shadows: the room's wall triangles as drawn (client fine units), but
+   * those of mostly see-through textures (railings, grates, windows), whose shadow would be a
+   * solid block.
+   */
+  private sunCasters(): Float32Array {
+    const out: number[] = [];
+    for (const batch of this.geometry.batches.values()) {
+      if (!this.mostlySolid(batch.textureId)) continue;
+      const p = batch.positions;
+      for (let a = 0; a + 2 < p.length / 3; a += 3) {
+        if (Math.abs(faceNormal(p, a)[2]) >= 0.5) continue;
+        for (let k = 0; k < 9; k++) out.push(p[a * 3 + k]);
+      }
+    }
+    return new Float32Array(out);
+  }
+
+  /** Whether at most SEE_THROUGH of a texture's first bitmap is transparent (index 254) */
+  private mostlySolid(id: number): boolean {
+    let v = this.solidTextures.get(id);
+    if (v === undefined) {
+      const px = this.textures.get(id)?.bitmaps[0]?.pixels;
+      let clear = 0;
+      if (px) for (const i of px) if (i === 254) clear++;
+      v = !!px && clear / px.length <= SEE_THROUGH;
+      this.solidTextures.set(id, v);
+    }
+    return v;
+  }
+
+  /** The sun's shadow map for the hour asked for, once this hour's is baked (null before, and in rooms without sky) */
+  get sunShadows(): { texture: THREE.Texture; rect: [number, number, number, number] } | null {
+    return this.sunHour !== null && this.sunTexture && this.openSky ? this.sunTexture : null;
+  }
+
+  /** How sunlit (0..1) the floor is at (x, y), fine units, at the hour asked for; 1 while there's no map */
+  sunlitAt(x: number, y: number): number {
+    if (this.sunHour === null) return 1;
+    const h0 = Math.floor(this.sunHour) % 24;
+    const m0 = this.sunMaps.get(h0);
+    if (!m0) return 1;
+    const m1 = this.sunMaps.get((h0 + 1) % 24) ?? m0;
+    const t = this.sunHour - Math.floor(this.sunHour);
+    return sunMapAt(m0, x, y) * (1 - t) + sunMapAt(m1, x, y) * t;
   }
 
   /** Bakes the corner map for up to `budgetMs`; when it's done, the corners are shaded. */
@@ -234,7 +373,7 @@ export class RoomView {
   /** Every texture the room draws with now, to upload ahead (WebGLRenderer.initTexture) */
   allTextures(): THREE.Texture[] {
     if (this.gone) return [];
-    return [...this.indexTextures.values(), ...this.colorTextures.values(), ...(this.ao ? [this.ao.texture] : [])];
+    return [...this.indexTextures.values(), ...this.colorTextures.values(), ...(this.ao ? [this.ao.texture] : []), ...(this.sunTexture ? [this.sunTexture.texture] : [])];
   }
 
   /** Smooth textures (Graphics Options): filtered, as the original; off, crisp pixels. */
@@ -259,6 +398,8 @@ export class RoomView {
 
   private build(room: Room, reuse?: Map<string, THREE.ShaderMaterial>): void {
     this.room = room;
+    this.openSky = roomHasOpenSky(room);
+    this.builtHeights = this.heightsKey();
     const info = (id: number): TextureInfo | null => {
       const b = this.textures.get(id);
       if (!b) return null;
@@ -276,6 +417,8 @@ export class RoomView {
       const shade = new Float32Array(n * 3);
       // Ours, for shaded corners: what each surface is, and the floor and ceiling in front of it
       const surface = surfaceKinds(room, batch);
+      // Ours, for the moods' sun: each face's normal and whether it's under open sky
+      const sky = skyInfo(room, batch);
       for (let i = 0; i < n; i++) {
         // reverse each triangle (mirror) and swap axes
         const src = i - (i % 3) + [0, 2, 1][i % 3];
@@ -295,6 +438,7 @@ export class RoomView {
       g.setAttribute("aLight", new THREE.BufferAttribute(light, 1));
       g.setAttribute("aShade", new THREE.BufferAttribute(shade, 3));
       g.setAttribute("aSurface", new THREE.BufferAttribute(surface, 3));
+      g.setAttribute("aSky", new THREE.BufferAttribute(sky, 4));
       // Which lights see each triangle (lightOcclusion.ts): bits 0-15 and 16-31, all set until worked out
       g.setAttribute("aMask0", new THREE.BufferAttribute(new Float32Array(n).fill(ALL_LIGHTS), 1));
       g.setAttribute("aMask1", new THREE.BufferAttribute(new Float32Array(n).fill(ALL_LIGHTS), 1));
@@ -363,6 +507,7 @@ export class RoomView {
   update(timeMs: number): void {
     this.time = timeMs;
     if (this.enhanced.shadedCorners) this.bakeCorners(4);
+    this.bakeSun(3);
     for (const { batch, material, frames, frameKeys, bgf } of this.animated) {
       const a = batch.animation!;
       const steps = Math.floor(timeMs / a.periodMs);
@@ -487,12 +632,54 @@ export class RoomView {
     this.ao?.texture.dispose();
     this.ao = null;
     this.aoJob = null;
+    this.sunTexture?.texture.dispose();
+    this.sunTexture = null;
+    this.sunMaps.clear();
+    this.sunJob = null;
+    this.sunGridJob = null;
   }
 }
 
 /** Client fine coordinates (x east, y south, z up) to scene coordinates. */
 export function clientToScene(x: number, y: number, z: number): THREE.Vector3 {
   return new THREE.Vector3(x / FINENESS, z / FINENESS, y / FINENESS);
+}
+
+/** A triangle's face normal (client axes), from roomGeometry's counter-clockwise winding */
+function faceNormal(p: Float32Array | number[], a: number): [number, number, number] {
+  const e1 = [p[(a + 1) * 3] - p[a * 3], p[(a + 1) * 3 + 1] - p[a * 3 + 1], p[(a + 1) * 3 + 2] - p[a * 3 + 2]];
+  const e2 = [p[(a + 2) * 3] - p[a * 3], p[(a + 2) * 3 + 1] - p[a * 3 + 1], p[(a + 2) * 3 + 2] - p[a * 3 + 2]];
+  const nx = e1[1] * e2[2] - e1[2] * e2[1],
+    ny = e1[2] * e2[0] - e1[0] * e2[2],
+    nz = e1[0] * e2[1] - e1[1] * e2[0];
+  const l = Math.hypot(nx, ny, nz) || 1;
+  return [nx / l, ny / l, nz / l];
+}
+
+/**
+ * Ours (moods): per vertex, in the mesh's order, the face's normal and 1 when it stands under
+ * open sky: a floor of a sky sector (ceiling texture 0), or a wall in front of one. Ceilings
+ * never are.
+ */
+function skyInfo(room: Room, batch: Batch): Float32Array {
+  const p = batch.positions;
+  const tris = Math.floor(p.length / 9);
+  const out = new Float32Array(tris * 12);
+  for (let tri = 0; tri < tris; tri++) {
+    const a = tri * 3;
+    const n = faceNormal(p, a);
+    const cx = (p[a * 3] + p[(a + 1) * 3] + p[(a + 2) * 3]) / 3,
+      cy = (p[a * 3 + 1] + p[(a + 1) * 3 + 1] + p[(a + 2) * 3 + 1]) / 3;
+    let sky = 0;
+    if (n[2] > -0.5) {
+      // A floor's own sector; for a wall, the sector a little in front of it
+      const wall = n[2] < 0.5;
+      const leaf = leafAt(room, cx + (wall ? n[0] * 16 : 0), cy + (wall ? n[1] * 16 : 0));
+      if (leaf?.sector && room.sectors[leaf.sector - 1].ceilingType === 0) sky = 1;
+    }
+    for (let k = 0; k < 3; k++) out.set([n[0], n[1], n[2], sky], (a + k) * 4);
+  }
+  return out;
 }
 
 /**

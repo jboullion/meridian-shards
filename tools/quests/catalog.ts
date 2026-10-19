@@ -30,6 +30,8 @@ export function buildCatalog(quests: ResolvedQuest[], _givers: ResolvedGiver[], 
     band: q.band,
     prereqs: q.prereqs,
     repeatHours: q.cooldownSeconds === null ? null : q.cooldownSeconds / 3600,
+    // Only when paused (QBQ_PAUSED, 16), so other quests' entries stay as they were
+    ...(q.needs & 16 ? { paused: true } : {}),
     timeLimitMinutes: q.timeLimitSeconds === null ? null : q.timeLimitSeconds / 60,
     text: q.text,
     steps: q.steps.map((s) => ({

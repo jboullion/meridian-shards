@@ -7,17 +7,22 @@
 // activated (gameuser.c SetDescParamsByRoomObject), an inventory item dropped, used or
 // unused (inventry.c A_LOOKINVENTORY), and anything else just has OK.
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ANIMATE, DF, type ObjectInfo } from "@shards/protocol";
 import { DRAWFX } from "@shards/render";
 import { isNumberItem, type AmbientPersonInfo, type LookResult } from "@shards/world";
 import type { IconRenderer } from "../icons.ts";
 import { Button, Window } from "./kit.tsx";
 import { ObjIcon } from "./Sidebar.tsx";
+import { useTurnDrag } from "./hooks.ts";
 
 /** dialog.h DESC_*: which buttons the description dialog shows */
 export const DESC = {
   NONE: 0, GET: 0x01, DROP: 0x02, USE: 0x04, UNUSE: 0x08, INSIDE: 0x10, ACTIVATE: 0x20, APPLY: 0x40,
+  /** Ours: ACTIVATE on an NPC is talking about quests (shards-server Monster.TryActivate), so it says Quests */
+  TALK: 0x80,
+  /** Ours: someone with something we can buy (OF_BUYABLE: shards-server Monster.HasForSale), as a double click on them does */
+  BUY: 0x100,
 } as const;
 
 /** dialog.c PAGE_BREAK_CHAR: splits a long description into pages */
@@ -27,7 +32,8 @@ const MAX_DESCRIPTION = 1000;
 const MAX_URL = 200;
 
 /** The description dialog's buttons besides OK (IDC_GET, IDC_DROP, IDC_USE, IDC_UNUSE, IDC_ACTIVATE, IDC_APPLY). */
-export type DescAction = "get" | "drop" | "use" | "unuse" | "inside" | "activate" | "apply";
+/** The original's buttons' actions; ours: buy (a shopkeeper's Buy, docs/adr/0016-abilities.md) */
+export type DescAction = "get" | "drop" | "use" | "unuse" | "inside" | "activate" | "apply" | "buy";
 
 /** dialog.c AnimateDescription: a cycling object keeps cycling in the picture. */
 function useAnimatedGroup(o: ObjectInfo): number | undefined {
@@ -66,16 +72,30 @@ function FittedName({ text, color }: { text: string; color?: string }) {
   );
 }
 
+/** Ours: a button the description dialog adds to the original's */
+export interface DescButton {
+  label: string;
+  title?: string;
+  disabled?: boolean;
+  /** Drawn instead of the label, which becomes its name for screen readers */
+  icon?: ReactNode;
+  /** What a click does: one of the dialog's actions (closing it, as its own buttons do), or a handler */
+  action?: DescAction;
+  onClick?: () => void;
+}
+
 /**
  * The description dialog: the object's picture on the left, its name in the title face, the
  * description, the inscription or a player's own words below it (editable when DF_EDITABLE),
  * a player's web page, and the buttons for what we can do with it.
  */
 export function DescriptionDialog({
-  look, buttons, icons, onAction, onSave, onClose, extra,
+  look, buttons, icons, onAction, onSave, onClose, extra, abilities,
 }: {
   /** Ours: one more button, on another player's description: Add or Remove friend (docs/adr/0005-friends.md) */
-  extra?: { label: string; title?: string; disabled?: boolean; onClick: () => void };
+  extra?: DescButton;
+  /** Ours: what we can do with an item we carry (docs/adr/0016-abilities.md), in a row of their own */
+  abilities?: DescButton[];
   look: LookResult;
   /** DESC_* flags */
   buttons: number;
@@ -87,6 +107,7 @@ export function DescriptionDialog({
 }) {
   const o = look.object;
   const group = useAnimatedGroup(o);
+  const [angle, turn, front] = useTurnDrag();
   const editable = (look.flags & DF.EDITABLE) !== 0;
   // DisplayDescription: the box only appears for inscribed or editable objects, and players
   const box = look.player || (look.flags & (DF.EDITABLE | DF.INSCRIBED)) !== 0 ? (look.inscription ?? "") : null;
@@ -119,9 +140,16 @@ export function DescriptionDialog({
     <div className="mk-modal look-modal desc-modal">
       <Window title="" onClose={onClose} className="desc-dialog">
         <div className="desc-layout">
-          <div className="desc-picture">
-            <ObjIcon icons={icons} object={o} opts={group !== undefined ? { group } : undefined} />
-          </div>
+          {look.player ? (
+            // Ours: a player turns as our figure in the character window does (a double click: the front)
+            <div className="desc-picture turnable" title="Drag to turn" onPointerDown={turn} onDoubleClick={front}>
+              <ObjIcon icons={icons} object={o} opts={{ group: group ?? 0, angle }} />
+            </div>
+          ) : (
+            <div className="desc-picture">
+              <ObjIcon icons={icons} object={o} opts={group !== undefined ? { group } : undefined} />
+            </div>
+          )}
           <div className="desc-main">
             <FittedName text={look.name} color={nameColor} />
             {look.description && <div className="desc-fixed">{look.description}</div>}
@@ -162,15 +190,16 @@ export function DescriptionDialog({
             )}
           </div>
         </div>
-        {/* IDD_DESC: OK at 148, Get/Drop at 206, Inside/Use/Unuse at 262 (dialog units) */}
+        {/* IDD_DESC: OK at 148, Get/Drop at 206 (ours: Buy), Inside/Use/Unuse at 262 (dialog units) */}
         <div className="desc-buttons" ref={okRef}>
           <Button isDefault onClick={ok}>
             OK
           </Button>
           {buttons & DESC.GET ? <Button className="slot-b" onClick={run("get")}>Get</Button> : null}
           {buttons & DESC.DROP ? <Button className="slot-b" onClick={run("drop")}>Drop</Button> : null}
+          {buttons & DESC.BUY && !(buttons & (DESC.GET | DESC.DROP)) ? <Button className="slot-b" onClick={run("buy")}>Buy</Button> : null}
           {buttons & DESC.INSIDE ? <Button className="slot-c" onClick={run("inside")}>Inside</Button> : null}
-          {buttons & DESC.ACTIVATE ? <Button className="slot-c" onClick={run("activate")}>Use</Button> : null}
+          {buttons & DESC.ACTIVATE ? <Button className="slot-c" onClick={run("activate")}>{buttons & DESC.TALK ? "Quests" : "Use"}</Button> : null}
           {buttons & DESC.APPLY ? <Button className="slot-c" onClick={run("apply")}>Use</Button> : null}
           {buttons & DESC.UNUSE ? <Button className="slot-c" onClick={run("unuse")}>Unuse</Button> : null}
           {buttons & DESC.USE ? <Button className="slot-c" onClick={run("use")}>Use</Button> : null}
@@ -180,6 +209,21 @@ export function DescriptionDialog({
             </Button>
           )}
         </div>
+        {abilities && abilities.length > 0 && (
+          <div className="desc-abilities">
+            {abilities.map((b) =>
+              b.icon ? (
+                <Button key={b.label} className="desc-icon-button" title={b.title ?? b.label} label={b.label} disabled={b.disabled} onClick={b.action ? run(b.action) : b.onClick}>
+                  {b.icon}
+                </Button>
+              ) : (
+                <Button key={b.label} title={b.title} disabled={b.disabled} onClick={b.action ? run(b.action) : b.onClick}>
+                  {b.label}
+                </Button>
+              ),
+            )}
+          </div>
+        )}
       </Window>
     </div>
   );

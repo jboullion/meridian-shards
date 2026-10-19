@@ -1,4 +1,4 @@
-// Ours: the numbers that shape ground detail, puddles and lightning, tunable live in development
+// Ours: the numbers that shape ground detail, puddles, lightning and the lighting's moods, tunable live in development
 // from the admin dashboard (apps/client/admin.html) and saved back here by its "Save as
 // defaults", which rewrites each entry's `value:`. Keep every entry on one line,
 // `key: { value: <number>, ... },`, so the save finds it. The same shape as @shards/world's
@@ -26,6 +26,12 @@ export const RENDER_TUNING = {
   lightningGapMax: { value: 18, min: 1, max: 120, step: 1, label: "Longest wait between strikes (s)", group: "Storm" },
   lightningNear: { value: 45, min: 10, max: 100, step: 1, label: "Strikes at least this far off (squares)", group: "Storm" },
   lightningFar: { value: 70, min: 10, max: 150, step: 1, label: "Strikes at most this far off (squares)", group: "Storm" },
+  moodSun: { value: 1, min: 0, max: 3, step: 0.05, label: "Sunlight (times the mood's)", group: "Moods" },
+  moodShadow: { value: 0.75, min: 0, max: 1, step: 0.05, label: "Sun shadows' darkness", group: "Moods" },
+  moodHaze: { value: 1, min: 0, max: 4, step: 0.05, label: "Haze (times the mood's)", group: "Moods" },
+  moodTint: { value: 1, min: 0, max: 2, step: 0.05, label: "Light's tint (times the mood's)", group: "Moods" },
+  moodGrade: { value: 1, min: 0, max: 2, step: 0.05, label: "Colour grading (times the mood's)", group: "Moods" },
+  moodFadeS: { value: 0.6, min: 0, max: 5, step: 0.1, label: "Changing rooms fades the mood over (s)", group: "Moods" },
 } satisfies Record<string, RenderTunable>;
 
 export type RenderTunableKey = keyof typeof RENDER_TUNING;

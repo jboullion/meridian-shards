@@ -14,7 +14,7 @@ export interface CatalogNpc {
   rooms: { rid: number; name: string }[];
 }
 
-export type QuestStepKind = "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion";
+export type QuestStepKind = "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune";
 
 /** How a quest's markers look: gold (main and levelling chains), silver (story), bronze (errands) */
 export type QuestTier = "main" | "story" | "errand";
@@ -66,6 +66,8 @@ export interface CatalogQuest {
   /** null: once */
   repeatHours: number | null;
   timeLimitMinutes: number | null;
+  /** Not offered for now (tools/quests/schema.ts Quest.paused); one going can be finished */
+  paused?: boolean;
   text: { offer: string; progress: string; complete: string };
   steps: CatalogStep[];
   rewards: CatalogRewards;
@@ -133,7 +135,7 @@ export function suggestedQuests(catalog: QuestCatalog, health: number, active: Q
   const isActive = new Set(active.map((a) => a.id));
   const isDone = new Set(done.map((d) => d.id));
   return catalog.quests
-    .filter((q) => !isActive.has(q.id) && (!isDone.has(q.id) || q.repeatHours !== null))
+    .filter((q) => !q.paused && !isActive.has(q.id) && (!isDone.has(q.id) || q.repeatHours !== null))
     .filter((q) => q.prereqs.every((p) => isDone.has(p)))
     .filter((q) => health >= q.band.min && health <= q.band.max)
     .sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier] || a.band.min - b.band.min || a.id - b.id);

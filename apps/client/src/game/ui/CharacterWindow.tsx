@@ -16,7 +16,7 @@ import { sortByType, sortMoves } from "../inventoryOrder.ts";
 import type { IconRenderer } from "../icons.ts";
 import { DRAG_ITEM } from "../quickSlots.ts";
 import { updateSettings, type Settings } from "../settings.ts";
-import { useWorld } from "./hooks.ts";
+import { useTurnDrag, useWorld } from "./hooks.ts";
 import { Button, Window } from "./kit.tsx";
 import { Inventory, NumericStats, ObjIcon, StatBar, StatList, StatTab, TABS, type Tab } from "./Sidebar.tsx";
 
@@ -77,10 +77,6 @@ function EquipBox({
   );
 }
 
-/** The figure's eight views (drawbmp.c angles, 4096 a turn), and how far a drag goes for one, of its width */
-const VIEW_STEP = 4096 / 8;
-const DRAG_PER_VIEW = 0.175;
-
 /**
  * Our figure (drawbmp.c DrawObject), from the front at first. Dragging across it turns it through
  * its eight views, as the UE remaster's inventory does; an item from the bag dropped on it is used.
@@ -88,34 +84,13 @@ const DRAG_PER_VIEW = 0.175;
 function Figure({ session, icons }: { session: GameSession; icons: IconRenderer }) {
   const world = session.world;
   const self = world.self;
-  const [angle, setAngle] = useState(0);
-  const turn = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    const el = e.currentTarget;
-    el.setPointerCapture(e.pointerId);
-    const width = el.getBoundingClientRect().width;
-    const startX = e.clientX,
-      startAngle = angle;
-    const move = (ev: PointerEvent) => {
-      const views = Math.round((ev.clientX - startX) / (width * DRAG_PER_VIEW));
-      setAngle((((startAngle - views * VIEW_STEP) % 4096) + 4096) % 4096);
-    };
-    const up = () => {
-      el.removeEventListener("pointermove", move);
-      el.removeEventListener("pointerup", up);
-      el.removeEventListener("pointercancel", up);
-    };
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up);
-    el.addEventListener("pointercancel", up);
-  };
+  const [angle, turn, front] = useTurnDrag();
   return (
     <div
       className="equip-figure"
       title="Drag to turn; drop an item here to put it on"
       onPointerDown={turn}
-      onDoubleClick={() => setAngle(0)}
+      onDoubleClick={front}
       onDragOver={(e) => e.dataTransfer.types.includes(DRAG_ITEM) && e.preventDefault()}
       onDrop={(e) => {
         const o = world.inventory.get(Number(e.dataTransfer.getData(DRAG_ITEM)));
@@ -132,8 +107,10 @@ function Figure({ session, icons }: { session: GameSession; icons: IconRenderer 
 
 export function CharacterWindow({
   session, icons, assets, settings, itemSlots, tab, onTab, onClose, onLookItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, selecting, onSelectObject, onCast,
-  friendsPanel, petsPanel, questsPanel, companionPanel, onStudy, studying,
+  friendsPanel, petsPanel, questsPanel, companionPanel, onStudy, studying, onTrain,
 }: {
+  /** Ours: the Stats tab's Train button (docs/adr/0016-abilities.md) */
+  onTrain?: () => void;
   /** Ours: the Spells tab's Study button (StatList) */
   onStudy?: () => void;
   studying?: boolean;
@@ -327,7 +304,7 @@ export function CharacterWindow({
         ) : (
           <div className="cw-page stat-area">
             {tab === "stats" ? (
-              <NumericStats stats={world.stats.get(STAT_GROUP.STATS) ?? []} rs={rs} />
+              <NumericStats stats={world.stats.get(STAT_GROUP.STATS) ?? []} rs={rs} english={(id) => session.englishResource(id)} onTrain={onTrain} />
             ) : tab === "friends" ? (
               friendsPanel
             ) : tab === "pets" ? (

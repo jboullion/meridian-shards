@@ -19,3 +19,6 @@ export * from "./groundCover.ts";
 export * from "./puddles.ts";
 export * from "./lightning.ts";
 export * from "./tuning.ts";
+export * from "./moods.ts";
+export * from "./sunPath.ts";
+export * from "./sunShadow.ts";

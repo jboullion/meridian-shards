@@ -276,7 +276,7 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
 **Our client:**
 - `game/quests.ts` (`QuestStore`): the catalogue, the log and what's tracked (up to 3, in `localStorage`; a quest taken on is tracked while there's room). A log whose hash isn't the catalogue's fetches the catalogue again; if it still differs, the game data is out of date.
 - `ui/QuestDialog.tsx`: the quest window. Several quests are listed first. An offer has the band, the story, the objectives with where they are, the reward, Accept and Decline; a step ready shows Hand in (or Complete), then the next step's brief (or the completion and reward).
-- `ui/QuestsPanel.tsx`: the Quests tab (Going, with objectives, time left, Track and Abandon; Suggested for you, by our maximum health; Done) in place of stat group 5's list, and the tracker under the Modern map.
+- `ui/QuestsPanel.tsx`: the Quests tab (Going, with objectives, time left, Track and Abandon; Suggested for you, by our maximum health; Done) in place of stat group 5's list, and the tracker under the Modern map (since 2026-10-17 the quest box, `ui/QuestBox.tsx`: every quest going, tracked first, moved and sized like the chat; a double click opens `QuestInfoDialog`).
 - `game/markers.ts`: the gold "!" and "?", grey for not yet, over heads and on the minimap, and a gold ring round a target monster's dot. Options, Show Quest Markers.
 - Double-clicking someone with a marker talks to them (before their shop for a gold "!" or "?"); so do the Use key and the Look window's Activate.
 
@@ -405,3 +405,34 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
 - **Tried on our server:** the Inner Sanctum rebuilt: the remains gone, `SpawnQueen` making the Queen once (a second call finding her) and setting its timer; no necromancer guild stood on our server; Drechx showing a gold "!" to a 50-health character.
 
 **Not yet tried:** fighting the Queen (it changes the world: tried by reading, the dead Lich is a talkable NPC), the offering and soldier quests end to end, kills by real fighting (only `MonsterKilled` sent by hand), shared kills in a builder group, a time limit running out, the dashboard's form driven by hand end to end in the browser (its routes were), and a save from before quests on the hosted server (new `User` properties: a copy first, 0008 3.3).
+
+## Play-test changes (2026-10-18)
+
+- **Raza's chain** (from the play test, QA_PLAYTEST.md; reworked the same day as the tutorial, with lots of hand holding, to reach 30 health quickly). Marcus, at the inn where newcomers arrive, starts it, and every hand-in leads to the next offer:
+  1. Arms for the Road (134, Marcus): talk to Tomas (250 shillings, the step's reward), buy a small round shield from him, and show it to Marcus (a `buy` step with `auto: false`, handed in to Marcus). No skill to learn any more.
+  2. The Elder of Raza (137, Marcus): talk to Rodric d'Stane in his hut.
+  3. Restless Graves (121, the Elder): ten mummies in the mausoleum.
+  4. The Shadow Mummy of Raza (10, the Elder), no longer optional, offered with 121 (both after 137), so one trip into the mausoleum does both.
+  5. A Strong Arm for Raza (138, the Elder, after 121 and 10): back to Marcus.
+  6. From Marcus at once: Rats in the Stores (120, the Outskirts) and The Farol Road (122, centipedes on the Western Edge of Farol beside it), eight each, both repeatable straight away (`repeat` with 0 hours) while base health is under 30 (`requires.healthBelow`); and A Way Home (135, attune to Raza's portal, travel point 3), unless already attuned.
+  7. The Road to Marion (136, Marcus, from 30 health): talk to Tova, Marion's bartender, who sends you on to Morrigan and Ran er'Hoth.
+  Quest XP to 30 health: the chain gives about 2,500 (and level-30 mummies, rats and centipedes give kill XP up to 30), so two or three rounds of both hunts finish it; 20 to 30 takes 6,585. Word to Marion (123) is retired (`retired.json`). The Western Edge of Farol spawns mostly centipedes (65%, rats 20%) for 122. The message of the day (`server/config/motd.txt`) sends newcomers to Marcus.
+- **Marion's start** (the same day), from 30 health:
+  - Tova (the bartender, where the Road to Marion ends) offers A Mace from Colhorr (139): talk to Colhorr at the smithy (100 shillings), buy a mace.
+  - Morrigan offers Slime on the Shore (125, ten slimes) and Fungus in the Valley (126, no longer after 125, band from 30) together, both repeatable at once (`repeat` with 0 hours, no health cap). Both lie out of Marion's north-east corner: the Deep Woods of Ileria, the Valley of Ileria (fungus beasts, level 50), then the Great Ocean (slimes).
+  - Ran er'Hoth offers Lady Aftyn's Remedy (148: talk to Aftyn, 100 shillings, buy a cure poison potion) beside The Crypt's First Chamber (124).
+  - Aftyn then offers The Temple of Shal'ille (149): talk to Priestess Xiana in the Deep Woods of Ileria.
+  - The Road Through Meridian (11, Xiana's long guide) is **paused**, to be broken into smaller quests.
+  - Marion's crypt gives 5 s for the second lever (`marcryp1.kod SLAM_TIME`, from 2 s), as Raza's mausoleum does, so one player can open its gate.
+- **Paused quests** (a quest file's `paused: true`, the `QBQ_PAUSED` need, 16): never offered (`MeetsNeeds` refuses it, so no marker either), but one a player has going can still be finished, and taking the flag off brings it back; retiring (`retired.json`) is for good. The catalogue says `paused` (only for those), so Suggested for you leaves them out. The dashboard's Quests tab has a Paused checkbox.
+- **Markers:** the view's "!" and "?" grow as we near them, to 1.4 times their size within 2 squares, from 8 squares in (`gameScene.ts MARKER_NEAR_SCALE`), and have a 1px black outline (`styles.css --marker-outline`). The minimap's way chevrons stop growing with the zoom at 9 pixels (`MiniMap.tsx CHEVRON_MAX`): a small room's map is zoomed right in, and they covered it.
+  - **Area exits on the maps:** Marion leaves for the Ileria woods only through areas its `SomethingMoved` watches (row < 32 and col > 66 to C4; row > 83 and col > 48 to C5), which `roomexits.json` didn't know, so the way to the ocean ran round through the plantation and the Forest of Farol. `tools/assets/roomLinks.ts areaExits` now reads every room's `if (new_row OP n) and (new_col OP m)` blocks that `UtilGoNearSquare` to a room as a door at the area's inner corner (19 rooms, the Deep Woods' way to the temple among them), for the quest way, the links and the townsfolk alike. Rebuild the assets after changing one.
+- **A health cap on offers** (`requires.healthBelow`, the row's `QB_HEALTH_BELOW` 23): a quest is offered only while base health is under it (`CanOffer`), first time and repeats alike; one already going can still be finished. The band's max stays a suggestion. The dashboard's Quests tab edits it (Offered below health).
+- **Two step kinds** (`QK_LEARN` 16, `QK_ATTUNE` 17):
+  - `learn` (`skills`: skill classes) counts when the player learns any of them (`Player.AddSkill` → `QuestBook.SkillLearned`), and is done at once if they know them all (`CheckStateSteps`, `KnowsSkills`).
+  - `attune` (`point`: a travel point) is a state step, done when attuned (`User.AttunePortal` → `CheckStateSteps`). A quest whose first step is one isn't offered to a player already attuned (`CanOffer`).
+  - The generator writes the skills as the step's classes and the point as its amount; the dashboard's Quests tab edits both.
+- **Signet rings as bronze quests:** a signet ring we carry is listed in the Quests tab and the quest box as "A Lost Signet Ring" (bronze), returnable to its owner, with their room. The server sends the list (`UC_SIGNETS` 114, `QuestBook.SendSignets`) at logon and whenever a ring reaches or leaves a player (`SignetRing.NewOwner` and `Delete` post `SignetMoved`). Returning one is the library's errand as before.
+- **Suggested for you** is hidden behind a Show suggestions checkbox at the Quests tab's foot (`settings.questSuggestions`, off by default).
+- **The way on the maps:** a doorway several squares wide is one chevron at its middle (`questWay.ts exitsTo`), not one a square.
+- **Skipping the tutorial** (the character creator's Skip the tutorial, `start <city>`, `ShardsAbilities.StartCity`) attunes the new character to Raza's and Marion's portals (points 3 and 2), the ones the tutorial's road passes, so A Way Home is never offered to them.

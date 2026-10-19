@@ -3,11 +3,13 @@
 // the story, the band, the objectives with where they are, and the rewards, with Accept; a step
 // ready to hand in shows Complete, then what comes next (or the reward). Everything is checked
 // again by the server (util/questbook.kod); the text is the catalogue's (quests.ts).
+// QuestInfoDialog is a quest's window away from its giver: a double click in the quest box or the
+// Quests tab shows its story, who gave it, the progress and the reward, with Track and Abandon.
 
 import { useEffect, useRef, useState } from "react";
 import { bandText, objectiveLine, QUEST_OFFER, rewardsLine, rewardText, timeLeftText, type CatalogQuest, type CatalogStep, type GameSession, type QuestOffer } from "@shards/world";
-import type { QuestStore } from "../quests.ts";
-import { Button, ListBox, Window } from "./kit.tsx";
+import { useQuests, type QuestStore } from "../quests.ts";
+import { Button, Check, ListBox, Window } from "./kit.tsx";
 
 /** As the server's QUEST_REACH (4 squares), and a little: past it, the window closes */
 const QUEST_REACH = 5 * 1024;
@@ -187,6 +189,72 @@ export function QuestDialog({
         {back && <Button onClick={back}>Back</Button>}
         {serviceButton}
         <Button onClick={onClose}>{state === QUEST_OFFER.OFFER ? "Decline" : "Close"}</Button>
+      </div>
+    </Window>
+  );
+}
+
+/** A quest's details away from its giver (the quest box, the Quests tab): to read, with Track and Abandon */
+export function QuestInfoDialog({ id, store, session, onClose }: { id: number; store: QuestStore; session: GameSession; onClose: () => void }) {
+  useQuests(store);
+  const quest = store.quest(id);
+  const active = store.active.find((a) => a.id === id);
+  const left = active ? store.secondsLeft(active) : -1;
+  // Its countdown, every second
+  const [, tick] = useState(0);
+  const timed = left >= 0;
+  useEffect(() => {
+    if (!timed) return;
+    const t = window.setInterval(() => tick((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [timed]);
+  if (!quest) {
+    return (
+      <Window title="Quest" onClose={onClose} className="game-dialog quest-dialog">
+        <p>{store.stale ? "Your game data is out of date: reload the page to see this quest." : "This quest isn't in your game data yet."}</p>
+        <div className="mk-buttons">
+          <Button isDefault onClick={onClose}>Close</Button>
+        </div>
+      </Window>
+    );
+  }
+  const step = active?.step;
+  const current = step !== undefined ? quest.steps[step - 1] : undefined;
+  const done = store.done.find((d) => d.id === id);
+  const where = quest.giver.rooms.map((r) => r.name).join(" or ");
+  return (
+    <Window title={quest.name} onClose={onClose} className="game-dialog quest-dialog quest-info">
+      <p className="quest-band">
+        {bandText(quest)}
+        {quest.repeatHours !== null ? ", can be done again" : ""}
+        {!active && done ? `, done${done.times > 1 ? ` ${done.times} times` : ""}` : ""}
+      </p>
+      <p className="quest-giver">
+        Given by {quest.giver.name}
+        {where ? `, ${where}` : ""}
+      </p>
+      <p className="quest-story">{quest.text.offer}</p>
+      {current?.brief && <p className="quest-story">{current.brief}</p>}
+      <h4>{active ? "Progress" : "Objectives"}</h4>
+      <Objectives quest={quest} step={step} count={active?.count} />
+      {timed && <p className="quest-time">Time left: {timeLeftText(left)}</p>}
+      <p className="quest-reward">Reward: {rewardText(quest)}</p>
+      <div className="mk-buttons">
+        {active && <Check label="Track" title="Show its way on the map, and first in the quest box (up to three)" checked={store.isTracked(id)} onChange={(v) => store.setTracked(id, v)} />}
+        {active && (
+          <Button
+            onClick={() => {
+              if (!window.confirm(`Abandon ${quest.name}? You can take it on again from the start.`)) return;
+              session.shardsCommand(`quest abandon ${id}`);
+              onClose();
+            }}
+          >
+            Abandon
+          </Button>
+        )}
+        <Button isDefault onClick={onClose}>
+          Close
+        </Button>
       </div>
     </Window>
   );

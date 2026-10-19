@@ -145,7 +145,8 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     who: [],
     emote: k("Semicolon"),
     go: k("Space"),
-    interact: k("KeyF"),
+    // G gets, as players expect; F, the key it had first, too
+    interact: k("KeyG", "KeyF"),
     lookAt: k("KeyR"),
     // right click examines, as in the original (merintr.c VK_RBUTTON A_LOOKMOUSE)
     examine: k("Mouse1"),
@@ -417,6 +418,16 @@ export interface Settings {
    * view's pixels), or null for its place beside the map
    */
   characterWindowAt: [number, number] | null;
+  /**
+   * Ours: the Modern layout's quest box (ui/QuestBox.tsx): where its title was dragged to (left
+   * and top in the view's pixels), or null for its place on the right under the map; its width,
+   * and its height in its own pixels (null: as tall as its quests, up to the view's bottom)
+   */
+  questBoxAt: [number, number] | null;
+  questBoxWidth: number;
+  questBoxTall: number | null;
+  /** Ours: the first controls have been shown on entering the game (ui/WelcomeControls.tsx) */
+  seenControls: boolean;
   /** The Modern layout's HUD size, % (75..150): the bars, slots, map, chat and character window */
   hudScale: number;
 
@@ -460,6 +471,8 @@ export interface Settings {
   ambientVolume: number;
   /** Ours, Second Hotbar (the Modern interface): quick slots 11-20 in a row above the first, on the numpad's keys; off by default */
   secondHotbar: boolean;
+  /** Ours: the Quests tab's "Suggested for you" (its Show suggestions checkbox); off by default */
+  questSuggestions: boolean;
   /** Ours, Limit to 60 FPS: a faster screen draws at most 60 frames a second (cooler, kinder to batteries) */
   frameLimit: boolean;
 }
@@ -477,7 +490,7 @@ export function touchUi(s: Settings): boolean {
   return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 }
 
-const SETTINGS_VERSION = 14;
+const SETTINGS_VERSION = 15;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
@@ -540,6 +553,10 @@ export const DEFAULT_SETTINGS: Settings = {
   chatAt: null,
   chatTall: null,
   characterWindowAt: null,
+  questBoxAt: null,
+  questBoxWidth: 250,
+  questBoxTall: null,
+  seenControls: false,
   hudScale: 100,
   enhanced: true,
   ambientLife: "normal",
@@ -555,6 +572,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ambientVolume: 70,
   frameLimit: true,
   secondHotbar: false,
+  questSuggestions: false,
 };
 
 const STORAGE_KEY = "shards.settings";
@@ -633,6 +651,11 @@ export function migrate(s: SavedSettings): Settings {
   if (version < 14) {
     const taken = Object.entries(keys).some(([a, list]) => a !== "companion" && list.some((b) => b.code === "KeyC" && !b.alt && !b.ctrl));
     if (taken) keys.companion = keys.companion.filter((b) => b.code !== "KeyC" || b.alt || b.ctrl);
+  }
+  // Version 15: G gets (Pick Up) in the modern preset too, unless G was already taken
+  if (version < 15 && preset === "modern") {
+    const taken = Object.values(keys).some((list) => list.some((b) => b.code === "KeyG" && !b.alt && !b.ctrl));
+    if (!taken) keys.interact = [{ code: "KeyG" }, ...keys.interact];
   }
   delete (out as SavedSettings).mouseSpeed;
   delete (out as SavedSettings).rightClickLooks;

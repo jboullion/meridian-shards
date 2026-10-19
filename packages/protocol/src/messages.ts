@@ -787,6 +787,10 @@ export const UC = {
   COMPANION: 109,
   /** Ours: a tailor's or barber's menu (docs/adr/0012-cosmetics.md) */
   COSMETICS: 110,
+  /** Ours (docs/adr/0016-abilities.md): a command about one object, what we can train, and whether an item can be appraised */
+  SHARDS_OBJECT: 111, TRAINING: 112, APPRAISAL: 113,
+  /** Ours: the signet rings we carry, for the quest log (docs/adr/0009-quests.md) */
+  SIGNETS: 114,
 } as const;
 
 /**
@@ -795,6 +799,14 @@ export const UC = {
  */
 export function buildShardsCommand(line: string): Uint8Array {
   return new ByteWriter().u8(BP.USERCOMMAND).u8(UC.SHARDS).string(line).finish();
+}
+
+/**
+ * UC_SHARDS_OBJECT (ours): a command line about one object ("train 2", "appraise 500", "vault"),
+ * as UC_SHARDS's line can't name an object (user.kod ShardsObjectCommand).
+ */
+export function buildShardsObjectCommand(id: number, line: string): Uint8Array {
+  return new ByteWriter().u8(BP.USERCOMMAND).u8(UC.SHARDS_OBJECT).u32(objId(id)).string(line).finish();
 }
 
 /** UC_APPEAL: a message to the game's staff (merintr.h RequestAppeal). */

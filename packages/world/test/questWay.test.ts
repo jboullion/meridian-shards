@@ -46,6 +46,20 @@ describe("the way to a quest's rooms", () => {
     expect(exitsTo(EXITS, "tos.roo", "toseast.roo")).toEqual([{ kind: "edge", side: "E" }]);
   });
 
+  it("marks a doorway several squares wide once, at its middle", () => {
+    // raza.roo's inn door is two squares; the museum's lists one square twice
+    const wide: Record<string, AmbientExits> = {
+      "raza.roo": {
+        doors: [[7, 26, "razainn.roo"], [7, 27, "razainn.roo"], [27, 15, "razamuseum.roo"], [27, 14, "razamuseum.roo"], [27, 14, "razamuseum.roo"], [11, 48, "razaapoth.roo"], [12, 48, "razaapoth.roo"], [11, 49, "razaapoth.roo"], [12, 49, "razaapoth.roo"]],
+        edges: [],
+        arrivals: [],
+      },
+    };
+    expect(exitsTo(wide, "raza.roo", "razainn.roo")).toEqual([{ kind: "door", row: 7, col: 26.5 }]);
+    expect(exitsTo(wide, "raza.roo", "razamuseum.roo")).toEqual([{ kind: "door", row: 27, col: 14.5 }]);
+    expect(exitsTo(wide, "raza.roo", "razaapoth.roo")).toEqual([{ kind: "door", row: 11.5, col: 48.5 }]);
+  });
+
   it("leads to the area while the step counts up", () => {
     const w = questWay(EXITS, rooFor, "tos.roo", step({}), 2);
     expect(w).toMatchObject({ inArea: false, atTurnin: false, marks: [{ kind: "door", row: 45, col: 32 }] });

@@ -4,7 +4,9 @@
 //     black), blurred (a dual-filter blur down a chain of ever smaller targets and back up)
 //     and added over the view.
 //   - Vignette (Enhanced): the corners a little darker.
-// Colours are 8-bit and untouched otherwise, so with all three off the picture is the
+//   - Grading (Enhanced's moods, moods.ts): exposure, saturation, contrast, and a tint for
+//     the shadows and one for the highlights.
+// Colours are 8-bit and untouched otherwise, so with all of them off the picture is the
 // same as drawing straight to the screen (which GameScene then does instead).
 
 import * as THREE from "three";
@@ -15,10 +17,21 @@ export interface PostFxOptions {
   bloom: number;
   /** How much darker the corners are, 0 for none */
   vignette: number;
+  /** Colour grading (a mood's); none leaves the colours as they are */
+  grade?: ColourGrade | null;
+}
+
+export interface ColourGrade {
+  exposure: number;
+  saturation: number;
+  contrast: number;
+  /** Multiply the dark end and the bright end, blended by brightness */
+  shadowGain: readonly [number, number, number];
+  highlightGain: readonly [number, number, number];
 }
 
 /** Whether these options need the render target at all. */
-export const postFxActive = (o: PostFxOptions): boolean => o.bloom > 0 || o.vignette > 0;
+export const postFxActive = (o: PostFxOptions): boolean => o.bloom > 0 || o.vignette > 0 || !!o.grade;
 
 /** Blur levels: each a quarter of the one before, from the glow pass's half size */
 const LEVELS = 5;
@@ -72,9 +85,22 @@ uniform sampler2D uBloom;
 uniform float uBloomStrength;
 uniform float uVignette;
 uniform float uAspect;
+uniform float uGrade;
+uniform vec3 uGrading; // exposure, saturation, contrast
+uniform vec3 uShadowGain;
+uniform vec3 uHighlightGain;
+// Contrast turns about this grey
+const float PIVOT = 0.3;
 void main() {
   vec3 c = texture(uScene, vUv).rgb;
   if (uBloomStrength > 0.0) c += texture(uBloom, vUv).rgb * uBloomStrength;
+  if (uGrade > 0.5) {
+    c *= uGrading.x;
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    c = mix(vec3(l), c, uGrading.y);
+    c = max(vec3(0.0), (c - PIVOT) * uGrading.z + PIVOT);
+    c *= mix(uShadowGain, uHighlightGain, smoothstep(0.05, 0.85, l));
+  }
   if (uVignette > 0.0) {
     vec2 p = (vUv - 0.5) * vec2(uAspect, 1.0);
     c *= 1.0 - uVignette * smoothstep(0.45, 1.05, length(p) * 1.15);
@@ -109,6 +135,10 @@ export class PostFx {
     uBloomStrength: { value: 0 },
     uVignette: { value: 0 },
     uAspect: { value: 1 },
+    uGrade: { value: 0 },
+    uGrading: { value: new THREE.Vector3(1, 1, 1) },
+    uShadowGain: { value: new THREE.Vector3(1, 1, 1) },
+    uHighlightGain: { value: new THREE.Vector3(1, 1, 1) },
   });
 
   constructor() {
@@ -185,6 +215,13 @@ export class PostFx {
     }
     u.uScene.value = this.scene!.texture;
     u.uVignette.value = options.vignette;
+    const g = options.grade;
+    u.uGrade.value = g ? 1 : 0;
+    if (g) {
+      u.uGrading.value.set(g.exposure, g.saturation, g.contrast);
+      u.uShadowGain.value.set(...g.shadowGain);
+      u.uHighlightGain.value.set(...g.highlightGain);
+    }
     u.uAspect.value = this.width / Math.max(1, this.height);
     this.pass(renderer, this.compositeMaterial, null);
   }

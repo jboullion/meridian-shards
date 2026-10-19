@@ -24,11 +24,11 @@ export type Insignia = keyof typeof INSIGNIA;
 export const FACTIONS = ["neutral", "duke", "princess", "rebel", "any"] as const;
 export type Faction = (typeof FACTIONS)[number];
 
-export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion"] as const;
+export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
 /** Steps that happen by doing something, once (the guide chains' kinds): done by themselves unless `auto` is false */
-export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion"];
+export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune"];
 
 /** How a quest's markers look: gold for the main and levelling chains, silver for story quests, bronze for errands */
 export const TIERS = ["main", "story", "errand"] as const;
@@ -40,7 +40,9 @@ export type Tier = (typeof TIERS)[number];
  * the hand-in; deliver gives a parcel at the start of the step and takes it back at the hand-in.
  * The action kinds happen once: cast a spell, deposit shillings with a banker, stash an item with
  * a vault keeper, buy from someone, equip one of some items, reach a health, choose a hometown,
- * bond with every mana node, have a companion (docs/adr/0010-followers.md).
+ * bond with every mana node, have a companion (docs/adr/0010-followers.md), learn a skill (one of
+ * `skills`, or done at once if we know them all), attune to a portal (`point`, docs/adr/0011; a
+ * quest that starts with one isn't offered once we're attuned).
  */
 export interface QuestStep {
   kind: StepKind;
@@ -56,6 +58,10 @@ export interface QuestStep {
   amount?: number;
   /** equip: any one of these item classes */
   items?: string[];
+  /** learn: skill classes; learning any one counts, and knowing them all already does too */
+  skills?: string[];
+  /** attune: the travel point (util/travelnet.kod GetPoints id) */
+  point?: number;
   /** The tracker's line ("Rats slain"); made up from the step when left out */
   objective?: string;
   /** What the giver says as the step begins (the offer window, the log); the quest's offer for the first */
@@ -125,6 +131,11 @@ export interface Quest {
     quests?: number[];
     /** Not offered once any of these is done or going (the same errand from another giver) */
     notQuests?: number[];
+    /**
+     * Offered only while the player's base health is under this (Raza's repeatable hunts, until
+     * the road to Marion at 30). The band's max is only a suggestion; this is a rule
+     */
+    healthBelow?: number;
     karmaMin?: number | null;
     karmaMax?: number | null;
     faction?: Faction;
@@ -139,6 +150,12 @@ export interface Quest {
   };
   /** null: once. Else again after the cooldown */
   repeat?: { cooldownHours: number } | null;
+  /**
+   * Not offered for now (QuestBook's QBQ_PAUSED need), without retiring it: a player who has it
+   * going can still finish it, and taking the flag off brings it back (the Road through Meridian,
+   * paused 2026-10-18 to be broken into smaller quests)
+   */
+  paused?: boolean;
   timeLimitMinutes?: number | null;
   text: { offer: string; progress?: string; complete: string };
   steps: QuestStep[];
@@ -218,11 +235,14 @@ export function checkQuestShape(q: unknown, where: string): string[] {
         if (r[k] !== undefined && r[k] !== null && !isInt(r[k], -100, 100)) errs.push(`${where}: requires.${k}: -100 to 100`);
       if (r.faction !== undefined && !FACTIONS.includes(r.faction as Faction)) errs.push(`${where}: requires.faction: one of ${FACTIONS.join(", ")}`);
       if (r.notQuests !== undefined && (!Array.isArray(r.notQuests) || !r.notQuests.every((x) => Number.isInteger(x)))) errs.push(`${where}: requires.notQuests: quest ids`);
+      if (r.healthBelow !== undefined && (!isInt(r.healthBelow, 1, 10000) || (isObj(q.band) && isInt(q.band.min) && r.healthBelow <= q.band.min)))
+        errs.push(`${where}: requires.healthBelow: a health above the band's min`);
       for (const k of ["intriguing", "guildMaster", "guildShield", "noGuild"] as const) if (r[k] !== undefined && typeof r[k] !== "boolean") errs.push(`${where}: requires.${k}: true or false`);
     }
   }
   if (q.repeat !== undefined && q.repeat !== null && (!isObj(q.repeat) || typeof q.repeat.cooldownHours !== "number" || q.repeat.cooldownHours < 0 || q.repeat.cooldownHours > 24 * 365))
     errs.push(`${where}: repeat: null, or { cooldownHours }`);
+  if (q.paused !== undefined && typeof q.paused !== "boolean") errs.push(`${where}: paused: true or false`);
   if (q.timeLimitMinutes !== undefined && q.timeLimitMinutes !== null && !isInt(q.timeLimitMinutes, 1, 60 * 24 * 30))
     errs.push(`${where}: timeLimitMinutes: null, or minutes`);
   if (!isObj(q.text) || !isText(q.text.offer) || !isText(q.text.complete) || (q.text.progress !== undefined && typeof q.text.progress !== "string"))
@@ -299,6 +319,12 @@ function checkStepShape(s: unknown, where: string): string[] {
       break;
     case "equip":
       if (!Array.isArray(s.items) || !s.items.length || !s.items.every(isText)) errs.push(`${where}: items: item classes, any one of them`);
+      break;
+    case "learn":
+      if (!Array.isArray(s.skills) || !s.skills.length || !s.skills.every(isText)) errs.push(`${where}: skills: skill classes, any one of them`);
+      break;
+    case "attune":
+      if (!isInt(s.point, 1)) errs.push(`${where}: point: a travel point's id`);
       break;
     case "health":
       if (s.amount === undefined) errs.push(`${where}: amount: the health to reach`);

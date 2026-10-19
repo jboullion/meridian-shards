@@ -3,8 +3,10 @@
 //     Sidebar.tsx HudBars) and our enchantments under them. The phone has it too (TouchControls.tsx).
 //   - TargetFrame, top centre: what's targeted, and a button to clear it
 //   - MapCluster, top right: the minimap in a round frame (a click opens the full map), the
-//     toolbar's Rest/Stand and mailbox at its top corners and its zoom buttons at the bottom, and
-//     the room's name and enchantments. The character window and the rest have keys.
+//     toolbar's Rest/Stand and mailbox at its top corners and its zoom buttons at the bottom, the
+//     room's name under it and the room's enchantments to its left. The character window and the
+//     rest have keys.
+//   - The quest box (QuestBox.tsx), on the right under the map, moved and sized like the chat.
 //   - ActionBar, bottom centre: the quick slots (Hotbar) alone, as on the phone.
 //     The hands stay in the view's corners, as in Classic: their art is cut off along the outer
 //     edge (it's meant to run off the screen), so anywhere else the swing shows a straight cut.
@@ -152,12 +154,10 @@ function MapButton({ label, className, onClick, children }: {
 }
 
 export function MapCluster({
-  session, icons, assets, settings, buttons, getRoom, roomName, annotations, onAnnotate, onLook, onZoom, onMap, tracker, getWay,
+  session, icons, assets, settings, buttons, getRoom, roomName, annotations, onAnnotate, onLook, onZoom, onMap, getWay,
 }: {
   /** Ours (docs/adr/0009-quests.md 5): tracked quests' areas and the way to them, for the map */
   getWay?: () => MapWay | null;
-  /** Ours (docs/adr/0009-quests.md 4.2): the quest tracker, under the map */
-  tracker?: ReactNode;
   /** The toolbar's Rest/Stand and mailbox, at the map's top corners (none with Show toolbar off) */
   buttons?: ToolbarButton[];
   session: GameSession;
@@ -207,8 +207,8 @@ export function MapCluster({
         ))}
       </div>
       {roomName && <div className="map-room-name">{roomName}</div>}
+      {/* Left of the map, along its top (styles.css .map-cluster .modern-enchantments) */}
       <Enchantments session={session} icons={icons} kind="room" tooltips={settings.tooltips} onLook={onLook} />
-      {tracker}
     </div>
   );
 }

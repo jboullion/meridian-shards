@@ -18,6 +18,7 @@ import { MiniMap } from "./MiniMap.tsx";
 import type { MapWay } from "../questWays.ts";
 import type { MapAnnotation } from "../annotations.ts";
 import { DRAG_SPELL } from "../quickSlots.ts";
+import { statRows } from "../statRows.ts";
 import { Button } from "./kit.tsx";
 
 /** include/proto.h OF_APPLYABLE: used on something else */
@@ -268,10 +269,12 @@ export function HudEnchantments({
 
 export function Sidebar({
   session, icons, assets, getRoom, tab, onTab, settings, onLookItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, target, selecting, onSelectObject, onCast,
-  annotations, onAnnotate, friendsPanel, petsPanel, questsPanel, companionPanel, getWay, onStudy, studying, onEmotes,
+  annotations, onAnnotate, friendsPanel, petsPanel, questsPanel, companionPanel, getWay, onStudy, studying, onEmotes, onTrain,
 }: {
   /** Ours: a click on our face, when not picking a target, shows the Quick Emotes (Q) */
   onEmotes?: () => void;
+  /** Ours: the Stats tab's Train button (docs/adr/0016-abilities.md) */
+  onTrain?: () => void;
   /** Ours: the Spells tab's Study button (StatList) */
   onStudy?: () => void;
   studying?: boolean;
@@ -419,7 +422,7 @@ export function Sidebar({
             tooltips={settings.tooltips}
           />
         ) : tab === "stats" ? (
-          <NumericStats stats={world.stats.get(STAT_GROUP.STATS) ?? []} rs={rs} />
+          <NumericStats stats={world.stats.get(STAT_GROUP.STATS) ?? []} rs={rs} english={(id) => session.englishResource(id)} onTrain={onTrain} />
         ) : tab === "friends" ? (
           friendsPanel
         ) : tab === "pets" ? (
@@ -639,22 +642,42 @@ export function Inventory({
   );
 }
 
-/** statnum.c: name on the left; a bar with the number, or a resource string, on the right. */
-export function NumericStats({ stats, rs }: { stats: Statistic[]; rs: (id: number) => string }) {
+/**
+ * statnum.c: name on the left; a bar with the number, or a resource string, on the right. Ours
+ * (statRows.ts): training points first with Train beside them, a divider after Aim, and no
+ * Karma, Unbound Energy, Weight or Bulk.
+ */
+export function NumericStats({
+  stats, rs, english, onTrain,
+}: {
+  stats: Statistic[];
+  rs: (id: number) => string;
+  /** A stat's name in English, for the rows matched by name */
+  english?: (id: number) => string | null | undefined;
+  /** Ours: the Train window (docs/adr/0016-abilities.md) */
+  onTrain?: () => void;
+}) {
   return (
     <div className="stat-rows">
-      {[...stats]
-        .sort((a, b) => a.num - b.num)
-        .map((s) => (
-          <div className="stat-row" key={s.num}>
-            <span className="stat-name">{rs(s.nameRes)}</span>
-            {s.numeric?.tag === STAT_TAG.RES ? (
-              <span className="stat-value">{rs(s.numeric.value)}</span>
-            ) : s.numeric ? (
-              <StatBar stat={s} />
+      {statRows(stats, english).map((row, i) =>
+        row.kind === "divider" ? (
+          <div className="stat-divider" role="separator" key={`divider-${i}`} />
+        ) : (
+          <div className={row.training && onTrain ? "stat-row training" : "stat-row"} key={row.stat.num}>
+            <span className="stat-name">{rs(row.stat.nameRes)}</span>
+            {row.stat.numeric?.tag === STAT_TAG.RES ? (
+              <span className="stat-value">{rs(row.stat.numeric.value)}</span>
+            ) : row.stat.numeric ? (
+              <StatBar stat={row.stat} />
             ) : null}
+            {row.training && onTrain && (
+              <Button className="stat-train" title="Spend training points on a spell or skill" onClick={onTrain}>
+                Train
+              </Button>
+            )}
           </div>
-        ))}
+        ),
+      )}
     </div>
   );
 }

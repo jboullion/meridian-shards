@@ -345,7 +345,7 @@ export function Text({ at: r, wrap, className, children }: { at?: Rect; wrap?: b
 
 /** PUSHBUTTON / DEFPUSHBUTTON: a stone bevel. */
 export function Button({
-  at: r, isDefault, disabled, onClick, type = "button", className, title, children,
+  at: r, isDefault, disabled, onClick, type = "button", className, title, label, children,
 }: {
   at?: Rect;
   isDefault?: boolean;
@@ -354,6 +354,8 @@ export function Button({
   type?: "button" | "submit";
   className?: string;
   title?: string;
+  /** Its name for screen readers, when it shows a picture rather than words */
+  label?: string;
   children: ReactNode;
 }) {
   return (
@@ -364,6 +366,7 @@ export function Button({
       disabled={disabled}
       onClick={onClick}
       title={title}
+      aria-label={label}
     >
       {children}
     </button>

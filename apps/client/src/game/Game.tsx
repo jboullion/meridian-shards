@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CharInfo, CharacterSlot } from "@shards/protocol";
 import { SAY } from "@shards/protocol";
 import {
-  GameSession, type ChatLine, type ContainerContents, type DamageDealt, type LookResult, type OfferEvent, type QuestEvent, type CosmeticsEvent, type SessionPhase, type SocialEvent, type TradeList, type TravelEvent,
+  GameSession, type ChatLine, type ContainerContents, type DamageDealt, type LookResult, type OfferEvent, type QuestEvent, type CosmeticsEvent, type TrainingCost, type Appraisal, type SessionPhase, type SocialEvent, type TradeList, type TravelEvent,
   type MailNewsEvent, type GuildEvent, type MinigameEvent, localResName } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
@@ -52,6 +52,10 @@ interface Live {
   questOffers: Relay<Extract<QuestEvent, { type: "offers" }>>;
   /** Ours (docs/adr/0012-cosmetics.md): a tailor's or barber's menu */
   cosmetics: Relay<CosmeticsEvent>;
+  /** Ours (docs/adr/0016-abilities.md): the abilities we can train, and their prices */
+  training: Relay<TrainingCost[]>;
+  /** Ours: whether an item of ours can be appraised, and its price (docs/adr/0016-abilities.md) */
+  appraisal: Relay<Appraisal>;
   /** Ours (docs/adr/0010-followers.md): our companion, kept from its first status at logon */
   companion: CompanionStore;
   offers: Relay<OfferEvent>;
@@ -190,6 +194,8 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     const quests = new QuestStore(assets, (text) => speak(text));
     const questOffers = new Relay<Extract<QuestEvent, { type: "offers" }>>();
     const cosmetics = new Relay<CosmeticsEvent>();
+    const training = new Relay<TrainingCost[]>();
+    const appraisal = new Relay<Appraisal>();
     const companion = new CompanionStore();
     const offers = new Relay<OfferEvent>();
     const looks = new Relay<LookResult>();
@@ -259,6 +265,8 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
         social: social.emit,
         quest: (e) => (e.type === "offers" ? questOffers.emit(e) : quests.handle(e)),
         cosmetics: (e) => cosmetics.emit(e),
+        training: training.emit,
+        appraisal: appraisal.emit,
         companion: (e) => companion.handle(e),
         offer: offers.emit,
         sound: (e) => audio.handle(e),
@@ -271,7 +279,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     s.setLanguage(getSettings().language);
     void loadProfanity(assets);
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, quests, questOffers, cosmetics, companion, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, quests, questOffers, cosmetics, training, appraisal, companion, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
   };
 
   const logout = () => {
@@ -376,6 +384,8 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       quests={live.quests}
       questOffers={live.questOffers.on}
       cosmetics={live.cosmetics.on}
+      training={live.training.on}
+      appraisal={live.appraisal.on}
       companion={live.companion}
       offers={live.offers.on}
       phase={phase}
