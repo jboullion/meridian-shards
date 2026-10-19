@@ -346,3 +346,26 @@ Each wears a herald shield (`GuildShield`) in its faction's colours with its fac
 - **Removed:** kinds 4-7 and their names, halls and palettes; `IsCaster`, `GetHeals`, `GetDiscipleQuest`, the healer's `SupportTimer`; guide quests 243-246. Quests 240-242 remain, their offers rewritten.
 
 **Not yet tried:** all of it, in game.
+
+### Round 2: support for all three (2026-10-19)
+
+**Decided with the user:** the Duke's and Princess's companions support their owner too, Jonas's adds Jala's songs (only while calm), and the touch strikes go: in reach they use their weapon. Artifice (Riija's) turned out to be a trading illusion with no combat effect, so the Duke's casts Qor's Unholy Weapon instead.
+
+| Owner health | Duke | Princess | Jonas |
+|---|---|---|---|
+| 50 | Splash of Acid · Shadow Form | Fireball/Ice Shard · Minor Heal | Bless · Invigorate |
+| 70 | Blind · Unholy Weapon | Lightning Bolt · Holy Weapon | Magic Shield · Restorate |
+| 90 | Reflection | Umbrella | Armor of Gort · Rejuvenate |
+
+- **One support timer** (`Companion.SupportTimer`, every 2 s, `CompanionKinds.GetSupport`'s `[spell, mana, COMP_SUP_*]`). It gives back 3% of its mana each time (monsters regained none, so round 1's casters ran dry), then, with its owner in its room:
+  - **Enchantments** (Bless, Magic Shield, Gort, Shadow Form): every 30 minutes, those they lack, lasting 30 minutes (`BuffOwner`).
+  - **Holy or Unholy Weapon:** in that round and whenever they wield a weapon it hasn't looked at (`EnchantWeapon`). It does what `holywp.kod`/`unholywp.kod` do itself, since those want their caster to hold the weapon, and never overwrites another attack spell or Enchant Weapon. Lasts the spell's hours.
+  - **Minor Heal:** below 75% health, at most every 10 s, by `CastAt`.
+  - **Umbrella** while fighting, **Reflection** (one every 20 s up to the player limit) while fighting; both gone once calm (`SYS.DeletePlayerReflections`).
+  - **Songs** while calm (no blow for 10 s and no target), stopped the moment it fights or is fought (`MarkFight`, from `TryAttack`, `AssessDamage` and its owner's attack or defend command), since they soothe everyone in range, foes too.
+  - Nothing in a safe room but the heal, unless buffing others is allowed there.
+- **Radius spells** (Umbrella, the songs) are the real ones, cast by `CastSpell(#who=companion)`; a monster can hold them (`nomoveon.kod`). `radiusench.kod CanEnchantUser` gained one rule: a companion's reach its owner, and others as if its owner had cast them (Umbrella's guild rule only knew players). They end when it leaves a room, falls, waits, turns passive or is deleted (`StopSupport`).
+- **Reflection** is `summrefl.kod`'s own cast, the companion the original; `reflectn.kod` already copies a monster's look and drains it nothing. `Companion.HasSpell` answers FALSE for `Reflection.Constructor`.
+- **Mana:** 60 + two thirds of the owner's base health.
+
+**Not yet tried:** all of it, in game. Watch the songs and dome (a companion as a radius source is new) and how reflections of a companion pick their targets.

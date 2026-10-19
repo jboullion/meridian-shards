@@ -480,7 +480,8 @@ function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }
           <dt>Companion (C)</dt>
           <dd>
             A companion who fights at your side and carries a pack for you, sworn to you from 50 health by your faction's leader: the Duke's battle-mage (an axe and
-            Qor's acids), the Princess's spellsword (a hammer and Faren's fire or ice) or the rebels' war-priest (a scimitar, and Kraanan's blessings on you). Its spells grow with you. Its stance, its pack, its looks, dismissing it and fetching it. Double-click it to give it things.
+            Qor's acids; shadow, an unholy blade and reflections for you), the Princess's spellsword (a hammer and Faren's fire or ice; heals, a holy blade and Shal'ille's
+            umbrella) or the rebels' war-priest (a scimitar; Kraanan's blessings, and Jala's songs between fights). Its spells grow with you. Its stance, its pack, its looks, dismissing it and fetching it. Double-click it to give it things.
           </dd>
           <dt>Tailors and barbers</dt>
           <dd>

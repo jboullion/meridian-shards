@@ -103,7 +103,7 @@ export function CompanionsTab({ act, me }: { act: Act; me: GameReport | null }) 
             <button onClick={action("My companion", "state")}>Refresh</button>
           </div>
           <p className="dim">
-            Give me one skips the rules (health, faction). Its spells come with your health (a second at 70, a third at 90). Kill it leaves a corpse for Restore Companion (Shal'ille) for 10 minutes, then it recovers at its leader's hall for an hour; Recover now ends the hour.
+            Give me one skips the rules (health, faction). Its spells come with your health (more at 70 and 90): the Duke's Splash of Acid, Blind, Shadow Form, Unholy Weapon, Reflection; the Princess's Fireball/Ice Shard, Lightning Bolt, Minor Heal, Holy Weapon, Umbrella; Jonas's Bless, Magic Shield, Armor of Gort and the Jala songs (out of combat). Kill it leaves a corpse for Restore Companion (Shal'ille) for 10 minutes, then it recovers at its leader's hall for an hour; Recover now ends the hour.
           </p>
         </>
       )}
