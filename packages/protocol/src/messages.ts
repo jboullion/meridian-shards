@@ -791,6 +791,8 @@ export const UC = {
   SHARDS_OBJECT: 111, TRAINING: 112, APPRAISAL: 113,
   /** Ours: the signet rings we carry, for the quest log (docs/adr/0009-quests.md) */
   SIGNETS: 114,
+  /** Ours: the season, the year and its day (docs/adr/0018-seasons-water-windows.md) */
+  SEASON: 115,
 } as const;
 
 /**

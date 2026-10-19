@@ -14,7 +14,7 @@ import { FINENESS, SF, ceilingHeightAt, floorHeightAt, gridTextureName, leafAt, 
 import {
   DRAWFX, Flyers, GroundCover, Lightning, Nature, OF, ObjectsView, Puddles, type PuddleRoom, type GroundKind, type GroundRoom, type NatureRoom, type RockArt, PARTICLE_STEPS_PER_SECOND, PostFx, RoomView, SkyOverlaysView, TrailBlur, WeatherParticles, XlatTable, type ParticleRoom, disposeSkybox, objectBrightness, paletteTexture, postFxActive, type LightSource,
   type PostFxOptions,
-  type NameLabel, type ViewObject, type SpriteMood, moodUniforms, sunAt,
+  type NameLabel, type ViewObject, type SpriteMood, moodUniforms, renderTune, sunAt, effectUniforms, roomSurfaceTextures,
 } from "@shards/render";
 import {
   AMBIENT_ROOMS, AMBIENT_SCALE, type AmbientRoomSpec, AmbientLife, LiveRoom, MOVEON, PlayerMover, REMOTE_VIEW, animStep, isAmbientId, localRes, localResName, townsfolkArt,
@@ -30,6 +30,7 @@ import { sceneTune } from "./sceneTuning.ts";
 import { markerFor, MM_OURS, MM_QUEST_NPC } from "./markers.ts";
 import { startDevBridge } from "./devBridge.ts";
 import { MoodDirector, type MoodFrame } from "./mood.ts";
+import { SEASON_NATURE, hasSeasons } from "./seasonZone.ts";
 import { loadSkybox, type LoadedRoom } from "../render/roomLoader.ts";
 import { ORIGINAL_FOV } from "../viewer/roomScene.ts";
 import { AmbientSounds } from "./ambientSounds.ts";
@@ -329,6 +330,10 @@ export class GameScene {
   private blur: TrailBlur | null = null;
   /** Ours: Anti Aliasing, glowing flames and the vignette (postFx.ts), made when first needed */
   private postFx: PostFx | null = null;
+  /** Dev tools: the season to show (0 spring .. 3 winter) instead of the server's; null: the server's */
+  seasonPin: number | null = null;
+  /** Ours (Seasons): how much snow lies on open ground, 0..1: it builds while it snows, melts after */
+  private snowCover = 0;
   /** Ours, Enhanced: the lighting's moods (mood.ts), and this frame's (null with Enhanced off) */
   private readonly moods = new MoodDirector();
   private moodFrame: MoodFrame | null = null;
@@ -602,6 +607,19 @@ export class GameScene {
     const [pal, lightPal] = await Promise.all([this.assets.palette(), this.assets.lightPalettes()]);
     if (this.disposed) return;
     this.palette = paletteTexture(pal);
+    // Ours (docs/adr/0018-seasons-water-windows.md): which textures are water, grass and foliage, and
+    // windows' glass, before any room is built with them
+    const [water, floors, foliage, windows] = await Promise.all([
+      this.assets.waterTextures().catch(() => new Set<number>()),
+      this.assets.floorTextures().catch(() => new Map()),
+      this.assets.foliageTextures().catch(() => new Set<number>()),
+      this.assets.windowTextures().catch(() => new Map()),
+    ]);
+    if (this.disposed) return;
+    roomSurfaceTextures.water = water;
+    roomSurfaceTextures.grass = new Set([...floors].filter(([, f]) => f.kind === "grass").map(([t]) => t));
+    roomSurfaceTextures.foliage = foliage;
+    roomSurfaceTextures.windows = windows;
     this.rooms = new RoomCache(this.assets, this.palette, (l) => this.prepareRoom(l));
     this.xlats = new XlatTable(pal.rgb, lightPal);
     this.objects = new ObjectsView(this.palette, this.xlats, (id) => this.bgf(id), (id) => this.session.resource(id));
@@ -1068,6 +1086,7 @@ export class GameScene {
     const enhanced = this.settings.enhanced;
     // Its moods: the sun, the light's tint, haze and grading (mood.ts)
     const mood = enhanced ? this.applyMood(room, now, dt) : this.noMood();
+    this.applySurfaceEffects(now, dt, mood);
     const ctx = {
       room,
       roomFlags: world.player?.roomFlags ?? 0,
@@ -1559,6 +1578,49 @@ export class GameScene {
     return m;
   }
 
+  /** The season this room shows (0 spring .. 3 winter), or null: none here, or the option off */
+  private seasonHere(): number | null {
+    if (!this.settings.seasons || !hasSeasons(this.roomFile, this.terrainHere())) return null;
+    return this.seasonPin ?? this.session.world.season?.season ?? null;
+  }
+
+  /**
+   * Ours (docs/adr/0018-seasons-water-windows.md): the seasons, the snow on the ground, Enhanced
+   * Water and the windows' glow, handed to the room's shader (surfaceEffects.ts effectUniforms)
+   */
+  private applySurfaceEffects(now: number, dt: number, mood: MoodFrame | null): void {
+    const u = effectUniforms;
+    const world = this.session.world;
+    u.uTime.value = (now / 1000) % 3600;
+    const season = this.seasonHere();
+    u.uSeasonOn.value = season === null ? 0 : 1;
+    u.uSeason.value = season ?? 1;
+    u.uSeasonStrength.value = renderTune("seasonStrength");
+    // Snow lies while it snows here under the sky, and melts after
+    const snowing = this.settings.seasons && this.settings.weather && world.effects.snowing && this.roomHasSky;
+    const build = renderTune("snowBuildS") * 1000,
+      melt = renderTune("snowMeltS") * 1000;
+    this.snowCover = Math.max(0, Math.min(1, this.snowCover + (snowing ? dt / build : -dt / melt)));
+    u.uSnow.value = this.settings.seasons ? this.snowCover : 0;
+    // Enhanced Water: the sky it shows (the mood's haze, or a plain one by the room's light), the sun's glint
+    u.uWaterOn.value = this.settings.enhancedWater ? 1 : 0;
+    u.uWaterTune.value = [renderTune("waterReflect"), renderTune("waterWaves"), renderTune("waterWobble")];
+    if (mood) {
+      // The sky low over the water: the haze, a little bluer and darker
+      const h = mood.mood.hazeColor;
+      u.uWaterSky.value = [h[0] * 0.7, h[1] * 0.78, h[2] * 0.9];
+      u.uWaterGlint.value = [mood.sunColor[0] * 1.6, mood.sunColor[1] * 1.6, mood.sunColor[2] * 1.6];
+      u.uWaterSunDir.value = mood.sunDir;
+    } else {
+      const k = world.lighting.ambient / 255;
+      u.uWaterSky.value = [0.5 * k, 0.56 * k, 0.62 * k];
+      u.uWaterGlint.value = [0, 0, 0];
+    }
+    // The windows' glass, by the mood (Enhanced Lighting)
+    u.uWindowGlow.value = mood ? mood.mood.windowGlow * renderTune("moodWindows") : 0;
+    u.uWindowDaylight.value = mood ? mood.mood.windowDaylight * renderTune("moodWindows") : 0;
+  }
+
   /** Enhanced off: the original's lighting, no mood */
   private noMood(): null {
     moodUniforms.uMoodOn.value = 0;
@@ -1669,13 +1731,17 @@ export class GameScene {
     const t = this.terrainHere() ?? [];
     const has = (...names: string[]) => names.some((n) => t.includes(n));
     const green = has("FOREST", "FIELDS", "HILLS", "JUNGLE");
+    // Ours (Seasons): leaves turn in fall, butterflies and fireflies thin out toward winter
+    const season = this.seasonHere();
+    nature.setSeason(season);
+    const bySeason = (k: keyof typeof SEASON_NATURE) => (season === null ? 1 : SEASON_NATURE[k][season]);
     const hour = this.gameHour();
     const day = hour === null || (hour >= 7 && hour < 19);
     const night = hour !== null && (hour >= 20 || hour < 5);
     const opts = {
-      butterflies: green && day && !world.effects.raining ? Math.round(sceneTune("butterflies") * scale) : 0,
-      fireflies: night && (green || has("SWAMP", "LAKE", "RIVER")) ? Math.round(sceneTune("fireflies") * scale) : 0,
-      leaves: has("FOREST", "JUNGLE") ? Math.round(sceneTune("leaves") * scale) : 0,
+      butterflies: green && day && !world.effects.raining ? Math.round(sceneTune("butterflies") * scale * bySeason("butterflies")) : 0,
+      fireflies: night && (green || has("SWAMP", "LAKE", "RIVER")) ? Math.round(sceneTune("fireflies") * scale * bySeason("fireflies")) : 0,
+      leaves: has("FOREST", "JUNGLE") ? Math.round(sceneTune("leaves") * scale * bySeason("leaves")) : 0,
       fish: scale > 0 && !has("SEWERS", "CAVES", "MINES"),
     };
     const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
@@ -1707,6 +1773,8 @@ export class GameScene {
     }
     const buffer = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     cover.setProjection(buffer.y, this.camera.fov);
+    // Ours (Seasons): the tufts take the season, and the snow
+    cover.setSeason(this.seasonHere(), this.settings.seasons ? this.snowCover : 0);
     cover.update(dt, { x: this.mover.x, y: this.mover.y });
   }
 
@@ -1843,6 +1911,8 @@ export class GameScene {
     // No rocks in towns, castles and the like: by the room's terrain, or as ambient life knows it
     // (the castles' rooms mostly have no terrain)
     const town = t.some((n) => SETTLED.has(n)) || this.crowdHere() !== undefined;
+    // Beaches have fewer rocks (2026-10-18 play test: half)
+    const rocks = t.includes("BEACH") ? renderTune("beachRocks") : 1;
     return {
       spot: (x, y) => {
         const leaf = leafAt(room, x, y);
@@ -1852,7 +1922,7 @@ export class GameScene {
         if (s.ceilingType !== 0 && !cave) return null;
         const f = this.floorTextures.get(s.floorType);
         // Cobbles (a road) get nothing strewn on them, but in a cave
-        return f ? { floor: floorHeightAt(s, x, y), kind: f.kind, color: f.color, town, bare: f.cobbled && !cave } : null;
+        return f ? { floor: floorHeightAt(s, x, y), kind: f.kind, color: f.color, town, bare: f.cobbled && !cave, rocks } : null;
       },
       light: (x, y, z) => {
         const leaf = leafAt(room, x, y);

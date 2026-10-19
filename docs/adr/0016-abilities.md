@@ -72,3 +72,16 @@ Play-testing the Stats and Spells tabs showed what the original left there:
 - Training is a window, not a spoken trance, and costs the same.
 - New characters start with Blink and Phase only.
 - The six quests gated on karma (`questbook.kod`) still can't be offered, as before: karma is always 0. That's for another change.
+
+## Skill practice (2026-10-18)
+
+Weapon skills improved too slowly in the play test, and the reason was the original's gate: a stroke or weapon skill could only improve on a hit after 75 swings (`piWeaponcraftImprovementMinimumSwings`) since the last gain or weapon change, and each hit tried only one of the two (60% the weapon). Doubling the tries (`viImprove_percent`) barely mattered while the gate set the pace. The improvement code also read the skill's ability as a *spell's* (`GetSpellAbility` with the skill's number), so skill % never slowed it down and the soft cap never applied.
+
+**Decision:** practice, for every skill (`skill.kod ImproveAbility`): weapons, strokes, brawling, parry, block, dodge, disarm, Second Wind. Spells keep their own formula (`spell.kod`, `piAdvancementRate`).
+
+- **Every use is one roll** at the skill's starting chance plus 1/20 of it for each use since the skill last improved (`PRACTICE_RAMP`): after 20 uses without a gain the chance has doubled, after 60 it has quadrupled, up to 50% (`PRACTICE_MAX_CHANCE`). A gain sets the count back to 0, but the starting chance is never 0, so two gains in a row can happen.
+- **Each skill keeps its own count:** `Player.plSkillPractice`, `[ skill number, half uses ]`, through `GetSkillPractice` and `SetSkillPractice` (kept to 20,000 half uses).
+- **A swing practises both** the stroke and the weapon's skill (`Stroke.ImproveStroke`; brawling when unarmed, `Unarmed.ImproveStroke`), hit or miss: a miss (`Player.AssessMiss`, ours) rolls at half the chance and counts as half a use. Parry, block and dodge still get their chance on a kill in which we dodged; other skills on use.
+- **The starting chance** (`GetPracticeChance`, in hundredths of a percent): `GetInitialChance` (the skill's `viChance_to_Increase` with Intellect and the faction bonus, as before) × 800/30, times (1 − ability/110)², halved above twice the requisite stat (the soft cap, which now works), times the foe (its level against 10 + ability/2, 0.25 to 1.5; 60 when not a monster), times the learn points' penalty (2.5% each, down to a quarter), times `Settings.piSkillPracticeRate` (percent, 100). Rooms' `ModifyChanceToImprove` still apply, and Second Wind's "no tokens" rule still gives 0.
+- **What it plays out to** (an average weapon of 30, stat 50, Intellect 30, monsters about our level): about 8 uses for 1% at 5%, 20 at 50%, 80 at 90%; about 600 uses from 1% to 50% and 2,500 more to 99% (the gate made it at least 7,500). Tried on our server: a mace at 50% against a giant rat starts at 1.67% a swing (Startling's Might of 25 puts its soft cap at 49%) and gained 5% in 250 hits, 8 to 61 hits apart; 30 unarmed swings took punch from 12% to 15% and brawling from 10% to 11%.
+- **Gone:** `ImproveOnce`, `GetSecondaryChance`, `viImprove_percent` and the 75-swing gate (`piWeaponcraftImprovementMinimumSwings` and the swing count stay, unused). The unused swing `bonus` is still passed but ignored.

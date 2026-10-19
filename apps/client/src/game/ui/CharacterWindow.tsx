@@ -13,7 +13,7 @@ import type { GameSession } from "@shards/world";
 import type { AssetStore } from "../../assets.ts";
 import { EQUIP_COLUMNS, layoutEquipment, wieldedWeapon, wornSlot, type EquipKey } from "../equipment.ts";
 import { sortByType, sortMoves } from "../inventoryOrder.ts";
-import type { IconRenderer } from "../icons.ts";
+import { neutralPose, type IconRenderer } from "../icons.ts";
 import { DRAG_ITEM } from "../quickSlots.ts";
 import { updateSettings, type Settings } from "../settings.ts";
 import { useTurnDrag, useWorld } from "./hooks.ts";
@@ -100,7 +100,8 @@ function Figure({ session, icons }: { session: GameSession; icons: IconRenderer 
         if (!world.inUse.has(o.id)) session.use(o.id);
       }}
     >
-      {self && <ObjIcon icons={icons} object={self.info} opts={{ group: 0, angle }} />}
+      {/* At rest, whatever we're doing (2026-10-18 play test) */}
+      {self && <ObjIcon icons={icons} object={neutralPose(self.info)} opts={{ group: 0, angle }} />}
     </div>
   );
 }

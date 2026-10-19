@@ -22,3 +22,5 @@ export * from "./tuning.ts";
 export * from "./moods.ts";
 export * from "./sunPath.ts";
 export * from "./sunShadow.ts";
+export * from "./surfaceEffects.ts";
+export * from "./windowMask.ts";

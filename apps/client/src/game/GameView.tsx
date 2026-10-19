@@ -42,7 +42,7 @@ import {
   WhoDialog,
   type ActionWindow, type StudySpell,
 } from "./ui/OptionsDialogs.tsx";
-import { EnchantmentRow, STAT_HP, STAT_MP, Sidebar, type Tab } from "./ui/Sidebar.tsx";
+import { EnchantmentRow, STAT_HP, STAT_MP, Sidebar, cancelEnchantment, type Tab } from "./ui/Sidebar.tsx";
 import { ClassicToolbar } from "./ui/Toolbar.tsx";
 import { ActionBar, MapCluster, TargetFrame, UnitFrame } from "./ui/ModernHud.tsx";
 import { CharacterWindow } from "./ui/CharacterWindow.tsx";
@@ -626,6 +626,18 @@ export function GameView({
    * travel makes them less needed.
    */
   const itemAbilities = (look: LookResult): DescButton[] | undefined => {
+    // Ours: one of our enchantments ends with Cancel (shardsabilities.kod Uncast; a double click on it does too)
+    if (session.world.enchantments.player.has(look.object.id))
+      return [
+        {
+          label: "Cancel",
+          title: "End it (curses and poisons can't be shaken off)",
+          onClick: () => {
+            cancelEnchantment(session, look.object.id);
+            setDesc(null);
+          },
+        },
+      ];
     const item = session.world.inventory.get(look.object.id);
     const info = item ? appraisals.get(objId(item.id)) : undefined;
     if (!item || !info?.appraisable) return undefined;

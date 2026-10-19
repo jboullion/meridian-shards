@@ -456,6 +456,10 @@ export interface Settings {
   nature: boolean;
   /** Ours, Ground Detail (its own option): grass, flowers, pebbles and stones on the ground (render groundCover.ts) */
   groundDetail: boolean;
+  /** Ours (docs/adr/0018-seasons-water-windows.md): the mainland's foliage, grass, leaves and creatures by the season, and snow lying while it snows */
+  seasons: boolean;
+  /** Ours: water that ripples, reflects the sky and glints (render surfaceEffects.ts), apart from Enhanced Lighting */
+  enhancedWater: boolean;
   /** Ours (docs/adr/0006-pets.md 4): other players' pets, and the names under pets */
   showPets: boolean;
   showPetNames: boolean;
@@ -564,6 +568,8 @@ export const DEFAULT_SETTINGS: Settings = {
   flyers: true,
   nature: true,
   groundDetail: true,
+  seasons: true,
+  enhancedWater: true,
   showPets: true,
   showPetNames: true,
   questMarkers: true,

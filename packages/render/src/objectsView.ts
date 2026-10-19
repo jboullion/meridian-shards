@@ -213,7 +213,7 @@ void main() {
 `;
 /** How dark a shadow's middle is, and its radius for a sprite's width (fine units) */
 const SHADOW_STRENGTH = 0.65;
-const shadowRadius = (widthFine: number): number => Math.max(128, Math.min(640, widthFine * 0.65));
+const shadowRadius = (widthFine: number): number => Math.max(64, Math.min(480, widthFine * 0.42));
 
 /** config.h TARGET_COLOR_*: 0 red (the default), 1 blue, 2 green */
 export const HALO_COLORS = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0)];
@@ -514,6 +514,10 @@ export class ObjectsView {
       e.x = x;
       e.y = y;
       e.z = o.z ?? this.ground(o, x, y, ctx, e.composite.heightFine);
+      // Ours: a figure drawn small (critters, pets) sits its art's feet on the floor. The art of
+      // some (rats, centipedes) stands a little above its ground point; at their size that showed
+      // as a gap over their shadow
+      if (o.scale !== undefined && o.z === undefined) e.z -= Math.max(0, e.composite.top - e.composite.heightFine) * o.scale;
       const dtMs = ctx.dt ?? 0;
       if (o.info.flags & OF.BOUNCING && !(o.info.flags & OF.PLAYER)) {
         // moveobj.c AnimateObjects: bob up and down above the floor (fairies, wasps, seekers)

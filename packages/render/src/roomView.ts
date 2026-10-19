@@ -6,7 +6,7 @@
 // winding is reversed when copying (roomGeometry winds CCW in client space).
 
 import * as THREE from "three";
-import { FINENESS, ceilingHeightAt, floorHeightAt, leafAt, paletteRgba, type Bgf, type Palette, type Room } from "@shards/formats";
+import { FINENESS, SF, ceilingHeightAt, floorHeightAt, leafAt, paletteRgba, type Bgf, type Palette, type Room } from "@shards/formats";
 import { buildRoomGeometry, type Batch, type RoomGeometry, type TextureInfo } from "./roomGeometry.ts";
 import { lightingUniforms, roomFragmentShader, roomVertexShader } from "./lighting.ts";
 import { MAX_LIGHTS, type LightSource } from "./objectLighting.ts";
@@ -15,6 +15,23 @@ import { triangleVisibility, wallsNear } from "./lightOcclusion.ts";
 import { bakeAoSteps, surfaceInfo, type AoMap } from "./roomAo.ts";
 import { bakeSunMapSteps, heightGridSteps, roomHasOpenSky, sunMapAt, type SunHeightGrid, type SunMap } from "./sunShadow.ts";
 import { sunAt } from "./sunPath.ts";
+import { windowGain, windowMask, type WindowTexture } from "./windowMask.ts";
+
+/**
+ * Ours (surfaceEffects.ts, docs/adr/0018-seasons-water-windows.md): which grid textures are
+ * water, grass and foliage (they take the seasons), and windows' glass: from the asset build
+ * (watertextures.json, floortextures.json, foliage.json, windows.json), set once by the game
+ * before it builds rooms. Empty, rooms are built as before.
+ */
+export const roomSurfaceTextures = {
+  water: new Set<number>(),
+  grass: new Set<number>(),
+  foliage: new Set<number>(),
+  windows: new Map<number, WindowTexture>(),
+};
+
+/** Window masks by grid texture, made once and shared by every room (null: no glass that glows) */
+const windowMasks = new Map<number, { texture: THREE.DataTexture; gain: number } | null>();
 
 export function paletteTexture(p: Palette): THREE.DataTexture {
   const tex = new THREE.DataTexture(paletteRgba(p), 256, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
@@ -419,6 +436,8 @@ export class RoomView {
       const surface = surfaceKinds(room, batch);
       // Ours, for the moods' sun: each face's normal and whether it's under open sky
       const sky = skyInfo(room, batch);
+      // Ours: what the seasons and Enhanced Water do to each surface (surfaceEffects.ts FX)
+      const fx = fxInfo(room, batch);
       for (let i = 0; i < n; i++) {
         // reverse each triangle (mirror) and swap axes
         const src = i - (i % 3) + [0, 2, 1][i % 3];
@@ -439,6 +458,7 @@ export class RoomView {
       g.setAttribute("aShade", new THREE.BufferAttribute(shade, 3));
       g.setAttribute("aSurface", new THREE.BufferAttribute(surface, 3));
       g.setAttribute("aSky", new THREE.BufferAttribute(sky, 4));
+      g.setAttribute("aFx", new THREE.BufferAttribute(fx, 4));
       // Which lights see each triangle (lightOcclusion.ts): bits 0-15 and 16-31, all set until worked out
       g.setAttribute("aMask0", new THREE.BufferAttribute(new Float32Array(n).fill(ALL_LIGHTS), 1));
       g.setAttribute("aMask1", new THREE.BufferAttribute(new Float32Array(n).fill(ALL_LIGHTS), 1));
@@ -469,6 +489,10 @@ export class RoomView {
         });
       }
       this.materials.push(mat);
+      // Ours: its glass, if its texture has windows
+      const glass = this.windowGlass(batch.textureId, bgf);
+      mat.uniforms.uWindowMap.value = glass?.texture ?? null;
+      mat.uniforms.uWindowGain.value = glass?.gain ?? 0;
       this.applyTextures(mat, frameKeys[0]);
       this.applyEnhanced(mat, ao);
       if (batch.animation) this.animated.push({ batch, material: mat, frames, frameKeys, bgf });
@@ -621,6 +645,36 @@ export class RoomView {
     }
   }
 
+  /** A texture's window mask (windowMask.ts) and its glass's glow, made on first use; null without windows */
+  private windowGlass(id: number, bgf: Bgf): { texture: THREE.DataTexture; gain: number } | null {
+    const spec = roomSurfaceTextures.windows.get(id);
+    if (!spec || spec.gain === 0) return null;
+    let w = windowMasks.get(id);
+    if (w === undefined) {
+      const bmp = bgf.bitmaps[0];
+      w = null;
+      if (bmp) {
+        const mask = windowMask(spec.openings, bmp.width, bmp.height);
+        const rgba = (this.palette.image as { data: Uint8Array }).data;
+        const rgb = new Uint8Array(768);
+        for (let i = 0; i < 256; i++) rgb.set([rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2]], i * 3);
+        const gain = windowGain(mask, bmp.pixels, rgb, spec.gain ?? 1);
+        if (gain > 0) {
+          const texture = new THREE.DataTexture(mask, bmp.width, bmp.height, THREE.RedFormat, THREE.UnsignedByteType);
+          texture.magFilter = texture.minFilter = THREE.LinearFilter;
+          texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+          texture.generateMipmaps = false;
+          texture.unpackAlignment = 1;
+          texture.colorSpace = THREE.NoColorSpace;
+          texture.needsUpdate = true;
+          w = { texture, gain };
+        }
+      }
+      windowMasks.set(id, w);
+    }
+    return w;
+  }
+
   dispose(): void {
     this.gone = true;
     for (const m of this.meshes) m.geometry.dispose();
@@ -678,6 +732,39 @@ function skyInfo(room: Room, batch: Batch): Float32Array {
       if (leaf?.sector && room.sectors[leaf.sector - 1].ceilingType === 0) sky = 1;
     }
     for (let k = 0; k < 3; k++) out.set([n[0], n[1], n[2], sky], (a + k) * 4);
+  }
+  return out;
+}
+
+/**
+ * Ours (surfaceEffects.ts FX): per vertex, in the mesh's order, whether the surface takes the
+ * seasons (a foliage wall, or a grass or foliage floor), whether it's water (a floor with a water
+ * texture) and how deep (its sector's depth, 0..1), and whether it's grass (a floor).
+ */
+function fxInfo(room: Room, batch: Batch): Float32Array {
+  const p = batch.positions;
+  const tris = Math.floor(p.length / 9);
+  const out = new Float32Array(tris * 12);
+  const t = batch.textureId;
+  const { water, grass, foliage } = roomSurfaceTextures;
+  for (let tri = 0; tri < tris; tri++) {
+    const a = tri * 3;
+    const n = faceNormal(p, a);
+    const floor = n[2] > 0.5;
+    let seasonal = 0,
+      wet = 0,
+      depth = 0;
+    if (floor) {
+      seasonal = grass.has(t) || foliage.has(t) ? 1 : 0;
+      if (water.has(t)) {
+        wet = 1;
+        const cx = (p[a * 3] + p[(a + 1) * 3] + p[(a + 2) * 3]) / 3,
+          cy = (p[a * 3 + 1] + p[(a + 1) * 3 + 1] + p[(a + 2) * 3 + 1]) / 3;
+        const leaf = leafAt(room, cx, cy);
+        if (leaf?.sector) depth = (room.sectors[leaf.sector - 1].flags & SF.DEPTH_MASK) / 3;
+      }
+    } else if (n[2] > -0.5) seasonal = foliage.has(t) ? 1 : 0;
+    for (let k = 0; k < 3; k++) out.set([seasonal, wet, depth, floor ? 1 : 0], (a + k) * 4);
   }
   return out;
 }

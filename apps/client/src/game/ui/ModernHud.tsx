@@ -25,13 +25,13 @@ import type { Settings } from "../settings.ts";
 import { useWorld } from "./hooks.ts";
 import { MiniMap } from "./MiniMap.tsx";
 import { Hotbar } from "./QuickSlots.tsx";
-import { ENCHANTMENT_EVENTS, HudBars, HudEnchantments, ObjIcon, PortraitIcon, shownEnchantments } from "./Sidebar.tsx";
+import { ENCHANTMENT_EVENTS, HudBars, HudEnchantments, ObjIcon, PortraitIcon, cancelEnchantment, shownEnchantments } from "./Sidebar.tsx";
 import { ToolbarButtonView, type ToolbarButton } from "./Toolbar.tsx";
 
 /** include/proto.h OF_ATTACKABLE */
 const OF_ATTACKABLE = 0x8;
 
-/** Our enchantments, or the room's: a right click looks at one (enchant.c WM_RBUTTONDOWN). */
+/** Our enchantments, or the room's: a right click looks at one (enchant.c WM_RBUTTONDOWN); a double click ends one of ours (ours) */
 function Enchantments({ session, icons, kind, tooltips, onLook }: { session: GameSession; icons: IconRenderer; kind: "player" | "room"; tooltips: boolean; onLook: (id: number) => void }) {
   const world = session.world;
   useWorld(world, ENCHANTMENT_EVENTS);
@@ -46,6 +46,7 @@ function Enchantments({ session, icons, kind, tooltips, onLook }: { session: Gam
           object={e}
           className="enchant"
           title={tooltips ? (session.resource(e.nameRes) ?? "") : undefined}
+          onDoubleClick={kind === "player" ? () => cancelEnchantment(session, e.id) : undefined}
           onContextMenu={(ev) => {
             ev.preventDefault();
             onLook(e.id);

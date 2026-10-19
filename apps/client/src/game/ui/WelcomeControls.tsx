@@ -1,5 +1,5 @@
 // Ours: the first controls, shown once on entering the game for the first time on the desktop
-// (settings.seenControls): moving, the inventory, the left click and the right drag, drawn like
+// (settings.seenControls): moving and opening doors, the inventory, the left click and the right drag, drawn like
 // the Help window's keyboard and mouse (HelpDialog.tsx) but small. The keys are the player's own
 // bindings; F1 (Help) has the rest.
 
@@ -76,15 +76,16 @@ export function WelcomeControls({ settings, onHelp, onClose }: { settings: Setti
           <Item
             title="Move"
             figure={
-              <svg viewBox={`0 0 ${3 * step} ${2 * step}`} className="wc-figure wc-keys" aria-hidden>
+              <svg viewBox={`0 0 ${3 * step} ${3 * step}`} className="wc-figure wc-keys wc-move" aria-hidden>
                 <Cap x={step} y={0} label={w} color={MOVE} />
                 <Cap x={0} y={step} label={a} color={MOVE} />
                 <Cap x={step} y={step} label={s} color={MOVE} />
                 <Cap x={2 * step} y={step} label={d} color={MOVE} />
+                <Cap x={0} y={2 * step} label={keyName(settings, "go")} color={MOVE} w={3 * step - 4} />
               </svg>
             }
           >
-            Forward, left, back and right. Hold Shift to run.
+            Forward, left, back and right. Hold Shift to run. {keyName(settings, "go")} opens a door in front of you.
           </Item>
           <Item
             title="Inventory"

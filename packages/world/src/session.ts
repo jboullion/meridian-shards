@@ -1097,6 +1097,9 @@ export class GameSession {
               rings.push({ id, owner, room, rid: r.u32() });
             }
             this.events.quest?.({ type: "signets", rings });
+          } else if (uc === UC.SEASON) {
+            // Ours (system.kod SendSeason): the season, the year, the day of the year
+            this.world.season = { season: r.u8(), year: r.u16(), day: r.u16() };
           } else if (uc === UC.COMPANION) {
             // Ours (companionbook.kod SendStatus, HealthChanged)
             const e = readCompanion(r, (id) => this.resource(id));

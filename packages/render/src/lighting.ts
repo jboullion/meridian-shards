@@ -29,6 +29,8 @@
 //     (roomAo.ts), and along walls near their floor and ceiling.
 // The glow pass (postFx.ts) draws the room black, to hide what's behind it.
 
+import { WINDOW_DAY_COLOR, WINDOW_GLOW_COLOR, effectUniforms, surfaceEffectsGlsl } from "./surfaceEffects.ts";
+
 /** Shared by every room and sprite material: 1 while postFx.ts draws the glow pass */
 export const glowPass = { value: 0 };
 
@@ -75,6 +77,10 @@ vec3 moodFog(vec3 c, float fog, float depth) {
 `;
 
 export const lightingUniforms = () => ({
+  /** Ours (windows, surfaceEffects.ts): this texture's glass (windowMask.ts) and how brightly it glows; 0: none */
+  uWindowMap: { value: null as unknown },
+  uWindowGain: { value: 0 },
+  ...effectUniforms,
   uPalette: { value: null as unknown },
   uMap: { value: null as unknown },
   /** The RGBA copy of uMap (colorTexture.ts), sampled when uColorMode is 1 */
@@ -121,6 +127,9 @@ out vec3 vSurface;
 // Ours (moods): the face normal (client axes), and 1 under open sky (RoomView skyInfo)
 in vec4 aSky;
 out vec4 vSky;
+// Ours (surfaceEffects.ts FX): x takes the season, y water, z its depth, w grass
+in vec4 aFx;
+out vec4 vFx;
 uniform float uMoodOn;
 out vec2 vUv;
 flat out int vMask0;
@@ -156,6 +165,7 @@ void main() {
   vMask1 = int(aMask1);
   vSurface = aSurface;
   vSky = aSky;
+  vFx = aFx;
   gl_Position = projectionMatrix * mv;
 }
 `;
@@ -172,7 +182,11 @@ flat in int vMask0;
 flat in int vMask1;
 in vec3 vSurface;
 in vec4 vSky;
+in vec4 vFx;
 out vec4 fragColor;
+uniform sampler2D uWindowMap;
+uniform float uWindowGain;
+uniform float uFinePerUnit;
 uniform float uGlowPass;
 uniform float uAo;
 uniform sampler2D uAoMap;
@@ -198,6 +212,7 @@ uniform vec4 uSunRect;
 uniform float uSunMix;
 uniform float uSunShadow;
 ${moodFogGlsl}
+${surfaceEffectsGlsl}
 
 float lightIndex(float light, float scale) {
   float idx;
@@ -237,16 +252,25 @@ vec3 softHighlight(vec3 base, vec3 c) {
 }
 
 void main() {
+  // Ours (Enhanced Water): a water floor's waves, which waver what's seen of it
+  bool water = uWaterOn > 0.5 && vFx.y > 0.5 && vSurface.x > 0.5 && vSurface.x < 1.5;
+  vec2 slope = water ? waterSlope(vClient.xy) : vec2(0.0);
+  vec2 uv = water ? vUv + slope * uWaterTune.z : vUv;
   vec3 rgb;
   if (uColorMode > 0.5) {
-    vec4 c = texture(uColorMap, vUv);
+    vec4 c = texture(uColorMap, uv);
     if (c.a < 0.5) discard;
     rgb = c.rgb;
   } else {
-    float index = floor(texture(uMap, vUv).r * 255.0 + 0.5);
+    float index = floor(texture(uMap, uv).r * 255.0 + 0.5);
     if (index == 254.0) discard;
     rgb = texelFetch(uPalette, ivec2(int(index), 0), 0).rgb;
   }
+  // Ours (Seasons): foliage and grass take the season; snow lies on open floors
+  vec3 base = rgb;
+  if (uSeasonOn > 0.5 && vFx.x > 0.5) rgb = seasonTint(rgb, vClient.xy, vFx.w);
+  if (uSnow > 0.0 && vSky.w > 0.5 && vSurface.x > 0.5 && vSurface.x < 1.5 && !water)
+    rgb = mix(rgb, vec3(0.88, 0.9, 0.94), snowCover(normalize(vSky.xyz), vClient.xy));
   if (uGlowPass > 0.5) {
     fragColor = vec4(0.0, 0.0, 0.0, 1.0);
     return;
@@ -303,6 +327,26 @@ void main() {
   }
   if (uMoodOn > 0.5) added *= uFlameScale;
   vec3 lit = rgb * ambient + rgb * sun + rgb * added;
+  // Ours (Enhanced Water): deep water darker; the sky at a grazing look; the sun's glint
+  if (water) {
+    lit *= mix(vec3(1.0), vec3(0.72, 0.84, 0.86), vFx.z);
+    // The waves in light and shade, as if lit from the sky's brighter side
+    lit *= 1.0 + dot(slope, vec2(0.7, 0.7)) * uWaterTune.y;
+    vec3 n = normalize(vec3(-slope * 0.35, 1.0));
+    vec3 eye = vec3(cameraPosition.x, cameraPosition.z, cameraPosition.y) * uFinePerUnit;
+    vec3 v = normalize(eye - vClient);
+    vec3 r = reflect(-v, n);
+    float f = 0.02 + 0.98 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
+    // The sky it mirrors: brighter low down, toward the horizon, so each wave catches it differently
+    vec3 skyHere = uWaterSky * mix(1.5, 0.6, clamp(r.z, 0.0, 1.0));
+    lit = mix(lit, skyHere, min(f, 0.6) * uWaterTune.x * (0.4 + 0.6 * vSky.w));
+    if (vSky.w > 0.5) lit += uWaterGlint * pow(max(dot(r, uWaterSunDir), 0.0), 120.0);
+  }
+  // Ours (windows): the glass glows warm at night, outside; indoors by day it lets daylight in
+  if (uWindowGain > 0.0) {
+    float m = texture(uWindowMap, vUv).r;
+    lit += m * (base * vec3(${WINDOW_GLOW_COLOR.join(", ")}) * uWindowGlow * uWindowGain + base * vec3(${WINDOW_DAY_COLOR.join(", ")}) * uWindowDaylight);
+  }
   vec3 c = uSoftLight > 0.5 ? softHighlight(rgb * ambient, lit) : min(vec3(1.0), lit);
   fragColor = vec4(moodFog(c, fog, vDepth), 1.0);
 }

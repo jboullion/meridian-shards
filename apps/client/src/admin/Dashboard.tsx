@@ -460,6 +460,16 @@ function WorldPanel({ act, needMe, me, scene, setScene }: { act: Act; needMe: ()
           Ambient life's hour {scene.ambientHour ?? "(the sun's)"}
           <input type="range" min={-1} max={23} value={scene.ambientHour ?? -1} onChange={(e) => setScene({ ...scene, ambientHour: Number(e.target.value) < 0 ? null : Number(e.target.value) })} />
         </label>
+        <label>
+          Season{" "}
+          <select value={scene.season ?? -1} onChange={(e) => setScene({ ...scene, season: Number(e.target.value) < 0 ? null : Number(e.target.value) })}>
+            <option value={-1}>(the server's)</option>
+            <option value={0}>Spring</option>
+            <option value={1}>Summer</option>
+            <option value={2}>Fall</option>
+            <option value={3}>Winter</option>
+          </select>
+        </label>
         <label className="check">
           <input type="checkbox" checked={!!scene.raining} onChange={(e) => setScene({ ...scene, raining: e.target.checked })} /> Rain
         </label>

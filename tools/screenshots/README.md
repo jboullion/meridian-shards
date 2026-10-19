@@ -113,6 +113,7 @@ To put them on the login screen, run `npm run assets`. It copies the WebP copies
 | `wheel` | Holds the phone's Cast button down until its wheel of quick slots opens |
 | `arenaFight[:<s>]` | Waits up to 4 minutes for a bout in the arena (ADR 0007), then `s` seconds more (4 by default) for it to get going |
 | `login` | Unreal only: its login screen |
+| `eval:<script>` | Runs a script in the page with `shards` in scope, then waits a moment: to try an effect, e.g. `eval:shards.gameScene.seasonPin = 2` (fall) or `eval:shards.gameScene.snowCover = 1` |
 
 ## The original client (by hand)
 

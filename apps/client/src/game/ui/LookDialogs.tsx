@@ -11,7 +11,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { ANIMATE, DF, type ObjectInfo } from "@shards/protocol";
 import { DRAWFX } from "@shards/render";
 import { isNumberItem, type AmbientPersonInfo, type LookResult } from "@shards/world";
-import type { IconRenderer } from "../icons.ts";
+import { neutralPose, type IconRenderer } from "../icons.ts";
 import { Button, Window } from "./kit.tsx";
 import { ObjIcon } from "./Sidebar.tsx";
 import { useTurnDrag } from "./hooks.ts";
@@ -143,7 +143,7 @@ export function DescriptionDialog({
           {look.player ? (
             // Ours: a player turns as our figure in the character window does (a double click: the front)
             <div className="desc-picture turnable" title="Drag to turn" onPointerDown={turn} onDoubleClick={front}>
-              <ObjIcon icons={icons} object={o} opts={{ group: group ?? 0, angle }} />
+              <ObjIcon icons={icons} object={neutralPose(o)} opts={{ group: 0, angle }} />
             </div>
           ) : (
             <div className="desc-picture">

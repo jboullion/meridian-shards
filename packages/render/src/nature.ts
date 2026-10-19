@@ -118,6 +118,17 @@ const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.
 
 const BUTTERFLY_COLORS: [number, number, number][] = [[1, 0.85, 0.2], [1, 0.5, 0.12], [0.95, 0.95, 0.88], [0.35, 0.55, 1], [0.9, 0.25, 0.2], [0.75, 0.45, 0.9]];
 const LEAF_COLORS: [number, number, number][] = [[0.35, 0.6, 0.18], [0.5, 0.65, 0.2], [0.85, 0.7, 0.2], [0.85, 0.42, 0.12], [0.55, 0.35, 0.18]];
+/**
+ * Ours (docs/adr/0018-seasons-water-windows.md): falling leaves by season (0 spring .. 3 winter):
+ * fresh greens, summer's mix, fall's golds, oranges and reds (the remaster's turned leaves), and
+ * winter's few dry browns
+ */
+const SEASON_LEAF_COLORS: [number, number, number][][] = [
+  [[0.35, 0.62, 0.18], [0.45, 0.7, 0.2], [0.55, 0.72, 0.25]],
+  LEAF_COLORS,
+  [[0.9, 0.62, 0.12], [0.85, 0.42, 0.1], [0.72, 0.25, 0.08], [0.95, 0.75, 0.2], [0.6, 0.38, 0.12]],
+  [[0.5, 0.36, 0.2], [0.42, 0.3, 0.18], [0.6, 0.48, 0.3]],
+];
 
 // ---- the pictures ----
 
@@ -299,6 +310,13 @@ export class Nature {
   private readonly emissive = new Float32Array(MAX_POINTS);
   private butterflies: Butterfly[] = [];
   private fireflies: Firefly[] = [];
+  /** Ours: the leaves' colours for the season (setSeason) */
+  private leafColors = LEAF_COLORS;
+
+  /** Ours: the season (0 spring .. 3 winter; null: none, the summer mix) for leaves falling from now on */
+  setSeason(season: number | null): void {
+    this.leafColors = season === null ? LEAF_COLORS : (SEASON_LEAF_COLORS[season] ?? LEAF_COLORS);
+  }
   private leaves: Leaf[] = [];
   private fish: Fish[] = [];
   /** Splashes not yet heard (client units) */
@@ -522,7 +540,7 @@ export class Nature {
         const wind = Math.random() * 2 * Math.PI;
         // From about the treetops in view (higher ones drift down out of sight above)
         this.leaves.push({
-          s: this.sprite(ROW.LEAF, at.x, at.y, at.floor + FINENESS * rnd(2, 4.5), rnd(120, 170), pick(LEAF_COLORS), false),
+          s: this.sprite(ROW.LEAF, at.x, at.y, at.floor + FINENESS * rnd(2, 4.5), rnd(120, 170), pick(this.leafColors), false),
           vz: rnd(0.35, 0.6) * FINENESS, sway: Math.random() * 6, swayRate: rnd(1.5, 3), spin: Math.random(),
           spinRate: rnd(0.6, 1.5), lying: 0, ground: at.floor, dx: Math.cos(wind) * 0.2 * FINENESS, dy: Math.sin(wind) * 0.2 * FINENESS,
         });

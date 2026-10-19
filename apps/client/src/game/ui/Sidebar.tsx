@@ -59,7 +59,7 @@ const TAB_ART: Partial<Record<Tab, string>> = {
 };
 
 export function ObjIcon({
-  icons, object, opts, className, title, onContextMenu, onClick,
+  icons, object, opts, className, title, onContextMenu, onClick, onDoubleClick,
 }: {
   icons: IconRenderer;
   object: Drawable | null;
@@ -68,11 +68,12 @@ export function ObjIcon({
   title?: string;
   onContextMenu?: (e: ReactMouseEvent) => void;
   onClick?: (e: ReactMouseEvent) => void;
+  onDoubleClick?: (e: ReactMouseEvent) => void;
 }) {
   const key = object ? icons.key(object, opts) : "";
   const url = useAsyncImage(key, () => (object ? icons.object(object, opts) : null));
   return (
-    <span className={`obj-icon ${className ?? ""}`} title={title} onContextMenu={onContextMenu} onClick={onClick}>
+    <span className={`obj-icon ${className ?? ""}`} title={title} onContextMenu={onContextMenu} onClick={onClick} onDoubleClick={onDoubleClick}>
       {url && <img src={url} alt="" draggable={false} />}
     </span>
   );
@@ -164,6 +165,12 @@ export function shownEnchantments(world: GameSession["world"], kind: "player" | 
   if (kind === "room") pool.reverse();
   return [...real, ...pool.slice(0, TEST_ENCHANTMENTS)];
 }
+
+/**
+ * Ours: a double click on one of our own enchantments ends it (shardsabilities.kod Uncast: any that
+ * isn't harmful; curses and poisons stay). Its description has Cancel too (GameView itemAbilities).
+ */
+export const cancelEnchantment = (session: GameSession, id: number): void => session.shardsObject(id, "uncast");
 
 /** What a list of enchantments redraws on: TEST_ENCHANTMENTS borrows spells, skills and items. */
 export const ENCHANTMENT_EVENTS: Parameters<typeof useWorld>[1] = TEST_ENCHANTMENTS ? ["enchantments", "spells", "skills", "inventory"] : ["enchantments"];
@@ -371,6 +378,7 @@ export function Sidebar({
             object={e}
             className="enchant"
             title={tip(rs(e.nameRes))}
+            onDoubleClick={() => cancelEnchantment(session, e.id)}
             onContextMenu={(ev) => {
               // enchant.c WM_RBUTTONDOWN: look at the enchantment
               ev.preventDefault();
@@ -734,7 +742,22 @@ export function StatList({
         }}
       >
         {!header && <ObjIcon icons={icons} object={l.icon ? bareIcon(l.icon) : null} className="list-icon" />}
-        <span>{quests ? rs(s.nameRes) : `${rs(s.nameRes)} ${l.value}%`}</span>
+        <span className="stat-list-name">{quests ? rs(s.nameRes) : `${rs(s.nameRes)} ${l.value}%`}</span>
+        {/* Ours (2026-10-18 play test): every spell has its own Cast, as a double click does */}
+        {spells && l.id ? (
+          <button
+            type="button"
+            className="mk-btn spell-cast"
+            title={`Cast ${rs(s.nameRes)}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCast(l.id, spellFor(l.id)?.numTargets ?? 0);
+            }}
+            onDoubleClick={(e) => e.stopPropagation()}
+          >
+            Cast
+          </button>
+        ) : null}
       </div>
     );
   });

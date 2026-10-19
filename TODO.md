@@ -5,6 +5,9 @@
 
 
 
+
+
+
 ## Future Ideas
 
 - Set up a season guess. I believe seasons should be game year % 4. However the server doesn't send the season so we have to calculate it client side.
@@ -17,12 +20,10 @@
 
 ## UI
 
-- Create our own "Shards" splash screen?
 
 
 ## Modern UI
 
-- We can probably hide the name of the location we are in since we show it in the title bar
 
 ## Classic UI
 

@@ -29,6 +29,7 @@
 // textures that are water even where the sector has no depth (waterTextures.ts), and
 // floortextures.json, which floors are grass, earth or rock, for Ground Detail (floorTextures.ts),
 // and rooms.json, every room by number and name, for the admin console's Travel list.
+// And foliage.json and windows.json (ours: the seasons' walls, the windows' glass), copied from here.
 // And our ambient sounds that aren't the game's (dist/sounds/amb_*.ogg, from fetch-sounds.ts),
 // and the login screen's backgrounds (login/*.webp and login/backgrounds.json, from the
 // screenshot tour's ReferenceImages/login-backgrounds).
@@ -284,6 +285,15 @@ console.log(`watertextures.json: ${waterTextures.length} textures`);
   files["floortextures.json"] = { size: json.length, hash: createHash("sha1").update(json).digest("hex").slice(0, 16), mtime: 0 };
   console.log(`floortextures.json: ${Object.keys(kinds).length} of ${used.size} floor textures`);
 }
+
+// Ours (docs/adr/0018-seasons-water-windows.md): foliage walls, which change with the seasons, and
+// windows' glass, which glows at night: our data (from meridian-unreal), copied as they are
+for (const name of ["foliage.json", "windows.json"]) {
+  const json = readFileSync(join(ROOT, "tools", "assets", name));
+  writeFileSync(join(OUT, name), json);
+  files[name] = { size: json.length, hash: createHash("sha1").update(json).digest("hex").slice(0, 16), mtime: 0 };
+}
+console.log("foliage.json, windows.json: copied");
 
 // Where townsfolk can walk in the rooms that have them (ours: navGrid.ts), built once here for
 // every player instead of in each client on entering

@@ -794,6 +794,31 @@ button.link {
   color: rgb(240, 208, 25);
 }
 
+.stat-list-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ours: each spell's Cast (Sidebar.tsx StatList) */
+.stat-list-row .mk-btn.spell-cast {
+  flex: none;
+  min-height: 0;
+  margin-right: 2px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 16px;
+  text-shadow: none;
+}
+
+.game.touch-ui .stat-list-row .mk-btn.spell-cast {
+  padding: 0 10px;
+  font-size: 13px;
+  line-height: 26px;
+}
+
 .stat-list-row.header {
   color: rgb(0, 196, 50);
   margin-top: 4px;
@@ -4844,6 +4869,52 @@ canvas.server-wait {
   opacity: 0.6;
 }
 
+/* An NPC's quest list (QuestDialog): bigger rows, each with its mark, its name and, for one to take, Accept */
+.quest-offers .mk-list {
+  font-size: 14px;
+}
+
+.quest-offers .mk-list li {
+  padding: 2px 4px;
+}
+
+/* Greyed (under way, or later), not smaller: .quest-later's own size is for the quest's text */
+.quest-offers .mk-list li.quest-later {
+  font-size: inherit;
+}
+
+.quest-offer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quest-offer-mark {
+  flex: none;
+  width: 10px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.quest-offer-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quest-offer-name small {
+  font-size: 12px;
+}
+
+.quest-offers .mk-btn.quest-offer-accept {
+  flex: none;
+  min-height: 0;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .quests-panel {
   display: flex;
   flex-direction: column;
@@ -5037,6 +5108,11 @@ canvas.server-wait {
   flex: none;
   width: 86px;
   height: 64px;
+}
+
+/* Moving's keys have a row more: the Space bar under them */
+.wc-figure.wc-move {
+  height: 86px;
 }
 
 .wc-key-top {

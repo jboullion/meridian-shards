@@ -237,6 +237,11 @@ export class WorldState {
   skills: ObjectInfo[] = [];
   /** Enchantments on us (ENCHANT_PLAYER) and on the room (ENCHANT_ROOM), by object id. */
   readonly enchantments = { player: new ObjectMap<ObjectInfo>(), room: new ObjectMap<ObjectInfo>() };
+  /**
+   * Ours (UC_SEASON, shards-server System.SendSeason): the season (0 spring, 1 summer, 2 fall,
+   * 3 winter: the game year % 4), the year and the day of it (0-239); null before it's sent
+   */
+  season: { season: number; year: number; day: number } | null = null;
   /** First-person overlays, slots 1 and 2 (index 0 and 1). */
   readonly playerOverlays: (PlayerOverlayState | null)[] = [null, null];
   effects: Effects = noEffects();

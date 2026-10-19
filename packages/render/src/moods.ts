@@ -34,6 +34,9 @@ export interface Mood {
   highlightGain: Rgb;
   bloom: number;
   vignette: number;
+  /** Windows' glass (windowMask.ts): how warmly it glows outside at night, and the daylight it lets in indoors */
+  windowGlow: number;
+  windowDaylight: number;
 }
 
 export type MoodKey = keyof Mood;
@@ -79,6 +82,8 @@ export const NEUTRAL_MOOD: Mood = {
   highlightGain: [1, 1, 1],
   bloom: 1.4,
   vignette: 0.28,
+  windowGlow: 0,
+  windowDaylight: 0,
 };
 
 export const MOODS: Record<string, MoodEntry> = {
@@ -130,6 +135,8 @@ export const MOODS: Record<string, MoodEntry> = {
     highlightGain: [1.08, 0.98, 0.88],
     skyTint: [1.05, 0.92, 0.86],
     bloom: 1.6,
+    // moods.json raza_dusk WindowGlow 0.045, at its exposure
+    windowGlow: 0.5,
   },
   // raza_night: an 8000 K moon, blue shade, dark blue haze, the flames and windows the warm spots
   outdoor_night: {
@@ -151,15 +158,20 @@ export const MOODS: Record<string, MoodEntry> = {
     skyTint: [0.85, 0.9, 1.05],
     bloom: 1.8,
     vignette: 0.35,
+    // moods.json raza_night WindowGlow 0.08, at its exposure
+    windowGlow: 1.0,
   },
   // raza_interior_day: the room's own light, untinted, no haze
   interior_day: {
     ambientColor: [1, 0.98, 0.95],
+    // moods.json raza_interior_day WindowDaylight 0.5
+    windowDaylight: 0.6,
     contrast: 1.02,
     vignette: 0.32,
   },
   interior_night: {
     inherit: "interior_day",
+    windowDaylight: 0,
     ambientColor: [0.95, 0.9, 0.85],
     exposure: 0.95,
     flameScale: 1.1,
@@ -176,6 +188,7 @@ export const MOODS: Record<string, MoodEntry> = {
   },
   inn_night: {
     inherit: "inn",
+    windowDaylight: 0,
     ambientColor: [0.97, 0.85, 0.7],
     exposure: 0.95,
     flameScale: 1.25,
@@ -183,6 +196,7 @@ export const MOODS: Record<string, MoodEntry> = {
   // raza_crypt: cold, desaturated, hard
   underground: {
     ambientColor: [0.86, 0.91, 1.02],
+    windowDaylight: 0,
     flameScale: 1.1,
     saturation: 0.82,
     contrast: 1.12,
@@ -244,6 +258,7 @@ export const STORM_OVERLAYS = {
     exposure: { mul: 0.9 },
     saturation: { mul: 0.8 },
     contrast: { mul: 0.95 },
+    windowDaylight: { mul: 0.35 },
   },
   snow: {
     sunStrength: { mul: 0.25 },

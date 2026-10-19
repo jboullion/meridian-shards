@@ -501,6 +501,8 @@ const QUEST_MARKERS_TITLE = 'A gold "!" over people with a quest for you, "?" wh
 const CRITTERS_TITLE = "Rats, spiders, centipedes and other small creatures scurrying about, killed with a click; seen by you alone, with no experience or loot";
 const FLYERS_TITLE = "Flocks of birds crossing the sky by day, and bats in caves (and out at night); seen by you alone";
 const GROUND_TITLE = "Tufts of grass, flowers, pebbles and stones on the ground outdoors and in caves";
+const SEASONS_TITLE = "On the mainland, trees, hedges and grass by the season (fresh in spring, gold and red in fall, pale in winter), the leaves and creatures with them, and snow lying while it snows";
+const WATER_TITLE = "Water that ripples, mirrors the sky and catches the sun and moon; off, the original's water";
 const NATURE_TITLE = "Butterflies by day, fireflies at night, leaves falling in the woods and fish leaping in lakes and rivers; seen by you alone";
 const AMBIENT_OPTIONS = [
   { key: "off", label: "Off" },
@@ -642,6 +644,8 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
                 <GroupBox label="World" className="flow">
                   <Check label="Dynamic Lighting" checked={d.dynamicLighting} onChange={(v) => set({ dynamicLighting: v })} />
                   <Check label="Ground Detail" title={GROUND_TITLE} checked={d.groundDetail} onChange={(v) => set({ groundDetail: v })} />
+                  <Check label="Seasons" title={SEASONS_TITLE} checked={d.seasons} onChange={(v) => set({ seasons: v })} />
+                  <Check label="Enhanced Water" title={WATER_TITLE} checked={d.enhancedWater} onChange={(v) => set({ enhancedWater: v })} />
                   {/* Ours: Enhanced Lighting, or the original's look */}
                   <Check label="Enhanced Lighting" title={ENHANCED_TITLE} checked={d.enhanced} onChange={(v) => set({ enhanced: v })} />
                   <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
@@ -1106,6 +1110,8 @@ export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Se
         <Check label="Dynamic Lighting" checked={d.dynamicLighting} onChange={(v) => set({ dynamicLighting: v })} />
         <Check label="Enhanced Lighting" title={ENHANCED_TITLE} checked={d.enhanced} onChange={(v) => set({ enhanced: v })} />
         <Check label="Ground Detail" title={GROUND_TITLE} checked={d.groundDetail} onChange={(v) => set({ groundDetail: v })} />
+        <Check label="Seasons" title={SEASONS_TITLE} checked={d.seasons} onChange={(v) => set({ seasons: v })} />
+        <Check label="Enhanced Water" title={WATER_TITLE} checked={d.enhancedWater} onChange={(v) => set({ enhancedWater: v })} />
         <Check label="Limit to 60 FPS" title={FRAME_LIMIT_TITLE} checked={d.frameLimit} onChange={(v) => set({ frameLimit: v })} />
         <AmbientLifeSelect value={d.ambientLife} onChange={(v) => set({ ambientLife: v })} />
         <Check label="Critters" title={CRITTERS_TITLE} checked={d.critters} onChange={(v) => set({ critters: v })} />
@@ -1135,6 +1141,8 @@ export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Se
                 flyers: d.flyers,
                 nature: d.nature,
                 groundDetail: d.groundDetail,
+                seasons: d.seasons,
+                enhancedWater: d.enhancedWater,
                 showPets: d.showPets,
                 showPetNames: d.showPetNames,
                 questMarkers: d.questMarkers,

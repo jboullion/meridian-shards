@@ -16,6 +16,7 @@ export interface RenderTunable {
 export const RENDER_TUNING = {
   groundRadius: { value: 20, min: 5, max: 40, step: 1, label: "Ground detail out to (squares)", group: "Ground detail" },
   groundFadeFrom: { value: 15, min: 2, max: 39, step: 1, label: "Ground detail shrinks away past (squares)", group: "Ground detail" },
+  beachRocks: { value: 0.5, min: 0, max: 1, step: 0.05, label: "Rocks on beaches (of the usual)", group: "Ground detail" },
   rockSize: { value: 0.75, min: 0.1, max: 2, step: 0.05, label: "Rocks' size (times the ornament's, at most)", group: "Ground detail" },
   puddleRadius: { value: 18, min: 5, max: 40, step: 1, label: "Puddles out to (squares)", group: "Puddles" },
   puddleFadeFrom: { value: 13, min: 2, max: 39, step: 1, label: "Puddles fade away past (squares)", group: "Puddles" },
@@ -31,6 +32,13 @@ export const RENDER_TUNING = {
   moodHaze: { value: 1, min: 0, max: 4, step: 0.05, label: "Haze (times the mood's)", group: "Moods" },
   moodTint: { value: 1, min: 0, max: 2, step: 0.05, label: "Light's tint (times the mood's)", group: "Moods" },
   moodGrade: { value: 1, min: 0, max: 2, step: 0.05, label: "Colour grading (times the mood's)", group: "Moods" },
+  waterReflect: { value: 0.32, min: 0, max: 1, step: 0.02, label: "How much sky the water mirrors", group: "Water" },
+  waterWaves: { value: 0.4, min: 0, max: 1.5, step: 0.05, label: "How strongly the waves shade the water", group: "Water" },
+  waterWobble: { value: 0.002, min: 0, max: 0.02, step: 0.001, label: "How much the waves waver the water's picture", group: "Water" },
+  moodWindows: { value: 1, min: 0, max: 3, step: 0.05, label: "Windows' glow (times the mood's)", group: "Moods" },
+  seasonStrength: { value: 1, min: 0, max: 2, step: 0.05, label: "Seasons' tint on foliage and grass", group: "Seasons" },
+  snowBuildS: { value: 300, min: 10, max: 1200, step: 10, label: "Snow covers the ground in (s)", group: "Seasons" },
+  snowMeltS: { value: 900, min: 10, max: 3600, step: 10, label: "Snow melts in (s)", group: "Seasons" },
   moodFadeS: { value: 0.6, min: 0, max: 5, step: 0.1, label: "Changing rooms fades the mood over (s)", group: "Moods" },
 } satisfies Record<string, RenderTunable>;
 

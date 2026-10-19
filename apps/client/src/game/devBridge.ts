@@ -14,6 +14,8 @@ import { applyTuning, TUNING_DEFAULTS, type TuningValues } from "./tuning.ts";
 export interface SceneOverrides {
   /** The hour ambient life goes by (null: the sun's) */
   ambientHour?: number | null;
+  /** The season to show, 0 spring .. 3 winter (null: the server's) */
+  season?: number | null;
   /** Weather as if the server had sent it (until it sends its own) */
   raining?: boolean;
   snowing?: boolean;
@@ -42,6 +44,7 @@ export interface GameReport {
 /** The parts of GameScene the bridge drives */
 export interface BridgeScene {
   ambientHour: number | null;
+  seasonPin: number | null;
   wetness: number;
   setTestRoom(o: { terrain?: string[] | null; crowd?: AmbientRoomSpec | null }): void;
   /** Tuning changed: what was worked out from the old values starts over */
@@ -62,6 +65,7 @@ export function startDevBridge(scene: BridgeScene, session: GameSession): () => 
     if (applyTuning(state.tuning) || changed) scene.retune();
     const s = state.scene;
     scene.ambientHour = s.ambientHour ?? null;
+    scene.seasonPin = s.season ?? null;
     const fx = session.world.effects;
     if (s.raining !== undefined) fx.raining = s.raining;
     if (s.snowing !== undefined) fx.snowing = s.snowing;

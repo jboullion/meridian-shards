@@ -4,6 +4,7 @@
 
 import { parseBgf, parsePaletteBin, parseRoo, parseRsb, type Bgf, type Palette, type Room, type RsbBundle } from "@shards/formats";
 import { EMPTY_CATALOG, type AmbientExits, type QuestCatalog } from "@shards/world";
+import type { WindowTexture } from "@shards/render";
 
 interface Manifest {
   /** When the asset build ran: a new value means the server has new files */
@@ -167,6 +168,20 @@ export class AssetStore {
   async waterTextures(): Promise<Set<number>> {
     if (!this.has("watertextures.json")) return new Set();
     return new Set(JSON.parse(new TextDecoder().decode(await this.download("watertextures.json"))) as number[]);
+  }
+
+  /** Ours (docs/adr/0018-seasons-water-windows.md): foliage wall textures, which change with the seasons (foliage.json); empty without one */
+  async foliageTextures(): Promise<Set<number>> {
+    if (!this.has("foliage.json")) return new Set();
+    const raw = JSON.parse(new TextDecoder().decode(await this.download("foliage.json"))) as { textures: Record<string, string> };
+    return new Set(Object.keys(raw.textures).map(Number));
+  }
+
+  /** Ours: wall textures' windows, whose glass glows at night (windows.json); empty without one */
+  async windowTextures(): Promise<Map<number, WindowTexture>> {
+    if (!this.has("windows.json")) return new Map();
+    const raw = JSON.parse(new TextDecoder().decode(await this.download("windows.json"))) as { textures: Record<string, WindowTexture> };
+    return new Map(Object.entries(raw.textures).map(([id, w]) => [Number(id), w]));
   }
 
   /** Floor texture -> what it is (grass, earth or rocky), its average colour, and whether it's cobbled (floortextures.json from the asset build); empty without one */

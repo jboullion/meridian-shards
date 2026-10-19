@@ -13,6 +13,7 @@ import * as THREE from "three";
 import { FINENESS } from "@shards/formats";
 import { glowPass } from "./lighting.ts";
 import { renderTune } from "./tuning.ts";
+import { seasonTint } from "./surfaceEffects.ts";
 
 const FRAME = 64;
 const COLS = 4,
@@ -74,6 +75,8 @@ export interface GroundSpot {
   town: boolean;
   /** Paving or cobbles: nothing strewn on it */
   bare?: boolean;
+  /** How many rocks, of the usual (1 by default; a beach has fewer: tuning.ts beachRocks) */
+  rocks?: number;
 }
 
 export interface GroundRoom {
@@ -330,6 +333,9 @@ export class GroundCover {
   private room: GroundRoom | null = null;
   private at: { x: number; y: number } | null = null;
   private relight = 0;
+  /** Ours (docs/adr/0018-seasons-water-windows.md): the season the tufts take (null: none), and the snow on them */
+  private season: number | null = null;
+  private snow = 0;
 
   constructor() {
     this.group.name = "ground cover";
@@ -367,6 +373,18 @@ export class GroundCover {
     this.clear();
   }
 
+  /**
+   * The season (0 spring .. 3 winter; null: none, the floor's own colours) and how much snow lies
+   * (0..1): a new season grows everything again; the snow whitens the tufts as they're relit
+   */
+  setSeason(season: number | null, snow: number): void {
+    this.snow = snow;
+    if (season === this.season) return;
+    this.season = season;
+    this.cells.clear();
+    this.at = null;
+  }
+
   /** Nothing drawn (the option off) until the next update */
   clear(): void {
     this.at = null;
@@ -402,9 +420,10 @@ export class GroundCover {
     if (spot && !spot.bare) {
       // Grass: a third tufts, a few flowers, a rare rock; earth: dry tufts, now and then a rock;
       // rock: the odd rock (rocks are meant to be few)
-      if (spot.kind === "grass") art = roll < 0.34 ? "tuft" : roll < 0.39 ? "flower" : roll < 0.395 && !spot.town ? "rock" : null;
-      else if (spot.kind === "earth") art = roll < 0.05 ? "dry" : roll < 0.0775 && !spot.town ? "rock" : null;
-      else art = !spot.town && roll < 0.0375 ? "rock" : null;
+      const r = spot.rocks ?? 1;
+      if (spot.kind === "grass") art = roll < 0.34 ? "tuft" : roll < 0.39 ? "flower" : roll < 0.39 + 0.005 * r && !spot.town ? "rock" : null;
+      else if (spot.kind === "earth") art = roll < 0.05 ? "dry" : roll < 0.05 + 0.0275 * r && !spot.town ? "rock" : null;
+      else art = !spot.town && roll < 0.0375 * r ? "rock" : null;
     }
     const rocks = art === "rock" && spot ? this.rocks.map((r, i) => [r, i] as const).filter(([r]) => r.kinds.includes(spot.kind)) : [];
     if (art === "rock" && !rocks.length) art = null;
@@ -420,11 +439,13 @@ export class GroundCover {
       p = { x, y, floor: spot.floor, art, variant: index, size: width / rock.fw, r: 1, g: 1, b: 1, lr: 1, lg: 1, lb: 1 };
     } else {
       const sizes: Record<Exclude<Art, "rock">, [number, number]> = { tuft: [128, 225], flower: [120, 180], dry: [112, 195] };
-      const [lo, hi] = sizes[art];
+      let [lo, hi] = sizes[art];
       // The floor's colour, a little lighter (dry tufts yellower), varied a bit each
       const vary = 0.85 + h(5) * 0.3;
       const lift = art === "dry" ? 1.25 : 1.35;
-      const [r, g, b] = spot.color;
+      // The season's greens (as the room shader tints the grass under them), and winter's are short
+      const [r, g, b] = this.season === null ? spot.color : seasonTint(spot.color, this.season, x, y, true, renderTune("seasonStrength"));
+      if (this.season === 3) [lo, hi] = [lo * 0.7, hi * 0.7];
       p = {
         x, y, floor: spot.floor, art, variant: Math.floor(h(4) * ART[art].length) % ART[art].length, size: lo + h(6) * (hi - lo),
         r: Math.min(1, r * lift * vary), g: Math.min(1, g * lift * vary), b: Math.min(1, b * lift * (art === "dry" ? 0.8 : 1) * vary),
@@ -438,9 +459,11 @@ export class GroundCover {
 
   private light(p: Piece): void {
     const [lr, lg, lb] = this.room!.light(p.x, p.y, p.floor);
-    p.lr = p.r * lr;
-    p.lg = p.g * lg;
-    p.lb = p.b * lb;
+    // Ours: snow on the tufts (not the rocks' own colours)
+    const s = p.art === "rock" ? 0 : this.snow * 0.8;
+    p.lr = (p.r + (0.88 - p.r) * s) * lr;
+    p.lg = (p.g + (0.9 - p.g) * s) * lg;
+    p.lb = (p.b + (0.94 - p.b) * s) * lb;
   }
 
   private write(v: { x: number; y: number }): void {

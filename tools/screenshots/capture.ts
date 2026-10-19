@@ -336,6 +336,13 @@ async function runSteps(page: Page, client: Client, shot: Shot): Promise<void> {
       }
       case "login":
         break;
+      case "eval": {
+        // eval:<script> (ours, for trying effects): run in the page, with shards in scope, then a moment
+        // for it to show, e.g. "eval:shards.gameScene.seasonPin = 2" or "eval:shards.gameScene.snowCover = 1"
+        await page.evaluate((src) => new Function("shards", src)((window as ShardsWindow).shards), step.slice("eval:".length));
+        await sleep(1500);
+        break;
+      }
       default:
         throw new Error(`${shot.id}: unknown step "${step}"`);
     }

@@ -1,6 +1,6 @@
 // Ours: the Stats tab's rows (Sidebar.tsx NumericStats). Training points first (with Train beside
-// them, docs/adr/0016-abilities.md), then the six attributes down to Aim, a divider, and the
-// rest. Karma (always 0 now), Unbound Energy (gone) and Weight and Bulk Carried (the inventory
+// them, docs/adr/0016-abilities.md), a divider, then the six attributes down to Aim, a divider,
+// and the rest. Karma (always 0 now), Unbound Energy (gone) and Weight and Bulk Carried (the inventory
 // shows them) aren't listed, whichever of them the server still sends.
 
 import type { Statistic } from "@shards/protocol";
@@ -25,7 +25,9 @@ export function statRows(stats: readonly Statistic[], english: (nameRes: number)
   const training = byNum.filter((s) => s.num === STAT_NUM.TRAINING);
   const attributes = byNum.filter((s) => ATTRIBUTES.includes(s.num));
   const rest = byNum.filter((s) => s.num !== STAT_NUM.TRAINING && !ATTRIBUTES.includes(s.num));
-  const rows: StatRow[] = [...training, ...attributes].map((stat) => ({ kind: "stat", stat, training: stat.num === STAT_NUM.TRAINING }));
+  const rows: StatRow[] = training.map((stat) => ({ kind: "stat", stat, training: true }));
+  if (training.length && attributes.length + rest.length) rows.push({ kind: "divider" });
+  for (const stat of attributes) rows.push({ kind: "stat", stat, training: false });
   if (attributes.length && rest.length) rows.push({ kind: "divider" });
   for (const stat of rest) rows.push({ kind: "stat", stat, training: false });
   return rows;

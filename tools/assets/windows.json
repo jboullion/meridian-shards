@@ -1,0 +1,1400 @@
+{
+ "_doc": "Ours (docs/adr/0018-seasons-water-windows.md): the glass of wall textures, which glows at night and lets daylight in, from meridian-unreal data/environment/facades.json. Per texture: its windows (and a clock face) in the picture's own pixels (x right, y down: the transpose of how the grid texture is stored), shaped rect, round, pointed (spring: the y where the arch starts) or circle, and a gain (0: it doesn't glow; none: 1). npm run assets copies it to dist/assets.",
+ "textures": {
+  "3406": {
+   "name": "IVORY_CHAPEL_WALL (Cor Noth, the Ivory Chapel): the grated window band",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      0,
+      64
+     ],
+     "y": [
+      65,
+      97
+     ]
+    }
+   ]
+  },
+  "9503": {
+   "name": "TOS-B FWL (Tos, abandoned, shutters closed)",
+   "gain": 0,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      97,
+      157
+     ],
+     "y": [
+      81,
+      175
+     ]
+    }
+   ]
+  },
+  "9504": {
+   "name": "TOS-B FWC (Tos, abandoned, shutters closed)",
+   "gain": 0,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      97,
+      157
+     ],
+     "y": [
+      81,
+      175
+     ]
+    }
+   ]
+  },
+  "9505": {
+   "name": "TOS-B FWL W/DOOR (Tos, abandoned, shutters closed)",
+   "gain": 0,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      97,
+      157
+     ],
+     "y": [
+      81,
+      175
+     ]
+    }
+   ]
+  },
+  "9511": {
+   "name": "TOS-BLDG-A FNTW L&R M&R (Tos, Familiars)",
+   "gain": 2,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      97,
+      178
+     ],
+     "y": [
+      47,
+      108
+     ]
+    },
+    {
+     "shape": "round",
+     "x": [
+      107,
+      161
+     ],
+     "y": [
+      192,
+      260
+     ],
+     "spring": 210
+    }
+   ]
+  },
+  "9512": {
+   "name": "TOS-BLDG-A FNTW2 L&R M&R (Tos, Familiars)",
+   "gain": 2,
+   "openings": [
+    {
+     "shape": "circle",
+     "x": [
+      58,
+      127
+     ],
+     "y": [
+      40,
+      111
+     ]
+    },
+    {
+     "shape": "round",
+     "x": [
+      66,
+      118
+     ],
+     "y": [
+      192,
+      260
+     ],
+     "spring": 210
+    }
+   ]
+  },
+  "9513": {
+   "name": "TOS-BLDG-A FNTW CENT (Tos, Familiars)",
+   "gain": 2,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      43,
+      160
+     ],
+     "y": [
+      36,
+      122
+     ]
+    }
+   ]
+  },
+  "9516": {
+   "name": "TOS-BLDG-C FNTW L&R M (Tos, a residence)",
+   "gain": 1.6,
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      32,
+      64
+     ],
+     "y": [
+      49,
+      142
+     ],
+     "spring": 66
+    },
+    {
+     "shape": "round",
+     "x": [
+      111,
+      145
+     ],
+     "y": [
+      49,
+      142
+     ],
+     "spring": 66
+    },
+    {
+     "shape": "round",
+     "x": [
+      188,
+      221
+     ],
+     "y": [
+      49,
+      142
+     ],
+     "spring": 66
+    },
+    {
+     "shape": "round",
+     "x": [
+      46,
+      92
+     ],
+     "y": [
+      231,
+      331
+     ],
+     "spring": 251
+    },
+    {
+     "shape": "round",
+     "x": [
+      160,
+      206
+     ],
+     "y": [
+      231,
+      331
+     ],
+     "spring": 251
+    }
+   ]
+  },
+  "9517": {
+   "name": "TOS-BLDG-C FNTW CENT (Tos, a residence)",
+   "gain": 2,
+   "openings": [
+    {
+     "shape": "circle",
+     "x": [
+      98,
+      157
+     ],
+     "y": [
+      129,
+      190
+     ]
+    }
+   ]
+  },
+  "9523": {
+   "name": "TOS-H WALL W/DOOR (Tos, the abandoned building)",
+   "gain": 0,
+   "openings": [
+    {
+     "shape": "pointed",
+     "x": [
+      76,
+      178
+     ],
+     "y": [
+      31,
+      158
+     ],
+     "spring": 73
+    }
+   ]
+  },
+  "9524": {
+   "name": "TOS-H WALL W/OUT DOOR (Tos, the abandoned building)",
+   "gain": 0,
+   "openings": [
+    {
+     "shape": "pointed",
+     "x": [
+      76,
+      178
+     ],
+     "y": [
+      31,
+      158
+     ],
+     "spring": 73
+    }
+   ]
+  },
+  "9526": {
+   "name": "TOS-BLDG-F FNTW L&R M&R (Tos, the abandoned Fountain Tavern)",
+   "gain": 0,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      95,
+      177
+     ],
+     "y": [
+      46,
+      108
+     ]
+    },
+    {
+     "shape": "round",
+     "x": [
+      106,
+      161
+     ],
+     "y": [
+      191,
+      260
+     ],
+     "spring": 210
+    }
+   ]
+  },
+  "9527": {
+   "name": "TOS-BLDG-F FNTW L&R M&R2 (Tos, the abandoned Fountain Tavern)",
+   "gain": 0,
+   "openings": [
+    {
+     "shape": "circle",
+     "x": [
+      70,
+      138
+     ],
+     "y": [
+      40,
+      111
+     ]
+    },
+    {
+     "shape": "round",
+     "x": [
+      78,
+      128
+     ],
+     "y": [
+      191,
+      260
+     ],
+     "spring": 210
+    }
+   ]
+  },
+  "9528": {
+   "name": "TOS-BLDG-F FNTW CENT (Tos, the abandoned Fountain Tavern)",
+   "gain": 0,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      64,
+      143
+     ],
+     "y": [
+      36,
+      122
+     ]
+    }
+   ]
+  },
+  "9530": {
+   "name": "TOS-BLDG-F BCKW M&R (Tos, the abandoned Fountain Tavern)",
+   "gain": 0,
+   "openings": [
+    {
+     "shape": "circle",
+     "x": [
+      100,
+      170
+     ],
+     "y": [
+      40,
+      103
+     ]
+    },
+    {
+     "shape": "round",
+     "x": [
+      106,
+      161
+     ],
+     "y": [
+      191,
+      260
+     ],
+     "spring": 210
+    }
+   ]
+  },
+  "9532": {
+   "name": "TOS-BLDG G FNTW CENT&S M&R (Tos, the west residences)",
+   "gain": 2,
+   "openings": [
+    {
+     "shape": "circle",
+     "x": [
+      94,
+      157
+     ],
+     "y": [
+      112,
+      184
+     ]
+    }
+   ]
+  },
+  "9536": {
+   "name": "TOS-WALL L L&R M&R (Tos, the city wall's fronts)",
+   "gain": 1.5,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      85,
+      170
+     ],
+     "y": [
+      47,
+      107
+     ]
+    }
+   ]
+  },
+  "9537": {
+   "name": "TOS-WALL L L&R M (Tos, the city wall's fronts)",
+   "gain": 1.5,
+   "openings": [
+    {
+     "shape": "circle",
+     "x": [
+      96,
+      161
+     ],
+     "y": [
+      44,
+      110
+     ]
+    }
+   ]
+  },
+  "9543": {
+   "name": "TOS-BLDG-I FNTW WOOD DOOR (Tos, the merchant's)",
+   "gain": 0,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      191,
+      220
+     ],
+     "y": [
+      222,
+      251
+     ]
+    }
+   ]
+  },
+  "9544": {
+   "name": "TOS-BLDG-I FNTW METL DOOR (Tos, the Tryst)",
+   "gain": 0,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      191,
+      220
+     ],
+     "y": [
+      222,
+      251
+     ]
+    }
+   ]
+  },
+  "9546": {
+   "name": "TOS-BLDG-I FNTW NO DOOR (Tos, the merchant's and the Tryst)",
+   "gain": 0,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      191,
+      220
+     ],
+     "y": [
+      222,
+      251
+     ]
+    }
+   ]
+  },
+  "9557": {
+   "name": "TOS-BLDG-A FNTW L&R M&R (Tos, Familiars)",
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      113,
+      158
+     ],
+     "y": [
+      61,
+      127
+     ],
+     "spring": 78
+    }
+   ]
+  },
+  "9590": {
+   "name": "RAZ-BLDG-J A FRNTWALL (Hut)",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      15,
+      62
+     ],
+     "y": [
+      43,
+      92
+     ]
+    },
+    {
+     "shape": "rect",
+     "x": [
+      73,
+      118
+     ],
+     "y": [
+      43,
+      92
+     ]
+    }
+   ]
+  },
+  "9593": {
+   "name": "raz-bldgL-Afrntwall (Tavern)",
+   "gain": 2,
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      56,
+      114
+     ],
+     "y": [
+      28,
+      108
+     ],
+     "spring": 57
+    },
+    {
+     "shape": "rect",
+     "x": [
+      56,
+      121
+     ],
+     "y": [
+      183,
+      253
+     ]
+    }
+   ]
+  },
+  "9599": {
+   "name": "RAZ-BLDG-M A FRNTW CENT (Temple)",
+   "gain": 2,
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      33,
+      69
+     ],
+     "y": [
+      128,
+      211
+     ],
+     "spring": 146
+    },
+    {
+     "shape": "round",
+     "x": [
+      110,
+      146
+     ],
+     "y": [
+      128,
+      211
+     ],
+     "spring": 146
+    },
+    {
+     "shape": "round",
+     "x": [
+      185,
+      221
+     ],
+     "y": [
+      128,
+      211
+     ],
+     "spring": 146
+    },
+    {
+     "shape": "round",
+     "x": [
+      45,
+      94
+     ],
+     "y": [
+      300,
+      402
+     ],
+     "spring": 325
+    },
+    {
+     "shape": "round",
+     "x": [
+      160,
+      210
+     ],
+     "y": [
+      300,
+      402
+     ],
+     "spring": 325
+    }
+   ]
+  },
+  "9600": {
+   "name": "RAZ-BLDG-M B FRNTW SIDE MIR (Temple)",
+   "gain": 2.48,
+   "openings": [
+    {
+     "shape": "circle",
+     "x": [
+      110,
+      146
+     ],
+     "y": [
+      88,
+      124
+     ]
+    }
+   ]
+  },
+  "9617": {
+   "name": "RAZ-BLDG-B FRNTW W/OUT DOOR (Barn)",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      78,
+      184
+     ],
+     "y": [
+      14,
+      106
+     ]
+    }
+   ]
+  },
+  "9618": {
+   "name": "RAZ-BLDG-B FRNTW W/DOOR (Barn)",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      50,
+      207
+     ],
+     "y": [
+      14,
+      106
+     ]
+    }
+   ]
+  },
+  "9619": {
+   "name": "RAZ-BLDG-B WALL FOR ADDT. (Barn)",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      88,
+      151
+     ],
+     "y": [
+      14,
+      74
+     ]
+    }
+   ]
+  },
+  "9625": {
+   "name": "raz-bldg-g frntwl w/out dr (Inn)",
+   "gain": 2.2,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      64,
+      133
+     ],
+     "y": [
+      158,
+      232
+     ]
+    }
+   ]
+  },
+  "9655": {
+   "name": "raz-def A outdoor (Shops)",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      66,
+      115
+     ],
+     "y": [
+      77,
+      141
+     ]
+    }
+   ]
+  },
+  "9658": {
+   "name": "raz-DEF-outdr d tallwall w/win (Shops)",
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      76,
+      116
+     ],
+     "y": [
+      77,
+      137
+     ],
+     "spring": 81
+    },
+    {
+     "shape": "round",
+     "x": [
+      76,
+      116
+     ],
+     "y": [
+      269,
+      329
+     ],
+     "spring": 273
+    }
+   ]
+  },
+  "9663": {
+   "name": "raz-bldg-h A wl w/ stainedglss",
+   "openings": [
+    {
+     "shape": "pointed",
+     "x": [
+      42,
+      92
+     ],
+     "y": [
+      47,
+      143
+     ],
+     "spring": 84
+    },
+    {
+     "shape": "pointed",
+     "x": [
+      163,
+      213
+     ],
+     "y": [
+      47,
+      143
+     ],
+     "spring": 84
+    }
+   ]
+  },
+  "9666": {
+   "name": "Raza Clock Face",
+   "openings": [
+    {
+     "shape": "circle",
+     "x": [
+      28,
+      99
+     ],
+     "y": [
+      16,
+      87
+     ]
+    }
+   ]
+  },
+  "9778": {
+   "name": "Raza new building front",
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      155,
+      203
+     ],
+     "y": [
+      94,
+      197
+     ],
+     "spring": 118
+    }
+   ]
+  },
+  "10041": {
+   "name": "Jas tavern window (Jasper): louvred shutters, lamplight through the slats",
+   "gain": 0.6,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      33,
+      96
+     ],
+     "y": [
+      11,
+      68
+     ]
+    }
+   ]
+  },
+  "10042": {
+   "name": "Jas tavern window w/ dirt (Jasper): louvred shutters, lamplight through the slats",
+   "gain": 0.6,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      33,
+      96
+     ],
+     "y": [
+      11,
+      68
+     ]
+    }
+   ]
+  },
+  "10102": {
+   "name": "Jas schoolmarm's window (Jasper, the Old Schoolhouse: abandoned)",
+   "gain": 0,
+   "openings": [
+    {
+     "shape": "pointed",
+     "x": [
+      44,
+      84
+     ],
+     "y": [
+      17,
+      124
+     ],
+     "spring": 41
+    }
+   ]
+  },
+  "10121": {
+   "name": "Jas Yevitan's wall (West Jasper): the gothic window",
+   "gain": 1.5,
+   "openings": [
+    {
+     "shape": "pointed",
+     "x": [
+      58,
+      98
+     ],
+     "y": [
+      17,
+      180
+     ],
+     "spring": 46
+    }
+   ]
+  },
+  "11053": {
+   "name": "BAR.N-Apoth window (North Barloque, Joguer's Herbs and Roots)",
+   "gain": 1.5,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      40,
+      183
+     ],
+     "y": [
+      36,
+      119
+     ]
+    }
+   ]
+  },
+  "11056": {
+   "name": "BAR.N-casinowindow (North Barloque, the Bookmaker's Guild House)",
+   "gain": 1.5,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      47,
+      128
+     ],
+     "y": [
+      26,
+      102
+     ]
+    }
+   ]
+  },
+  "11066": {
+   "name": "BAR.N-inn front window (North Barloque, the Brownestone Inn)",
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      1,
+      127
+     ],
+     "y": [
+      7,
+      127
+     ],
+     "spring": 60
+    }
+   ]
+  },
+  "11067": {
+   "name": "BAR.N-inn side window (North Barloque, the Brownestone Inn)",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      2,
+      88
+     ],
+     "y": [
+      2,
+      127
+     ]
+    }
+   ]
+  },
+  "11068": {
+   "name": "BAR.N-inn side wall (North Barloque, the Brownestone Inn)",
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      255,
+      365
+     ],
+     "y": [
+      162,
+      292
+     ],
+     "spring": 217
+    }
+   ]
+  },
+  "11069": {
+   "name": "BAR.N-inn upstairs (North Barloque, the Brownestone Inn): half an arched window",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      72,
+      128
+     ],
+     "y": [
+      60,
+      121
+     ]
+    }
+   ]
+  },
+  "11077": {
+   "name": "BAR.N-lib side/window (North Barloque, the library)",
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      121,
+      253
+     ],
+     "y": [
+      179,
+      291
+     ],
+     "spring": 225
+    }
+   ]
+  },
+  "11090": {
+   "name": "BAR.N-tav windowfront (North Barloque, the Bhrama & Falcon)",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      10,
+      117
+     ],
+     "y": [
+      19,
+      164
+     ]
+    }
+   ]
+  },
+  "11091": {
+   "name": "BAR.N-tav windowside (North Barloque, the Bhrama & Falcon)",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      5,
+      35
+     ],
+     "y": [
+      11,
+      157
+     ]
+    }
+   ]
+  },
+  "11129": {
+   "name": "BAR.S-SB2 window (South Barloque)",
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      142,
+      261
+     ],
+     "y": [
+      25,
+      111
+     ],
+     "spring": 85
+    },
+    {
+     "shape": "rect",
+     "x": [
+      121,
+      291
+     ],
+     "y": [
+      174,
+      298
+     ]
+    }
+   ]
+  },
+  "11130": {
+   "name": "BAR.S-SB2 door (South Barloque): the fanlight",
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      69,
+      203
+     ],
+     "y": [
+      91,
+      158
+     ],
+     "spring": 158
+    }
+   ]
+  },
+  "11131": {
+   "name": "BAR.S-SB3 sidewall (South Barloque)",
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      99,
+      216
+     ],
+     "y": [
+      191,
+      266
+     ],
+     "spring": 249
+    }
+   ]
+  },
+  "11133": {
+   "name": "BAR.S-SB3 window (South Barloque)",
+   "gain": 1.5,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      31,
+      231
+     ],
+     "y": [
+      29,
+      123
+     ]
+    }
+   ]
+  },
+  "11147": {
+   "name": "BAR.S-SB6 window/portal (South Barloque)",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      33,
+      102
+     ],
+     "y": [
+      161,
+      241
+     ]
+    }
+   ]
+  },
+  "11150": {
+   "name": "BAR.S-SB17 window (South Barloque)",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      154,
+      191
+     ],
+     "y": [
+      178,
+      274
+     ]
+    },
+    {
+     "shape": "rect",
+     "x": [
+      221,
+      259
+     ],
+     "y": [
+      178,
+      274
+     ]
+    }
+   ]
+  },
+  "11151": {
+   "name": "BAR.S-SB17 window, midwall (South Barloque)",
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      66,
+      186
+     ],
+     "y": [
+      189,
+      263
+     ],
+     "spring": 230
+    }
+   ]
+  },
+  "11153": {
+   "name": "BAR.S-SB17 door (South Barloque): the fanlight",
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      64,
+      208
+     ],
+     "y": [
+      61,
+      146
+     ],
+     "spring": 133
+    }
+   ]
+  },
+  "11156": {
+   "name": "BAR.S-SB16 window w/o port (South Barloque)",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      99,
+      158
+     ],
+     "y": [
+      161,
+      241
+     ]
+    }
+   ]
+  },
+  "11158": {
+   "name": "BAR.S-SB9 window (South Barloque)",
+   "gain": 1.5,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      67,
+      246
+     ],
+     "y": [
+      19,
+      124
+     ]
+    }
+   ]
+  },
+  "11168": {
+   "name": "BAR.S-jeweler window (South Barloque, the Sparkling Stone Shop)",
+   "gain": 1.5,
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      20,
+      240
+     ],
+     "y": [
+      115,
+      226
+     ]
+    }
+   ]
+  },
+  "11171": {
+   "name": "BAR.S-genehall door (South Barloque): the fanlight",
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      31,
+      168
+     ],
+     "y": [
+      52,
+      111
+     ],
+     "spring": 111
+    }
+   ]
+  },
+  "11172": {
+   "name": "BAR.S-genehall windows (South Barloque; the upper one shuttered)",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      26,
+      106
+     ],
+     "y": [
+      179,
+      276
+     ]
+    }
+   ]
+  },
+  "20215": {
+   "name": "jixa-build-b-2 (Jixa): the leaded window in the timber frame",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      395,
+      511
+     ],
+     "y": [
+      63,
+      210
+     ]
+    },
+    {
+     "shape": "rect",
+     "x": [
+      527,
+      643
+     ],
+     "y": [
+      63,
+      210
+     ]
+    }
+   ]
+  },
+  "55051": {
+   "name": "Brick Gray 55051 (Cor Noth): the leaded window",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      27,
+      96
+     ],
+     "y": [
+      207,
+      262
+     ]
+    }
+   ]
+  },
+  "55052": {
+   "name": "Brick Gray 55052 (Cor Noth): the tall arched leaded window",
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      27,
+      96
+     ],
+     "y": [
+      67,
+      282
+     ],
+     "spring": 102
+    }
+   ]
+  },
+  "55053": {
+   "name": "Brick Gray 55053 (Cor Noth): the leaded window",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      25,
+      96
+     ],
+     "y": [
+      205,
+      262
+     ]
+    }
+   ]
+  },
+  "55054": {
+   "name": "Brick Gray 55054 (Cor Noth): the tall arched leaded window",
+   "openings": [
+    {
+     "shape": "round",
+     "x": [
+      27,
+      97
+     ],
+     "y": [
+      67,
+      282
+     ],
+     "spring": 102
+    }
+   ]
+  },
+  "55055": {
+   "name": "Brick Gray 55055 (Cor Noth): the gothic window",
+   "openings": [
+    {
+     "shape": "pointed",
+     "x": [
+      33,
+      88
+     ],
+     "y": [
+      177,
+      257
+     ],
+     "spring": 205
+    }
+   ]
+  },
+  "55057": {
+   "name": "Cor Noth: the lattice gable window",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      45,
+      255
+     ],
+     "y": [
+      72,
+      148
+     ]
+    }
+   ]
+  },
+  "61027": {
+   "name": "Berg's barred window in the brick (TOS-BLDG-D CEILING by name)",
+   "openings": [
+    {
+     "shape": "rect",
+     "x": [
+      290,
+      455
+     ],
+     "y": [
+      542,
+      812
+     ]
+    }
+   ]
+  }
+ }
+}

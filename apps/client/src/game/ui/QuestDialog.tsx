@@ -16,11 +16,16 @@ const QUEST_REACH = 5 * 1024;
 
 type View = { kind: "list" } | { kind: "quest"; id: number } | { kind: "after"; id: number; step: number };
 
+/** The list's own state for a quest handed in from it and finished (not one of QUEST_OFFER's) */
+const LIST_DONE = 0;
+
+/** The list's mark before each quest: one to take, one to hand in, one under way (greyed), none for later, one done */
 const STATE_LABEL: Record<number, string> = {
   [QUEST_OFFER.OFFER]: "!",
   [QUEST_OFFER.READY]: "?",
-  [QUEST_OFFER.PENDING]: "…",
-  [QUEST_OFFER.SOON]: "later",
+  [QUEST_OFFER.PENDING]: "?",
+  [QUEST_OFFER.SOON]: "",
+  [LIST_DONE]: "✓",
 };
 
 /** Where a step is done: its rooms, or where its NPC stands */
@@ -62,6 +67,11 @@ export function QuestDialog({
   const serviceButton = service ? <Button onClick={service.open}>{service.label}</Button> : null;
   const [view, setView] = useState<View>(offers.length === 1 ? { kind: "quest", id: offers[0]!.id } : { kind: "list" });
   const [picked, setPicked] = useState<number | null>(offers[0]?.id ?? null);
+  /** Quests accepted or handed in from the list's own buttons; the log (UC_QUEST_LOG) says when the server did it */
+  const [sent, setSent] = useState<ReadonlySet<number>>(new Set());
+  useQuests(store);
+  const underWay = (id: number) => store.active.some((a) => a.id === id);
+  const activeStep = (id: number) => store.active.find((a) => a.id === id)?.step;
   const [from] = useState(() => {
     const self = session.world.self;
     return self ? { x: self.x, y: self.y } : null;
@@ -83,15 +93,67 @@ export function QuestDialog({
   const nameOf = (id: number) => store.quest(id)?.name ?? `Quest ${id}`;
 
   if (view.kind === "list") {
+    // What's changed since the list came (the server sends no new list): an offer taken is under
+    // way; a step handed in moves the quest on (under way) or finishes it
+    const stateOf = (x: QuestOffer) => {
+      if (x.state === QUEST_OFFER.OFFER && underWay(x.id)) return QUEST_OFFER.PENDING;
+      if (x.state === QUEST_OFFER.READY && sent.has(x.id)) {
+        const step = activeStep(x.id);
+        if (step === undefined) return LIST_DONE;
+        if (step > x.step) return QUEST_OFFER.PENDING;
+      }
+      return x.state;
+    };
+    const fromList = (command: "accept" | "turnin", id: number) => {
+      session.shardsCommand(`quest ${command} ${id}`);
+      setSent((t) => new Set(t).add(id));
+    };
+    // A row's button: Accept an offer, or hand in a step that's ready (Complete on the last)
+    const rowButton = (x: QuestOffer, state: number) => {
+      const steps = store.quest(x.id)?.steps.length ?? 0;
+      const label = state === QUEST_OFFER.OFFER ? "Accept" : state === QUEST_OFFER.READY ? (x.step >= steps ? "Complete" : "Hand in") : null;
+      if (!label) return null;
+      return (
+        <button
+          type="button"
+          className="mk-btn quest-offer-accept"
+          disabled={sent.has(x.id)}
+          // its own click: neither picking the row nor opening the quest
+          onMouseDown={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onClick={() => fromList(state === QUEST_OFFER.OFFER ? "accept" : "turnin", x.id)}
+        >
+          {label}
+        </button>
+      );
+    };
     return (
       <Window title={npcName} onClose={onClose} className="game-dialog quest-dialog">
         <ListBox
           label="Quests"
           autoFocus
+          className="quest-offers"
           selected={picked}
           onSelect={setPicked}
           onActivate={(id) => setView({ kind: "quest", id })}
-          items={offers.map((x) => ({ key: x.id, label: `${STATE_LABEL[x.state] ?? ""} ${nameOf(x.id)}`, className: x.state === QUEST_OFFER.SOON || x.state === QUEST_OFFER.PENDING ? "quest-later" : "" }))}
+          items={offers.map((x) => {
+            const state = stateOf(x);
+            const min = store.quest(x.id)?.band.min;
+            return {
+              key: x.id,
+              className: state === QUEST_OFFER.SOON || state === QUEST_OFFER.PENDING || state === LIST_DONE ? "quest-later" : "",
+              label: (
+                <span className="quest-offer">
+                  <span className="quest-offer-mark">{STATE_LABEL[state] ?? ""}</span>
+                  <span className="quest-offer-name">
+                    {nameOf(x.id)}
+                    {state === QUEST_OFFER.SOON && <small> requires {min !== undefined ? `${min} health` : "more health"}</small>}
+                  </span>
+                  {rowButton(x, state)}
+                </span>
+              ),
+            };
+          })}
         />
         <div className="mk-buttons">
           <Button isDefault disabled={picked === null} onClick={() => picked !== null && setView({ kind: "quest", id: picked })}>
@@ -142,7 +204,7 @@ export function QuestDialog({
   }
 
   const offer = offers.find((x) => x.id === quest.id);
-  const state = offer?.state ?? QUEST_OFFER.OFFER;
+  const state = offer?.state === QUEST_OFFER.OFFER && underWay(quest.id) ? QUEST_OFFER.PENDING : (offer?.state ?? QUEST_OFFER.OFFER);
   const active = store.active.find((a) => a.id === quest.id);
   const step = active?.step ?? offer?.step ?? 1;
   const current = quest.steps[step - 1];

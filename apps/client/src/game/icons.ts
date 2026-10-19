@@ -17,6 +17,17 @@ function groupOf(a: Animation): number {
 
 export type Drawable = Pick<ObjectInfo, "iconRes" | "animation" | "overlays" | "translation">;
 
+/**
+ * Ours: an object as it stands at rest, for the character window's figure and a player's
+ * description: what's playing once (a swing, a cast: player.kod SendAnimation) shows where it
+ * ends, not its first frame, and the base its first group.
+ */
+export function neutralPose(o: Drawable): Drawable {
+  const rest = (a: Animation): Animation =>
+    a.type === ANIMATE.ONCE ? { type: ANIMATE.NONE, group: a.groupFinal ?? a.groupLow ?? 1 } : a;
+  return { ...o, animation: { type: ANIMATE.NONE, group: 1 }, overlays: o.overlays.map((v) => ({ ...v, animation: rest(v.animation) })) };
+}
+
 /** A .bgf on its own (stat and enchantment icons): group 0, no overlays. */
 export const bareIcon = (resource: number): Drawable => ({
   iconRes: resource, animation: { type: ANIMATE.NONE, group: 1 }, overlays: [], translation: 0,
