@@ -31,11 +31,11 @@ export const ARENAS = {
 } as const;
 export type ArenaName = keyof typeof ARENAS;
 
-export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train"] as const;
+export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
 /** Steps that happen by doing something, once (the guide chains' kinds): done by themselves unless `auto` is false */
-export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train"];
+export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node"];
 
 /** How a quest's markers look: gold for the main and levelling chains, silver for story quests, bronze for errands */
 export const TIERS = ["main", "story", "errand"] as const;
@@ -72,6 +72,8 @@ export interface QuestStep {
   spells?: string[];
   /** attune: the travel point (util/travelnet.kod GetPoints id) */
   point?: number;
+  /** node: the mana node, by its NODE_ constant (blakston.khd: "NODE_A5"); done once bonded */
+  node?: string;
   /** arena: whose mock bouts count (the Arena of Kraanan's melee, the Arena of Death's duel) */
   arena?: ArenaName;
   /** arena: only a bout won counts */
@@ -170,6 +172,11 @@ export interface Quest {
    * paused 2026-10-18 to be broken into smaller quests)
    */
   paused?: boolean;
+  /**
+   * "death": never offered by its giver; it starts by itself when a player dies for real and may
+   * take it (QuestBook's QBQ_ON_DEATH need, PlayerDied: the Underworld's node)
+   */
+  start?: "death";
   timeLimitMinutes?: number | null;
   text: { offer: string; progress?: string; complete: string };
   steps: QuestStep[];
@@ -257,6 +264,7 @@ export function checkQuestShape(q: unknown, where: string): string[] {
   if (q.repeat !== undefined && q.repeat !== null && (!isObj(q.repeat) || typeof q.repeat.cooldownHours !== "number" || q.repeat.cooldownHours < 0 || q.repeat.cooldownHours > 24 * 365))
     errs.push(`${where}: repeat: null, or { cooldownHours }`);
   if (q.paused !== undefined && typeof q.paused !== "boolean") errs.push(`${where}: paused: true or false`);
+  if (q.start !== undefined && q.start !== "death") errs.push(`${where}: start: "death", or left out`);
   if (q.timeLimitMinutes !== undefined && q.timeLimitMinutes !== null && !isInt(q.timeLimitMinutes, 1, 60 * 24 * 30))
     errs.push(`${where}: timeLimitMinutes: null, or minutes`);
   if (!isObj(q.text) || !isText(q.text.offer) || !isText(q.text.complete) || (q.text.progress !== undefined && typeof q.text.progress !== "string"))
@@ -342,6 +350,9 @@ function checkStepShape(s: unknown, where: string): string[] {
     }
     case "attune":
       if (!isInt(s.point, 1)) errs.push(`${where}: point: a travel point's id`);
+      break;
+    case "node":
+      if (typeof s.node !== "string" || !/^NODE_\w+$/.test(s.node)) errs.push(`${where}: node: a NODE_ constant`);
       break;
     case "health":
       if (s.amount === undefined) errs.push(`${where}: amount: the health to reach`);

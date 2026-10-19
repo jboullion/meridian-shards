@@ -11,10 +11,10 @@ import {
 
 type Act = (what: string, fn: () => Promise<string | void>) => () => void;
 
-const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train"];
+const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node"];
 
 /** The kinds that happen once by doing something: done by themselves unless Auto is unticked */
-const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train"];
+const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node"];
 
 const TIER_LABEL = { main: "Main (gold)", story: "Story (silver)", errand: "Errand (bronze)" } as const;
 
@@ -327,6 +327,9 @@ function QuestForm({
         <label className="check" title="Never offered while paused; a player who has it going can still finish it">
           <input type="checkbox" checked={!!q.paused} onChange={(e) => set({ paused: e.target.checked || undefined })} /> Paused (not offered)
         </label>
+        <label className="check" title="Never offered by its giver; it starts by itself when a player dies for real and may take it">
+          <input type="checkbox" checked={q.start === "death"} onChange={(e) => set({ start: e.target.checked ? "death" : undefined })} /> Starts on death
+        </label>
       </div>
       <label>
         Offer: what the giver says <textarea rows={3} value={q.text.offer} onChange={(e) => set({ text: { ...q.text, offer: e.target.value } })} />
@@ -427,6 +430,12 @@ function QuestForm({
             <label>
               Travel point{" "}
               <input type="number" value={s.point ?? 1} onChange={(e) => setStep(i, { point: num(e.target.value) ?? 1 })} />
+            </label>
+          )}
+          {s.kind === "node" && (
+            <label>
+              Mana node{" "}
+              <input value={s.node ?? ""} placeholder="NODE_ constant (NODE_A5)" onChange={(e) => setStep(i, { node: e.target.value.trim() || undefined })} />
             </label>
           )}
           {s.kind === "arena" && (
@@ -664,6 +673,7 @@ function clean(q: QuestFile): QuestFile {
   return {
     ...q,
     paused: q.paused || undefined,
+    start: q.start || undefined,
     requires: cleanRequires(q.requires),
     text: { offer: q.text.offer, ...(q.text.progress ? { progress: q.text.progress } : {}), complete: q.text.complete },
     steps: q.steps.map((s) => {
@@ -677,6 +687,7 @@ function clean(q: QuestFile): QuestFile {
       if (s.kind === "equip") out.items = s.items;
       if (s.kind === "learn") Object.assign(out, s.skills?.length ? { skills: s.skills } : {}, s.spells?.length ? { spells: s.spells } : {});
       if (s.kind === "attune") out.point = s.point ?? 1;
+      if (s.kind === "node") out.node = s.node;
       if (s.kind === "arena") Object.assign(out, { arena: s.arena ?? "kraanan" }, s.win ? { win: true } : {});
       if (s.kind === "deposit" || s.kind === "health" || (s.kind === "nodes" && s.amount !== undefined && s.amount !== 12)) out.amount = s.amount ?? (s.kind === "health" ? 50 : 1);
       if (s.auto !== undefined && s.auto !== ACTION_KINDS.includes(s.kind) && s.kind !== "talk" && s.kind !== "deliver") out.auto = s.auto;

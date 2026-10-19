@@ -8,7 +8,7 @@ import { classOf, iconOf, isItem, isMonster, isNpc, isNumberItem, isSkill, isSpe
 
 /** QuestBook's step kinds (questbook.kod QK_*) */
 export const KIND_NUM: Record<StepKind, number> = {
-  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17, arena: 18, train: 19,
+  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17, arena: 18, train: 19, node: 20,
 };
 
 /** The faction a quest needs, as QuestBook reads it: the FACTION_ number, -1 any but neutral, $ none */
@@ -98,7 +98,7 @@ export interface ResolvedQuest {
   faction: Faction | null;
   /** Quests that, done or going, keep this one from being offered */
   excludes: number[];
-  /** QuestBook's requirement bits (QBQ_*): 1 intriguing, 2 a guild master, 4 a guild shield, 8 no guild, 16 paused (never offered) */
+  /** QuestBook's requirement bits (QBQ_*): 1 intriguing, 2 a guild master, 4 a guild shield, 8 no guild, 16 paused (never offered), 32 starts on a death */
   needs: number;
   /** Offered only while base health is under this (null: no cap) */
   healthBelow: number | null;
@@ -278,7 +278,11 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
         if (!ok) errs.push(`${where}: ${field}: ${name} isn't ${field === "skills" ? "a skill" : field === "spells" ? "a spell" : "an item"} class`);
         return { cls: c ?? name, name: c ? nameOf(w, c) : name };
       });
-      const amount = s.kind === "attune" ? (s.point ?? 0) : s.kind === "arena" ? (s.win ? 1 : 0) : (s.amount ?? (s.kind === "nodes" ? 12 : s.kind === "deposit" ? 1 : 0));
+      // A node step's amount is the node's bit (QuestBook checks the player's GetNodeList)
+      const nodeBit = s.kind === "node" && s.node ? w.consts.get(s.node) : undefined;
+      if (s.kind === "node" && (nodeBit === undefined || nodeBit <= 0)) errs.push(`${where}: node: no ${s.node} in blakston.khd`);
+      const amount =
+        s.kind === "attune" ? (s.point ?? 0) : s.kind === "arena" ? (s.win ? 1 : 0) : s.kind === "node" ? (nodeBit ?? 0) : (s.amount ?? (s.kind === "nodes" ? 12 : s.kind === "deposit" ? 1 : 0));
       const ridsOf = (list: (string | number)[] | undefined) =>
         (list ?? []).map((r) => {
           const n = typeof r === "number" ? r : w.rids.get(r);
@@ -330,6 +334,8 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
                                         ? "Attune to the portal"
                                         : s.kind === "train"
                                           ? "Spend training points"
+                                          : s.kind === "node"
+                                            ? "Bond with the mana node"
                                         : arena
                                           ? `${s.win ? "Win" : "Fight"} a mock bout in ${arena.name}`
                                         : "Bond with every mana node");
@@ -371,7 +377,7 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
       karmaMax: q.requires?.karmaMax ?? null,
       faction: q.requires?.faction ?? null,
       excludes: q.requires?.notQuests ?? [],
-      needs: (q.requires?.intriguing ? 1 : 0) | (q.requires?.guildMaster ? 2 : 0) | (q.requires?.guildShield ? 4 : 0) | (q.requires?.noGuild ? 8 : 0) | (q.paused ? 16 : 0),
+      needs: (q.requires?.intriguing ? 1 : 0) | (q.requires?.guildMaster ? 2 : 0) | (q.requires?.guildShield ? 4 : 0) | (q.requires?.noGuild ? 8 : 0) | (q.paused ? 16 : 0) | (q.start === "death" ? 32 : 0),
       healthBelow: q.requires?.healthBelow ?? null,
       cooldownSeconds: q.repeat ? Math.round(q.repeat.cooldownHours * 3600) : null,
       timeLimitSeconds: q.timeLimitMinutes ? q.timeLimitMinutes * 60 : null,

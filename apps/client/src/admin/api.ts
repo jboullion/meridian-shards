@@ -222,13 +222,15 @@ export interface QuestFile {
   timeLimitMinutes?: number | null;
   /** Not offered for now; one going can be finished (tools/quests/schema.ts) */
   paused?: boolean;
+  /** "death": starts by itself on a death, never from its giver */
+  start?: "death";
   text: { offer: string; progress?: string; complete: string };
   steps: QuestStepFile[];
   rewards: QuestRewardsFile;
 }
 
 export interface QuestStepFile {
-  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune" | "arena" | "train";
+  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune" | "arena" | "train" | "node";
   auto?: boolean;
   rewards?: QuestRewardsFile;
   spell?: string;
@@ -241,6 +243,8 @@ export interface QuestStepFile {
   spells?: string[];
   /** attune: the travel point */
   point?: number;
+  /** node: the mana node's NODE_ constant */
+  node?: string;
   /** arena: whose mock bouts count, and whether only a bout won does (docs/adr/0019-arena-bouts.md) */
   arena?: "kraanan" | "death";
   win?: boolean;

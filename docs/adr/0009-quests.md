@@ -468,3 +468,47 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
     - Each explains the side's benefits and risks (the bonuses are in `parlia.kod`).
     - Each one's steps: attune that city's portal (5, 4, 1), talk to the liege in their room (852, 371, 952), then report back to Rook.
 - **Already done before this round** (d444d1e2): ten slimes, repeatable slime and fungus hunts, and The Road Through Meridian paused.
+
+## Mana node quests (2026-10-19)
+
+- **One silver quest per mana node** (261-275):
+  - Each is given by an NPC near the node, or a themed one, and finishes the moment the player bonds (a `node` step, no walk back).
+  - It isn't offered to anyone already bonded with that node.
+  - Esseldi's Hunt for the Mana Nodes (15) stays as the long goal.
+
+  | id | Node | Giver |
+  |---|---|---|
+  | 261 | Vale of Sorrows, good | Xiana (Shal'ille) |
+  | 262 | Vale of Sorrows, evil | Zuxana (Qor) |
+  | 263 | the Underworld | starts on death |
+  | 264 | Avar Village | Oxal, Ko'catan's bartender |
+  | 265 | Martyr's Battleground | Qerti'nya (Kraanan) |
+  | 266 | the icky cave | Paddock, Tos |
+  | 267 | Seafarer's Peak | Widow Qesino, Jasper's inn |
+  | 268 | Dreaded Caves of Ice | Quintor |
+  | 269 | the Badlands | Pritchett, Barloque's inn |
+  | 270 | Maze of the Mimic | Tendrath |
+  | 271 | the Sentinel (H9) | Solomon, Cor Noth |
+  | 272 | the ancient place (G9) | Pietro, Jasper's tavern |
+  | 273 | Castle Victoria | Frisconar, Tos |
+  | 274 | the Heart of Zjiria (I9) | Fehr'loi Qan, Tos |
+  | 275 | the Collapsed Causeway | Meidei, Barloque's bar |
+
+  - The two Vale quests first ask for a cast of the priestess's detect spell.
+  - The guest node (Raza's mausoleum) isn't in the game.
+- **The `node` kind** (`QK_NODE` 20):
+  - A step's `node` (a NODE_ constant) becomes its amount: the node's bit. `world.ts` now reads hex constants too.
+  - It's a state step: done when `Player.GetNodeList` has the bit (`CheckStateSteps`, which bonding already posts).
+  - `CanOffer` refuses a quest with a node step the player already has.
+- **Quests that start on a death:**
+  - A quest file's `"start": "death"` sets the `QBQ_ON_DEATH` need (32). Its giver never offers it, and the catalogue says `onDeath`, so Suggested for you leaves it out.
+  - `Underworld.NewDeath` (a real death: a player's corpse) posts `QuestBook.PlayerDied`. That starts each such quest `CanOffer` allows (death) while the log has room.
+  - The Skull's Five Fires (263) explains the Underworld's brazier puzzle. Once it's done, or the node is bonded, it never comes back. Its giver (Xiana, whose voice it speaks in) is only for the catalogue.
+- **The Vale of Sorrows** (`feyforst.kod`, `feyforst/c2.kod`):
+  - **The gate is back:** the fey node shows only while all eight rooms are very good or all very evil. The elhai (good) or dirhai (evil) node is the same `NODE_FAERIE`. Its karma check (`FeyNode.LashOut`) stays off, so anyone may bond either way.
+  - **Locks** (`FeyForest.CastLock`): casting Detect Evil (Shal'ille) in a vale room locks it good, and Detect Good (Qor) locks it evil, for a Meridian day (`FEY_LOCK_TIME`, 2 real hours). Potions don't count.
+    - While locked, the room's karma holds at 100 or 0, it spawns only its own fey, and it doesn't drift.
+    - The same spell again renews the lock. The opposing spell only breaks it.
+    - So one to three players can lock all eight rooms and bond.
+  - **The lock icon** is a room enchantment, `FeyLockGood` or `FeyLockEvil` (`passive/roomflagicon/feylock*`, with Shal'ille and Qor bane art). It's held for the lock's time, so every client shows it by the map. Its `EndSpell` (the timer, or `RemoveEnchantment` when broken) unlocks the room (`FeyLockEnded`).
+  - A DM's room karma command breaks any lock.

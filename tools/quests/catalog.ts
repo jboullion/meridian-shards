@@ -32,6 +32,8 @@ export function buildCatalog(quests: ResolvedQuest[], _givers: ResolvedGiver[], 
     repeatHours: q.cooldownSeconds === null ? null : q.cooldownSeconds / 3600,
     // Only when paused (QBQ_PAUSED, 16), so other quests' entries stay as they were
     ...(q.needs & 16 ? { paused: true } : {}),
+    // Only when it starts on a death (QBQ_ON_DEATH, 32): no NPC offers it
+    ...(q.needs & 32 ? { onDeath: true } : {}),
     timeLimitMinutes: q.timeLimitSeconds === null ? null : q.timeLimitSeconds / 60,
     text: q.text,
     steps: q.steps.map((s) => ({

@@ -275,6 +275,27 @@ describe("the quest generator", () => {
     expect(generateFrom(sources([{ ...RATS, paused: "yes" }]), WORLD).errors).toEqual(["cellar-rats.json: paused: true or false"]);
   });
 
+  it("writes a quest that starts on a death with its needs bit, and says so in the catalogue", () => {
+    const g = generateFrom(sources([{ ...RATS, start: "death" }, { ...RATS, id: 2, key: "other" }]), WORLD);
+    expect(g.errors).toEqual([]);
+    expect(g.kod).toContain("0, 2, $, $, 32, $, $, $ ]");
+    expect(g.catalog.quests[0]!.onDeath).toBe(true);
+    expect("onDeath" in g.catalog.quests[1]!).toBe(false);
+    expect(generateFrom(sources([{ ...RATS, start: "dawn" }]), WORLD).errors).toEqual(['cellar-rats.json: start: "death", or left out']);
+  });
+
+  it("writes the node kind: the NODE_ bit (hex in blakston.khd) as the step's amount", () => {
+    const w = worldFrom([], "   NODE_A5 = 0x0020\n   RID_TOS_INN = 52\n");
+    expect(w.consts.get("NODE_A5")).toBe(32);
+    const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "node", node: "NODE_BADLANDS" }] }]), worldFrom([], "   NODE_BADLANDS = 0x0008\n"));
+    expect(g.errors.filter((e) => e.includes("node"))).toEqual([]);
+    expect(g.kod).toContain("[ 20, $, 1, 0,");
+    expect(g.kod).toContain("1, $, $, $, 8 ]");
+    expect(g.catalog.quests[0]!.steps[0]!.objective).toBe("Bond with the mana node");
+    expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "node", node: "NODE_NOWHERE" }] }]), WORLD).errors.join()).toMatch(/no NODE_NOWHERE in blakston.khd/);
+    expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "node" }] }]), WORLD).errors.join()).toMatch(/node: a NODE_ constant/);
+  });
+
   it("refuses an auto talk step and unknown replacements", () => {
     const q = { ...RATS, steps: [{ kind: "talk", turnin: { class: "TosInnKeeper" }, auto: true }, { kind: "cast", spell: "OrcTooth" }] };
     expect(generateFrom(sources([q]), WORLD).errors).toEqual(["cellar-rats.json: step 1: auto: a talk step is the hand-in itself"]);

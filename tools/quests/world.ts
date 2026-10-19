@@ -73,7 +73,8 @@ export function worldFrom(files: KodFile[], khd: string): World {
     if (list?.length) spawns.set(rid, [...new Set([...(spawns.get(rid) ?? []), ...list])]);
   }
   const consts = new Map<string, number>();
-  for (const m of khd.matchAll(/^\s*(\w+)\s*=\s*(-?\d+)\b/gm)) if (!consts.has(m[1]!)) consts.set(m[1]!, Number(m[2]));
+  // Decimal or hex (the NODE_ bits are 0x0001...)
+  for (const m of khd.matchAll(/^\s*(\w+)\s*=\s*(-?(?:0x[0-9a-fA-F]+|\d+))\b/gm)) if (!consts.has(m[1]!)) consts.set(m[1]!, Number(m[2]));
   return { classes, byLower, rids, consts, rooms, npcRooms, spawns };
 }
 
