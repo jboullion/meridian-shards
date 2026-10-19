@@ -324,3 +324,25 @@ The user decided these on 2026-10-15:
 - Guide quests 244-246 (`companion-shalille`, `-qor`, `-faren`), from each priestess to her disciples.
 
 **Tried on our server:** every caster's gear, spell book and numbers at every tier; Faren, Qor and Shal'ille attack spells landing on a monster, one every 2 seconds; the healer healing itself and its owner with both heals. **Not yet tried:** healing a groupmate; the Ivy Circlet was dropped from Faren's gear because it asks its wearer for Shal'ille spells.
+
+### The revamp: faction leaders only (2026-10-19)
+
+**Decided with the user, after play testing:** seven kinds were too many, and the faction ones were plain fighters. Only the three faction leaders give companions now, and each fights with a weapon and a school's spells; the schools' four kinds and the disciple-quest rule are gone. Spells come as the owner's base health grows (the first at 50, the second at 70, the third at 90), and spell power and damage grow with it. The bond keeps its 0-15% bonus and now betters the kit within its weapon's family.
+
+| Leader | Kind | Kit (tier 1 → 5) | Spells |
+|---|---|---|---|
+| The Duke | battle-mage | axe → berserker axe → + thorn circlet → nerudite axe → + Qormas helm; Qor's disciple robe | Acid Touch, Splash of Acid, Blind |
+| The Princess | spellsword | hammer → + circlet → maul → + gauntlets → wizard's hat; Faren's disciple robe | Touch of Flame or Icy Fingers, Fireball or Ice Shard, Lightning Bolt |
+| Jonas D'Accor | war-priest | scimitar → + simple helm → helm → + gauntlets → daemon helm; Kraanan's disciple robe | Bless, Magic Shield, Armor of Gort, on its owner |
+
+Each wears a herald shield (`GuildShield`) in its faction's colours with its faction's insignia, in place of the soldier shields.
+
+- **Fire or ice:** the Princess's spellsword turns a fire spell into its cold twin when its target resists cold less (`Battler.ResistanceCheck`).
+- **Touch spells:** a player's touch spell is an enchantment that works only unarmed, so a companion's is one blow of the spell's kind in reach, 150% of its melee damage, which resistances temper (`Companion.TouchStrike`). Out of reach it picks a ranged spell or uses its weapon.
+- **Blind is back** for the Duke's (third spell, a fifth of its casts), which the second round had ruled out for PvP.
+- **The war-priest's buffs:** every 30 minutes, with its owner beside it in sight (and not in a safe room unless buffing others is allowed there), it puts on them each buff they lack, lasting 30 minutes, so they stay up. One purged stays gone until the next round. They're the real enchantments (`StartEnchantment` with its spell power), so they show and purge as any other.
+- **Old companions:** a school's companion is released when its owner logs on, its pack returned; a faction one puts on the new kit.
+- **Numbers** (`blakston.khd`): `COMPANION_KINDS` 3, `COMPANION_SPELL2_HEALTH` 70, `COMPANION_SPELL3_HEALTH` 90, `COMPANION_BUFF_SECONDS` 1800, `COMPANION_BUFF_CHECK_MS` 5000, `COMPANION_TOUCH_PCT` 150. Chance to cast 30% + 2 a tier; spell power two thirds of the owner's base health + 3 a tier (10-99); mana 40 + half its owner's health. Damage 4.5-10% of the owner's health for the casters, 5-11% for the war-priest.
+- **Removed:** kinds 4-7 and their names, halls and palettes; `IsCaster`, `GetHeals`, `GetDiscipleQuest`, the healer's `SupportTimer`; guide quests 243-246. Quests 240-242 remain, their offers rewritten.
+
+**Not yet tried:** all of it, in game.

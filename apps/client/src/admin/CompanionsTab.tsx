@@ -9,10 +9,7 @@ import { companionPlayer, type GameReport, type PlayerCompanion } from "./api.ts
 type Act = (what: string, fn: () => Promise<string | void>) => () => void;
 
 /** blakston.khd COMPANION_* */
-const KINDS = [
-  "The Duke's soldier", "The Princess's knight", "A rebel fencer", "Kraanan's warrior-priest",
-  "Shal'ille's healer", "Qor's dark caster", "Faren's mage",
-];
+const KINDS = ["The Duke's battle-mage", "The Princess's spellsword", "A rebel war-priest"];
 /** blakston.khd COMP_* */
 const STATES = ["none", "with its owner", "waiting at its hall", "fallen", "recovering at its hall"];
 /** companionkinds.kod TierFloor */
@@ -106,7 +103,7 @@ export function CompanionsTab({ act, me }: { act: Act; me: GameReport | null }) 
             <button onClick={action("My companion", "state")}>Refresh</button>
           </div>
           <p className="dim">
-            Give me one skips the rules (health, faction, the disciple quest). Kill it leaves a corpse for Restore Companion (Shal'ille) for 10 minutes, then it recovers at its leader's hall for an hour; Recover now ends the hour.
+            Give me one skips the rules (health, faction). Its spells come with your health (a second at 70, a third at 90). Kill it leaves a corpse for Restore Companion (Shal'ille) for 10 minutes, then it recovers at its leader's hall for an hour; Recover now ends the hour.
           </p>
         </>
       )}
