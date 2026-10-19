@@ -683,8 +683,8 @@ export class ObjectsView {
       e.shadow.raycast = () => {}; // never picked
       this.shadows.add(e.shadow);
     }
-    // The faintest translucent figures (25%) cast none
-    e.shadow.visible = alpha > 0.3;
+    // Figures half see-through or fainter (ghosts, the invisible, those fading) cast none
+    e.shadow.visible = alpha > 0.6;
     const floor = this.ground(o, e.x, e.y, ctx);
     const r = (shadowRadius(c.widthFine) * e.scale) / FINENESS;
     e.shadow.position.set(e.x / FINENESS, (floor + 2) / FINENESS, e.y / FINENESS);

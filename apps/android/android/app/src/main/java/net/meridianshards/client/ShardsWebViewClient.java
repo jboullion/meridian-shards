@@ -74,6 +74,7 @@ public class ShardsWebViewClient extends BridgeWebViewClient {
             AssetCache.Source src = assets.open(host.server(), name, hash);
             Map<String, String> headers = new HashMap<>();
             if (src.length >= 0) headers.put("Content-Length", String.valueOf(src.length));
+            if (src.offline) headers.put("X-Shards-Offline", "1");
             return new WebResourceResponse(mimeOf(name), null, 200, "OK", headers, src.stream);
         } catch (IOException e) {
             Log.w(TAG, name + ": " + e.getMessage());

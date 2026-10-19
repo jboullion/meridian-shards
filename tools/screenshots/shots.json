@@ -81,6 +81,14 @@
       "steps": ["hideHud", "chase:2900:-0.45:5"]
     },
     {
+      "id": "quest-marcus",
+      "title": "A quest from Marcus",
+      "note": "In the Inn of Raza, across the counter from Marcus (his Kod square is 7, 3), facing him: his quest's \"!\" over his head, for a new character. The angle is set again after placing, as the server's turn didn't land.",
+      "rid": 301, "row": 5, "col": 5, "angle": 1489,
+      "clients": ["modern"],
+      "steps": ["hideHud", "eval:shards.gameScene.mover.setAngle(1489)"]
+    },
+    {
       "id": "mobile-wheel",
       "title": "The casting wheel",
       "note": "The phone's Cast button held open on the quick slots; the Attack button shows the mace.",

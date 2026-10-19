@@ -81,10 +81,17 @@ public class AssetCache {
 
         final InputStream stream;
         final long length;
+        /** The APK's manifest in place of the server's, which couldn't be read (offlineManifest) */
+        final boolean offline;
 
         Source(InputStream stream, long length) {
+            this(stream, length, false);
+        }
+
+        Source(InputStream stream, long length, boolean offline) {
             this.stream = stream;
             this.length = length;
+            this.offline = offline;
         }
     }
 
@@ -143,7 +150,14 @@ public class AssetCache {
      * manifest) comes straight from the server and isn't kept.
      */
     Source open(String origin, String name, String hash) throws IOException {
-        if (!isHash(hash)) return passThrough(remote(origin, name, hash));
+        if (!isHash(hash)) {
+            try {
+                return passThrough(remote(origin, name, hash));
+            } catch (IOException e) {
+                if (!name.equals("manifest.json") || bundled.isEmpty()) throw e;
+                return offlineManifest(e);
+            }
+        }
         if (hash.equals(bundled.get(name))) {
             try {
                 InputStream in = apk.open(BUNDLE + "/" + name);
@@ -160,6 +174,21 @@ public class AssetCache {
         }
         byte[] bytes = fetch(name, hash, remote(origin, name, hash));
         return new Source(new ByteArrayInputStream(bytes), bytes.length);
+    }
+
+    /**
+     * The server can't be reached (no internet, or it's down), so the page gets the APK's manifest,
+     * marked X-Shards-Offline (assetCache.ts offlineManifest): everything it lists is in the APK,
+     * so the login screen draws as usual and says the server can't be reached.
+     */
+    private Source offlineManifest(IOException failed) throws IOException {
+        try {
+            InputStream in = apk.open(BUNDLE + "/manifest.json");
+            Log.i(TAG, "the server's manifest failed (" + failed.getMessage() + "): using the APK's");
+            return new Source(in, -1, true);
+        } catch (IOException e) {
+            throw failed;
+        }
     }
 
     private Source passThrough(String url) throws IOException {

@@ -6,6 +6,10 @@
   /* color.c COLOR_HIGHLITE */
   --hl: rgb(240, 208, 25);
   --ui-text: rgb(231, 231, 231);
+  /* Until installUiTheme sets them (never, when the game files can't be loaded: App.tsx
+     StartupFailure); unset, "#3a3a3a var(--ui-bkgnd) repeat" would lose its colour too */
+  --ui-bkgnd: none;
+  --ui-invbkgnd: none;
 }
 
 .mk-backdrop {

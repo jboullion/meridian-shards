@@ -79,6 +79,8 @@ const ROLE_LABELS: Record<Role, string> = {
 };
 /** Moods for when nothing in particular is going on, one per person (by their name) */
 const MOODS = ["Content", "Cheerful", "Thoughtful", "Weary", "Busy", "Bored", "Curious", "Grumpy", "Hopeful", "Distracted"] as const;
+/** The historic towns' ghosts' */
+const GHOST_MOODS = ["Silent", "Wistful", "Forlorn", "Distant", "Lost in the past", "Restless"] as const;
 const nameHash = (s: string) => [...s].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 0x01000193) >>> 0, 0x811c9dc5);
 /** A walker stopping steps aside this far (fine units), so sprites don't share a spot */
 const NUDGE_MIN = 24;
@@ -87,6 +89,8 @@ const NUDGE_MAX = 56;
 const REACH_CLEARANCE_NUDGE = 64;
 /** proto.h DRAWFX_TRANSLUCENT75/50/25: fading in and out */
 const FADE_FX = [1, 2, 3, 0];
+/** Ghosts (the historic towns) never get past half see-through: DRAWFX_TRANSLUCENT25, then 50 */
+const GHOST_FX = [1, 1, 2, 2];
 const FADE_MS = 600;
 /** Turning speed, client angle units per ms */
 const TURN_RATE = 6;
@@ -306,7 +310,8 @@ export class AmbientLife {
     const w = this.walkers.find((v) => v.obj.id === id);
     if (!w) return null;
     const kind = this.spec.kind;
-    const role = ROLE_LABELS[w.role] ?? "Townsperson";
+    const label = ROLE_LABELS[w.role] ?? "Townsperson";
+    const role = this.spec.ghost ? `Ghost of a ${label.toLowerCase()}` : label;
     let doing: string;
     if (w.fleeing) doing = "Running from danger";
     else if (w.beat) doing = w.role === "knight" ? "Standing watch" : "Keeping the peace on their beat";
@@ -321,6 +326,7 @@ export class AmbientLife {
     else doing = "Standing about";
     let mood: string;
     if (w.fleeing) mood = "Frightened";
+    else if (this.spec.ghost) mood = GHOST_MOODS[nameHash(w.name) % GHOST_MOODS.length];
     else if (w.say && w.waveBackMs > 0) mood = "Friendly";
     else if (this.weather === "rain" && kind === "town") mood = "Soggy";
     else if (this.weather === "snow" && kind === "town") mood = "Chilly";
@@ -356,7 +362,8 @@ export class AmbientLife {
       }
       if (this.flee(w, at) && !cried) {
         cried = true;
-        this.event({ type: "flee", x: w.obj.x, y: w.obj.y, female: w.look.female });
+        // Ghosts run without a cry
+        if (!this.spec.ghost) this.event({ type: "flee", x: w.obj.x, y: w.obj.y, female: w.look.female });
         if (this.rand() < 0.7) this.say(w, scatterLine(this.rand));
       }
     }
@@ -439,7 +446,8 @@ export class AmbientLife {
     for (let k = 0; k < 2 && this.toPlace > 0; k++, this.toPlace--) this.placeOnTheWay();
     this.keepGuards(guards);
     this.keepPopulation(target, dt);
-    const dark = kind === "town" && torchHours(this.hour);
+    // Ghosts walk in the dark
+    const dark = kind === "town" && !this.spec.ghost && torchHours(this.hour);
     for (const w of this.walkers) {
       if (w.torch !== (dark && w.torchBearer)) {
         w.torch = !w.torch;
@@ -922,6 +930,8 @@ export class AmbientLife {
   }
 
   private say(w: Walker, text: string): void {
+    // Ghosts say nothing (the line is still drawn, so the crowd's random stream is the same)
+    if (this.spec.ghost) return;
     w.say = { text, ms: tune("sayMs") + text.length * 40 };
   }
 
@@ -1049,7 +1059,7 @@ export class AmbientLife {
   }
 
   private applyFade(w: Walker): void {
-    const dt = FADE_FX[Math.min(3, Math.floor(w.fade * 4))];
+    const dt = (this.spec.ghost ? GHOST_FX : FADE_FX)[Math.min(3, Math.floor(w.fade * 4))];
     if (w.obj.info.drawingType !== dt) w.obj.info.drawingType = dt;
   }
 

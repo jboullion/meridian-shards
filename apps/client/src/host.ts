@@ -361,6 +361,13 @@ export function serverName(): string {
   return desktop.servers.find((s) => s.origin === desktop.server)?.name ?? desktop.server;
 }
 
+/** Ours: what the login screen says when the server's files can't be fetched (no internet, or it's down) */
+export function unreachableMessage(): string {
+  return navigator.onLine === false
+    ? "You're not connected to the internet. Check your connection, then log in."
+    : `Can't reach the server (${serverName()}). Check your internet connection, or try again in a few minutes.`;
+}
+
 /** The gateway's WebSocket URL. */
 export function gameSocketUrl(): string {
   const base = desktop ? new URL(desktop.server) : new URL(location.href);

@@ -67,8 +67,8 @@ function safeName(raw: string): string | null {
   return name;
 }
 
-const reply = (bytes: Uint8Array, name: string) =>
-  new Response(bytes as Uint8Array<ArrayBuffer>, { headers: { "content-type": mimeOf(name), "content-length": String(bytes.length) } });
+const reply = (bytes: Uint8Array, name: string, extra: Record<string, string> = {}) =>
+  new Response(bytes as Uint8Array<ArrayBuffer>, { headers: { "content-type": mimeOf(name), "content-length": String(bytes.length), ...extra } });
 
 const failure = (status: number, text: string) => new Response(text, { status, headers: { "content-type": "text/plain" } });
 
@@ -105,11 +105,31 @@ export class AssetCache {
     const remote = `${origin}/assets/${name}${hash ? `?v=${hash}` : ""}`;
     try {
       // The manifest, and anything asked for without a content hash, isn't cached
-      if (!hash || !HASH.test(hash)) return await this.passThrough(remote, name);
+      if (!hash || !HASH.test(hash)) {
+        const res = await this.passThrough(remote, name).catch((e: Error) => failure(502, e.message));
+        return res.ok || name !== "manifest.json" ? res : await this.offlineManifest(res);
+      }
       return reply(await this.cached(name, hash, remote), name);
     } catch (e) {
       log(`assets: ${remote}: ${(e as Error).message}`);
       return failure(502, (e as Error).message);
+    }
+  }
+
+  /**
+   * Ours: the server can't be reached (no internet, or it's down), so the page gets the
+   * installed manifest, marked X-Shards-Offline. Everything it lists is in the install, so the
+   * login screen draws as usual and says the server can't be reached; once it can, logging in
+   * finds the server's manifest changed and reloads (Game.tsx login).
+   */
+  private async offlineManifest(failed: Response): Promise<Response> {
+    if (!this.bundle) return failed;
+    try {
+      const bytes = new Uint8Array(await readFile(join(this.bundle, "manifest.json")));
+      log(`assets: the server's manifest failed (${failed.status}): using the installed one`);
+      return reply(bytes, "manifest.json", { "x-shards-offline": "1" });
+    } catch {
+      return failed;
     }
   }
 

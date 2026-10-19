@@ -2,7 +2,8 @@
 // Towns get townsfolk walking from door to door, and guards pacing a beat; inns and taverns get
 // patrons who stand about, chat and now and then leave; the castles get knights and courtiers,
 // the arena its fights (its own sim: arena/), and the city's shops customers who come in, look
-// about a while and go. Rooms not listed get nothing.
+// about a while and go. The historic towns (the Cor Noth museum's, RID 9000-9005) get ghosts: town
+// crowds drawn see-through, who say nothing and carry no torches. Rooms not listed get nothing.
 
 import type { Place } from "./chatter.ts";
 import { C, type Faction } from "./townsfolk.ts";
@@ -27,6 +28,11 @@ export interface AmbientRoomSpec {
    * townsfolk walk about inside it (the Arena of Death by day)
    */
   arena?: boolean;
+  /**
+   * Ghosts (the historic towns): drawn half see-through (DRAWFX_TRANSLUCENT50) and silent: no
+   * speech, no cries, no chatter under them (ambientSounds.ts), and no torches after dark
+   */
+  ghost?: boolean;
 }
 
 /**
@@ -37,6 +43,8 @@ export interface AmbientRoomSpec {
 export const BIG_ROOM = 4;
 
 const town = (count: number, place: Place, guards: number, livery: number): AmbientRoomSpec => ({ kind: "town", count, place, guards, livery });
+/** The historic towns' ghosts: a town's crowd, silent and see-through */
+const ghostTown = (count: number, place: Place, guards: number, livery: number): AmbientRoomSpec => ({ ...town(count, place, guards, livery), ghost: true });
 /** `size`: 1, or BIG_ROOM for a big one */
 const inn = (count: number, place?: Place, size = 1): AmbientRoomSpec => ({ kind: "inn", count: count * size, place });
 const castle = (count: number, faction: Faction, guards: number): AmbientRoomSpec => ({
@@ -91,8 +99,9 @@ export const AMBIENT_ROOMS: Record<string, AmbientRoomSpec> = {
   "raza.roo": town(7, "raza", 1, C.GRAY),
   "razainn.roo": inn(4, "raza"),
   "razabar.roo": inn(3, "raza"),
-  // Ko'catan
+  // Ko'catan, both sides of the city gate (RID 2000 and 2009)
   "settle1.roo": town(8, "kocatan", 1, C.YELLOW),
+  "settle2.roo": town(9, "kocatan", 1, C.YELLOW),
   "kocinn.roo": inn(5, "kocatan"),
   "koctav.roo": inn(4, "kocatan"),
   // Bergensdorf and Jixa
@@ -100,6 +109,15 @@ export const AMBIENT_ROOMS: Record<string, AmbientRoomSpec> = {
   "berginn.roo": inn(4, "bergen"),
   "jixa.roo": town(6, "jixa", 1, C.BLACK),
   "jixa_inn.roo": inn(4, "jixa"),
+  // The historic towns (oldtown.kod, RID 9000-9005, reached from the Cor Noth museum's portals):
+  // ghosts. Only the historic Cor Noth and its Hall of Genealogy have doors (to each other):
+  // elsewhere they come and go out of sight, fading
+  "ojas.roo": ghostTown(10, "jasper", 1, C.RED),
+  "omar.roo": ghostTown(9, "marion", 1, C.GREEN),
+  "obarln.roo": ghostTown(10, "barloque", 1, C.PURPLE),
+  "obarls.roo": ghostTown(8, "barloque", 1, C.PURPLE),
+  "ocornoth.roo": ghostTown(9, "cornoth", 1, C.DGREEN),
+  "ocoruniv.roo": ghostTown(3, "cornoth", 0, C.DGREEN),
   // The cities' shops, banks and adventurers' halls: a customer or two
   "tossmith.roo": shop(2, "tos"),
   "tosapoth.roo": shop(2, "tos"),

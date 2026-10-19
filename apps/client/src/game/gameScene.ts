@@ -1888,7 +1888,8 @@ export class GameScene {
       dt,
       listener: { x: me.x, y: me.y, angle: this.mover.angle },
       room: this.roomFile,
-      kind: life ? (this.crowdHere()?.kind ?? null) : null,
+      // The historic towns' ghosts are silent: no chatter under them
+      kind: life && !this.crowdHere()?.ghost ? (this.crowdHere()?.kind ?? null) : null,
       indoors: this.underRoof(me.x, me.y),
       populated: this.crowdHere() !== undefined || (this.terrainHere() ?? []).some((n) => SETTLED.has(n)),
       hour: this.gameHour(),

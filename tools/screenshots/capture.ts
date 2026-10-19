@@ -135,6 +135,8 @@ function settingsFor(client: Client) {
     // The same sky everywhere: no rain or snow, and no frame counter in the picture
     weather: false,
     showFps: false,
+    // No first-time Controls window (WelcomeControls.tsx) over a new character's first shots
+    seenControls: true,
     ...manifest.settings,
   };
 }

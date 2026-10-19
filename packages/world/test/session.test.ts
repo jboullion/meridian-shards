@@ -44,6 +44,13 @@ describe("logging in doesn't wait forever", () => {
     expect(ws.closed).toBe(true);
   });
 
+  test("a socket that closes before it opens (no internet) says the server can't be reached", () => {
+    const { s, ws, errors } = make();
+    ws.close();
+    expect(errors).toEqual([expect.stringMatching(/Can't reach the server/)]);
+    expect(s.phase).toBe("closed");
+  });
+
   test("a server that accepts and then says nothing (hung) gives up and lets go", () => {
     vi.useFakeTimers();
     const { s, ws, errors } = make();

@@ -372,6 +372,46 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
     expect(count("rain")).toBeLessThan(count(null));
   }, 30000);
 
+  test("the historic towns get ghosts, the island settlement townsfolk", () => {
+    const rooms: { rid: number; roo: string }[] = JSON.parse(readFileSync(join(ASSETS, "rooms.json"), "utf8"));
+    const file = (rid: number) => rooms.find((r) => r.rid === rid)!.roo;
+    for (let rid = 9000; rid <= 9005; rid++) expect(AMBIENT_ROOMS[file(rid)]).toMatchObject({ kind: "town", ghost: true });
+    // Ko'catan on both sides of the city gate: living townsfolk
+    for (const rid of [2000, 2009]) {
+      expect(AMBIENT_ROOMS[file(rid)]?.kind).toBe("town");
+      expect(AMBIENT_ROOMS[file(rid)]?.ghost).toBeUndefined();
+    }
+  });
+
+  test("ghosts walk about see-through and say nothing, waved at, running or at night", () => {
+    for (const name of ["ojas.roo", "ocornoth.roo"]) {
+      const r = room(name);
+      const life = new AmbientLife(r, AMBIENT_ROOMS[name], exits()[name], 7, buildNavGrid(r));
+      const seen = new Set<number>();
+      let player: { x: number; y: number } | null = null;
+      for (let t = 0; t < 60000; t += 33) {
+        const hour = t < 30000 ? 12 : 22;
+        life.update(33, { player, scale: 1, hour, impressive: true });
+        const ws = inside(life).walkers;
+        // Stand among them, wave at them now and then, and set off a spell
+        if (!player && ws.length) player = { x: ws[0].obj.x + 200, y: ws[0].obj.y };
+        if (player && t % 3000 < 33) life.wavedAt(player, 0);
+        if (player && t % 7000 < 33) life.scatter(player, 6 * 1024);
+        expect(life.speech()).toHaveLength(0);
+        expect(life.takeEvents()).toHaveLength(0);
+        for (const o of life.objects()) {
+          seen.add(o.id);
+          // DRAWFX_TRANSLUCENT25 fading, TRANSLUCENT50 at most: never solid
+          expect([1, 2]).toContain(o.info.drawingType);
+          expect(o.info.light.intensity).toBe(0);
+        }
+      }
+      expect(seen.size).toBeGreaterThan(AMBIENT_ROOMS[name].count);
+      const one = life.objects()[0];
+      expect(life.describe(one.id)?.role).toMatch(/^Ghost of a /);
+    }
+  }, 60000);
+
   test("nobody when the setting is off", () => {
     const life = new AmbientLife(room("razainn.roo"), AMBIENT_ROOMS["razainn.roo"], exits()["razainn.roo"], 1);
     for (let t = 0; t < 5000; t += 33) life.update(33, { player: null, scale: 0 });

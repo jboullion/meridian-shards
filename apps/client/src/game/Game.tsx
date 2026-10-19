@@ -6,7 +6,7 @@ import {
   type MailNewsEvent, type GuildEvent, type MinigameEvent, localResName } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
-import { allowPortrait, desktop, gameSocketUrl, onAndroidAway, requiredUpdate, type RequiredUpdate } from "../host.ts";
+import { allowPortrait, desktop, gameSocketUrl, onAndroidAway, requiredUpdate, unreachableMessage, type RequiredUpdate } from "../host.ts";
 import { GameAudio } from "./audio.ts";
 import { IntroBackdrop } from "./Intro.tsx";
 import { CharacterCreator } from "./CharacterCreator.tsx";
@@ -87,26 +87,38 @@ export function ignoredLine(line: ChatLine, ownName: string): boolean {
   return s.ignoreEveryone || s.ignored.includes(name) || (s.ignoreBroadcasts && line.sayType === SAY.EVERYONE);
 }
 
-/** Set before reloading for a server update, so the login screen can say why. */
+/**
+ * Set before reloading for a server update, so the login screen can say why: "1", or "online"
+ * when the page had the installed files because the server couldn't be reached (AssetStore.offline).
+ */
 const UPDATED_KEY = "shards.serverUpdated";
 
 function takeUpdatedNotice(): string | null {
   try {
     const was = sessionStorage.getItem(UPDATED_KEY);
     sessionStorage.removeItem(UPDATED_KEY);
+    if (was === "online") return "The server can be reached again. Please log in again.";
     return was ? "The server was updated while you were away. Please log in again." : null;
   } catch {
     return null;
   }
 }
 
-export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
+export function Game({
+  assets, rsb, retryLogin,
+}: {
+  assets: AssetStore;
+  rsb: RsbBundle;
+  /** Ours: a login tried while the game files couldn't be loaded (App.tsx), to go on with now they have */
+  retryLogin?: { username: string; password: string } | null;
+}) {
   const [live, setLive] = useState<Live | null>(null);
   const session = live?.session ?? null;
   const [phase, setPhase] = useState<SessionPhase | "offline">("offline");
   const [characters, setCharacters] = useState<CharacterSlot[]>([]);
   const [motd, setMotd] = useState("");
-  const [error, setError] = useState<string | null>(takeUpdatedNotice);
+  // Ours: the apps' installed files, the server out of reach, say so at once (and the login says it again)
+  const [error, setError] = useState<string | null>(() => takeUpdatedNotice() ?? (assets.offline && !retryLogin ? unreachableMessage() : null));
   const [chat, setChat] = useState<ChatLine[]>([]);
   /** The creator is open for this empty slot once BP_CHARINFO arrives */
   const [creating, setCreating] = useState<{ slotId: number; info: CharInfo | null } | null>(null);
@@ -152,6 +164,8 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       worker.terminate();
       window.removeEventListener("beforeunload", onUnload);
       live.audio.dispose();
+      // Closed already after logging off; not when the game is unmounted by an error (App.tsx GameCrashed)
+      live.session.close();
     };
   }, [live]);
 
@@ -179,7 +193,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
           if (!changed) return connect(username, password, audio);
           audio.dispose();
           try {
-            sessionStorage.setItem(UPDATED_KEY, "1");
+            sessionStorage.setItem(UPDATED_KEY, assets.offline ? "online" : "1");
           } catch {
             // no notice then
           }
@@ -308,11 +322,15 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
   );
 
   // login.c GetLogin: with /Q, no login dialog; log on with /U and /W at once
-  const autoLogin = useRef(launch?.quickstart === true && !!launch.username && !!launch.password);
+  // Ours: and a login tried before the game files could be loaded (App.tsx), now they are
+  const autoLogin = useRef(
+    retryLogin ?? (launch?.quickstart === true && launch.username && launch.password ? { username: launch.username, password: launch.password } : null),
+  );
   useEffect(() => {
-    if (!autoLogin.current || !launch?.username || !launch.password) return;
-    autoLogin.current = false;
-    login(launch.username, launch.password);
+    const first = autoLogin.current;
+    if (!first) return;
+    autoLogin.current = null;
+    login(first.username, first.password);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, at startup
   }, []);
 

@@ -40,10 +40,18 @@ export class AssetStore {
     this.base = base;
   }
 
+  /**
+   * Ours: the server couldn't be reached, so the desktop or Android app answered with the
+   * manifest it was installed with (X-Shards-Offline: assetCache.ts offlineManifest). The
+   * login screen draws from it, and says so.
+   */
+  offline = false;
+
   async init(): Promise<void> {
     const res = await fetch(this.base + "manifest.json");
     if (res.status === 404) throw new Error("No dist/assets/manifest.json. Run `npm run assets` first.");
     if (!res.ok) throw new Error(`manifest.json: HTTP ${res.status}`);
+    this.offline = res.headers.get("x-shards-offline") === "1";
     this.manifest = await res.json();
   }
 

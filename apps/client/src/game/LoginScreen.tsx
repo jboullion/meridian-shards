@@ -132,7 +132,7 @@ export function LoginScreen({
         <div className="mk-modal login-modal">
           <Window title="Login" dlu={LAYOUT.size} onClose={() => setOpen(false)}>
             <form onSubmit={submit}>
-              <img className="mk-login-icon" src={assets.url("ui/icon1.ico")} alt="" style={at([6, 6, 20, 20])} />
+              {assets.has("ui/icon1.ico") && <img className="mk-login-icon" src={assets.url("ui/icon1.ico")} alt="" style={at([6, 6, 20, 20])} />}
               <Text at={LAYOUT.intro} wrap>
                 Meridian Shards is a game played over the Internet. To play, you must have an account with the central server.
               </Text>

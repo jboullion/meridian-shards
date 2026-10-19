@@ -38,6 +38,8 @@ export const LOGON_SERVER_TAB_MS = 5000;
  * first word (AP_GETLOGIN comes at once from a server that's well), and the character list
  */
 export const LOGIN_TIMEOUTS = { connect: 15_000, firstWord: 15_000, characters: 45_000 };
+/** Ours: the socket didn't open (in LOGIN_TIMEOUTS.connect, or it closed first) */
+const CANT_REACH = "Can't reach the server. Check your internet connection, or try again in a few minutes.";
 
 export interface ChatLine {
   kind: "system" | "say" | "said-resource";
@@ -347,9 +349,11 @@ export class GameSession {
     this.conn.token.lookup = opts.lookupResource;
     const limits = { ...LOGIN_TIMEOUTS, ...opts.loginTimeouts };
     // Ours: a server that doesn't open, doesn't answer, or never gets us to the character list
-    this.loginTimer = setTimeout(() => this.loginStalled("Can't reach the server. Check your connection, or try again in a few minutes."), limits.connect);
+    this.loginTimer = setTimeout(() => this.loginStalled(CANT_REACH), limits.connect);
     let heard = false;
+    let opened = false;
     this.ws.onopen = () => {
+      opened = true;
       this.armLoginTimer(limits.firstWord, "The server isn't answering. It may be starting up or busy: try again in a few minutes.");
       this.charactersTimer = setTimeout(() => this.loginStalled("Logging in is taking too long. Try again in a few minutes."), limits.characters);
       this.conn.start();
@@ -364,7 +368,8 @@ export class GameSession {
     this.ws.onclose = () => {
       this.clearLoginTimer();
       this.clearCharactersTimer();
-      if (!this.closedByUs && this.phase !== "closed") this.events.error?.("Disconnected from the server.");
+      // A socket that never opened (no internet, the server down) is one that can't reach the server
+      if (!this.closedByUs && this.phase !== "closed") this.events.error?.(opened ? "Disconnected from the server." : CANT_REACH);
       this.setPhase("closed");
       this.conn.close();
     };
