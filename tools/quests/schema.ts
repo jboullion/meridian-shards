@@ -31,11 +31,11 @@ export const ARENAS = {
 } as const;
 export type ArenaName = keyof typeof ARENAS;
 
-export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena"] as const;
+export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
 /** Steps that happen by doing something, once (the guide chains' kinds): done by themselves unless `auto` is false */
-export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena"];
+export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train"];
 
 /** How a quest's markers look: gold for the main and levelling chains, silver for story quests, bronze for errands */
 export const TIERS = ["main", "story", "errand"] as const;
@@ -68,6 +68,8 @@ export interface QuestStep {
   items?: string[];
   /** learn: skill classes; learning any one counts, and knowing them all already does too */
   skills?: string[];
+  /** learn: spell classes, the same way (Minor Heal at the Temple of Shal'ille) */
+  spells?: string[];
   /** attune: the travel point (util/travelnet.kod GetPoints id) */
   point?: number;
   /** arena: whose mock bouts count (the Arena of Kraanan's melee, the Arena of Death's duel) */
@@ -332,9 +334,12 @@ function checkStepShape(s: unknown, where: string): string[] {
     case "equip":
       if (!Array.isArray(s.items) || !s.items.length || !s.items.every(isText)) errs.push(`${where}: items: item classes, any one of them`);
       break;
-    case "learn":
-      if (!Array.isArray(s.skills) || !s.skills.length || !s.skills.every(isText)) errs.push(`${where}: skills: skill classes, any one of them`);
+    case "learn": {
+      const lists = [s.skills, s.spells].filter((l) => l !== undefined);
+      if (!lists.length || !lists.every((l) => Array.isArray(l) && l.every(isText)) || !lists.some((l) => (l as unknown[]).length))
+        errs.push(`${where}: skills, spells: skill or spell classes, any one of them`);
       break;
+    }
     case "attune":
       if (!isInt(s.point, 1)) errs.push(`${where}: point: a travel point's id`);
       break;

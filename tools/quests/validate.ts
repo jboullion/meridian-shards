@@ -8,7 +8,7 @@ import { classOf, iconOf, isItem, isMonster, isNpc, isNumberItem, isSkill, isSpe
 
 /** QuestBook's step kinds (questbook.kod QK_*) */
 export const KIND_NUM: Record<StepKind, number> = {
-  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17, arena: 18,
+  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17, arena: 18, train: 19,
 };
 
 /** The faction a quest needs, as QuestBook reads it: the FACTION_ number, -1 any but neutral, $ none */
@@ -265,10 +265,17 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
         if (!withCls || !isNpc(w, withCls)) errs.push(`${where}: with: ${s.with} isn't an NPC class`);
       }
       const withName = withCls ? nameOf(w, withCls) : null;
-      // equip's items, or learn's skills: the step's classes (QuestBook QBS_CLASSES)
-      const items = (s.kind === "equip" ? (s.items ?? []) : s.kind === "learn" ? (s.skills ?? []) : []).map((name) => {
+      // equip's items, or learn's skills and spells: the step's classes (QuestBook QBS_CLASSES)
+      const listed: { name: string; field: "items" | "skills" | "spells" }[] =
+        s.kind === "equip"
+          ? (s.items ?? []).map((name) => ({ name, field: "items" as const }))
+          : s.kind === "learn"
+            ? [...(s.skills ?? []).map((name) => ({ name, field: "skills" as const })), ...(s.spells ?? []).map((name) => ({ name, field: "spells" as const }))]
+            : [];
+      const items = listed.map(({ name, field }) => {
         const c = classOf(w, name);
-        if (s.kind === "learn" ? !c || !isSkill(w, c) : !c || !isItem(w, c)) errs.push(`${where}: ${s.kind === "learn" ? "skills" : "items"}: ${name} isn't ${s.kind === "learn" ? "a skill" : "an item"} class`);
+        const ok = !!c && (field === "skills" ? isSkill(w, c) : field === "spells" ? isSpell(w, c) : isItem(w, c));
+        if (!ok) errs.push(`${where}: ${field}: ${name} isn't ${field === "skills" ? "a skill" : field === "spells" ? "a spell" : "an item"} class`);
         return { cls: c ?? name, name: c ? nameOf(w, c) : name };
       });
       const amount = s.kind === "attune" ? (s.point ?? 0) : s.kind === "arena" ? (s.win ? 1 : 0) : (s.amount ?? (s.kind === "nodes" ? 12 : s.kind === "deposit" ? 1 : 0));
@@ -321,6 +328,8 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
                                       ? `Learn ${items.map((x) => x.name).join(" or ")}`
                                       : s.kind === "attune"
                                         ? "Attune to the portal"
+                                        : s.kind === "train"
+                                          ? "Spend training points"
                                         : arena
                                           ? `${s.win ? "Win" : "Fight"} a mock bout in ${arena.name}`
                                         : "Bond with every mana node");

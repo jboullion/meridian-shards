@@ -85,3 +85,10 @@ Weapon skills improved too slowly in the play test, and the reason was the origi
 - **The starting chance** (`GetPracticeChance`, in hundredths of a percent): `GetInitialChance` (the skill's `viChance_to_Increase` with Intellect and the faction bonus, as before) × 800/30, times (1 − ability/110)², halved above twice the requisite stat (the soft cap, which now works), times the foe (its level against 10 + ability/2, 0.25 to 1.5; 60 when not a monster), times the learn points' penalty (2.5% each, down to a quarter), times `Settings.piSkillPracticeRate` (percent, 100). Rooms' `ModifyChanceToImprove` still apply, and Second Wind's "no tokens" rule still gives 0.
 - **What it plays out to** (an average weapon of 30, stat 50, Intellect 30, monsters about our level): about 8 uses for 1% at 5%, 20 at 50%, 80 at 90%; about 600 uses from 1% to 50% and 2,500 more to 99% (the gate made it at least 7,500). Tried on our server: a mace at 50% against a giant rat starts at 1.67% a swing (Startling's Might of 25 puts its soft cap at 49%) and gained 5% in 250 hits, 8 to 61 hits apart; 30 unarmed swings took punch from 12% to 15% and brawling from 10% to 11%.
 - **Gone:** `ImproveOnce`, `GetSecondaryChance`, `viImprove_percent` and the 75-swing gate (`piWeaponcraftImprovementMinimumSwings` and the swing count stay, unused). The unused swing `bonus` is still passed but ignored.
+
+## Free spells (2026-10-19)
+
+- **Minor Heal is a free spell** (`Spell.IsFreeToLearn`): anyone may learn it, whatever their schools, karma or learn points. `Player.PlayerCanLearn` says SUCCESS before those checks.
+- **It doesn't count toward learn points**, in `PlayerCanLearn` or `GetTotalLearnPoints`, which means it adds nothing to the practice penalty either. Blink and the utility spells are skipped the same way.
+- Priestess Xiana sells it to everyone at the usual level-1 price, and the Temple of Shal'ille quest (149) ends with learning it (docs/adr/0009-quests.md, 2026-10-19).
+- **Training points:** spending them is now a quest step, `train` (`ShardsAbilities.Train` calls `QuestBook.AbilityTrained`). Rook's Put It to Practice (253) uses it.

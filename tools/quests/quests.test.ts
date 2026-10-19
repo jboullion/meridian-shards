@@ -178,6 +178,23 @@ describe("the quest generator", () => {
     expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "learn", skills: ["OrcTooth"] }] }]), w).errors.join()).toMatch(/OrcTooth isn't a skill class/);
   });
 
+  it("writes a learn step's spells with its skills, as the step's classes", () => {
+    const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "learn", spells: ["Phase"] }, { kind: "learn", skills: ["Block"], spells: ["Phase"] }] }]), WORLD);
+    expect(g.errors).toEqual([]);
+    expect(g.kod).toContain("[ 16, $, 1, 0, &TosInnKeeper, 0, qd_1_s1, $, $, qd_1_t1,\r\n               1, $, $, [ &Phase ], 0 ]");
+    expect(g.kod).toContain("[ 16, $, 1, 0, &TosInnKeeper, 0, qd_1_s2, $, $, qd_1_t2,\r\n               1, $, $, [ &Block, &Phase ], 0 ]");
+    expect(g.catalog.quests[0]!.steps.map((s) => s.objective)).toEqual(["Learn phase", "Learn block or phase"]);
+    expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "learn", spells: ["Block"] }] }]), WORLD).errors.join()).toMatch(/spells: Block isn't a spell class/);
+    expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "learn", spells: [] }] }]), WORLD).errors.join()).toMatch(/skills, spells/);
+  });
+
+  it("writes the train kind (spending training points, ShardsAbilities.Train)", () => {
+    const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "train" }] }]), WORLD);
+    expect(g.errors).toEqual([]);
+    expect(g.kod).toContain("[ 19, $, 1, 0, &TosInnKeeper, 0, qd_1_s1, $, $, qd_1_t1,\r\n               1, $, $, $, 0 ]");
+    expect(g.catalog.quests[0]!.steps[0]!.objective).toBe("Spend training points");
+  });
+
   it("writes the arena kind: its watcher as the step's NPC, a win as its amount, the arena as its area", () => {
     const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "arena", arena: "kraanan" }, { kind: "arena", arena: "death", win: true }] }]), WORLD);
     expect(g.errors).toEqual([]);

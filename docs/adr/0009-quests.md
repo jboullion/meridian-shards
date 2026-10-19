@@ -436,3 +436,35 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
 - **Suggested for you** is hidden behind a Show suggestions checkbox at the Quests tab's foot (`settings.questSuggestions`, off by default).
 - **The way on the maps:** a doorway several squares wide is one chevron at its middle (`questWay.ts exitsTo`), not one a square.
 - **Skipping the tutorial** (the character creator's Skip the tutorial, `start <city>`, `ShardsAbilities.StartCity`) attunes the new character to Raza's and Marion's portals (points 3 and 2), the ones the tutorial's road passes, so A Way Home is never offered to them.
+
+## Play-test changes (2026-10-19)
+
+- **Raza:** the Outskirts of Raza (`razaforest.kod`) spawn faster and fuller for Rats in the Stores (120): `piGen_time` 14000 (from 20000), 5-8 to start (from 3-7), at most 18 (from 15), and rats 75% (from 60, spider babies 25).
+- **Marion:**
+  - Marion's crypt gives 6 s for the second lever (`marcryp1.kod SLAM_TIME`, from 5). Its levers are further apart than in Raza's mausoleum, which stays at 5 s.
+  - **Clearing the statues** (12, The Restless Dead of Marion, step 2) is now eight living statues on the crypt's second level (`kill` LivingStatue, `inRooms` RID_MAR_CRYPT2, handed in to Ran er'Hoth). It used to be a visit to level 3A, the thrashers' level, and the quest no longer sends anyone there. `marcryp2.kod` places 37 statues, and places them again when the room empties and someone comes back.
+  - The Temple of Shal'ille (149) now ends with learning **Minor Healing** from Priestess Xiana: a `learn` step with `spells`. It's done at once if the player already knows it.
+- **Free spells** (`Spell.IsFreeToLearn`, TRUE only for Minor Heal):
+  - Anyone may learn one: `Player.PlayerCanLearn` says SUCCESS (or ALREADY) before the points, school and karma checks.
+  - It doesn't count toward learn points: both counts (`PlayerCanLearn`, `GetTotalLearnPoints`) skip it, as they skip Blink and the utility spells.
+  - It still costs a level-1 spell's 500 shillings.
+- **`learn` steps take spells:**
+  - A step's `spells` (spell classes) are written into the step's classes with its `skills`. The generator checks each kind.
+  - `Player.AddSpell` calls `QuestBook.SkillLearned` as `AddSkill` does.
+  - `KnowsSkills` looks in the spell list too.
+  - The dashboard's Quests tab edits them ("or spells").
+- **The `train` kind** (`QK_TRAIN` 19): spending training points on any spell or skill. `ShardsAbilities.Train` calls `QuestBook.AbilityTrained` once the points are spent. There are no classes: anything counts.
+- **Cor Noth (40-50) teaches the game.** Rook (`CorNothSergeant`) and D'Franco (`CorNothInnkeeper`) offer small tutorial quests alongside the old monster quests (129-132).
+  - **Rook:**
+    - A Lesson from Rook (252): learn any of his skills. It rewards 400 training points.
+    - Then, together: Put It to Practice (253, a `train` step) and Cor Noth's Portal (254, attune point 6).
+    - Word to Cor Noth (128) now pays 500 shillings, enough for a level-1 skill.
+  - **D'Franco:**
+    - The Meridian Museum (255): visit the museum, then any historic town through its old portals.
+    - The Hall of Genealogy (256).
+    - Herbs from Solomon (257): buy anything from `CornothGrocer`.
+  - **Rook's faction tour** replaces Choosing a Side (133, retired):
+    - The quests are The Princess of Barloque (258), Jonas and the Rebels (259) and The Duke of Tos (260, from 48), all offered after 254.
+    - Each explains the side's benefits and risks (the bonuses are in `parlia.kod`).
+    - Each one's steps: attune that city's portal (5, 4, 1), talk to the liege in their room (852, 371, 952), then report back to Rook.
+- **Already done before this round** (d444d1e2): ten slimes, repeatable slime and fungus hunts, and The Road Through Meridian paused.

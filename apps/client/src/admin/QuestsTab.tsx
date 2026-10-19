@@ -11,10 +11,10 @@ import {
 
 type Act = (what: string, fn: () => Promise<string | void>) => () => void;
 
-const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena"];
+const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train"];
 
 /** The kinds that happen once by doing something: done by themselves unless Auto is unticked */
-const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena"];
+const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train"];
 
 const TIER_LABEL = { main: "Main (gold)", story: "Story (silver)", errand: "Errand (bronze)" } as const;
 
@@ -417,6 +417,12 @@ function QuestForm({
               <input value={(s.skills ?? []).join(" ")} placeholder="skill classes, spaces between (Block Punch)" onChange={(e) => setStep(i, { skills: e.target.value.split(/\s+/).filter(Boolean) })} />
             </label>
           )}
+          {s.kind === "learn" && (
+            <label>
+              or spells{" "}
+              <input value={(s.spells ?? []).join(" ")} placeholder="spell classes, spaces between (MinorHeal)" onChange={(e) => setStep(i, { spells: e.target.value.split(/\s+/).filter(Boolean) })} />
+            </label>
+          )}
           {s.kind === "attune" && (
             <label>
               Travel point{" "}
@@ -669,7 +675,7 @@ function clean(q: QuestFile): QuestFile {
       if ((s.kind === "deposit" || s.kind === "stash" || s.kind === "buy") && s.with) out.with = s.with;
       if ((s.kind === "stash" || s.kind === "buy") && s.item) out.item = s.item;
       if (s.kind === "equip") out.items = s.items;
-      if (s.kind === "learn") out.skills = s.skills;
+      if (s.kind === "learn") Object.assign(out, s.skills?.length ? { skills: s.skills } : {}, s.spells?.length ? { spells: s.spells } : {});
       if (s.kind === "attune") out.point = s.point ?? 1;
       if (s.kind === "arena") Object.assign(out, { arena: s.arena ?? "kraanan" }, s.win ? { win: true } : {});
       if (s.kind === "deposit" || s.kind === "health" || (s.kind === "nodes" && s.amount !== undefined && s.amount !== 12)) out.amount = s.amount ?? (s.kind === "health" ? 50 : 1);
