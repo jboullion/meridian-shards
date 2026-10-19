@@ -498,6 +498,12 @@ function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }
           <dd>Double click a shopkeeper to buy; a banker to deposit; a vault keeper to withdraw. Typed: buy, offer, deposit, withdraw.</dd>
           <dt>Trading</dt>
           <dd>Offer items to another player; they answer with their own; then both accept.</dd>
+          <dt>The arenas (⚔)</dt>
+          <dd>
+            In the Arena of Kraanan or the Arena of Death in Tos, the crossed swords by the map (or typed arena) open the Arena window. Mock bouts: a melee against three fighters
+            in the Arena of Kraanan, a duel against an elite in the Arena of Death, matched to your health. Losing one is never a death: you wake in the stands. Player battles:
+            the watcher's matches of players (in the Arena of Death, a real death). Record: your mock wins and losses, and your title.
+          </dd>
           <dt>Containers</dt>
           <dd>Double click a box to see inside and take things out; put stores things in one.</dd>
           <dt>The full map</dt>

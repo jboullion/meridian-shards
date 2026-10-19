@@ -196,8 +196,11 @@ export function tickerColor(color: string | undefined): string | undefined {
 
 export function TouchControls({
   session, icons, settings, chatUnread, onMove, onPress, onChat, onDrawer, onMap, mapOpen, onLook, resting, onRest,
-  quickSlots, onUseSlot, onEditSlot, onSetSlot, onSwapSlots, selecting, onSelectSelf, onCancelSelect, cooldown, onEmotes,
+  quickSlots, onUseSlot, onEditSlot, onSetSlot, onSwapSlots, selecting, onSelectSelf, onCancelSelect, cooldown, onEmotes, onArena, arenaActive,
 }: {
+  /** Ours (docs/adr/0019-arena-bouts.md): in an arena, the Arena window; and whether we're in its line or bout */
+  onArena?: () => void;
+  arenaActive?: boolean;
   onSetSlot: (i: number, slot: QuickSlot) => void;
   onSwapSlots: (a: number, b: number) => void;
   /** The spell cooldown (cooldowns.ts), on the hotbar's spell slots */
@@ -253,6 +256,11 @@ export function TouchControls({
         <button type="button" className="touch-button small" onClick={onDrawer} aria-label="Inventory, spells and map">
           Items
         </button>
+        {onArena && (
+          <button type="button" className={`touch-button small arena-touch${arenaActive ? " pressed" : ""}`} onClick={onArena} aria-label="Arena">
+            ⚔
+          </button>
+        )}
       </div>
       <Joystick onMove={onMove} />
       <div className="touch-actions">

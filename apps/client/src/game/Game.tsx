@@ -19,6 +19,7 @@ import { filterIncoming, loadProfanity } from "./profanity.ts";
 import { IconRenderer } from "./icons.ts";
 import { QuestStore } from "./quests.ts";
 import { CompanionStore } from "./companion.ts";
+import { ArenaStore } from "./arenaBouts.ts";
 import { ConnectingScreen, LoginScreen, rememberName } from "./LoginScreen.tsx";
 
 /** A tiny event relay: session events that arrive before (or without) a listener are dropped. */
@@ -58,6 +59,8 @@ interface Live {
   appraisal: Relay<Appraisal>;
   /** Ours (docs/adr/0010-followers.md): our companion, kept from its first status at logon */
   companion: CompanionStore;
+  /** Ours (docs/adr/0019-arena-bouts.md): the arena's mock bouts and our records */
+  arena: ArenaStore;
   offers: Relay<OfferEvent>;
   looks: Relay<LookResult>;
   contents: Relay<ContainerContents>;
@@ -197,6 +200,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     const training = new Relay<TrainingCost[]>();
     const appraisal = new Relay<Appraisal>();
     const companion = new CompanionStore();
+    const arena = new ArenaStore();
     const offers = new Relay<OfferEvent>();
     const looks = new Relay<LookResult>();
     const contents = new Relay<ContainerContents>();
@@ -268,6 +272,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
         training: training.emit,
         appraisal: appraisal.emit,
         companion: (e) => companion.handle(e),
+        arena: (s) => arena.handle(s),
         offer: offers.emit,
         sound: (e) => audio.handle(e),
         damageDealt: damage.emit,
@@ -279,7 +284,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
     s.setLanguage(getSettings().language);
     void loadProfanity(assets);
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, quests, questOffers, cosmetics, training, appraisal, companion, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, quests, questOffers, cosmetics, training, appraisal, companion, arena, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
   };
 
   const logout = () => {
@@ -387,6 +392,7 @@ export function Game({ assets, rsb }: { assets: AssetStore; rsb: RsbBundle }) {
       training={live.training.on}
       appraisal={live.appraisal.on}
       companion={live.companion}
+      arena={live.arena}
       offers={live.offers.on}
       phase={phase}
       chat={chat}

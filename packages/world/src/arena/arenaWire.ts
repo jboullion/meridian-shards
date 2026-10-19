@@ -8,7 +8,7 @@ import type { ArenaChampion, ArenaRecord } from "./arenaRoster.ts";
 import type { FieldKind } from "./arenaData.ts";
 
 /** Status bits (ArenaPersonWire.st) */
-export const ARENA_STATUS = { WEBBED: 1, BLIND: 2, DAZZLED: 4, POISONED: 8, WINNER: 16, BEATEN: 32 } as const;
+export const ARENA_STATUS = { WEBBED: 1, BLIND: 2, DAZZLED: 4, POISONED: 8, WINNER: 16, BEATEN: 32, HELD: 64 } as const;
 
 /** Someone in the arena, all of them */
 export interface ArenaPersonWire {

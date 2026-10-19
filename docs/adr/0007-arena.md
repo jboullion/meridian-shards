@@ -1,6 +1,6 @@
 # ADR 0007: The arena, one sim on the relay
 
-- **Status:** accepted, 2026-10-12, and built the same day (see "As built"). Builds on the relay of [ADR 0005](0005-friends.md). **Since 2026-10-16** the relay is only the arena's feed: anyone in the arena's room watches with no sign-in (`ArenaClient`, [ADR 0015](0015-social-on-our-server.md) 3).
+- **Status:** accepted, 2026-10-12, and built the same day (see "As built"). Builds on the relay of [ADR 0005](0005-friends.md). **Since 2026-10-16** the relay is only the arena's feed: anyone in the arena's room watches with no sign-in (`ArenaClient`, [ADR 0015](0015-social-on-our-server.md) 3). **Since 2026-10-18** ([ADR 0019](0019-arena-bouts.md)): the Arena of Death has a show of its own (one sim per server and room, `arena/arenaRooms.ts`), and a player's mock bout on our server takes either floor while it's fought (decision 8 below still holds for the show: the bouts aren't the relay's).
 
 ## Context
 
@@ -22,7 +22,7 @@ We want real battles that everyone on our server watches together, using the gam
 5. **With no relay** (or none answering within 4 s, or an older gateway that answers `arenaOff`), the client runs the same sim itself with the default settings and the season's roster. It's the same to look at, just not shared.
 6. **The game's hours.** The arena is shut from 22 to 6 by the game's hour, which the relay can't see, so watchers tell it the hour their sun shows (`hour` in `arenaWatch`, then `arenaHour` when it changes). Everyone on a server sees the same sun, so the latest word holds, and an admin setting the time opens or shuts it. With no word yet, the relay guesses from the wall clock as blakserv's `SystemInitGameHour` does (`arenaHourAt`); a running server drifts from that guess.
 7. **Only while watched.** The relay starts an arena when its first watcher comes and drops it a minute after the last one leaves; the next visitor gets a fresh round.
-8. **Real players are never in it.** The sim doesn't see them, fights go on whoever is in the room, and nothing about the arena reaches blakserv or `WorldState` (arena figures are ambient objects, as before).
+8. **Real players are never in it.** (A player's mock bout is our server's, [ADR 0019](0019-arena-bouts.md): the show gives way to it.) The sim doesn't see them, fights go on whoever is in the room, and nothing about the arena reaches blakserv or `WorldState` (arena figures are ambient objects, as before).
 
 ### 2. Real combat
 
@@ -116,7 +116,7 @@ Note that the roster is made when a season starts and kept, so a changed `mix` o
 ## Consequences
 
 - The relay does real work now: under a millisecond of CPU per simulated second per server with watchers. That's nothing next to blakserv.
-- The gateway image carries our packages (`packages/{protocol,formats,world}/src`) and the arena's room (`tosarena.roo`, `nav/tosarena.nav`), and starts Node with `--import ./register.mjs` so `@shards/*` resolves to them. Node won't run TypeScript from `node_modules`.
+- The gateway image carries our packages (`packages/{protocol,formats,world}/src`) and the arenas' rooms (`tosarena.roo`, `tosarena_death.roo`, and their `nav/*.nav`), and starts Node with `--import ./register.mjs` so `@shards/*` resolves to them. Node won't run TypeScript from `node_modules`.
 - Clients without the relay see their own fights, as before. Clients with it see everyone's.
 - The old lockstep arena (ADR 0005 6, for the arena) is gone. Shared seeds stay for the other crowds.
 

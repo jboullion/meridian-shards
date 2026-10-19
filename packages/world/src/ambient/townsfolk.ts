@@ -9,8 +9,8 @@ import { animStateFrom } from "../animation.ts";
 import type { Look, OverlayState, WorldObject } from "../state.ts";
 import { ambientId, localRes } from "./ambientIds.ts";
 
-/** blakston.khd HS_* */
-const HS = { HEAD: 1, EYES: 11, MOUTH: 12, TOUPEE: 13, NOSE: 14, RIGHT_HAND: 21, RIGHT_WEAPON: 22, LEFT_HAND: 31, LEFT_WEAPON: 32, LEGS: 41 } as const;
+/** blakston.khd HS_* (HS_TOP_BOW is HS_LEFT_WEAPON's spot) */
+const HS = { HEAD: 1, EYES: 11, MOUTH: 12, TOUPEE: 13, NOSE: 14, RIGHT_HAND: 21, RIGHT_WEAPON: 22, LEFT_HAND: 31, LEFT_WEAPON: 32, TOP_BOW: 32, BOTTOM_BOW: 33, LEGS: 41, EMBLEM: 51 } as const;
 /**
  * A lit torch (torch.kod): its overlay in the left hand, flickering over groups 1-6 every 60 ms
  * (SendHeldAnimation), the left arm bent to hold it (player.kod: group 7 for HS_LEFT_WEAPON),
@@ -167,6 +167,13 @@ export interface Gear {
   shield?: { file: string; xlat: number; emblem?: string };
   /** On the head (helmet.kod: HS_TOUPEE), and whether it hides the hair (helmets do: RemoveHair; circlets don't) */
   hat?: { file: string; hidesHair: boolean };
+  /**
+   * A bow (bow.kod) in place of a weapon: its lower half held (HS_BOTTOM_BOW, group 2, the left
+   * arm bent as for a shield), the upper half too while it's drawn (HS_TOP_BOW)
+   */
+  bow?: { top: string; bottom: string };
+  /** A disciple robe's school emblem on the chest (robedisc.kod: HS_EMBLEM), in the robe's colours */
+  emblem?: { file: string; xlat: number };
 }
 
 /** What a person is made of, kept so the looks can be built again (a wave, a turn) */
@@ -240,7 +247,7 @@ export function randomAppearance(rand: () => number): Appearance {
  * The arms' and legs' animations: standing, walking, and the emotes: waving the right hand,
  * pointing, dancing, casting a spell, swinging a weapon, and our cheer (a dance's frame, held)
  */
-export type Pose = "stand" | "walk" | "wave" | "point" | "dance" | "cast" | "attack" | "cheer";
+export type Pose = "stand" | "walk" | "wave" | "point" | "dance" | "cast" | "attack" | "cheer" | "shoot";
 
 const once = (period: number, low: number, high: number, final: number): Animation => ({ type: ANIMATE.ONCE, period, groupLow: low, groupHigh: high, groupFinal: final });
 
@@ -255,10 +262,13 @@ export function lookFor(a: Appearance, pose: Pose, torch = false, cheerFrame = 0
   const walk = pose === "walk";
   const gear = a.gear ?? {};
   const armed = !!gear.weapon;
-  // A torch takes the shield's hand
-  const shield = torch ? undefined : gear.shield;
-  const leftHeld = torch || !!shield;
+  // A torch takes the shield's hand (a bow takes both)
+  const bow = gear.bow;
+  const shield = torch || bow ? undefined : gear.shield;
+  const leftHeld = torch || !!shield || !!bow;
   const attack = pose === "attack" && armed;
+  // player.kod PANM_BOW_FIRE: 1.2 s, the arms drawing and loosing
+  const shoot = pose === "shoot" && !!bow;
   // The arms: bent to hold what they hold, else swinging as they walk
   const rightGroup = armed ? 17 : 1;
   const leftGroup = leftHeld ? 7 : 1;
@@ -288,11 +298,15 @@ export function lookFor(a: Appearance, pose: Pose, torch = false, cheerFrame = 0
       right = none(18 + cheerFrame);
       left = none(10 + cheerFrame);
       break;
+    case "shoot":
+      right = bow ? once(600, 15, 16, rightGroup) : none(rightGroup);
+      left = bow ? once(1200, 9, 9, leftGroup) : none(leftGroup);
+      break;
     default:
       right = armed ? none(17) : walk ? cycle(200, 2, 3) : none(1);
       left = leftHeld ? none(7) : walk ? cycle(200, 2, 3) : none(1);
   }
-  const legs = attack ? once(900, 6, 6, 1) : pose === "dance" ? cycle(150, 8, 24) : pose === "cheer" ? none(8 + cheerFrame) : walk ? cycle(100, 2, 5) : none(1);
+  const legs = attack ? once(900, 6, 6, 1) : shoot ? once(1200, 7, 7, 1) : pose === "dance" ? cycle(150, 8, 24) : pose === "cheer" ? none(8 + cheerFrame) : walk ? cycle(100, 2, 5) : none(1);
   const overlays = [
     overlay(a.arms[0], HS.LEFT_HAND, a.armsXlat, left),
     overlay(a.arms[1], HS.RIGHT_HAND, a.armsXlat, right),
@@ -312,9 +326,18 @@ export function lookFor(a: Appearance, pose: Pose, torch = false, cheerFrame = 0
     overlays.push(overlay(shield.file, HS.LEFT_WEAPON, shield.xlat, none(2)));
     if (shield.emblem) overlays.push(overlay(shield.emblem, HS.LEFT_WEAPON, 0, none(1)));
   }
+  if (bow) {
+    if (shoot) overlays.push(overlay(bow.top, HS.TOP_BOW, 0, once(1200, 1, 1, 2)));
+    overlays.push(overlay(bow.bottom, HS.BOTTOM_BOW, 0, shoot ? once(1200, 1, 1, 2) : none(2)));
+  }
   if (torch) overlays.push(overlay(TORCH_OVERLAY, HS.LEFT_WEAPON, 0, cycle(60, 1, 6)));
-  // The body bends into a swing and sways in a dance (player.kod SendAnimation)
-  const body = attack ? once(300, 2, 4, 1) : pose === "dance" ? cycle(150, 6, 22) : pose === "cheer" ? none(6 + cheerFrame) : none(1);
+  // The body bends into a swing and sways in a dance (player.kod SendAnimation), and so does a
+  // robe's emblem with it (robedisc.kod SendOverlayAnimation)
+  const body = attack ? once(300, 2, 4, 1) : shoot ? once(1200, 5, 5, 1) : pose === "dance" ? cycle(150, 6, 22) : pose === "cheer" ? none(6 + cheerFrame) : none(1);
+  if (gear.emblem) {
+    const e = attack ? once(300, 2, 4, 1) : shoot ? once(1200, 5, 5, 1) : pose === "dance" ? cycle(150, 6, 21) : pose === "cheer" ? none(6 + Math.min(cheerFrame, 15)) : none(1);
+    overlays.push(overlay(gear.emblem.file, HS.EMBLEM, gear.emblem.xlat, e));
+  }
   return { anim: animStateFrom(body), overlays, translation: a.bodyXlat };
 }
 
@@ -495,6 +518,51 @@ export function mageAppearance(rand: () => number, female?: boolean): Appearance
   };
 }
 
+/** The schools' battle mages at the Arena of Death (docs/adr/0019-arena-bouts.md) */
+export type BattleSchool = "qor" | "faren" | "riija";
+
+/**
+ * A disciple robe's mastery colour (robedisc.kod viXLAT_*_master), its emblem (emblm-{school}{m,f}),
+ * what's worn on the head, and what's held in the left hand, as the server's battle mages wear them
+ * (battler/monster/human/arenafighter.kod): Qor a thorn circlet and an orc shield, Faren a circlet
+ * (and the Jewel of Froz, which shows nowhere), Riija a circlet and a herald's shield, the guild
+ * shield in Riija's purple with its sign (guilshld.kod: gshA-D, gshriov)
+ */
+const SCHOOL_KIT: Record<BattleSchool, { robe: number; emblem: string; hat: string; shield?: { file: string | string[]; xlat: (skin: number) => number; emblem?: string } }> = {
+  qor: { robe: C.BLACK, emblem: "q", hat: "thocirclov.bgf", shield: { file: "osh.bgf", xlat: () => 0 } },
+  faren: { robe: C.RED, emblem: "f", hat: "circlet.bgf" },
+  riija: { robe: C.PURPLE, emblem: "r", hat: "circlet.bgf", shield: { file: ["gsha.bgf", "gshb.bgf", "gshc.bgf", "gshd.bgf"], xlat: () => twoColorXlat(C.PURPLE, C.PURPLE), emblem: "gshriov.bgf" } },
+};
+
+/** A battle mage of a school: its disciple robe and emblem, a circlet, and its shield */
+export function battleMageAppearance(rand: () => number, school: BattleSchool, female?: boolean): Appearance {
+  const p = person(rand, female ?? rand() < 0.45);
+  const sex = p.female ? 1 : 0;
+  const kit = SCHOOL_KIT[school];
+  const robe = twoColorXlat(kit.robe, p.skin);
+  const s = kit.shield;
+  return {
+    ...p, body: ROBE_BODY[sex], bodyXlat: robe, arms: ROBE_ARMS[sex], armsXlat: robe, legs: ROBE_LEGS[sex], legsXlat: robe,
+    gear: {
+      hat: { file: kit.hat, hidesHair: false },
+      emblem: { file: `emblm-${kit.emblem}${p.female ? "f" : "m"}.bgf`, xlat: robe },
+      shield: s ? { file: Array.isArray(s.file) ? pick(rand, s.file) : s.file, xlat: s.xlat(p.skin), emblem: s.emblem } : undefined,
+    },
+  };
+}
+
+/**
+ * A gladiator at the Arena of Death: heavy armour always, a helm mostly, a fine weapon or a bow
+ * (its two overlays, as the bow option), and with a one-handed weapon a shield now and then
+ */
+export function gladiatorAppearance(
+  rand: () => number, opts: { armour: string; weapon?: string; bow?: { top: string; bottom: string }; shield: number; helm: number; female?: boolean },
+): Appearance {
+  const a = fighterAppearance(rand, { armour: opts.armour, weapon: opts.weapon, shield: opts.bow ? 0 : opts.shield, helm: opts.helm, female: opts.female });
+  if (opts.bow) a.gear = { ...a.gear, weapon: undefined, shield: undefined, bow: opts.bow };
+  return a;
+}
+
 /** Whether a player's body art is armour worth a second look (chain, scale, plate or nerudite) */
 export function isImpressiveBody(file: string): boolean {
   const f = file.toLowerCase();
@@ -533,6 +601,9 @@ export function townsfolkArt(): string[] {
     out.add(PLAIN_LEGS[s]);
   }
   for (const f of [...CIRCLETS, ...Object.values(WEAPONS), ...SHIELDS, "gshe.bgf"]) out.add(f);
+  // The Arena of Death's: bows, the schools' emblems and shields
+  for (const f of ["bowaov.bgf", "bowbov.bgf", "osh.bgf", "gsha.bgf", "gshb.bgf", "gshc.bgf", "gshd.bgf", "gshriov.bgf"]) out.add(f);
+  for (const k of Object.values(SCHOOL_KIT)) for (const s of ["m", "f"]) out.add(`emblm-${k.emblem}${s}.bgf`);
   for (const f of Object.values(FACTIONS)) out.add(f.emblem);
   return [...out];
 }

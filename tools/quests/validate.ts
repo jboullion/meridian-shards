@@ -2,13 +2,13 @@
 // to what the Kod writer and the catalogue need: classes as declared, rooms as numbers, NPCs'
 // names, and each step's objective line.
 
-import { ACTION_KINDS, checkGiverShape, checkQuestShape, INSIGNIA, SCHOOLS, type Faction, type Giver, type NpcRef, type Quest, type QuestRewards, type StepKind, type Tier } from "./schema.ts";
+import { ACTION_KINDS, ARENAS, checkGiverShape, checkQuestShape, INSIGNIA, SCHOOLS, type Faction, type Giver, type NpcRef, type Quest, type QuestRewards, type StepKind, type Tier } from "./schema.ts";
 import { xpForPoints } from "./xp.ts";
 import { classOf, iconOf, isItem, isMonster, isNpc, isNumberItem, isSkill, isSpell, nameOf, spawnRooms, type World } from "./world.ts";
 
 /** QuestBook's step kinds (questbook.kod QK_*) */
 export const KIND_NUM: Record<StepKind, number> = {
-  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17,
+  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17, arena: 18,
 };
 
 /** The faction a quest needs, as QuestBook reads it: the FACTION_ number, -1 any but neutral, $ none */
@@ -255,7 +255,12 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
         if (!cls || !isSpell(w, cls)) errs.push(`${where}: spell: ${s.spell} isn't a spell class`);
       }
       let withCls: string | null = null;
-      if (s.with) {
+      // An arena step is counted by its arena's watcher (QBS_WITH), and its area is the arena
+      const arena = s.kind === "arena" && s.arena ? ARENAS[s.arena] : null;
+      if (arena) {
+        withCls = classOf(w, arena.watcher);
+        if (!withCls) errs.push(`${where}: arena: no ${arena.watcher} class`);
+      } else if (s.with) {
         withCls = classOf(w, s.with);
         if (!withCls || !isNpc(w, withCls)) errs.push(`${where}: with: ${s.with} isn't an NPC class`);
       }
@@ -266,14 +271,14 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
         if (s.kind === "learn" ? !c || !isSkill(w, c) : !c || !isItem(w, c)) errs.push(`${where}: ${s.kind === "learn" ? "skills" : "items"}: ${name} isn't ${s.kind === "learn" ? "a skill" : "an item"} class`);
         return { cls: c ?? name, name: c ? nameOf(w, c) : name };
       });
-      const amount = s.kind === "attune" ? (s.point ?? 0) : (s.amount ?? (s.kind === "nodes" ? 12 : s.kind === "deposit" ? 1 : 0));
+      const amount = s.kind === "attune" ? (s.point ?? 0) : s.kind === "arena" ? (s.win ? 1 : 0) : (s.amount ?? (s.kind === "nodes" ? 12 : s.kind === "deposit" ? 1 : 0));
       const ridsOf = (list: (string | number)[] | undefined) =>
         (list ?? []).map((r) => {
           const n = typeof r === "number" ? r : w.rids.get(r);
           if (n === undefined || !w.rooms.has(n)) errs.push(`${where}: no room ${r}`);
           return n ?? 0;
         });
-      const rooms = ridsOf(s.rooms);
+      const rooms = ridsOf(arena ? [arena.room] : s.rooms);
       const exclude = new Set(ridsOf(s.exclude));
       // A kill's area is where its monster spawns (5.1), and a deposit's or a purchase's where its
       // NPC stands, unless the step names it
@@ -316,6 +321,8 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
                                       ? `Learn ${items.map((x) => x.name).join(" or ")}`
                                       : s.kind === "attune"
                                         ? "Attune to the portal"
+                                        : arena
+                                          ? `${s.win ? "Win" : "Fight"} a mock bout in ${arena.name}`
                                         : "Bond with every mana node");
       kodText(objective, `${where}: objective`, errs);
       if (s.parcel) kodText(s.parcel, `${where}: parcel`, errs);

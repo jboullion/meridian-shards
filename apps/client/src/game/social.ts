@@ -189,6 +189,11 @@ export class SocialLink {
     this.arena.setHour(hour);
   }
 
+  /** A player's mock bout holds the arena's floor (our server says so), for the relay's fighters to give way (sent only when it changes) */
+  arenaBusy(busy: boolean): void {
+    this.arena.setBusy(busy);
+  }
+
   /** Whether the arena's connection is up (the arena falls back to our own without it) */
   get relayOnline(): boolean {
     return this.arena.online;

@@ -7,13 +7,15 @@ import { ARENA_ARCHETYPES, ARENA_ARMOUR, ARENA_SPELLS, ARENA_WEAPONS, type Arche
 export interface ArenaConfig {
   /** How many fight a round (picked anew each round) */
   floor: [number, number];
+  /** At least this many of a round's fighters are casters, when the roster has them (so there's magic to see) */
+  minCasters: number;
   /** People always in the stands while it's open (the beaten besides) */
   spectators: number;
   /** Fighters in a season's roster */
   rosterSize: number;
   /** How many of each archetype the roster has, against the others */
   mix: Record<string, number>;
-  /** The game hours it's open, from and to (22 to 6 shut, as before) */
+  /** The game hours it's open, from and to (22 to 6 shut, as before); from after to runs past midnight */
   open: [number, number];
   /** A round that goes on this long ends: the healthiest left wins */
   roundMaxMs: number;
@@ -37,6 +39,7 @@ export interface ArenaConfig {
 
 export const DEFAULT_ARENA_CONFIG: ArenaConfig = {
   floor: [4, 8],
+  minCasters: 2,
   spectators: 14,
   rosterSize: 24,
   mix: { warrior: 3, knight: 2, duelist: 2, kraanan: 2, faren: 2, qor: 1.5, shalille: 1.5, riija: 1.5 },
@@ -52,6 +55,27 @@ export const DEFAULT_ARENA_CONFIG: ArenaConfig = {
   armour: ARENA_ARMOUR,
   archetypes: ARENA_ARCHETYPES,
 };
+
+/**
+ * The Arena of Death's (docs/adr/0019-arena-bouts.md): one against one, its elites only, and open
+ * at night, while the Arena of Kraanan is shut
+ */
+export const DEATH_ARENA_CONFIG: ArenaConfig = {
+  ...DEFAULT_ARENA_CONFIG,
+  floor: [2, 2],
+  minCasters: 0,
+  spectators: 10,
+  rosterSize: 16,
+  mix: { gladiator: 4, qorbattle: 2, farenbattle: 2, riijabattle: 2 },
+  open: [22, 6],
+  roundMaxMs: 3 * 60_000,
+};
+
+/** Whether an arena is open at a game hour (null: as by day) */
+export function arenaOpenAt(open: readonly [number, number], hour: number | null): boolean {
+  if (hour === null) return open[0] < open[1] || open[0] === open[1];
+  return open[0] <= open[1] ? hour >= open[0] && hour < open[1] : hour >= open[0] || hour < open[1];
+}
 
 /** Maps whose entries may be added to: a new entry takes what it leaves out from the first default */
 const OPEN_MAPS = new Set(["spells", "weapons", "armour", "archetypes", "mix"]);
@@ -137,9 +161,13 @@ function check(c: ArenaConfig, errors: string[]): ArenaConfig {
     return [a, b];
   };
   c.floor = clampPair(c.floor, 2, 12, "floor");
+  c.minCasters = Math.max(0, Math.min(c.floor[1], Math.round(c.minCasters)));
   c.spectators = Math.max(0, Math.min(40, Math.round(c.spectators)));
   c.rosterSize = Math.max(c.floor[1] + 2, Math.min(64, Math.round(c.rosterSize)));
-  c.open = clampPair(c.open, 0, 24, "open");
+  // Either way round: from after to is open across midnight
+  const hours = c.open.map((h) => Math.max(0, Math.min(24, Math.round(h))));
+  if (hours[0] !== c.open[0] || hours[1] !== c.open[1]) errors.push("open: kept to whole hours 0-24");
+  c.open = [hours[0], hours[1]];
   c.fieldLife = Math.max(0.02, Math.min(2, c.fieldLife));
   c.damageScale = Math.max(0.1, Math.min(10, c.damageScale));
   for (const [k, a] of Object.entries(c.archetypes)) {
@@ -169,10 +197,10 @@ function check(c: ArenaConfig, errors: string[]): ArenaConfig {
   return c;
 }
 
-/** The defaults with `json` (arena.json, parsed) merged over them, and what couldn't be used */
-export function readArenaConfig(json: unknown): { config: ArenaConfig; errors: string[] } {
+/** The defaults (`defaults`, the Arena of Kraanan's unless said) with `json` (arena.json, parsed) merged over them, and what couldn't be used */
+export function readArenaConfig(json: unknown, defaults: ArenaConfig = DEFAULT_ARENA_CONFIG): { config: ArenaConfig; errors: string[] } {
   const errors: string[] = [];
-  const base = structuredClone(DEFAULT_ARENA_CONFIG);
+  const base = structuredClone(defaults);
   const merged = json === undefined || json === null ? base : (merge(base, json, "", errors) as ArenaConfig);
   return { config: check(merged, errors), errors };
 }

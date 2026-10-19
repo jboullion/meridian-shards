@@ -23,6 +23,8 @@ export class ArenaClient {
   private ws: WebSocket | null = null;
   private room: string | null = null;
   private hour: number | null = null;
+  /** Whether a player's mock bout holds the floor, as our server told us (docs/adr/0019-arena-bouts.md) */
+  private busy = false;
   private backoff = BACKOFF_MS;
   private retry: ReturnType<typeof setTimeout> | null = null;
   private readonly opts: ArenaClientOptions;
@@ -40,7 +42,7 @@ export class ArenaClient {
     this.room = room;
     this.hour = hour;
     if (!room) return this.disconnect();
-    if (this.online) this.raw({ t: "arenaWatch", server: this.opts.server, room, hour });
+    if (this.online) this.watchNow();
     else if (!this.ws) this.open();
   }
 
@@ -49,6 +51,16 @@ export class ArenaClient {
     if (hour === this.hour) return;
     this.hour = hour;
     if (this.room && hour !== null) this.raw({ t: "arenaHour", hour });
+  }
+
+  /**
+   * A player's mock bout holds the floor (our server says so: UC_ARENA): the relay's fighters give
+   * way to it until it's over. Said again on every watch, so a reconnect keeps it
+   */
+  setBusy(busy: boolean): void {
+    if (busy === this.busy) return;
+    this.busy = busy;
+    if (this.room) this.raw({ t: "arenaBusy", busy });
   }
 
   close(): void {
@@ -63,6 +75,11 @@ export class ArenaClient {
     this.ws = null;
     this.online = false;
     ws?.close();
+  }
+
+  private watchNow(): void {
+    this.raw({ t: "arenaWatch", server: this.opts.server, room: this.room, hour: this.hour });
+    if (this.busy) this.raw({ t: "arenaBusy", busy: true });
   }
 
   private raw(msg: Record<string, unknown>): void {
@@ -81,7 +98,7 @@ export class ArenaClient {
       if (this.ws !== ws) return;
       this.online = true;
       this.backoff = BACKOFF_MS;
-      if (this.room) this.raw({ t: "arenaWatch", server: this.opts.server, room: this.room, hour: this.hour });
+      if (this.room) this.watchNow();
     };
     ws.onmessage = (ev) => {
       if (this.ws !== ws || typeof ev.data !== "string") return;

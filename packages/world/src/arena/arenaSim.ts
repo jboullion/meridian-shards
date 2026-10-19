@@ -1,5 +1,5 @@
-// Ours (docs/adr/0007-arena.md): the Arena of Kraanan's fights, as one simulation that everyone on a
-// game server watches. The relay runs it (tools/gateway/arena.ts) and sends what happens; with no
+// Ours (docs/adr/0007-arena.md): an arena's fights (the Arena of Kraanan's, or the Arena of Death's:
+// arenaRooms.ts), as one simulation that everyone on a game server watches. The relay runs it (tools/gateway/arena.ts) and sends what happens; with no
 // relay the client runs it itself (arenaView.ts). It never touches the game: nothing here reaches
 // blakserv, and real players are never in it.
 //
@@ -12,7 +12,10 @@
 // of fire that burn whoever stands in them, poison fog, webs that hold whoever walks into them,
 // brambles that bar the way until they're cut down and scratch whoever brushes past, and blind and
 // dazzle, after which the victim stumbles about unable to fight (AI_MOVE_RANDOM | AI_NOFIGHT, as
-// the server does to monsters).
+// the server does to monsters), and hold, which leaves them standing still. Bows shoot arrows.
+//
+// While a player's mock bout holds the floor (our server's, docs/adr/0019-arena-bouts.md; the
+// watchers say so: setBusy), no round is fought: those on the floor leave, the stands stay.
 //
 // Fixed 50 ms ticks from a seeded random stream: the same seed and the same calls give the same
 // fights (the tests rely on it).
@@ -23,8 +26,8 @@ import { chatterLine, type ChatterContext, type Role } from "../ambient/chatter.
 import { personName } from "../ambient/names.ts";
 import { randomAppearance, type Appearance, type Pose } from "../ambient/townsfolk.ts";
 import { seededRandom } from "../ambient/ambientLife.ts";
-import { EFFECT_INTERVAL_MS, WEAPON_DAMAGE, type ArchetypeDef, type ArenaSpellDef, type FieldKind } from "./arenaData.ts";
-import type { ArenaConfig } from "./arenaConfig.ts";
+import { EFFECT_INTERVAL_MS, WEAPON_DAMAGE, type ArchetypeDef, type ArenaSpellDef, type ArenaWeaponDef, type FieldKind } from "./arenaData.ts";
+import { arenaOpenAt, type ArenaConfig } from "./arenaConfig.ts";
 import type { ArenaChampion, ArenaRecord, RosterEntry } from "./arenaRoster.ts";
 import {
   ARENA_STATUS, type ArenaEvent, type ArenaFieldWire, type ArenaMove, type ArenaPersonWire, type ArenaPhase, type ArenaRosterWire, type ArenaShotWire,
@@ -63,6 +66,10 @@ const SAY_MS = 3200;
 const RETARGET_MS = 4000;
 const CHASE_STEP_MS = 350;
 const FOREVER = 1e9;
+/** A player's bout holds the floor at most this long, unless said again (anyone may say so: the relay asks nobody) */
+export const ARENA_BUSY_MAX_MS = 6 * 60_000;
+/** Bowmen keep this far off (squares) */
+const BOW_KEEP = 3;
 
 type ArenaRole = "fighter" | "mage" | "spectator";
 
@@ -86,6 +93,7 @@ interface Person {
   webMs: number;
   blindMs: number;
   dazzleMs: number;
+  holdMs: number;
   poisonBy: Person | null;
   winner: boolean;
   beaten: boolean;
@@ -174,6 +182,8 @@ export interface ArenaSimOptions {
   seed: number;
   /** The sim's clock at the start (the relay's ms): times in the messages count from it */
   now?: number;
+  /** The fighting floor's nav area (arenaRooms.ts arenaFloorArea); the stands are the other big ones. Default 1, the biggest */
+  floorArea?: number;
 }
 
 const dist = (a: NavPoint, b: NavPoint) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -211,6 +221,9 @@ export class ArenaSim {
   private round = 0;
   private winner: Person | null = null;
   private pit: NavPoint = { x: 0, y: 0 };
+  private readonly floorArea: number;
+  /** Until when (the sim's clock) a player's bout holds the floor */
+  private busyUntil = 0;
   private galleries: number[] = [];
   private areaCells = new Map<number, number>();
   private blocksVersion = 0;
@@ -240,14 +253,15 @@ export class ArenaSim {
     this.rand = seededRandom(opts.seed);
     this.nameRand = seededRandom((opts.seed ^ 0x5bd1e995) >>> 0);
     this.now = opts.now ?? 0;
+    this.floorArea = opts.floorArea ?? 1;
     for (const a of grid.area) if (a) this.areaCells.set(a, (this.areaCells.get(a) ?? 0) + 1);
-    // The floor is the largest area (nav areas are numbered largest first); the stands the other big ones
-    this.galleries = [...this.areaCells.entries()].filter(([a, n]) => a !== 1 && n >= 100).map(([a]) => a);
+    // The floor is its area (by default the largest: nav areas are numbered largest first); the stands the other big ones
+    this.galleries = [...this.areaCells.entries()].filter(([a, n]) => a !== this.floorArea && n >= 100).map(([a]) => a);
     let sx = 0,
       sy = 0,
       n = 0;
     for (let i = 0; i < grid.area.length; i++)
-      if (grid.area[i] === 1) {
+      if (grid.area[i] === this.floorArea) {
         const c = cellCentre(grid, i);
         sx += c.x;
         sy += c.y;
@@ -267,13 +281,26 @@ export class ArenaSim {
     for (const r of roster) this.rosterChanged.add(r.id);
   }
 
+  /**
+   * A player's bout holds the floor (true), or is over (false): while it does, no round is fought
+   * and those on the floor leave it. It lapses after ARENA_BUSY_MAX_MS unless said again
+   */
+  setBusy(busy: boolean): void {
+    this.busyUntil = busy ? this.now + ARENA_BUSY_MAX_MS : 0;
+  }
+
+  /** Whether a player's bout holds the floor */
+  get busy(): boolean {
+    return this.now < this.busyUntil;
+  }
+
   // ---- stepping ----
 
   /** One tick (ARENA_TICK_MS), at the game hour (null: as by day) */
   update(dt: number, hour: number | null): void {
     this.now += dt;
     this.tickCount++;
-    const open = hour === null || (hour >= this.config.open[0] && hour < this.config.open[1]);
+    const open = arenaOpenAt(this.config.open, hour);
     if (!open && this.phase !== "closed") this.close();
     if (open && this.phase === "closed") {
       this.phase = "rest";
@@ -360,7 +387,8 @@ export class ArenaSim {
   private st(p: Person): number {
     return (
       (p.webMs > 0 ? ARENA_STATUS.WEBBED : 0) | (p.blindMs > 0 ? ARENA_STATUS.BLIND : 0) | (p.dazzleMs > 0 ? ARENA_STATUS.DAZZLED : 0) |
-      (p.poisonBy ? ARENA_STATUS.POISONED : 0) | (p.winner ? ARENA_STATUS.WINNER : 0) | (p.beaten ? ARENA_STATUS.BEATEN : 0)
+      (p.poisonBy ? ARENA_STATUS.POISONED : 0) | (p.winner ? ARENA_STATUS.WINNER : 0) | (p.beaten ? ARENA_STATUS.BEATEN : 0) |
+      (p.holdMs > 0 ? ARENA_STATUS.HELD : 0)
     );
   }
 
@@ -419,6 +447,10 @@ export class ArenaSim {
   }
 
   private runRound(dt: number): void {
+    if (this.busy) {
+      if (this.phase === "fight" || this.phase === "won") this.yieldFloor();
+      return;
+    }
     const floor = this.people.filter((p) => this.contestant(p));
     if (this.phase === "fight") {
       this.roundMs += dt;
@@ -466,16 +498,16 @@ export class ArenaSim {
     const free = this.roster.filter((r) => !present.has(r.id));
     const casters = (list: { arch: string }[]) => list.filter((r) => this.config.archetypes[r.arch]?.role === "mage").length;
     const chosen: RosterEntry[] = [];
-    // At least two casters when the roster has them, so there's magic to see
+    // At least so many casters when the roster has them, so there's magic to see
     for (let k = floor.length; k < n && free.length; k++) {
-      const needMage = casters(chosen) + casters(floor) < 2;
+      const needMage = casters(chosen) + casters(floor) < c.minCasters;
       const pool = needMage && casters(free) ? free.filter((r) => this.config.archetypes[r.arch]?.role === "mage") : free;
       const r = pool[Math.floor(this.rand() * pool.length) % pool.length];
       chosen.push(r);
       free.splice(free.indexOf(r), 1);
     }
     for (const r of chosen) {
-      const cell = this.openCell(1);
+      const cell = this.openCell(this.floorArea);
       if (cell < 0) break;
       const at = cellCentre(this.grid, cell);
       const p = this.spawnFighter(r, at);
@@ -534,6 +566,27 @@ export class ArenaSim {
     w.fadeDir = -1;
   }
 
+  /** A player's bout takes the floor: the round stops, those on it walk off, their walls and spells go; the stands stay */
+  private yieldFloor(): void {
+    this.winner = null;
+    for (const p of this.people) {
+      if (p.role === "spectator" || p.fadeDir < 0 || p.leaving) continue;
+      p.target = null;
+      p.winner = false;
+      p.emoteMs = 0;
+      this.setPose(p, "stand");
+      this.walkOff(p);
+    }
+    for (const f of this.fields) this.fieldsGone.push(f.id);
+    this.fields = [];
+    this.shots = [];
+    this.reblock();
+    for (const p of this.people) p.fav = null;
+    this.phase = "rest";
+    this.phaseMs = this.between(this.config.restMs);
+    this.endRound();
+  }
+
   /** Shut for the night: everyone goes, the walls with them */
   private close(): void {
     this.phase = "closed";
@@ -560,7 +613,7 @@ export class ArenaSim {
   private spawn(role: ArenaRole, look: Appearance, at: NavPoint, area: number, fadeIn: boolean): Person {
     const p: Person = {
       id: this.nextId++, rid: -1, name: "", arch: "", role, look, x: at.x, y: at.y, angle: Math.floor(this.rand() * 4096), pose: "stand", ps: 0, cf: 0,
-      hp: 1, mhp: 1, mana: 0, mmana: 0, webMs: 0, blindMs: 0, dazzleMs: 0, poisonBy: null, winner: false, beaten: false,
+      hp: 1, mhp: 1, mana: 0, mmana: 0, webMs: 0, blindMs: 0, dazzleMs: 0, holdMs: 0, poisonBy: null, winner: false, beaten: false,
       fade: fadeIn ? 0 : 1, fadeDir: fadeIn ? 1 : 0, path: [], walking: false, pace: PACE_MIN + this.rand() * (PACE_MAX - PACE_MIN), idleMs: 0, faceAngle: -1,
       leaving: false, stayMs: FOREVER, emoteMs: 0, nextEmoteMs: 1500 + this.rand() * 4500, target: null, swingMs: 0, castMs: 0, cooldownMs: 0, stepMs: 0,
       retargetMs: 0, lastSquare: -1, moved: false, lastHitBy: null, hacking: null, area, say: null, sayMs: 0, fav: null, favRound: -1, sent: "", fresh: true,
@@ -571,7 +624,7 @@ export class ArenaSim {
 
   private spawnFighter(r: RosterEntry, at: NavPoint): Person {
     const a = this.archetype(r.arch);
-    const p = this.spawn(a.role, r.look, at, 1, true);
+    const p = this.spawn(a.role, r.look, at, this.floorArea, true);
     p.rid = r.id;
     p.name = r.name;
     p.arch = r.arch;
@@ -716,11 +769,14 @@ export class ArenaSim {
     if (p.webMs > 0) p.webMs = Math.max(0, p.webMs - dt);
     if (p.blindMs > 0) p.blindMs = Math.max(0, p.blindMs - dt);
     if (p.dazzleMs > 0) p.dazzleMs = Math.max(0, p.dazzleMs - dt);
+    if (p.holdMs > 0) p.holdMs = Math.max(0, p.holdMs - dt);
     if (p.mmana) p.mana = Math.min(p.mmana, p.mana + (this.archetype(p.arch).manaRegen * dt) / 1000);
     if (p.role === "spectator" || p.winner) return this.idle(p, dt);
     if (!this.contestant(p) || this.phase !== "fight") return this.idle(p, dt);
     if (p.poisonBy) this.hurt(p, (POISON_RATE * dt) / 1000, p.poisonBy);
     if (!this.contestant(p)) return;
+    // Held: still as a statue, neither moving nor fighting (hold.kod)
+    if (p.holdMs > 0) return;
     if (p.blindMs > 0 || p.dazzleMs > 0) return this.stumble(p);
     if (p.idleMs > 0) {
       p.idleMs -= dt;
@@ -765,6 +821,8 @@ export class ArenaSim {
   }
 
   private fightMelee(p: Person, o: Person, a: ArchetypeDef): void {
+    const bow = this.weaponOf(p)?.bow;
+    if (bow) return this.fightBow(p, o, bow);
     const d = dist(p, o);
     const reach = this.reachOf(p);
     // A war-mage casts now and then, mostly while closing in
@@ -807,7 +865,7 @@ export class ArenaSim {
     if (p.walking) return;
     if (p.webMs <= 0 && p.stepMs <= 0 && (d < keep || d > range)) {
       const to = d < keep ? this.awayFrom(p, o) : this.towards(p, o, (keep + range) / 2);
-      p.stepMs = to ? 2500 + this.rand() * 2500 : 1000;
+      p.stepMs = to ? this.between(a.temper.stepEvery ?? [2500, 5000]) : 1000;
       if (to) return this.walk(p, [to]);
     }
     p.faceAngle = angleTo(o.x - p.x, o.y - p.y);
@@ -815,6 +873,30 @@ export class ArenaSim {
     if (d < ARM && p.swingMs <= 0 && (p.mana < 7 || this.rand() < 0.3)) return this.swing(p, o);
     if (p.castMs > 0 || p.cooldownMs > 0) return;
     if (!this.castAt(p, o, a)) p.castMs = 800;
+  }
+
+  /** With a bow: keep a few squares off, as a caster does, and loose an arrow each time the bow's drawn */
+  private fightBow(p: Person, o: Person, bow: NonNullable<ArenaWeaponDef["bow"]>): void {
+    const d = dist(p, o);
+    const keep = BOW_KEEP * SQ;
+    const range = bow.range * SQ;
+    if (p.walking) return;
+    if (p.webMs <= 0 && p.stepMs <= 0 && (d < keep - 0.5 * SQ || d > range)) {
+      const to = d < keep ? this.awayFrom(p, o) : this.towards(p, o, (keep + range) / 2);
+      p.stepMs = to ? 2000 + this.rand() * 2000 : 800;
+      if (to) return this.walk(p, [to]);
+    }
+    p.faceAngle = angleTo(o.x - p.x, o.y - p.y);
+    if (p.swingMs > 0 || d > range) return;
+    const s = this.config.spells[bow.shot];
+    if (!s) return;
+    const w = this.weaponOf(p);
+    p.swingMs = (w?.swingMs ?? 1800) * (0.85 + this.rand() * 0.3);
+    p.angle = p.faceAngle;
+    this.setPose(p, "shoot", true);
+    this.event({ type: "cast", x: p.x, y: p.y, spell: bow.shot });
+    this.shoot(p, o, bow.shot, s);
+    this.chatterInFight(p);
   }
 
   /** Blind or dazzled: stumbling about, unable to fight (blind.kod: AI_MOVE_RANDOM | AI_NOFIGHT) */
@@ -857,7 +939,7 @@ export class ArenaSim {
     this.setPose(p, "attack", true);
     // Armour turns some blows; a foe held fast or blind is easier to hit
     const armour = this.armourOf(o);
-    const helpless = o.webMs > 0 || o.blindMs > 0 || o.dazzleMs > 0 ? 0.15 : 0;
+    const helpless = o.webMs > 0 || o.blindMs > 0 || o.dazzleMs > 0 || o.holdMs > 0 ? 0.15 : 0;
     const lands = this.rand() < a.hit - (armour?.dodge ?? 0) + helpless;
     if (!lands) {
       this.event({ type: "swing", x: p.x, y: p.y, hit: null, ouch: 0, female: o.look.female });
@@ -961,7 +1043,7 @@ export class ArenaSim {
     const fav = p.rid >= 0 ? this.roster[p.rid]?.spell : null;
     const melee = this.archetype(o.arch).role === "fighter";
     const closing = melee && d < 5.5 * SQ && o.webMs <= 0;
-    const helpless = o.webMs > 0 || o.blindMs > 0 || o.dazzleMs > 0;
+    const helpless = o.webMs > 0 || o.blindMs > 0 || o.dazzleMs > 0 || o.holdMs > 0;
     const choices: [string, number][] = [];
     for (const [key, weight] of a.spells) {
       const s = this.config.spells[key];
@@ -969,7 +1051,7 @@ export class ArenaSim {
       let m = 1;
       if (s.kind === "bolt") m = (d > 3 * SQ ? 1.5 : 1) * (helpless ? 2 : 1);
       else if (s.kind === "curse") {
-        if (o.blindMs > 0 || o.dazzleMs > 0) continue;
+        if (o.blindMs > 0 || o.dazzleMs > 0 || o.holdMs > 0) continue;
         m = melee ? (closing ? 3 : 1.5) : 0.8;
       } else if (s.wall) {
         const ahead = s.wall.ahead * SQ;
@@ -999,11 +1081,12 @@ export class ArenaSim {
     return choices[choices.length - 1][0];
   }
 
-  /** A bolt or curse across the floor (project.c, as the server sends a projectile) */
+  /** A bolt or curse across the floor (project.c, as the server sends a projectile); one with no projectile (Hold) lands at once */
   private shoot(p: Person, o: Person, key: string, s: ArenaSpellDef): void {
-    const speed = s.projectile?.speed ?? 10;
+    const speed = s.projectile?.speed;
     const len = dist(p, o) / SQ;
-    const shot: Shot = { id: this.nextId++, spell: key, sx: p.x, sy: p.y, dx: o.x, dy: o.y, born: this.now, flight: (len / speed) * 1000, from: p, to: o };
+    const flight = speed ? (len / speed) * 1000 : 0;
+    const shot: Shot = { id: this.nextId++, spell: key, sx: p.x, sy: p.y, dx: o.x, dy: o.y, born: this.now, flight, from: p, to: o };
     this.shots.push(shot);
     this.shotsAdded.push(this.shotWire(shot));
   }
@@ -1031,7 +1114,13 @@ export class ArenaSim {
     ms = this.int(Math.floor((ms * (100 - c.deviation)) / 100), ms);
     ms = Math.max(c.min, Math.min(c.max, ms));
     if (c.status === "blind") t.blindMs = ms;
-    else t.dazzleMs = ms;
+    else if (c.status === "dazzle") t.dazzleMs = ms;
+    else {
+      // Held: they stand where they are, and keep their foe
+      t.holdMs = ms;
+      if (t.walking) this.stand(t, 0);
+      return;
+    }
     t.target = null;
     if (t.walking) this.stand(t, 0);
     if (this.speakers() < MAX_SPEAKING && this.rand() < 0.6) this.speak(t, { blinded: true });
@@ -1274,7 +1363,7 @@ export class ArenaSim {
 
   private spotOpen(at: NavPoint): boolean {
     const cell = cellAt(this.grid, at.x, at.y);
-    return cell >= 0 && isOpen(this.grid, cell) && this.grid.area[cell] === 1;
+    return cell >= 0 && isOpen(this.grid, cell) && this.grid.area[cell] === this.floorArea;
   }
 
   /** A random open cell in an area, not where someone stands */
@@ -1300,7 +1389,7 @@ export class ArenaSim {
     }
     p.moved = false;
     if (p.fadeDir < 0 && !p.leaving) return;
-    if (p.walking && p.webMs <= 0) {
+    if (p.walking && p.webMs <= 0 && p.holdMs <= 0) {
       const next = p.path[0];
       if (!next) {
         p.walking = false;

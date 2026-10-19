@@ -5,7 +5,7 @@
 // server's name and the season's number, so it's the same wherever it's made.
 
 import { personName } from "../ambient/names.ts";
-import { fighterAppearance, mageAppearance, type Appearance } from "../ambient/townsfolk.ts";
+import { battleMageAppearance, fighterAppearance, gladiatorAppearance, mageAppearance, type Appearance } from "../ambient/townsfolk.ts";
 import { seededRandom } from "../ambient/ambientLife.ts";
 import type { ArenaConfig } from "./arenaConfig.ts";
 
@@ -66,7 +66,10 @@ function weighted<T>(rand: () => number, list: readonly (readonly [T, number])[]
   return list[list.length - 1][0];
 }
 
-/** A season's fighters on a game server */
+/**
+ * A season's fighters on a game server (an arena's own key after the server's name for an arena
+ * other than the Arena of Kraanan: arenaRooms.ts seasonKey)
+ */
 export function makeRoster(server: string, season: number, config: ArenaConfig): RosterEntry[] {
   const rand = seededRandom(hashText(`${server.toLowerCase()}|arena|${season}`));
   const mix = Object.entries(config.mix).filter(([k]) => config.archetypes[k]);
@@ -79,10 +82,13 @@ export function makeRoster(server: string, season: number, config: ArenaConfig):
     const weapon = a.weapons.length ? a.weapons[Math.floor(rand() * a.weapons.length) % a.weapons.length] : null;
     const spell = a.spells.length ? weighted(rand, a.spells) : null;
     const armour = a.armour.length ? weighted(rand, a.armour) : "";
-    const look =
-      a.role === "mage"
-        ? mageAppearance(rand, female)
-        : fighterAppearance(rand, { armour, weapon: weapon ? config.weapons[weapon].overlay : undefined, shield: a.shield, helm: a.helm, female });
+    const w = weapon ? config.weapons[weapon] : undefined;
+    let look: Appearance;
+    if (a.look === "qor" || a.look === "faren" || a.look === "riija") look = battleMageAppearance(rand, a.look, female);
+    else if (a.look === "gladiator")
+      look = gladiatorAppearance(rand, { armour: armour || "plate", weapon: w?.bow ? undefined : w?.overlay, bow: w?.bow, shield: a.shield, helm: a.helm, female });
+    else if (a.role === "mage") look = mageAppearance(rand, female);
+    else look = fighterAppearance(rand, { armour, weapon: w?.overlay, shield: a.shield, helm: a.helm, female });
     let name = personName(rand, a.role, female);
     for (let k = 0; names.has(name) && k < 20; k++) name = personName(rand, a.role, female);
     names.add(name);

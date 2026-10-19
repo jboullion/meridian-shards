@@ -136,15 +136,17 @@ copy(join(ROOT, "deploy", "blakserv", "maint.sh"), join(STAGE, "maint.sh"));
 for (const f of ["gateway.ts", "relay.ts", "arena.ts"]) copy(join(ROOT, "tools", "gateway", f), join(STAGE, "gateway", f));
 copy(join(ROOT, "node_modules", "ws"), join(STAGE, "gateway", "node_modules", "ws"));
 // The arena (docs/adr/0007-arena.md) runs on our packages: their sources beside it, found through
-// register.mjs (Node won't run TypeScript from node_modules), and the arena's room and nav grid
+// register.mjs (Node won't run TypeScript from node_modules), and the arenas' rooms and nav grids
 for (const p of ["protocol", "formats", "world"]) {
   copy(join(ROOT, "packages", p, "src"), join(STAGE, "gateway", "packages", p, "src"));
   copy(join(ROOT, "packages", p, "package.json"), join(STAGE, "gateway", "packages", p, "package.json"));
 }
 for (const f of ["register.mjs", "resolve.mjs"]) copy(join(ROOT, "deploy", "gateway", f), join(STAGE, "gateway", f));
-need(join(ROOT, "dist", "assets", "nav", "tosarena.nav"), "build the assets first: npm run assets");
-copy(join(ROOT, "dist", "assets", "tosarena.roo"), join(STAGE, "gateway", "arena-assets", "tosarena.roo"));
-copy(join(ROOT, "dist", "assets", "nav", "tosarena.nav"), join(STAGE, "gateway", "arena-assets", "nav", "tosarena.nav"));
+for (const room of ["tosarena", "tosarena_death"]) {
+  need(join(ROOT, "dist", "assets", "nav", `${room}.nav`), "build the assets first: npm run assets");
+  copy(join(ROOT, "dist", "assets", `${room}.roo`), join(STAGE, "gateway", "arena-assets", `${room}.roo`));
+  copy(join(ROOT, "dist", "assets", "nav", `${room}.nav`), join(STAGE, "gateway", "arena-assets", "nav", `${room}.nav`));
+}
 
 if (!opt["skip-client"]) stageClient();
 if (!opt["skip-site"]) stageSite();

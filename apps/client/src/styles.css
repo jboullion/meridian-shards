@@ -3382,6 +3382,129 @@ canvas.server-wait {
   right: -2px;
 }
 
+/* Ours (docs/adr/0019-arena-bouts.md): the Arena window's crossed swords, at the map's left in an
+   arena; lit while we're in its line or bout */
+.map-ring .arena-button {
+  top: 50%;
+  bottom: auto;
+  left: -14px;
+  width: 30px;
+  height: 30px;
+  transform: translateY(-50%);
+  font-size: 17px;
+}
+
+.map-ring .arena-button.active,
+.arena-touch.pressed,
+.toolbar-button.arena-classic.pressed {
+  border-color: var(--hl);
+  color: var(--hl);
+  box-shadow: 0 0 8px var(--hl);
+}
+
+.toolbar-button.arena-classic {
+  margin-right: 6px;
+  color: var(--ui-text);
+  font: bold 14px / 1 Arial, sans-serif;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.mk-window.game-dialog.arena-window {
+  width: min(480px, calc(100% - 16px));
+}
+
+.arena-page {
+  min-height: 220px;
+  padding: 8px 2px;
+}
+
+.arena-page p {
+  margin: 0 0 8px;
+  line-height: 1.35;
+}
+
+.arena-rules {
+  color: var(--ui-text);
+}
+
+.arena-state {
+  font-weight: bold;
+  color: var(--ui-text);
+}
+
+.arena-state.mine,
+.arena-state.won {
+  color: var(--hl);
+}
+
+.arena-note {
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.arena-title {
+  font: 20px var(--font-title);
+  color: var(--hl);
+  text-align: center;
+}
+
+.arena-opponents {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.arena-opponents li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.arena-opponents li.fallen .arena-opp-name {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.arena-hp {
+  flex: 0 0 110px;
+  padding: 1px 4px;
+  background: linear-gradient(to right, rgb(0, 128, 0) var(--hp), rgb(60, 20, 20) var(--hp));
+  border: 1px solid #000;
+  color: #fff;
+  font-size: 11px;
+  text-align: center;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.arena-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.arena-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.arena-record {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.arena-record th,
+.arena-record td {
+  padding: 3px 6px;
+  text-align: center;
+}
+
+.arena-record tbody th {
+  text-align: left;
+  font-weight: normal;
+}
+
 .map-room-name {
   max-width: 100%;
   overflow: hidden;

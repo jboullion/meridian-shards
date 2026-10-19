@@ -10,9 +10,10 @@ import { localResName } from "../src/ambient/ambientIds.ts";
 import { seededRandom } from "../src/ambient/ambientLife.ts";
 import { fighterAppearance } from "../src/ambient/townsfolk.ts";
 import { ARENA_SPELLS, ARENA_WEAPONS, WEAPON_DAMAGE } from "../src/arena/arenaData.ts";
-import { DEFAULT_ARENA_CONFIG, readArenaConfig, type ArenaConfig } from "../src/arena/arenaConfig.ts";
+import { DEATH_ARENA_CONFIG, DEFAULT_ARENA_CONFIG, arenaOpenAt, readArenaConfig, type ArenaConfig } from "../src/arena/arenaConfig.ts";
+import { arenaFloorArea, readArenaConfigs } from "../src/arena/arenaRooms.ts";
 import { SEASON_EPOCH, SEASON_MS, championOf, makeRoster, seasonAt, seasonStart, type ArenaRecord } from "../src/arena/arenaRoster.ts";
-import { ArenaSim, arenaHourAt } from "../src/arena/arenaSim.ts";
+import { ARENA_BUSY_MAX_MS, ArenaSim, arenaHourAt } from "../src/arena/arenaSim.ts";
 import { ArenaView } from "../src/arena/arenaView.ts";
 import { ARENA_STATUS, type ArenaPersonWire, type ArenaState, type ArenaTick } from "../src/arena/arenaWire.ts";
 
@@ -374,4 +375,166 @@ describe("the arena as drawn (ArenaView)", () => {
     v.update(2000, 16);
     expect(v.describe(id)!.cheering).toBe("Bram the Bold");
   });
+});
+
+// ---- the Arena of Death (docs/adr/0019-arena-bouts.md) ----
+
+const haveDeath = existsSync(join(ASSETS, "tosarena_death.roo"));
+let deathCache: NavGrid | null = null;
+const deathGrid = () => (deathCache ??= buildNavGrid(parseRoo(new Uint8Array(readFileSync(join(ASSETS, "tosarena_death.roo"))))));
+
+function deathSim(seed: number, config: ArenaConfig = DEATH_ARENA_CONFIG) {
+  const g = deathGrid();
+  return new ArenaSim(g, {
+    config, roster: makeRoster(`${SERVER}|death`, 1, config), records: {}, champions: [], season: 1, seed, now: 1_000_000,
+    floorArea: arenaFloorArea("tosarena_death.roo", g),
+  });
+}
+
+/** The Arena of Death's settings with a roster of only these archetypes */
+const deathOnly = (mix: Record<string, number>, over: Record<string, unknown> = {}) =>
+  readArenaConfig({ mix: { ...Object.fromEntries(Object.keys(DEATH_ARENA_CONFIG.mix).map((k) => [k, 0])), ...mix }, ...over }, DEATH_ARENA_CONFIG).config;
+
+/** Those fighting on the floor now */
+const onFloor = (s: ArenaSim) => s.everyone.filter((p) => p.role !== "spectator" && p.fd >= 0 && !(p.st & (ARENA_STATUS.BEATEN | ARENA_STATUS.WINNER)));
+
+describe("arena settings for each room", () => {
+  test("hours that run past midnight", () => {
+    expect(arenaOpenAt([22, 6], 23)).toBe(true);
+    expect(arenaOpenAt([22, 6], 3)).toBe(true);
+    expect(arenaOpenAt([22, 6], 6)).toBe(false);
+    expect(arenaOpenAt([22, 6], 12)).toBe(false);
+    // Not known: as by day
+    expect(arenaOpenAt([22, 6], null)).toBe(false);
+    expect(arenaOpenAt([6, 22], null)).toBe(true);
+    expect(arenaOpenAt([6, 22], 21)).toBe(true);
+    expect(arenaOpenAt([6, 22], 22)).toBe(false);
+  });
+
+  test("arena.json: the Arena of Kraanan's at the top, the Arena of Death's under death", () => {
+    const { configs, errors } = readArenaConfigs({ spectators: 3, death: { spectators: 5, open: [21, 5] } });
+    expect(errors).toEqual([]);
+    expect(configs["tosarena.roo"]!.spectators).toBe(3);
+    expect(configs["tosarena.roo"]!.open).toEqual([6, 22]);
+    expect(configs["tosarena_death.roo"]!.spectators).toBe(5);
+    expect(configs["tosarena_death.roo"]!.open).toEqual([21, 5]);
+    expect(configs["tosarena_death.roo"]!.floor).toEqual([2, 2]);
+    expect(Object.keys(configs["tosarena_death.roo"]!.mix)).toEqual(["gladiator", "qorbattle", "farenbattle", "riijabattle"]);
+    expect(readArenaConfigs({ death: { nonsense: 1 } }).errors).toEqual(["death.nonsense: unknown"]);
+  });
+
+  test("the Arena of Death's roster: gladiators in heavy armour, battle mages in their schools' robes", () => {
+    const roster = makeRoster(`${SERVER}|death`, 1, DEATH_ARENA_CONFIG);
+    expect(roster).toHaveLength(16);
+    for (const r of roster) {
+      const g = r.look.gear;
+      if (r.arch === "gladiator") {
+        expect(["bte.bgf", "btf.bgf", "bti.bgf", "btj.bgf", "btm.bgf", "btn.bgf"]).toContain(r.look.body);
+        // A fine weapon in hand, or a bow
+        expect(!!g?.weapon !== !!g?.bow).toBe(true);
+        if (g?.bow) expect(g.shield).toBeUndefined();
+      } else {
+        const school = { qorbattle: "q", farenbattle: "f", riijabattle: "r" }[r.arch]!;
+        expect(g?.emblem?.file).toBe(`emblm-${school}${r.look.female ? "f" : "m"}.bgf`);
+        expect(g?.hat?.file).toBe(school === "q" ? "thocirclov.bgf" : "circlet.bgf");
+        if (school === "q") expect(g?.shield?.file).toBe("osh.bgf");
+        if (school === "r") expect(g?.shield?.emblem).toBe("gshriov.bgf");
+        if (school === "f") expect(g?.shield).toBeUndefined();
+      }
+    }
+  });
+});
+
+describe.skipIf(!haveDeath)("the Arena of Death's fights on the real room", () => {
+  test("one against one in the cage, by night; the stands round it; shut by day", () => {
+    const s = deathSim(3);
+    const g = s.nav;
+    const floor = arenaFloorArea("tosarena_death.roo", g);
+    // The cage is not the biggest area: the stands round it are
+    expect(floor).not.toBe(1);
+    let pairs = 0;
+    run(s, 4 * 60_000, () => {
+      const on = onFloor(s);
+      expect(on.length).toBeLessThanOrEqual(2);
+      if (s.phase === "fight" && on.length === 2) pairs++;
+      for (const p of on) expect(g.area[cellAt(g, p.x, p.y)]).toBe(floor);
+      for (const p of s.everyone) if (p.role === "spectator" && p.fd >= 0) expect(g.area[cellAt(g, p.x, p.y)]).not.toBe(floor);
+    }, 23);
+    expect(pairs).toBeGreaterThan(10);
+    const day = deathSim(3);
+    run(day, 5000, undefined, 12);
+    expect(day.phase).toBe("closed");
+    expect(day.everyone).toHaveLength(0);
+  }, 30_000);
+
+  test("the same seed gives the same fights", () => {
+    const a = deathSim(9),
+      b = deathSim(9);
+    const ma: string[] = [],
+      mb: string[] = [];
+    run(a, 40_000, (m) => ma.push(JSON.stringify(m)), 23);
+    run(b, 40_000, (m) => mb.push(JSON.stringify(m)), 23);
+    expect(mb).toEqual(ma);
+  }, 30_000);
+
+  test("a battle mage's Hold leaves its foe standing still", () => {
+    const s = deathSim(4, deathOnly({ qorbattle: 1 }, { archetypes: { qorbattle: { spells: [["hold", 1]] } } }));
+    let held = 0;
+    const stillAt = new Map<number, string>();
+    let stayedStill = 0;
+    run(s, 90_000, () => {
+      for (const p of onFloor(s)) {
+        if (!(p.st & ARENA_STATUS.HELD)) {
+          stillAt.delete(p.id);
+          continue;
+        }
+        held++;
+        const at = `${p.x},${p.y}`;
+        if (stillAt.get(p.id) === at) stayedStill++;
+        stillAt.set(p.id, at);
+      }
+    }, 23);
+    expect(held).toBeGreaterThan(5);
+    expect(stayedStill).toBeGreaterThan(3);
+  }, 30_000);
+
+  test("gladiators with bows keep off and shoot arrows, drawing as they do", () => {
+    const s = deathSim(6, deathOnly({ gladiator: 1 }, { archetypes: { gladiator: { weapons: ["longbow"] } } }));
+    let arrows = 0,
+      drawn = 0;
+    run(s, 60_000, (m) => {
+      arrows += (m.sh ?? []).filter((x) => x.spell === "arrow").length;
+      drawn += (m.mv ?? []).filter((mv) => mv[4] === "shoot").length;
+    }, 23);
+    expect(arrows).toBeGreaterThan(5);
+    expect(drawn).toBeGreaterThan(0);
+  }, 30_000);
+
+  test("a player's bout takes the floor: the fighters leave, and no round is fought until it's over", () => {
+    const s = deathSim(8);
+    run(s, 60_000, undefined, 23);
+    // Into a round
+    for (let k = 0; k < 400 && !(s.phase === "fight" && onFloor(s).length === 2); k++) run(s, 50, undefined, 23);
+    expect(onFloor(s)).toHaveLength(2);
+    s.setBusy(true);
+    run(s, 20_000, undefined, 23);
+    expect(s.phase).toBe("rest");
+    expect(onFloor(s)).toHaveLength(0);
+    // The stands stay
+    expect(s.everyone.some((p) => p.role === "spectator" && p.fd >= 0)).toBe(true);
+    run(s, 60_000, () => expect(s.phase).toBe("rest"), 23);
+    s.setBusy(false);
+    let fought = false;
+    run(s, 30_000, () => (fought ||= s.phase === "fight"), 23);
+    expect(fought).toBe(true);
+  }, 30_000);
+
+  test("a busy floor lapses by itself after a while", () => {
+    const s = deathSim(2);
+    s.setBusy(true);
+    run(s, ARENA_BUSY_MAX_MS - 1000, undefined, 23);
+    expect(s.busy).toBe(true);
+    run(s, 2000, undefined, 23);
+    expect(s.busy).toBe(false);
+  }, 60_000);
 });

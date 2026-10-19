@@ -20,8 +20,8 @@ import {
   AMBIENT_ROOMS, AMBIENT_SCALE, type AmbientRoomSpec, AmbientLife, LiveRoom, MOVEON, PlayerMover, REMOTE_VIEW, animStep, isAmbientId, localRes, localResName, townsfolkArt,
   Critters, batsOf, critterArt, decodeNavGrid, habitatOf, hourFromSun, isImpressiveBody, type AmbientExits, type DamageDealt, type NavGrid, type NavPoint, type RemoteView, type GameSession, type WorldObject,
   FollowPlanner, navGridBuilder, AmbientStepper, type AmbientFrame, type AmbientSeed, Pets, petArt, type PetChoice, type PetOwner,
-  ARENA_SEND_EVERY, ARENA_TICK_MS, ArenaSim, ArenaView, arenaArt, arenaHourAt, buildNavGrid, hashText, makeRoster, readArenaConfig, seasonAt,
-  type AmbientPersonInfo, type ArenaMessage,
+  ARENA_SEND_EVERY, ARENA_TICK_MS, ARENA_ROOM_DEFS, ArenaSim, ArenaView, arenaArt, arenaFloorArea, arenaHourAt, arenaOpenAt, buildNavGrid, hashText, makeRoster, readArenaConfigs, seasonAt,
+  type AmbientPersonInfo, type ArenaEvent, type ArenaMessage,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import { gameSocketUrl } from "../host.ts";
@@ -208,6 +208,8 @@ interface DamageFloat {
 
 export interface GameSceneStatus {
   roomName: string;
+  /** The room's file, lower case ("tosarena.roo") */
+  roomFile: string;
   objects: number;
   lights: number;
   loading: boolean;
@@ -268,6 +270,12 @@ export class GameScene {
   private arenaFeed: "waiting" | "relay" | "local" = "waiting";
   private arenaWaitUntil = 0;
   private arenaLocal: { sim: ArenaSim; due: number; ticks: number } | null = null;
+  /** The arenas' settings by room, as the relay's defaults have them (for their hours and our own sim) */
+  private readonly arenaConfigs = readArenaConfigs(undefined).configs;
+  /** The busy floor as last told to the relay or our own sim */
+  private arenaBusySent = false;
+  /** Cheers the stands give a player's mock bout (our hits in it), heard with the arena's sounds */
+  private boutCheers: ArenaEvent[] = [];
   /** The room BP_PLAYER last put us in (file, lower case) */
   private playerRoomFile = "";
   /** roomexits.json, once loaded (empty without one) */
@@ -466,6 +474,10 @@ export class GameScene {
   ownName = "";
   /** Ours (docs/adr/0010-followers.md 9.4): our companion, for its health under its name */
   companion: { id: number; hpPct: number } | null = null;
+  /** Ours (docs/adr/0019-arena-bouts.md): the arena bout's fighters' health, by object, for a bar under each name */
+  arenaHp = new Map<number, number>();
+  /** ...and whether one holds the floor: the relay's show of NPCs gives way to it */
+  arenaFloorBusy = false;
   private pets: Pets | null = null;
   private petsRoom = "";
   private petNamePool: HTMLDivElement[] = [];
@@ -1213,8 +1225,11 @@ export class GameScene {
   private updateAmbient(dt: number): void {
     const level = this.settings.ambientLife;
     const spec = this.crowdHere();
-    this.updateArena(dt, spec?.arena && level !== "off" ? this.roomFile : null);
-    if (!spec || spec.arena || level === "off" || !this.ambientExits || !this.loaded) {
+    // An arena's show while it's open; while it's shut, its townsfolk if it has any (the Arena of Death by day)
+    const config = spec?.arena ? this.arenaConfigs[this.roomFile] : undefined;
+    const arenaNow = !!spec?.arena && level !== "off" && (!config || arenaOpenAt(config.open, this.gameHour()));
+    this.updateArena(dt, arenaNow ? this.roomFile : null);
+    if (!spec || arenaNow || !spec.count || level === "off" || !this.ambientExits || !this.loaded) {
       this.ambient = null;
       this.ambientStep = null;
       this.ambientRoom = "";
@@ -1274,6 +1289,8 @@ export class GameScene {
       this.arena = null;
       this.arenaLocal = null;
       this.social?.watchArena(null, null);
+      this.social?.arenaBusy(false);
+      this.arenaBusySent = false;
       if (!file) return;
       const view = new ArenaView();
       this.arena = view;
@@ -1296,6 +1313,12 @@ export class GameScene {
     if (!view) return;
     // The relay keeps the arena's hours by our sun (an admin's time change too)
     this.social?.arenaHour(this.gameHour());
+    // A player's mock bout on our server holds the floor: the relay's fighters (or our own sim's) give way
+    if (this.arenaFloorBusy !== this.arenaBusySent) {
+      this.arenaBusySent = this.arenaFloorBusy;
+      this.social?.arenaBusy(this.arenaFloorBusy);
+      this.arenaLocal?.sim.setBusy(this.arenaFloorBusy);
+    }
     if (this.arenaFeed === "waiting" && performance.now() > this.arenaWaitUntil) this.startLocalArena(view);
     const local = this.arenaLocal;
     if (local) {
@@ -1317,13 +1340,18 @@ export class GameScene {
     const grid = this.navGrids.get(file);
     if (grid === undefined) return void this.loadNavGrid(file, this.loaded.room);
     if (grid === "loading") return;
-    const config = readArenaConfig(undefined).config;
-    const server = gameSocketUrl();
+    const config = this.arenaConfigs[file] ?? this.arenaConfigs["tosarena.roo"]!;
+    // Its season's roster as the relay keeps it: the server's name, and the arena's own key
+    const server = gameSocketUrl() + (ARENA_ROOM_DEFS[file]?.seasonKey ?? "");
     const season = seasonAt(Date.now());
     const nav = grid === "build" ? buildNavGrid(this.loaded.room, this.waterTextures) : grid;
     if (grid === "build") this.keepNavGrid(file, nav);
     const now = Date.now();
-    const sim = new ArenaSim(nav, { config, roster: makeRoster(server, season, config), records: {}, champions: [], season, seed: hashText(`${server}|${now}`), now });
+    const sim = new ArenaSim(nav, {
+      config, roster: makeRoster(server, season, config), records: {}, champions: [], season, seed: hashText(`${server}|${now}`), now,
+      floorArea: arenaFloorArea(file, nav),
+    });
+    sim.setBusy(this.arenaFloorBusy);
     this.arenaLocal = { sim, due: 0, ticks: 0 };
     this.arenaFeed = "local";
     view.receive(sim.state());
@@ -1846,7 +1874,7 @@ export class GameScene {
    */
   private updateAmbientSounds(dt: number): void {
     const events = this.ambient?.takeEvents() ?? [];
-    const arenaEvents = this.arena?.takeEvents() ?? [];
+    const arenaEvents = [...(this.arena?.takeEvents() ?? []), ...this.boutCheers.splice(0)];
     const strike = this.lightning?.takeStrike() ?? null;
     const splashes = this.nature?.takeSplashes() ?? [];
     const sounds = (this.ambientSounds ??= new AmbientSounds(this.audio));
@@ -2516,7 +2544,9 @@ export class GameScene {
       const friend = this.social?.friends.options.healthBars ? this.social.friendIds.get(l.id) : undefined;
       el.className = `name-label${l.id === this.hovered ? " hovered" : ""}${l.id === this.target ? " target" : ""}${friend ? " friend" : ""}`;
       // Ours: our companion's health under its name, as a friend's
-      const comp = this.companion && this.companion.id === l.id ? this.companion : null;
+      // and an arena bout's fighters'
+      const arenaPct = this.arenaHp.get(l.id);
+      const comp = this.companion && this.companion.id === l.id ? this.companion : arenaPct !== undefined ? { id: l.id, hpPct: arenaPct } : null;
       if (comp && !friend) {
         const width = Math.max(FRIEND_BAR_MIN, Math.min(FRIEND_BAR_WIDTH, FRIEND_BAR_WIDTH / Math.max(1, l.position.distanceTo(eye))));
         if (el.children.length !== 2) el.replaceChildren(document.createElement("span"), document.createElement("i"));
@@ -2554,6 +2584,11 @@ export class GameScene {
    * there), else the nearest object with that name.
    */
   showDamage(hit: DamageDealt): void {
+    // Ours (docs/adr/0019-arena-bouts.md): the stands cheer a mock bout's blows now and then
+    if (this.arenaFloorBusy && this.arena && Math.random() < 0.35) {
+      const self = this.session.world.self;
+      if (self) this.boutCheers.push({ type: "cheer", x: self.x, y: self.y, female: Math.random() < 0.5 });
+    }
     if (!this.settings.damageNumbers) return;
     const world = this.session.world;
     const self = world.self;
@@ -2618,6 +2653,7 @@ export class GameScene {
     const w = this.session.world;
     this.onStatus?.({
       roomName: w.player ? (this.session.resource(w.player.roomNameRes) ?? "") : "",
+      roomFile: this.roomFile,
       objects: w.objects.size,
       lights: this.lights.length,
       loading,

@@ -4,9 +4,12 @@ import { CF, SAY, STAT_GROUP, UA, UC, objId, type ObjectInfo } from "@shards/pro
 import {
   PROFANITY_WARNING, isNumberItem, type SpellRefusal, OBSERVER, WHITE, BLACK, decodeBoard, type GuildEvent, type MinigameEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
   type SocialEvent, type TradeList, type TravelEvent, type TravelPlace, petForKarma, petKind, type AmbientPersonInfo, type QuestEvent, type QuestOffer, type CosmeticsEvent, type TrainingCost, type Appraisal,
+  ARENA_ROOMS, BOUT_STATE, arenaCommand, floorTaken,
 } from "@shards/world";
 import type { QuestStore } from "./quests.ts";
 import { useCompanion, type CompanionStore } from "./companion.ts";
+import { useArena, type ArenaStore } from "./arenaBouts.ts";
+import { ArenaDialog } from "./ui/ArenaDialog.tsx";
 import { CompanionPanel } from "./ui/CompanionPanel.tsx";
 import { CompanionLooksDialog } from "./ui/CompanionLooksDialog.tsx";
 import { TailorDialog } from "./ui/TailorDialog.tsx";
@@ -180,6 +183,8 @@ type Modal =
   | { type: "give"; kind: "offer" | "deposit"; target: { id: number; name: string } }
   // Ours (docs/adr/0010-followers.md 9.3): our companion's looks
   | { type: "companionLooks" }
+  // Ours (docs/adr/0019-arena-bouts.md): the Arena window
+  | { type: "arena" }
   | { type: "amount"; object: ObjectInfo }
   | { type: "suicide" }
   | { type: "quickSlot"; index: number }
@@ -209,8 +214,10 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, cosmetics, training, appraisal, companion, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, cosmetics, training, appraisal, companion, arena, offers, serverPrefs, latency,
 }: {
+  /** Ours: the arenas' mock bouts (docs/adr/0019-arena-bouts.md) */
+  arena: ArenaStore;
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
   /** The game options the server keeps for us (CF_* flags), null until it has said */
@@ -779,6 +786,25 @@ export function GameView({
     const s = companion.status;
     if (scene) scene.companion = s && s.id ? { id: s.id, hpPct: s.maxHp ? Math.round((100 * s.hp) / s.maxHp) : 0 } : null;
   }, [companion, companionVersion, status]);
+  // Ours (docs/adr/0019-arena-bouts.md): the arenas' mock bouts. In an arena we ask where we stand
+  // (the server tells everyone there as the floor changes), show the crossed swords, and draw the
+  // bout's fighters' health under their names
+  const arenaVersion = useArena(arena);
+  const roomFile = status?.roomFile ?? "";
+  const inArena = ARENA_ROOMS[roomFile] !== undefined;
+  useEffect(() => {
+    if (inArena) session.shardsCommand(arenaCommand("status"));
+  }, [inArena, roomFile, session]);
+  const arenaActive = inArena && !!arena.status && arena.status.state !== BOUT_STATE.IDLE;
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const s = inArena ? arena.status : null;
+    scene.arenaHp.clear();
+    if (s && floorTaken(s)) for (const o of s.opponents) if (o.id) scene.arenaHp.set(o.id, o.maxHp ? Math.round((100 * o.hp) / o.maxHp) : 0);
+    scene.arenaFloorBusy = floorTaken(s);
+  }, [arena, arenaVersion, inArena, status]);
+  const openArena = () => setModal({ type: "arena" });
   const comp = companion.status;
   const compObject = comp?.id ? (session.world.objects.get(comp.id)?.info ?? null) : null;
   const companionPanel = (
@@ -1718,6 +1744,9 @@ export function GameView({
       case "companion":
         // Ours: our companion's commands (companionbook.kod CompanionCommand); alone, its status
         return session.shardsCommand(`companion ${args || "status"}`);
+      case "arena":
+        // Ours: "arena join", "arena leave"...; alone, the Arena window (docs/adr/0019-arena-bouts.md)
+        return args ? session.shardsCommand(`arena ${args}`) : setModal({ type: "arena" });
       case "map":
         return setFullMap((v) => !v);
       case "get":
@@ -2179,6 +2208,11 @@ export function GameView({
                 : undefined
             }
           >
+            {inArena && (
+              <button type="button" className={`toolbar-button arena-classic${arenaActive ? " pressed" : ""}`} title={settings.tooltips ? "Arena" : undefined} aria-label="Arena" onClick={openArena}>
+                ⚔
+              </button>
+            )}
             <EnchantmentRow session={session} icons={icons} kind="room" tooltips={settings.tooltips} onLook={(id) => lookAt(id, DESC.NONE)} />
           </ClassicToolbar>
         </>
@@ -2253,6 +2287,8 @@ export function GameView({
             onSelectSelf={() => selfInfo && selectObject(selfInfo.id)}
             onCancelSelect={() => sceneRef.current?.select(null)}
             onEmotes={toggleEmotes}
+            onArena={inArena ? openArena : undefined}
+            arenaActive={arenaActive}
           />
         )}
         {!touch && !modern && (
@@ -2293,6 +2329,8 @@ export function GameView({
               onZoom={(dir) => handleAction(dir > 0 ? "mapZoomIn" : "mapZoomOut")}
               onMap={() => setFullMap((v) => !v)}
               getWay={getWay}
+              onArena={inArena ? openArena : undefined}
+              arenaActive={arenaActive}
             />
             <QuestBox store={quests} settings={settings} onOpen={openQuestInfo} />
             <ActionBar
@@ -2429,6 +2467,7 @@ export function GameView({
         {modal?.type === "trade" && (
           <TradeDialog list={modal.list} session={session} icons={icons} onClose={() => setModal(null)} />
         )}
+        {modal?.type === "arena" && <ArenaDialog status={arena.status} session={session} onClose={() => setModal(null)} />}
         {modal?.type === "travel" && (
           <TravelDialog here={modal.here} places={modal.places} pvpUntil={pvpUntil} session={session} onClose={() => setModal(null)} />
         )}

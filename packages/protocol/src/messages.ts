@@ -793,6 +793,8 @@ export const UC = {
   SIGNETS: 114,
   /** Ours: the season, the year and its day (docs/adr/0018-seasons-water-windows.md) */
   SEASON: 115,
+  /** Ours: mock bouts in the arenas (docs/adr/0019-arena-bouts.md) */
+  ARENA: 116,
 } as const;
 
 /**

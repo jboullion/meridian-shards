@@ -21,7 +21,11 @@ export interface AmbientRoomSpec {
   livery?: number;
   /** Castles: whose (the knights' shields) */
   faction?: Faction;
-  /** The arena's floor: its fights are the arena sim's (arena/arenaSim.ts), watched by everyone alike */
+  /**
+   * The arena's floor: its fights are the arena sim's (arena/arenaSim.ts), watched by everyone
+   * alike, while it's open (its settings' hours: arena/arenaRooms.ts); while it's shut, `count`
+   * townsfolk walk about inside it (the Arena of Death by day)
+   */
   arena?: boolean;
 }
 
@@ -50,6 +54,8 @@ export const AMBIENT_ROOMS: Record<string, AmbientRoomSpec> = {
   // The Arena of Kraanan and its foyer
   "tosarena.roo": { kind: "arena", count: 0, place: "arena", arena: true },
   "tosaren2.roo": { kind: "arena", count: 6, place: "arena" },
+  // The Arena of Death (docs/adr/0019-arena-bouts.md): its elites' duels by night, a few about by day
+  "tosarena_death.roo": { kind: "arena", count: 4, place: "arena", arena: true },
   // Barloque
   "barln.roo": town(14, "barloque", 2, C.PURPLE),
   "barls.roo": town(14, "barloque", 2, C.PURPLE),

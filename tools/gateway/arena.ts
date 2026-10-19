@@ -1,25 +1,28 @@
-// The arena on the relay (docs/adr/0007-arena.md): one ArenaSim per game server, run while anyone
-// on that server watches the arena (a player with Ambient Life on, in tosarena.roo), so everyone
-// there sees the same fights, friends or not. It ticks every 50 ms against the wall clock and
-// sends watchers what changed every 100 ms (packages/world arenaWire.ts). A minute after the last
-// watcher leaves, the round is dropped; the next visitor starts a new one.
+// The arenas on the relay (docs/adr/0007-arena.md): one ArenaSim per game server and arena room
+// (packages/world arenaRooms.ts: the Arena of Kraanan's melees by day, the Arena of Death's duels
+// by night), run while anyone on that server watches it (a player with Ambient Life on, in its
+// room), so everyone there sees the same fights, friends or not. It ticks every 50 ms against the
+// wall clock and sends watchers what changed every 100 ms (packages/world arenaWire.ts). A minute
+// after the last watcher leaves, the round is dropped; the next visitor starts a new one.
 //
-// The season's roster and records (arenaRoster.ts) are kept in one small JSON file (ARENA_STATE),
-// written when a round ends and when the season turns: the one thing the relay keeps on disk.
+// Each arena's season (roster and records, arenaRoster.ts) is kept in one small JSON file
+// (ARENA_STATE), written when a round ends and when the season turns: the one thing the relay
+// keeps on disk. The Arena of Kraanan's is kept under the server's name, as it always was; the
+// others' under the name and the room's season key.
 //
-// The room comes from the asset build (tosarena.roo and nav/tosarena.nav in ARENA_ASSETS), so the
-// sim walks the same floor the clients draw.
+// The rooms come from the asset build (tosarena.roo, tosarena_death.roo and their nav/*.nav in
+// ARENA_ASSETS), so the sims walk the same floors the clients draw.
 
 import { existsSync, readFileSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseRoo } from "@shards/formats";
 import {
-  ARENA_SEND_EVERY, ARENA_TICK_MS, ArenaSim, arenaHourAt, buildNavGrid, championOf, decodeNavGrid, hashText, makeRoster, seasonAt,
-  type ArenaChampion, type ArenaConfig, type ArenaRecord, type NavGrid, type RosterEntry,
+  ARENA_ROOM_DEFS, ARENA_ROOM_FILES, ARENA_SEND_EVERY, ARENA_TICK_MS, ArenaSim, arenaFloorArea, arenaHourAt, buildNavGrid, championOf, decodeNavGrid,
+  hashText, makeRoster, seasonAt, type ArenaChampion, type ArenaConfig, type ArenaRecord, type NavGrid, type RosterEntry,
 } from "@shards/world";
 
-/** The room the arena is in */
+/** The Arena of Kraanan's room (the first arena, and the default) */
 export const ARENA_ROOM = "tosarena.roo";
 /** After the last watcher leaves, the round goes on this long (ms) in case they come back */
 const IDLE_MS = 60_000;
@@ -33,7 +36,7 @@ export interface ArenaWatcher {
   send(text: string): void;
 }
 
-/** A game server's season, as kept on disk */
+/** An arena's season on a game server, as kept on disk */
 interface Season {
   season: number;
   roster: RosterEntry[];
@@ -43,6 +46,9 @@ interface Season {
 
 interface Arena {
   server: string;
+  room: string;
+  /** Its season's key: the server's name, and the room's season key */
+  key: string;
   sim: ArenaSim;
   watchers: Set<ArenaWatcher>;
   timer: ReturnType<typeof setInterval>;
@@ -53,8 +59,11 @@ interface Arena {
 }
 
 export interface ArenaHostOptions {
+  /** The Arena of Kraanan's settings */
   config: ArenaConfig;
-  /** Where tosarena.roo and nav/tosarena.nav are (the asset build) */
+  /** Other arenas' settings by room (packages/world readArenaConfigs); left out, each room's defaults */
+  configs?: Record<string, ArenaConfig>;
+  /** Where the arena rooms and nav/*.nav are (the asset build) */
   assetsDir: string;
   /** The season file, or null to keep nothing */
   statePath: string | null;
@@ -65,12 +74,12 @@ export interface ArenaHostOptions {
 }
 
 export class ArenaHost {
-  /** The only room watched */
-  readonly room = ARENA_ROOM;
+  /** The rooms that may be watched */
+  readonly rooms: readonly string[] = ARENA_ROOM_FILES;
   private readonly opts: ArenaHostOptions;
   private readonly now: () => number;
   private readonly log: (...a: unknown[]) => void;
-  private grid: NavGrid | null | undefined;
+  private readonly grids = new Map<string, NavGrid | null>();
   private readonly arenas = new Map<string, Arena>();
   private seasons: Record<string, Season> = {};
   private writer: Promise<void> | null = null;
@@ -83,39 +92,46 @@ export class ArenaHost {
     this.load();
   }
 
-  /** Whether there's an arena to watch (its room was found) */
+  /** Whether there's an arena to watch (the Arena of Kraanan's room was found) */
   get available(): boolean {
-    return this.floor() !== null;
+    return this.floor(ARENA_ROOM) !== null;
   }
 
-  /** How many servers' arenas are running (for the log and tests) */
+  /** How many arenas are running (for the log and tests) */
   get running(): number {
     return this.arenas.size;
   }
 
-  /** The room's nav grid, read once */
-  private floor(): NavGrid | null {
-    if (this.grid !== undefined) return this.grid;
-    const roo = join(this.opts.assetsDir, ARENA_ROOM);
-    if (!existsSync(roo)) {
-      this.log(`arena: no ${roo}, so no arena on the relay`);
-      return (this.grid = null);
+  private configOf(room: string): ArenaConfig {
+    return this.opts.configs?.[room] ?? (room === ARENA_ROOM ? this.opts.config : (ARENA_ROOM_DEFS[room]?.defaults ?? this.opts.config));
+  }
+
+  /** A room's nav grid, read once */
+  private floor(room: string): NavGrid | null {
+    const known = this.grids.get(room);
+    if (known !== undefined) return known;
+    const roo = join(this.opts.assetsDir, room);
+    if (!ARENA_ROOM_DEFS[room] || !existsSync(roo)) {
+      this.log(`arena: no ${roo}, so no arena there on the relay`);
+      this.grids.set(room, null);
+      return null;
     }
-    const room = parseRoo(new Uint8Array(readFileSync(roo)));
-    const nav = join(this.opts.assetsDir, "nav", ARENA_ROOM.replace(/\.roo$/, ".nav"));
-    this.grid = (existsSync(nav) ? decodeNavGrid(new Uint8Array(readFileSync(nav)), room) : null) ?? buildNavGrid(room);
-    return this.grid;
+    const parsed = parseRoo(new Uint8Array(readFileSync(roo)));
+    const nav = join(this.opts.assetsDir, "nav", room.replace(/\.roo$/, ".nav"));
+    const grid = (existsSync(nav) ? decodeNavGrid(new Uint8Array(readFileSync(nav)), parsed) : null) ?? buildNavGrid(parsed);
+    this.grids.set(room, grid);
+    return grid;
   }
 
   /**
-   * Someone on `server` starts watching: they get everything now, and the ticks after. `hour` is
-   * the game hour their sun shows (null: not known)
+   * Someone on `server` starts watching the arena in `room`: they get everything now, and the
+   * ticks after. `hour` is the game hour their sun shows (null: not known)
    */
-  watch(server: string, w: ArenaWatcher, hour: number | null = null): boolean {
-    const grid = this.floor();
+  watch(server: string, w: ArenaWatcher, hour: number | null = null, room = ARENA_ROOM): boolean {
+    const grid = this.floor(room);
     if (!grid) return false;
-    let a = this.arenas.get(server);
-    if (!a) a = this.start(server, grid);
+    let a = this.arenas.get(`${server}|${room}`);
+    if (!a) a = this.start(server, room, grid);
     if (hour !== null) a.hour = hour;
     a.watchers.add(w);
     a.idleSince = null;
@@ -124,19 +140,25 @@ export class ArenaHost {
   }
 
   /**
-   * A watcher's sun moved: the game's hour, which the arena opens and shuts by. Every player on a
+   * A watcher's sun moved: the game's hour, which the arenas open and shut by. Every player on a
    * server sees the same sun, so the latest word is everyone's; an admin setting the time moves it
    */
   setHour(server: string, hour: number | null): void {
-    const a = this.arenas.get(server);
-    if (a && hour !== null) a.hour = hour;
+    if (hour === null) return;
+    for (const a of this.arenas.values()) if (a.server === server) a.hour = hour;
+  }
+
+  /** A player's mock bout holds an arena's floor, or is over (docs/adr/0019-arena-bouts.md) */
+  setBusy(server: string, room: string, busy: boolean): void {
+    this.arenas.get(`${server}|${room}`)?.sim.setBusy(busy);
   }
 
   /** They stop watching (left the room, or went) */
   leave(server: string, w: ArenaWatcher): void {
-    const a = this.arenas.get(server);
-    if (!a || !a.watchers.delete(w)) return;
-    if (!a.watchers.size) a.idleSince = this.now();
+    for (const a of this.arenas.values()) {
+      if (a.server !== server || !a.watchers.delete(w)) continue;
+      if (!a.watchers.size) a.idleSince = this.now();
+    }
   }
 
   /** Everything stops (the gateway shutting down) */
@@ -146,28 +168,30 @@ export class ArenaHost {
     await this.save();
   }
 
-  private season(server: string, at: number): Season {
+  private season(key: string, at: number, config: ArenaConfig): Season {
     const n = seasonAt(at);
-    let s = this.seasons[server];
+    let s = this.seasons[key];
     if (!s) {
-      s = this.seasons[server] = { season: n, roster: makeRoster(server, n, this.opts.config), records: {}, champions: [] };
+      s = this.seasons[key] = { season: n, roster: makeRoster(key, n, config), records: {}, champions: [] };
       void this.save();
     }
     return s;
   }
 
-  private start(server: string, grid: NavGrid): Arena {
+  private start(server: string, room: string, grid: NavGrid): Arena {
     const now = this.now();
-    const s = this.season(server, now);
+    const config = this.configOf(room);
+    const key = server + (ARENA_ROOM_DEFS[room]?.seasonKey ?? "");
+    const s = this.season(key, now, config);
     const sim = new ArenaSim(grid, {
-      config: this.opts.config, roster: s.roster, records: s.records, champions: s.champions, season: s.season, now,
-      seed: hashText(`${server}|${now}`),
+      config, roster: s.roster, records: s.records, champions: s.champions, season: s.season, now,
+      seed: hashText(`${key}|${now}`), floorArea: arenaFloorArea(room, grid),
     });
     sim.onRoundEnd = () => void this.save();
-    const a: Arena = { server, sim, watchers: new Set(), timer: undefined as unknown as ReturnType<typeof setInterval>, idleSince: null, ticks: 0, hour: null };
+    const a: Arena = { server, room, key, sim, watchers: new Set(), timer: undefined as unknown as ReturnType<typeof setInterval>, idleSince: null, ticks: 0, hour: null };
     if (!this.opts.manual) a.timer = setInterval(() => this.run(a), ARENA_TICK_MS);
-    this.arenas.set(server, a);
-    this.log(`arena: started for ${server} (season ${s.season})`);
+    this.arenas.set(`${server}|${room}`, a);
+    this.log(`arena: ${room} started for ${server} (season ${s.season})`);
     this.checkSeason(a);
     return a;
   }
@@ -177,8 +201,8 @@ export class ArenaHost {
     const now = this.now();
     if (a.idleSince !== null && now - a.idleSince > IDLE_MS) {
       clearInterval(a.timer);
-      this.arenas.delete(a.server);
-      this.log(`arena: stopped for ${a.server} (nobody watching)`);
+      this.arenas.delete(`${a.server}|${a.room}`);
+      this.log(`arena: ${a.room} stopped for ${a.server} (nobody watching)`);
       void this.save();
       return;
     }
@@ -210,22 +234,22 @@ export class ArenaHost {
     for (const a of [...this.arenas.values()]) this.run(a);
   }
 
-  /** For the tests: the arena watchers of a server see */
-  simOf(server: string): ArenaSim | undefined {
-    return this.arenas.get(server)?.sim;
+  /** For the tests: the arena watchers of a server see in a room */
+  simOf(server: string, room = ARENA_ROOM): ArenaSim | undefined {
+    return this.arenas.get(`${server}|${room}`)?.sim;
   }
 
   /** A new Meridian year: last season's champion is remembered, and a new roster fights from the next round */
   private checkSeason(a: Arena): void {
-    const s = this.seasons[a.server];
+    const s = this.seasons[a.key];
     const n = seasonAt(a.sim.now);
     if (!s || s.season === n) return;
     const champ = championOf(s.roster, s.records, s.season);
     const champions = champ ? [...s.champions, champ].slice(-MAX_CHAMPIONS) : s.champions;
-    const next: Season = { season: n, roster: makeRoster(a.server, n, this.opts.config), records: {}, champions };
-    this.seasons[a.server] = next;
+    const next: Season = { season: n, roster: makeRoster(a.key, n, this.configOf(a.room)), records: {}, champions };
+    this.seasons[a.key] = next;
     a.sim.setSeason(n, next.roster, next.records, next.champions);
-    this.log(`arena: season ${n} on ${a.server}${champ ? `; ${champ.name} was champion of season ${s.season}` : ""}`);
+    this.log(`arena: season ${n} in ${a.room} on ${a.server}${champ ? `; ${champ.name} was champion of season ${s.season}` : ""}`);
     void this.save();
   }
 
@@ -237,10 +261,10 @@ export class ArenaHost {
     try {
       const data = JSON.parse(readFileSync(path, "utf8")) as { version?: number; servers?: Record<string, Season> };
       if (data.version === 1 && data.servers && typeof data.servers === "object") {
-        for (const [server, s] of Object.entries(data.servers))
-          if (Number.isInteger(s?.season) && Array.isArray(s.roster) && s.records && Array.isArray(s.champions)) this.seasons[server] = s;
+        for (const [key, s] of Object.entries(data.servers))
+          if (Number.isInteger(s?.season) && Array.isArray(s.roster) && s.records && Array.isArray(s.champions)) this.seasons[key] = s;
       }
-      this.log(`arena: seasons for ${Object.keys(this.seasons).length} server(s) from ${path}`);
+      this.log(`arena: ${Object.keys(this.seasons).length} season(s) from ${path}`);
     } catch (e) {
       this.log(`arena: couldn't read ${path}: ${(e as Error).message}`);
     }

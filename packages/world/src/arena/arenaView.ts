@@ -378,12 +378,13 @@ export class ArenaView {
     else if (st & ARENA_STATUS.BLIND) doing = "Stumbling about, blinded";
     else if (st & ARENA_STATUS.DAZZLED) doing = "Stumbling about, dazzled";
     else if (st & ARENA_STATUS.WEBBED) doing = "Stuck fast in a web";
+    else if (st & ARENA_STATUS.HELD) doing = "Held fast by a spell";
     else if (this.phase === "fight") doing = st & ARENA_STATUS.POISONED ? "Fighting, poisoned" : "Fighting a bout";
     else doing = "Waiting for the next bout";
     let mood: string;
     if (st & ARENA_STATUS.WINNER) mood = "Triumphant";
     else if (st & ARENA_STATUS.BEATEN) mood = "Sore";
-    else if (st & (ARENA_STATUS.BLIND | ARENA_STATUS.DAZZLED | ARENA_STATUS.WEBBED)) mood = "Furious";
+    else if (st & (ARENA_STATUS.BLIND | ARENA_STATUS.DAZZLED | ARENA_STATUS.WEBBED | ARENA_STATUS.HELD)) mood = "Furious";
     else if (w.role !== "spectator" && this.phase === "fight") mood = w.hp < w.mhp / 4 ? "Desperate" : "Fierce";
     else mood = MOODS[nameHash(w.name) % MOODS.length];
     const archLabel = this.labels.arch[w.arch] ?? w.arch;

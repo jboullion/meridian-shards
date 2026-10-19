@@ -8,13 +8,13 @@
 import { ANIMATE, type Animation } from "@shards/protocol";
 
 /** The spells, by key */
-export type ArenaSpellKey = "fireball" | "lightning" | "firewall" | "bramble" | "poisonfog" | "web" | "blind" | "dazzle";
+export type ArenaSpellKey = "fireball" | "lightning" | "firewall" | "bramble" | "poisonfog" | "web" | "blind" | "dazzle" | "hold" | "arrow";
 
 /** What a wall spell lays: wallelem/*.kod and monster/bramble.kod */
 export type FieldKind = "fire" | "fog" | "web" | "bramble";
 
-/** A status a curse puts on its target */
-export type CurseKind = "blind" | "dazzle";
+/** A status a curse puts on its target (hold: held fast, neither moving nor fighting) */
+export type CurseKind = "blind" | "dazzle" | "hold";
 
 export interface ProjectileDef {
   /** The projectile's art (GetProjectileIcon) and animation (SendProjectileAnimation) */
@@ -38,7 +38,7 @@ export interface ArenaSpellDef {
   range: number;
   /** Its sound (vrSucceed_wav) */
   sound: string;
-  /** A bolt's or curse's projectile */
+  /** A bolt's or curse's projectile (none: it lands at once, as Hold does) */
   projectile?: ProjectileDef;
   /** A bolt's damage (GetDamage's random range) */
   damage?: [number, number];
@@ -51,6 +51,9 @@ export interface ArenaSpellDef {
 const proj = (file: string, period: number, lo: number, hi: number, speed: number, light: number): ProjectileDef => ({
   file, animation: { type: ANIMATE.CYCLE, period, groupLow: lo, groupHigh: hi }, speed, light,
 });
+
+/** An arrow (ammo.kod GetProjectileSpeed 8; neruarow.kod's art, still) */
+const ARROW: ProjectileDef = { file: "arrowner.bgf", animation: { type: ANIMATE.NONE, group: 1 }, speed: 8, light: 0 };
 
 /** blakston.khd LIGHT_BORANGE, LIGHT_LIGHTNING */
 const LIGHT_BORANGE = 0x7e40;
@@ -87,6 +90,15 @@ export const ARENA_SPELLS: Record<ArenaSpellKey, ArenaSpellDef> = {
     curse: { status: "dazzle", base: 3000, perPower: 40, extra: [1000, 10000], deviation: 10, min: 4000, max: 18000 },
     projectile: proj("dazzlestar.bgf", 80, 1, 6, 10, 0),
   },
+  // debuff/hold.kod: 15 mana (:34), post-cast 1 s (:42), 2000 + power * 30 ms less up to 10%
+  // (:49-50, :170-180), 0.5-10 s (:126); no projectile: it takes hold at once
+  hold: {
+    label: "Hold", kind: "curse", mana: 15, postCast: 1, range: 7, sound: "qor.ogg",
+    curse: { status: "hold", base: 2000, perPower: 30, deviation: 10, min: 500, max: 10000 },
+  },
+  // A bow's arrow (ours: a "spell" so it flies like one): neruarow.kod 2-6 and the bow's own
+  // weight behind it; no mana, the bow's draw is its wait
+  arrow: { label: "arrow", kind: "bolt", mana: 0, postCast: 0, range: 9, sound: "arrowswish1.ogg", damage: [5, 11], projectile: ARROW },
 };
 
 export interface FieldDef {
@@ -137,6 +149,11 @@ export interface ArenaWeaponDef {
   reach: number;
   /** ms between swings */
   swingMs: number;
+  /**
+   * A bow (bow.kod): its two overlays, the top (bowaov, HS_TOP_BOW) only while it's drawn, and
+   * the "spell" its shots fly as. Its wielder keeps off and shoots, as a battle mage casts
+   */
+  bow?: { top: string; bottom: string; shot: string; range: number };
 }
 
 export const ARENA_WEAPONS: Record<string, ArenaWeaponDef> = {
@@ -154,6 +171,10 @@ export const ARENA_WEAPONS: Record<string, ArenaWeaponDef> = {
   hammer: { label: "hammer", overlay: "hamrov.bgf", kind: "bludgeon", quality: 0, reach: 128, swingMs: 1200 },
   // weapon/neruswd.kod: thrust, nerudite, nerswdov.bgf
   nerudite: { label: "nerudite sword", overlay: "nerswdov.bgf", kind: "thrust", quality: 1, reach: 128, swingMs: 1000 },
+  // weapon/ranged/bow/longbow.kod, battlebow.kod: bowaov/bowbov.bgf (bow.kod :30-31); the battle
+  // bow draws a little quicker. Their arrows: the "arrow" spell
+  longbow: { label: "longbow", overlay: "bowbov.bgf", kind: "thrust", quality: 0, reach: 128, swingMs: 1900, bow: { top: "bowaov.bgf", bottom: "bowbov.bgf", shot: "arrow", range: 8 } },
+  battlebow: { label: "battle bow", overlay: "bowbov.bgf", kind: "thrust", quality: 1, reach: 128, swingMs: 1600, bow: { top: "bowaov.bgf", bottom: "bowbov.bgf", shot: "arrow", range: 8 } },
 };
 
 /** Armour, by its player art (armor/*.kod): how much it takes off a blow, and how much harder it is to hit */
@@ -174,6 +195,8 @@ export interface ArenaTemper {
   keepAway: number;
   castRange: number;
   castEvery: [number, number];
+  /** How long a caster stands its ground between steps away or in (ms; default 2.5-5 s) */
+  stepEvery?: [number, number];
 }
 
 export interface ArchetypeDef {
@@ -198,10 +221,18 @@ export interface ArchetypeDef {
   shield: number;
   helm: number;
   temper: ArenaTemper;
+  /**
+   * How they're dressed, when not as an arena fighter or mage of the Arena of Kraanan: the Arena
+   * of Death's gladiators (heavy armour, never a plain shirt) and battle mages of a school (its
+   * disciple robe, emblem, circlet and shield: townsfolk.ts battleMageAppearance)
+   */
+  look?: "gladiator" | "qor" | "faren" | "riija";
 }
 
 const FIGHTER_TEMPER: ArenaTemper = { keepAway: 0, castRange: 7, castEvery: [6000, 12000] };
 const MAGE_TEMPER: ArenaTemper = { keepAway: 4, castRange: 8, castEvery: [3500, 7000] };
+/** The Arena of Death's battle mages keep closer, and stand their ground longer */
+const BATTLE_TEMPER: ArenaTemper = { keepAway: 2, castRange: 7, castEvery: [3000, 6000], stepEvery: [5000, 9000] };
 
 export const ARENA_ARCHETYPES: Record<string, ArchetypeDef> = {
   warrior: {
@@ -244,6 +275,28 @@ export const ARENA_ARCHETYPES: Record<string, ArchetypeDef> = {
     weapons: [], spells: [["web", 2.5], ["dazzle", 2], ["blind", 1.5], ["fireball", 1.5]], armour: [], shield: 0, helm: 0,
     temper: MAGE_TEMPER,
   },
+  // The Arena of Death's (docs/adr/0019-arena-bouts.md): stronger, all of them. Gladiators in
+  // heavy armour with fine weapons (none magic) or a bow, and battle mages of three schools
+  gladiator: {
+    label: "Gladiator", role: "fighter", hp: [150, 190], mana: 0, manaRegen: 0, might: [2, 4], power: 0, hit: 0.72,
+    weapons: ["scimitar", "axe", "hammer", "nerudite", "nerudite", "longbow", "battlebow"], spells: [], armour: [["plate", 3], ["scale", 2], ["nerudite", 2]],
+    shield: 0.45, helm: 0.7, temper: FIGHTER_TEMPER, look: "gladiator",
+  },
+  qorbattle: {
+    label: "Battle mage of Qor", role: "mage", hp: [120, 150], mana: 130, manaRegen: 2.5, might: [1, 2], power: 85, hit: 0.5,
+    weapons: [], spells: [["hold", 2], ["blind", 2], ["lightning", 2], ["poisonfog", 1]], armour: [], shield: 0, helm: 0,
+    temper: BATTLE_TEMPER, look: "qor",
+  },
+  farenbattle: {
+    label: "Battle mage of Faren", role: "mage", hp: [120, 150], mana: 130, manaRegen: 2.5, might: [1, 2], power: 85, hit: 0.5,
+    weapons: [], spells: [["web", 2.5], ["fireball", 3], ["lightning", 2], ["firewall", 1]], armour: [], shield: 0, helm: 0,
+    temper: BATTLE_TEMPER, look: "faren",
+  },
+  riijabattle: {
+    label: "Battle mage of Riija", role: "mage", hp: [120, 150], mana: 130, manaRegen: 2.5, might: [1, 2], power: 85, hit: 0.5,
+    weapons: [], spells: [["hold", 2], ["dazzle", 2.5], ["web", 1], ["fireball", 2]], armour: [], shield: 0, helm: 0,
+    temper: BATTLE_TEMPER, look: "riija",
+  },
 };
 
 /** The art the arena can draw (projectiles, elements, overlays), to load ahead of time */
@@ -251,6 +304,9 @@ export function arenaArt(spells: Record<string, ArenaSpellDef> = ARENA_SPELLS, w
   const out = new Set<string>([WEB_OVERLAY]);
   for (const s of Object.values(spells)) if (s.projectile) out.add(s.projectile.file);
   for (const f of Object.values(ARENA_FIELDS)) out.add(f.file);
-  for (const w of Object.values(weapons)) out.add(w.overlay);
+  for (const w of Object.values(weapons)) {
+    out.add(w.overlay);
+    if (w.bow) [w.bow.top, w.bow.bottom].forEach((f) => out.add(f));
+  }
   return [...out];
 }

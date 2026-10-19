@@ -8,12 +8,13 @@ import { ArenaRelay, RELAY_MAX_MESSAGE, RELAY_RATE } from "./relay.ts";
 
 /** An arena host that only notes who watches */
 function fakeHost() {
-  const watching: { server: string; w: ArenaWatcher; hour: number | null }[] = [];
+  const watching: { server: string; w: ArenaWatcher; hour: number | null; room: string }[] = [];
   const hours: (number | null)[] = [];
+  const busy: [string, string, boolean][] = [];
   const host = {
-    room: "tosarena.roo",
-    watch(server: string, w: ArenaWatcher, hour: number | null = null) {
-      watching.push({ server, w, hour });
+    rooms: ["tosarena.roo", "tosarena_death.roo"],
+    watch(server: string, w: ArenaWatcher, hour: number | null = null, room = "tosarena.roo") {
+      watching.push({ server, w, hour, room });
       w.send(JSON.stringify({ t: "arenaState" }));
       return true;
     },
@@ -24,8 +25,11 @@ function fakeHost() {
     setHour(_server: string, hour: number | null) {
       hours.push(hour);
     },
+    setBusy(server: string, room: string, b: boolean) {
+      busy.push([server, room, b]);
+    },
   };
-  return { host: host as unknown as ArenaHost, watching, hours };
+  return { host: host as unknown as ArenaHost, watching, hours, busy };
 }
 
 function peer() {
@@ -53,6 +57,25 @@ describe("the arena's feed", () => {
     conn.closed();
     expect(watching).toHaveLength(0);
     expect(relay.size).toBe(0);
+  });
+
+  it("watches the Arena of Death too, and passes on a player's bout holding the floor", async () => {
+    const { host, watching, busy } = fakeHost();
+    const relay = new ArenaRelay({ arena: host });
+    const p = peer();
+    const conn = relay.connect(p.peer);
+    // Not before watching
+    await conn.receive(JSON.stringify({ t: "arenaBusy", busy: true }));
+    expect(busy).toEqual([]);
+    await conn.receive(JSON.stringify({ t: "arenaWatch", server: "ws://test/ws", room: "tosarena_death.roo", hour: 23 }));
+    expect(watching[0]).toMatchObject({ room: "tosarena_death.roo", hour: 23 });
+    await conn.receive(JSON.stringify({ t: "arenaBusy", busy: true }));
+    await conn.receive(JSON.stringify({ t: "arenaBusy", busy: "yes" }));
+    await conn.receive(JSON.stringify({ t: "arenaBusy", busy: false }));
+    expect(busy).toEqual([
+      ["ws://test/ws", "tosarena_death.roo", true],
+      ["ws://test/ws", "tosarena_death.roo", false],
+    ]);
   });
 
   it("says there's no arena for another room, no server, or no arena at all", async () => {

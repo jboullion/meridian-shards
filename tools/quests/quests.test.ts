@@ -37,8 +37,14 @@ const WORLD = worldFrom(
     kod("phase.kod", "Phase is Spell\nresources:\n   phase_name_rsc = \"phase\"\nclassvars:\n   vrName = phase_name_rsc\n"),
     kod("skill.kod", "Skill is PassiveObject\n"),
     kod("block.kod", "Block is Skill\nresources:\n   block_name_rsc = \"block\"\nclassvars:\n   vrName = block_name_rsc\n"),
+    // The arenas and their watchers, for the arena kind
+    kod("watcher.kod", "Watcher is Towns\n"),
+    kod("tswatch.kod", "TosWatcher is Watcher\n"),
+    kod("darenawatcher.kod", "DeathArenaWatcher is Watcher\n"),
+    kod("tosarena.kod", "TosArena is Room\nresources:\n   room_name_tosarena = \"The Arena of Kraanan\"\n   room_tosarena = tosarena.roo\nclassvars:\n   vrName = room_name_tosarena\nproperties:\n   prRoom = room_tosarena\n   piRoom_num = RID_TOS_ARENA\n"),
+    kod("tosdeatharena.kod", "TosDeathArena is Room\nresources:\n   room_name_tosdeath = \"The Arena of Death\"\n   room_tosdeath = tosarena_death.roo\nclassvars:\n   vrName = room_name_tosdeath\nproperties:\n   prRoom = room_tosdeath\n   piRoom_num = RID_TOS_DEATH_ARENA\n"),
   ],
-  "   RID_TOS_INN = 52\n   RID_TOS_INN_CELLAR = 53\n   RID_RAT_CAVE = 60\n   QST_ID_FAMS_RATS = 76\n   HP20_RAZA_CHAIN = 0\n",
+  "   RID_TOS_INN = 52\n   RID_TOS_INN_CELLAR = 53\n   RID_RAT_CAVE = 60\n   RID_TOS_ARENA = 70\n   RID_TOS_DEATH_ARENA = 79\n   QST_ID_FAMS_RATS = 76\n   HP20_RAZA_CHAIN = 0\n",
 );
 
 const RATS = {
@@ -170,6 +176,17 @@ describe("the quest generator", () => {
     expect(g.kod).toContain("[ 17, $, 1, 0, &TosInnKeeper, 0, qd_1_s2, $, $, qd_1_t2,\r\n               1, $, $, $, 3 ]");
     expect(g.catalog.quests[0]!.steps.map((s) => s.objective)).toEqual(["Learn block", "Attune to the portal"]);
     expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "learn", skills: ["OrcTooth"] }] }]), w).errors.join()).toMatch(/OrcTooth isn't a skill class/);
+  });
+
+  it("writes the arena kind: its watcher as the step's NPC, a win as its amount, the arena as its area", () => {
+    const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "arena", arena: "kraanan" }, { kind: "arena", arena: "death", win: true }] }]), WORLD);
+    expect(g.errors).toEqual([]);
+    expect(g.kod).toContain("[ 18, $, 1, 0, &TosInnKeeper, 0, qd_1_s1, $, $, qd_1_t1,\r\n               1, $, &TosWatcher, $, 0 ]");
+    expect(g.kod).toContain("[ 18, $, 1, 0, &TosInnKeeper, 0, qd_1_s2, $, $, qd_1_t2,\r\n               1, $, &DeathArenaWatcher, $, 1 ]");
+    const steps = g.catalog.quests[0]!.steps;
+    expect(steps.map((s) => s.objective)).toEqual(["Fight a mock bout in the Arena of Kraanan", "Win a mock bout in the Arena of Death"]);
+    expect(steps.map((s) => s.rooms.map((r) => r.rid))).toEqual([[70], [79]]);
+    expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "arena", arena: "moon" }] }]), WORLD).errors.join()).toMatch(/arena: kraanan or death/);
   });
 
   it("writes long tables in groups, as a Kod list literal holds at most 40 elements", () => {

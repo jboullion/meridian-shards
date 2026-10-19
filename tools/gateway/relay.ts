@@ -19,8 +19,9 @@ export interface RelayPeer {
 
 interface Conn {
   peer: RelayPeer;
-  /** The game server it watches the arena of, once it asks */
+  /** The game server it watches the arena of, once it asks, and the arena's room */
   server: string;
+  room: string;
   /** Watching its server's arena, as this */
   arena: ArenaWatcher | null;
   tokens: number;
@@ -48,7 +49,7 @@ export class ArenaRelay {
   }
 
   connect(peer: RelayPeer): { receive: (text: string) => Promise<void>; closed: () => void } {
-    const c: Conn = { peer, server: "", arena: null, tokens: 2 * RELAY_RATE, refilled: this.now(), closed: false };
+    const c: Conn = { peer, server: "", room: "", arena: null, tokens: 2 * RELAY_RATE, refilled: this.now(), closed: false };
     this.conns++;
     return { receive: async (text) => this.receive(c, text), closed: () => this.closed(c) };
   }
@@ -97,6 +98,11 @@ export class ArenaRelay {
       case "arenaHour":
         if (c.arena) this.arena?.setHour(c.server, ArenaRelay.readHour(m.hour));
         return;
+      case "arenaBusy":
+        // A player's mock bout holds the floor (docs/adr/0019-arena-bouts.md): anyone watching may
+        // say so, and it lapses by itself (ArenaSim.setBusy)
+        if (c.arena && typeof m.busy === "boolean") this.arena?.setBusy(c.server, c.room, m.busy);
+        return;
     }
   }
 
@@ -105,10 +111,12 @@ export class ArenaRelay {
     if (c.arena) this.leaveArena(c);
     const server = m.server;
     if (typeof server !== "string" || !server || server.length > MAX_SERVER) return this.send(c, { t: "arenaOff" });
-    if (!this.arena || m.room !== this.arena.room) return this.send(c, { t: "arenaOff" });
+    const room = m.room;
+    if (!this.arena || typeof room !== "string" || !this.arena.rooms.includes(room)) return this.send(c, { t: "arenaOff" });
     const w: ArenaWatcher = { send: (text) => void (!c.closed && c.peer.send(text)) };
-    if (!this.arena.watch(server, w, ArenaRelay.readHour(m.hour))) return this.send(c, { t: "arenaOff" });
+    if (!this.arena.watch(server, w, ArenaRelay.readHour(m.hour), room)) return this.send(c, { t: "arenaOff" });
     c.server = server;
+    c.room = room;
     c.arena = w;
     this.log(`arena: a watcher on ${server}`);
   }

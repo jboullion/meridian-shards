@@ -20,6 +20,7 @@ import { messageChannel, type ChatChannel } from "./chatChannel.ts";
 import { readDamageDealt, type DamageDealt } from "./combatHit.ts";
 import { readSpellRefusal, type SpellRefusal } from "./spellRefusal.ts";
 import { readCompanion, type CompanionEvent } from "./companion.ts";
+import { readArena, type ArenaStatus } from "./arenaBouts.ts";
 import { readCosmetics, type CosmeticsEvent } from "./cosmetics.ts";
 import { readAppraisal, readTraining, type Appraisal, type TrainingCost } from "./training.ts";
 
@@ -283,6 +284,8 @@ export interface SessionEvents {
   quest?: (e: QuestEvent) => void;
   /** Ours: our companion, from our server (docs/adr/0010-followers.md) */
   companion?: (e: CompanionEvent) => void;
+  /** Ours: the arena's mock bouts, where we stand in them, and our records (docs/adr/0019-arena-bouts.md) */
+  arena?: (s: ArenaStatus) => void;
   /** Ours: a tailor's or barber's menu (docs/adr/0012-cosmetics.md) */
   cosmetics?: (e: CosmeticsEvent) => void;
   /** Ours: the abilities we can train, and what 1% of each costs (docs/adr/0016-abilities.md) */
@@ -1100,6 +1103,10 @@ export class GameSession {
           } else if (uc === UC.SEASON) {
             // Ours (system.kod SendSeason): the season, the year, the day of the year
             this.world.season = { season: r.u8(), year: r.u16(), day: r.u16() };
+          } else if (uc === UC.ARENA) {
+            // Ours (arenabouts.kod SendStatus)
+            const s = readArena(r, (id) => this.resource(id));
+            if (s) this.events.arena?.(s);
           } else if (uc === UC.COMPANION) {
             // Ours (companionbook.kod SendStatus, HealthChanged)
             const e = readCompanion(r, (id) => this.resource(id));

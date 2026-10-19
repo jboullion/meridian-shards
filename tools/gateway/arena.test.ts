@@ -17,6 +17,7 @@ import { ArenaRelay } from "./relay.ts";
 
 const ASSETS = join(import.meta.dirname, "../../dist/assets");
 const have = existsSync(join(ASSETS, "tosarena.roo"));
+const haveDeath = existsSync(join(ASSETS, "tosarena_death.roo"));
 const SERVER = "ws://test/ws";
 
 let dir: string | null = null;
@@ -135,6 +136,39 @@ describe.skipIf(!have)("the arena on the relay", () => {
     expect(next.roster.map((r: { name: string }) => r.name)).not.toEqual(roster);
     expect(next.champions).toHaveLength(1);
     expect(SEASON_MS).toBe(20 * 24 * 3600_000);
+  });
+
+  it.skipIf(!haveDeath)("runs the Arena of Death beside it, with its own season, by night, giving way to a player's bout", async () => {
+    dir = mkdtempSync(join(tmpdir(), "arena-"));
+    const file = join(dir, "arena-state.json");
+    const clock = { now: seasonStart(4) + 5000 };
+    const h = host(clock, file);
+    const a = watcher(),
+      d = watcher();
+    h.watch(SERVER, a, 23);
+    expect(h.watch(SERVER, d, 23, "tosarena_death.roo")).toBe(true);
+    expect(h.running).toBe(2);
+    // Its own roster: the elites, kept apart from the Arena of Kraanan's
+    const roster = (d.got[0] as ArenaState).roster;
+    expect(new Set(roster.map((r) => r.arch))).toEqual(new Set(["gladiator", "qorbattle", "farenbattle", "riijabattle"]));
+    await h.save();
+    const saved = JSON.parse(readFileSync(file, "utf8"));
+    expect(Object.keys(saved.servers).sort()).toEqual([SERVER, `${SERVER}|death`]);
+    // At 23 the Arena of Kraanan is shut and the Arena of Death fights
+    h.stepAll(400);
+    expect(h.simOf(SERVER)!.phase).toBe("closed");
+    const death = h.simOf(SERVER, "tosarena_death.roo")!;
+    expect(death.phase).not.toBe("closed");
+    // A player's bout takes the floor: nobody fights while it does
+    h.setBusy(SERVER, "tosarena_death.roo", true);
+    h.stepAll(200);
+    expect(death.busy).toBe(true);
+    expect(death.phase).toBe("rest");
+    // The hour moves to the day for everyone on the server: the Arena of Death shuts
+    h.setHour(SERVER, 12);
+    h.stepAll(40);
+    expect(death.phase).toBe("closed");
+    expect(h.simOf(SERVER)!.phase).not.toBe("closed");
   });
 
   it("players watch it through the relay; with no arena there, they're told", async () => {

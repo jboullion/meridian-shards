@@ -228,7 +228,7 @@ export interface QuestFile {
 }
 
 export interface QuestStepFile {
-  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune";
+  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune" | "arena";
   auto?: boolean;
   rewards?: QuestRewardsFile;
   spell?: string;
@@ -239,6 +239,9 @@ export interface QuestStepFile {
   skills?: string[];
   /** attune: the travel point */
   point?: number;
+  /** arena: whose mock bouts count, and whether only a bout won does (docs/adr/0019-arena-bouts.md) */
+  arena?: "kraanan" | "death";
+  win?: boolean;
   objective?: string;
   brief?: string;
   target?: string;

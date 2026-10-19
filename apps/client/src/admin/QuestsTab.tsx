@@ -11,10 +11,10 @@ import {
 
 type Act = (what: string, fn: () => Promise<string | void>) => () => void;
 
-const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune"];
+const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena"];
 
 /** The kinds that happen once by doing something: done by themselves unless Auto is unticked */
-const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune"];
+const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena"];
 
 const TIER_LABEL = { main: "Main (gold)", story: "Story (silver)", errand: "Errand (bronze)" } as const;
 
@@ -423,6 +423,16 @@ function QuestForm({
               <input type="number" value={s.point ?? 1} onChange={(e) => setStep(i, { point: num(e.target.value) ?? 1 })} />
             </label>
           )}
+          {s.kind === "arena" && (
+            <label>
+              Arena{" "}
+              <select value={s.arena ?? "kraanan"} onChange={(e) => setStep(i, { arena: e.target.value as "kraanan" | "death" })}>
+                <option value="kraanan">Kraanan (melee)</option>
+                <option value="death">Death (duel)</option>
+              </select>{" "}
+              <input type="checkbox" checked={!!s.win} onChange={(e) => setStep(i, { win: e.target.checked || undefined })} /> only a bout won
+            </label>
+          )}
           {(s.kind === "health" || s.kind === "nodes") && (
             <label>
               {s.kind === "health" ? "Base health to reach" : "Mana nodes"}{" "}
@@ -661,6 +671,7 @@ function clean(q: QuestFile): QuestFile {
       if (s.kind === "equip") out.items = s.items;
       if (s.kind === "learn") out.skills = s.skills;
       if (s.kind === "attune") out.point = s.point ?? 1;
+      if (s.kind === "arena") Object.assign(out, { arena: s.arena ?? "kraanan" }, s.win ? { win: true } : {});
       if (s.kind === "deposit" || s.kind === "health" || (s.kind === "nodes" && s.amount !== undefined && s.amount !== 12)) out.amount = s.amount ?? (s.kind === "health" ? 50 : 1);
       if (s.auto !== undefined && s.auto !== ACTION_KINDS.includes(s.kind) && s.kind !== "talk" && s.kind !== "deliver") out.auto = s.auto;
       const sr = cleanRewards(s.rewards ?? {});

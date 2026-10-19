@@ -24,11 +24,18 @@ export type Insignia = keyof typeof INSIGNIA;
 export const FACTIONS = ["neutral", "duke", "princess", "rebel", "any"] as const;
 export type Faction = (typeof FACTIONS)[number];
 
-export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune"] as const;
+/** The arenas with mock bouts (docs/adr/0019-arena-bouts.md): the Watcher class that reports their results, and the room */
+export const ARENAS = {
+  kraanan: { watcher: "TosWatcher", room: "RID_TOS_ARENA", name: "the Arena of Kraanan" },
+  death: { watcher: "DeathArenaWatcher", room: "RID_TOS_DEATH_ARENA", name: "the Arena of Death" },
+} as const;
+export type ArenaName = keyof typeof ARENAS;
+
+export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
 /** Steps that happen by doing something, once (the guide chains' kinds): done by themselves unless `auto` is false */
-export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune"];
+export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena"];
 
 /** How a quest's markers look: gold for the main and levelling chains, silver for story quests, bronze for errands */
 export const TIERS = ["main", "story", "errand"] as const;
@@ -42,7 +49,8 @@ export type Tier = (typeof TIERS)[number];
  * a vault keeper, buy from someone, equip one of some items, reach a health, choose a hometown,
  * bond with every mana node, have a companion (docs/adr/0010-followers.md), learn a skill (one of
  * `skills`, or done at once if we know them all), attune to a portal (`point`, docs/adr/0011; a
- * quest that starts with one isn't offered once we're attuned).
+ * quest that starts with one isn't offered once we're attuned), fight a mock bout in an arena
+ * (`arena`; with `win`, only a bout won: docs/adr/0019-arena-bouts.md).
  */
 export interface QuestStep {
   kind: StepKind;
@@ -62,6 +70,10 @@ export interface QuestStep {
   skills?: string[];
   /** attune: the travel point (util/travelnet.kod GetPoints id) */
   point?: number;
+  /** arena: whose mock bouts count (the Arena of Kraanan's melee, the Arena of Death's duel) */
+  arena?: ArenaName;
+  /** arena: only a bout won counts */
+  win?: boolean;
   /** The tracker's line ("Rats slain"); made up from the step when left out */
   objective?: string;
   /** What the giver says as the step begins (the offer window, the log); the quest's offer for the first */
@@ -328,6 +340,11 @@ function checkStepShape(s: unknown, where: string): string[] {
       break;
     case "health":
       if (s.amount === undefined) errs.push(`${where}: amount: the health to reach`);
+      break;
+    case "arena":
+      if (typeof s.arena !== "string" || !Object.hasOwn(ARENAS, s.arena)) errs.push(`${where}: arena: ${Object.keys(ARENAS).join(" or ")}`);
+      if (s.win !== undefined && typeof s.win !== "boolean") errs.push(`${where}: win: true or false`);
+      if (s.with !== undefined) errs.push(`${where}: with: an arena step is counted by its arena's watcher`);
       break;
   }
   return errs;

@@ -24,7 +24,7 @@ import { createServer } from "node:http";
 import { connect } from "node:net";
 import { parseArgs } from "node:util";
 import { WebSocketServer } from "ws";
-import { readArenaConfig } from "@shards/world";
+import { readArenaConfigs } from "@shards/world";
 import { ArenaHost } from "./arena.ts";
 import { ArenaRelay, RELAY_MAX_MESSAGE } from "./relay.ts";
 
@@ -62,10 +62,10 @@ const wss = new WebSocketServer({
   handleProtocols: (protocols) => (protocols.has("binary") ? "binary" : false),
 });
 
-/** The arena's settings: the defaults, with arena.json's changes */
-function arenaConfig() {
+/** The arenas' settings by room: the defaults, with arena.json's changes (the Arena of Death's under "death") */
+function arenaConfigs() {
   const path = process.env.ARENA_CONFIG;
-  if (!path) return readArenaConfig(undefined).config;
+  if (!path) return readArenaConfigs(undefined).configs;
   let json: unknown;
   try {
     json = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : undefined;
@@ -73,14 +73,16 @@ function arenaConfig() {
   } catch (e) {
     log(`arena: ${path} isn't JSON (${(e as Error).message}); the defaults`);
   }
-  const { config, errors } = readArenaConfig(json);
+  const { configs, errors } = readArenaConfigs(json);
   for (const e of errors) log(`arena: ${path}: ${e}`);
-  return config;
+  return configs;
 }
 
 const statePath = process.env.ARENA_STATE ?? "dist/arena-state.json";
+const configs = arenaConfigs();
 const arena = new ArenaHost({
-  config: arenaConfig(),
+  config: configs["tosarena.roo"]!,
+  configs,
   assetsDir: process.env.ARENA_ASSETS ?? "dist/assets",
   statePath: statePath === "none" ? null : statePath,
   log,

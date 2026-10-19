@@ -155,8 +155,11 @@ function MapButton({ label, className, onClick, children }: {
 }
 
 export function MapCluster({
-  session, icons, assets, settings, buttons, getRoom, roomName, annotations, onAnnotate, onLook, onZoom, onMap, getWay,
+  session, icons, assets, settings, buttons, getRoom, roomName, annotations, onAnnotate, onLook, onZoom, onMap, getWay, onArena, arenaActive,
 }: {
+  /** Ours (docs/adr/0019-arena-bouts.md): in an arena, the crossed swords at the map's left that open the Arena window; lit while we're in its line or bout */
+  onArena?: () => void;
+  arenaActive?: boolean;
   /** Ours (docs/adr/0009-quests.md 5): tracked quests' areas and the way to them, for the map */
   getWay?: () => MapWay | null;
   /** The toolbar's Rest/Stand and mailbox, at the map's top corners (none with Show toolbar off) */
@@ -203,6 +206,11 @@ export function MapCluster({
         <MapButton label="Zoom in" className="zoom-in" onClick={() => onZoom(1)}>
           +
         </MapButton>
+        {onArena && (
+          <MapButton label="Arena" className={`arena-button${arenaActive ? " active" : ""}`} onClick={onArena}>
+            ⚔
+          </MapButton>
+        )}
         {buttons?.map((b, i) => (
           <ToolbarButtonView key={b.bitmap} assets={assets} button={b} tooltips={settings.tooltips} className={`map-tool ${i ? "top-right" : "top-left"}`} />
         ))}
