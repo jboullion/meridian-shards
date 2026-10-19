@@ -284,6 +284,13 @@ describe("the quest generator", () => {
     expect(generateFrom(sources([{ ...RATS, start: "dawn" }]), WORLD).errors).toEqual(['cellar-rats.json: start: "death", or left out']);
   });
 
+  it("writes the claim kind (claiming a flagpole, Flagpole.ClaimAttempt)", () => {
+    const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "claim" }] }]), WORLD);
+    expect(g.errors).toEqual([]);
+    expect(g.kod).toContain("[ 21, $, 1, 0, &TosInnKeeper, 0, qd_1_s1, $, $, qd_1_t1,\r\n               1, $, $, $, 0 ]");
+    expect(g.catalog.quests[0]!.steps[0]!.objective).toBe("Claim a flagpole for your faction");
+  });
+
   it("writes the node kind: the NODE_ bit (hex in blakston.khd) as the step's amount", () => {
     const w = worldFrom([], "   NODE_A5 = 0x0020\n   RID_TOS_INN = 52\n");
     expect(w.consts.get("NODE_A5")).toBe(32);

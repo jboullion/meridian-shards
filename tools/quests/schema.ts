@@ -31,11 +31,11 @@ export const ARENAS = {
 } as const;
 export type ArenaName = keyof typeof ARENAS;
 
-export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node"] as const;
+export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
 /** Steps that happen by doing something, once (the guide chains' kinds): done by themselves unless `auto` is false */
-export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node"];
+export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim"];
 
 /** How a quest's markers look: gold for the main and levelling chains, silver for story quests, bronze for errands */
 export const TIERS = ["main", "story", "errand"] as const;

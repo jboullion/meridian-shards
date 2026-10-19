@@ -8,7 +8,7 @@ import { classOf, iconOf, isItem, isMonster, isNpc, isNumberItem, isSkill, isSpe
 
 /** QuestBook's step kinds (questbook.kod QK_*) */
 export const KIND_NUM: Record<StepKind, number> = {
-  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17, arena: 18, train: 19, node: 20,
+  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17, arena: 18, train: 19, node: 20, claim: 21,
 };
 
 /** The faction a quest needs, as QuestBook reads it: the FACTION_ number, -1 any but neutral, $ none */
@@ -336,6 +336,8 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
                                           ? "Spend training points"
                                           : s.kind === "node"
                                             ? "Bond with the mana node"
+                                            : s.kind === "claim"
+                                              ? "Claim a flagpole for your faction"
                                         : arena
                                           ? `${s.win ? "Win" : "Fight"} a mock bout in ${arena.name}`
                                         : "Bond with every mana node");

@@ -512,3 +512,22 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
     - So one to three players can lock all eight rooms and bond.
   - **The lock icon** is a room enchantment, `FeyLockGood` or `FeyLockEvil` (`passive/roomflagicon/feylock*`, with Shal'ille and Qor bane art). It's held for the lock's time, so every client shows it by the map. Its `EndSpell` (the timer, or `RemoveEnchantment` when broken) unlocks the room (`FeyLockEnded`).
   - A DM's room karma command breaks any lock.
+
+## Graveyard, temples and faction ground (2026-10-19)
+
+- **Tos graveyard** (Paddock, `TosInnKeeper`), both repeatable every 24 hours:
+  - The Restless Dead of Tos (276): ten zombies.
+  - Bones in the Graveyard (277): five skeletons.
+  - Both count only in the Graveyard of Tos (`inRooms`), whose dead rise only late at night (`tosgrave.kod`, game hour < 5 or > 21). The text says so.
+- **Where to learn a school** (talk steps to the teacher):
+  - The Song of Jala (278): Luisane d'Ile, Berg's merchant → Priestess Themala.
+  - The Temple of Riija (279): Quetzal, Ko'catan's language master → the Monk of Riija, past the ruins and the noble avars.
+  - Each liege sends their own people (`requires.faction`) to a priestess:
+    - The Duke's Priestess (280) → Zuxana. The Temple of Qor's door moves between the Sentinel and the Cragged Mountains.
+    - The Princess's Priestess (281) → Tenuv'vyal in the Badlands.
+    - Jonas's Priestess (282) → Qerti'nya at the Temple of Kraanan.
+- **Faction ground** (283 Duke, 284 Princess, 285 Rebels), repeatable every 24 hours:
+  - Gated on the faction and its soldier quest (77, 76, 78), which gives the SoldierShield a claim needs.
+  - Steps: kill three troops of each rival faction (auto steps, no walk back), then claim any flagpole for your side.
+  - The offer and step briefs explain the territory game: your faction's flag from your liege's hall, a pole next to land you hold, and eight minutes holding it.
+- **The `claim` kind** (`QK_CLAIM` 21): an action step done by `Flagpole.ClaimAttempt` on a real claim, through `QuestBook.FlagClaimed`. It isn't hooked in `TerritoryGame.FlagClaimed`, which admin changes and recreates also call. Any pole counts.
