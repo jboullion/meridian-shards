@@ -208,8 +208,14 @@ if (!dry) {
 if (rooms.rids.length) {
   step(`Rebuild changed rooms: ${rooms.files.join(", ")} (RID ${rooms.rids.join(", ")})`);
   for (const rid of rooms.rids) {
-    const found = remote(host, sshArgs, `${COMPOSE} exec -T blakserv maint "send object 0 FindRoomByNum num int ${rid}"`, true);
-    // The answer's last line is ": OBJECT <id>" (or ": $ 0" when the room isn't loaded)
+    // The answer's last line is ": OBJECT <id>" (or ": $ 0" when the room isn't loaded). Just
+    // after a restart the first answer can come back empty, so ask again until one comes.
+    let found = "";
+    for (let attempt = 1; attempt <= 4 && !dry; attempt++) {
+      found = remote(host, sshArgs, `${COMPOSE} exec -T blakserv maint "send object 0 FindRoomByNum num int ${rid}"`, true);
+      if (/return from/.test(found)) break;
+      await sleep(5000);
+    }
     const obj = /^:\s*OBJECT\s+(\d+)\s*$/m.exec(found)?.[1];
     if (!obj) {
       if (!dry) console.log(`RID ${rid}: not loaded on the server, nothing to rebuild`);
