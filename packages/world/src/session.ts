@@ -608,6 +608,29 @@ export class GameSession {
     for (const fn of this.castListeners) fn(spell);
   }
 
+  /**
+   * Ours: more listeners for the session's events, called after the ones it was made with (the
+   * AI playtester's body in the page, tools/agent/inpage.ts); a function that stops them. Stop
+   * them in the reverse order they were added.
+   */
+  listen(extra: SessionEvents): () => void {
+    type Handler = ((...args: never[]) => void) | undefined;
+    const events = this.events as Record<string, Handler>;
+    const before: [string, Handler][] = [];
+    for (const [key, fn] of Object.entries(extra) as [string, Handler][]) {
+      if (!fn) continue;
+      const prev = events[key];
+      before.push([key, prev]);
+      events[key] = (...args: never[]) => {
+        prev?.(...args);
+        fn(...args);
+      };
+    }
+    return () => {
+      for (const [key, prev] of before) events[key] = prev;
+    };
+  }
+
   /** Ours: each BP_REQ_CAST we send, by spell id (the quick slots' cooldowns, apps/client cooldowns.ts) */
   private readonly castListeners = new Set<(spell: number) => void>();
   onCastSent(fn: (spell: number) => void): () => void {

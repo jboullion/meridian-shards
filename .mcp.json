@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "meridian": {
+      "command": "node",
+      "args": ["tools/agent/server.ts", "--user", "shardscout", "--pass", "shardscout", "--character", "Scout"]
+    }
+  }
+}

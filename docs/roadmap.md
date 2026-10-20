@@ -324,6 +324,17 @@ Players of the original ran bots to cast spells while away, to raise them. Study
 - [x] **Mana** comes back at a guessed rate until a rest has measured this character's, which is then kept for the next estimate.
 - [ ] **Try it on our server:** confirm that Server 104's refusal messages match `spellRefusal.ts`, and that a reagent bag or ring counts as the client expects.
 
+### 17. The AI playtester (ours, 2026-10-20)
+
+An AI agent plays a character and writes up what's broken ([ADR 0020](adr/0020-ai-playtester.md)).
+
+- [x] **Phase 1, local, text** (2026-10-20): the `meridian` MCP server (`tools/agent/`, started from `.mcp.json`) plays Scout (`shardscout`) through a headless `GameSession`.
+  - **Tools:** look around, walk (nav-grid paths, doors, edges, room to room), speak and tell, examine, talk to NPCs, quests, fight, cast, items, shops, and a journal of events to wait on.
+  - **Reports and helpers:** bug reports in `playtest/reports/` and notes in `playtest/notes/`, plus test helpers on the maintenance port.
+  - **The brief** is `.claude/agents/playtester.md`.
+- [x] **Phase 2, eyes** (2026-10-20): `connect` with body `browser` plays in the real dev client (Playwright), the agent's logic running in the page on its own session. `screenshot` shows what a player sees, and bug reports attach one.
+- [ ] **Phase 3, players' own AI characters:** any player may run one AI agent at a time, marked "AI" by the server. It ships and installs with the game, explains itself to any MCP client (Claude Code, Codex...), and might be started from a Launch AI Bot button in the game. To be designed and tried ([ADR 0020](adr/0020-ai-playtester.md), "Later phases").
+
 ## What the slice must prove
 
 - [x] An unmodified Server 104 `blakserv` (plus config changes only) serves browser players through the gateway (the protocol side; proven with the headless client). Since 2026-10-15 the server is our own fork, changed as our features need (ADR 0001 decision 4).

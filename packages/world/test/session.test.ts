@@ -82,3 +82,28 @@ describe("logging in doesn't wait forever", () => {
     expect(other.errors).toEqual([]);
   });
 });
+
+describe("more listeners (listen)", () => {
+  test("hear the session's events after its own, and stop when asked", () => {
+    const { s, ws, errors } = make();
+    const heard: string[] = [];
+    const stop = s.listen({ error: (e) => heard.push(e), phase: (p) => heard.push(`phase ${p}`) });
+    ws.close();
+    expect(errors).toEqual([expect.stringMatching(/Can't reach the server/)]);
+    expect(heard).toEqual([errors[0], "phase closed"]);
+    expect(s.phase).toBe("closed");
+    stop();
+  });
+
+  test("stopping puts the session's own back", () => {
+    vi.useFakeTimers();
+    const { s, ws, errors } = make();
+    const heard: string[] = [];
+    s.listen({ error: (e) => heard.push(e) })();
+    vi.advanceTimersByTime(15_001);
+    expect(errors).toHaveLength(1);
+    expect(heard).toEqual([]);
+    expect(ws.closed).toBe(true);
+    vi.useRealTimers();
+  });
+});

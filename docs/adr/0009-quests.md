@@ -531,3 +531,10 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
   - Steps: kill three troops of each rival faction (auto steps, no walk back), then claim any flagpole for your side.
   - The offer and step briefs explain the territory game: your faction's flag from your liege's hall, a pole next to land you hold, and eight minutes holding it.
 - **The `claim` kind** (`QK_CLAIM` 21): an action step done by `Flagpole.ClaimAttempt` on a real claim, through `QuestBook.FlagClaimed`. It isn't hooked in `TerritoryGame.FlagClaimed`, which admin changes and recreates also call. Any pole counts.
+
+## Marion repeats (2026-10-20)
+
+- The Crypt's First Chamber (124, spectral mummies) repeats at once (`repeat` with 0 hours) while base health is under 40 (`requires.healthBelow`).
+- The Restless Dead of Marion (12, the statues) is offered from 40 health and repeats at once while base health is under 60.
+  - It no longer needs 124 done: 124 stops being offered at 40, and anyone who skipped it would otherwise never get 12.
+  - The Spiders of Farol (127) still needs 12, so a player past 60 who never did the statues won't get 127 or Word to Cor Noth (128). Cor Noth's own quests don't need them.
