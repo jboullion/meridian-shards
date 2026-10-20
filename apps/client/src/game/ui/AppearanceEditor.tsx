@@ -6,6 +6,7 @@
 import { Fragment, useMemo, type ReactNode } from "react";
 import { ANIMATE, type CharInfo } from "@shards/protocol";
 import type { IconRenderer } from "../icons.ts";
+import { useTurnDrag } from "./hooks.ts";
 import { Button, Check, GroupBox, Text, Trackbar, at, type Rect } from "./kit.tsx";
 import { ObjIcon } from "./Sidebar.tsx";
 
@@ -103,6 +104,8 @@ export function AppearanceEditor({
   children?: ReactNode;
 }) {
   const p = facePicks(info, face);
+  // Ours: the head turns through its views as it's dragged, like the character window's figure
+  const [angle, turn, front] = useTurnDrag();
   const none = { type: ANIMATE.NONE, group: 1 };
   const faceObject = useMemo(
     () => ({
@@ -136,9 +139,12 @@ export function AppearanceEditor({
   return (
     <div style={at(r)}>
       <GroupBox at={[3, 0, 150, 158]} label="Face" />
-      <div className="mk-face" style={at([14, 18, 127, 127])}>
-        <ObjIcon icons={icons} object={faceObject} className="face" />
+      <div className="mk-face" style={at([14, 18, 127, 127])} title="Drag to turn" onPointerDown={turn} onDoubleClick={front}>
+        <ObjIcon icons={icons} object={faceObject} opts={{ angle }} className="face" />
       </div>
+      <Text at={[14, 147, 127, 8]} className="mk-face-hint">
+        Drag to rotate head
+      </Text>
       <Text at={[175, 3, 135, 18]} wrap>
         {intro}
       </Text>

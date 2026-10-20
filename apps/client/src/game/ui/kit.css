@@ -574,6 +574,12 @@
   text-align: right;
 }
 
+/* Ours: the hint under the creator's face (AppearanceEditor.tsx) */
+.mk-text.mk-face-hint {
+  text-align: center;
+  color: #a8a8a8;
+}
+
 /* A property sheet page: a raised panel joined to the tabs over it */
 .mk-page {
   border: 2px solid;
@@ -587,6 +593,10 @@
   place-items: center;
   background: rgba(0, 0, 0, 0.35);
   box-shadow: inset 1px 1px 0 #141414, inset -1px -1px 0 #6a6a6a;
+  /* Ours: dragged to turn the head (AppearanceEditor.tsx, hooks.ts useTurnDrag) */
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
 }
 
 /* kit.tsx FlowPage: blocks one under the other, scrolling if they don't fit */
