@@ -43,6 +43,8 @@ describe("windows' glass", () => {
     expect(Math.min(...pts.map((p) => p[1]))).toBeCloseTo(0, 0);
     const pointed = openingOutline({ shape: "pointed", x: [0, 20], y: [0, 40], spring: 15 });
     expect(Math.min(...pointed.map((p) => p[1]))).toBeCloseTo(0, 0);
+    const gable = openingOutline({ shape: "gable", x: [0, 20], y: [0, 40], spring: 15 });
+    expect(gable).toEqual([[0, 40], [20, 40], [20, 15], [10, 0], [0, 15]]);
     const circle = openingOutline({ shape: "circle", x: [0, 10], y: [0, 10] });
     for (const [x, y] of circle) expect(Math.hypot(x - 5, y - 5)).toBeCloseTo(5, 5);
   });

@@ -1,5 +1,5 @@
 {
- "_doc": "Ours (docs/adr/0018-seasons-water-windows.md): the glass of wall textures, which glows at night and lets daylight in, from meridian-unreal data/environment/facades.json. Per texture: its windows (and a clock face) in the picture's own pixels (x right, y down: the transpose of how the grid texture is stored), shaped rect, round, pointed (spring: the y where the arch starts) or circle, and a gain (0: it doesn't glow; none: 1). npm run assets copies it to dist/assets.",
+ "_doc": "Ours (docs/adr/0018-seasons-water-windows.md): the glass of wall textures, which glows at night and lets daylight in, from meridian-unreal data/environment/facades.json. Per texture: its windows (and a clock face) in the picture's own pixels (x right, y down: the transpose of how the grid texture is stored), shaped rect, round, pointed (spring: the y where the arch starts), circle or (ours, not the remaster's) gable (spring: where its straight slopes start, meeting at the apex in the middle), and a gain (0: it doesn't glow; none: 1). npm run assets copies it to dist/assets.",
  "textures": {
   "3406": {
    "name": "IVORY_CHAPEL_WALL (Cor Noth, the Ivory Chapel): the grated window band",
@@ -1368,15 +1368,16 @@
    "name": "Cor Noth: the lattice gable window",
    "openings": [
     {
-     "shape": "rect",
+     "shape": "gable",
      "x": [
-      45,
-      255
+      48,
+      252
      ],
      "y": [
-      72,
-      148
-     ]
+      46,
+      146
+     ],
+     "spring": 95
     }
    ]
   },

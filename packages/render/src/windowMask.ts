@@ -6,11 +6,11 @@
 
 /** A window (or clock face) as windows.json gives it */
 export interface WindowOpening {
-  shape: "rect" | "round" | "pointed" | "circle";
+  shape: "rect" | "round" | "pointed" | "circle" | "gable";
   /** Left and right, top (the apex) and bottom, in the picture's pixels */
   x: [number, number];
   y: [number, number];
-  /** Where an arch starts (round and pointed) */
+  /** Where an arch starts (round and pointed), or a gable's slopes (ours: straight up to the apex, at the middle) */
   spring?: number;
 }
 
@@ -40,6 +40,7 @@ export function openingOutline(op: WindowOpening, segments = 8): Point[] {
   }
   if (op.shape === "rect" || op.spring === undefined) return [[xl, yb], [xr, yb], [xr, ya], [xl, ya]];
   const ys = op.spring;
+  if (op.shape === "gable") return [[xl, yb], [xr, yb], [xr, ys], [(xl + xr) / 2, ya], [xl, ys]];
   const a = (xr - xl) / 2,
     h = ys - ya,
     xm = (xl + xr) / 2;
