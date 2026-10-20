@@ -104,6 +104,21 @@ copy(join(SRC, "common.mak.linux"), join(STAGE, "blakserv-src", "common.mak.linu
 
 // Game data from our build (platform independent)
 for (const d of ["memmap", "rsc", "rooms"]) copy(join(RUN, d), join(STAGE, "gamedata", d));
+// The build installs changed Kod into run/server/loadkod, and only a reload of the local
+// blakserv moves it into memmap/: staging memmap alone shipped Kod as old as the last local
+// reload (2026-10-20). So lay every compiled .bof from the Kod tree over it, as a reload would.
+{
+  const memmap = join(STAGE, "gamedata", "memmap");
+  const names = new Map(readdirSync(memmap).map((f) => [f.toLowerCase(), f]));
+  let fresh = 0;
+  for (const rel of readdirSync(join(SRC, "kod"), { recursive: true }) as string[]) {
+    if (!rel.toLowerCase().endsWith(".bof")) continue;
+    const name = rel.split(/[\\/]/).pop()!;
+    cpSync(join(SRC, "kod", rel), join(memmap, names.get(name.toLowerCase()) ?? name));
+    fresh++;
+  }
+  console.log(`Kod: ${fresh} compiled files from the Kod tree`);
+}
 for (const f of ["kodbase.txt", "blakston.khd", "protocol.khd"]) {
   if (existsSync(join(RUN, f))) copy(join(RUN, f), join(STAGE, "gamedata", f));
 }
