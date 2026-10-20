@@ -43,7 +43,7 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 | `tools/gateway/` | WebSocket-to-TCP bridge in front of blakserv (`ws`), and on `/social` the arena's feed (`relay.ts`), which runs the arena's fights (`arena.ts`, [ADR 0007](docs/adr/0007-arena.md)). It carried the friends relay too until our server took friends and pets over ([ADR 0015](docs/adr/0015-social-on-our-server.md)). |
 | `tools/headless/` | Headless protocol client for spikes and soak tests (`client.ts`), a scripted friend (`friend.ts`), a scripted quester (`quest.ts`: talk, accept, turn in, maintenance commands), and a scripted companion owner (`companion.ts`: ask, stances, dismiss, give and take, looks). |
 | `tools/maint/` | Sends commands to blakserv's maintenance port (localhost:9998). |
-| `tools/deploy/` | `stage.ts` gathers the Docker build context in `deploy/.stage` (git-ignored: game data and art); `push.ts` ships it to the VM over ssh and restarts the stack; `release.ts` releases the desktop app (`npm run release -- <x.y.z>`). |
+| `tools/deploy/` | `stage.ts` gathers the Docker build context in `deploy/.stage` (git-ignored: game data and art); `push.ts` ships it to the VM over ssh and restarts the stack; `release.ts` releases the desktop app (`npm run release -- <x.y.z>`). `ship.ts` is the one button (`npm run ship -- -m "..."`): build, check, commit and push both repositories, save and deploy, then rebuild the rooms whose `.roo` changed since the last ship (`~/.meridian-shards/last-ship.json`). `bump.ts` ships, then releases the next version (`npm run release:patch` / `release:minor`). |
 | `deploy/` | The hosted stack: `docker-compose.yml`, the blakserv Linux image, the gateway image, the Caddyfile, the download page (`web/site/download/`, published to GitHub Pages by `.github/workflows/pages.yml`), and the run book (`deploy/README.md`). |
 | `server/config/blakserv.cfg` | Our server config, the source of truth. Copied into the run folder by `server/setup-run.cmd`. |
 | `server/config/motd.txt` | The message of the day on the character screen (CRLF line endings). `server/setup-run.cmd` copies it into the run folder and deploys put it in the image. |
@@ -78,6 +78,8 @@ npm run desktop:build       # an unpacked build in apps/desktop/dist/win-unpacke
 npm run desktop:dist        # installers + latest*.yml for this OS, with dist/assets inside
 npm run desktop:release     # the same, uploaded to a draft GitHub release (CI does this on a v* tag)
 npm run release -- 0.2.0     # bump, commit, tag and push; CI builds all three OSes and publishes v0.2.0
+npm run ship -- -m "msg"      # build, check, commit + push both repos, deploy, rebuild changed rooms
+npm run release:patch -- -m "msg"  # ship, then release the next patch version (release:minor for x.y+1.0)
 npm run android:run         # build the client and the debug APK, install it on the phone or emulator, adb reverse 5173, launch
 npm run android:run -- --no-build --device emulator-5554   # reinstall and relaunch only, on one of several devices
 npm run android:run -- --bundle   # with the game files in the APK (dist/assets, ~380 MB), as release builds have them

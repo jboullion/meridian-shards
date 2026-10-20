@@ -74,6 +74,18 @@ describe("overlay depth", () => {
     expect(c.pixels[1 * 4 + 1]).toBe(30);
     expect(c.pixels[0]).toBe(10); // the head itself stays under
   });
+  test("on a head drawn alone (the creator's face), facial hair is over the head's other parts", () => {
+    const face = one(2, 2, 20, [{ number: 12, x: 1, y: 1 }]);
+    const c = compositeSprite(
+      {
+        base: { bgf: face, group: 0, translation: 0, hotspot: 0 },
+        overlays: [{ bgf: one(1, 1, 30, [{ number: HS_OVER_FIGURE, x: 0, y: 0 }]), group: 0, translation: 0, hotspot: 12 }, { bgf: one(1, 1, 40), group: 0, translation: 0, hotspot: 12 }],
+        viewAngle: 0,
+      },
+      new XlatTable(grayPalette(), null),
+    )!;
+    expect(c.pixels[1 * 2 + 1]).toBe(30); // the beard over the mouth
+  });
 });
 
 describe("object lighting", () => {

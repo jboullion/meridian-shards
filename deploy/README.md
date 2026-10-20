@@ -87,6 +87,39 @@ The first entry is the site itself, for the browser client; without it the gatew
 
 ## 5. Deploy (and redeploy)
 
+**The one-button way** (since 2026-10-20), from the repo root on your PC:
+
+```bash
+npm run ship -- -m "What changed"
+```
+
+`tools/deploy/ship.ts`:
+- builds the server (`server\build.cmd`: the quests, the Kod, blakserv) and the game files, and runs `npm run check`;
+- commits whatever changed in both repositories (meridian-browser and shards-server, through `server/src`) with that message, and pushes both;
+- on the VM, saves the game, then deploys with `push.ts`. The game files go up only when they changed since the last ship;
+- waits for blakserv to listen again, then `Recreate`s every room built from a `.roo` that changed since the last ship (`dist/assets/rooms.json` maps files to rooms). With no record yet, it compares against shards-server as it was at the last release tag;
+- writes what it shipped to `~/.meridian-shards/last-ship.json`.
+
+The VM comes from `.env`: `SHARDS_DEPLOY_HOST` and `SHARDS_DEPLOY_KEY`. Other options:
+- `--message-file` takes a longer message;
+- `--skip-build` and `--skip-checks` skip those steps;
+- `--no-deploy` commits and pushes only;
+- `--dry-run` prints every step without doing it.
+
+**Releases** run a ship first, then `release.ts` with the next version (section 6):
+
+```bash
+npm run release:patch -- -m "What changed"
+```
+
+```bash
+npm run release:minor -- -m "What changed"
+```
+
+`release:patch` is an incremental release (0.12.0 to 0.12.1); `release:minor` goes to 0.13.0. `--skip-ship` releases what's already deployed, and `--no-wait` pushes the tag and leaves.
+
+**By hand:**
+
 From the repo root on your PC:
 
 ```bash

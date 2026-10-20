@@ -537,4 +537,5 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
 - The Crypt's First Chamber (124, spectral mummies) repeats at once (`repeat` with 0 hours) while base health is under 40 (`requires.healthBelow`).
 - The Restless Dead of Marion (12, the statues) is offered from 40 health and repeats at once while base health is under 60.
   - It no longer needs 124 done: 124 stops being offered at 40, and anyone who skipped it would otherwise never get 12.
-  - The Spiders of Farol (127) still needs 12, so a player past 60 who never did the statues won't get 127 or Word to Cor Noth (128). Cor Noth's own quests don't need them.
+- The Spiders of Farol (127) moves to Morrigan (`MarionInnkeeper`), beside the slimes and fungus beasts. It's offered from 35 health with no prerequisite, and its hand-in points the player to Ran er'Hoth.
+- **Word to Cor Noth** (128, Ran er'Hoth) is offered to anyone from 40 health with no prerequisite. Reaching Cor Noth matters too much for it to hang on a skipped quest.
