@@ -23,6 +23,8 @@ export const DESC = {
   TALK: 0x80,
   /** Ours: someone with something we can buy (OF_BUYABLE: shards-server Monster.HasForSale), as a double click on them does */
   BUY: 0x100,
+  /** Ours: someone who takes things from us (OF_OFFERABLE, not a player): typed `offer` opens the same window */
+  SELL: 0x200,
 } as const;
 
 /** dialog.c PAGE_BREAK_CHAR: splits a long description into pages */
@@ -33,7 +35,7 @@ const MAX_URL = 200;
 
 /** The description dialog's buttons besides OK (IDC_GET, IDC_DROP, IDC_USE, IDC_UNUSE, IDC_ACTIVATE, IDC_APPLY). */
 /** The original's buttons' actions; ours: buy (a shopkeeper's Buy, docs/adr/0016-abilities.md) */
-export type DescAction = "get" | "drop" | "use" | "unuse" | "inside" | "activate" | "apply" | "buy";
+export type DescAction = "get" | "drop" | "use" | "unuse" | "inside" | "activate" | "apply" | "buy" | "sell";
 
 /** dialog.c AnimateDescription: a cycling object keeps cycling in the picture. */
 function useAnimatedGroup(o: ObjectInfo): number | undefined {
@@ -191,13 +193,14 @@ export function DescriptionDialog({
           </div>
         </div>
         {/* IDD_DESC: OK at 148, Get/Drop at 206 (ours: Buy), Inside/Use/Unuse at 262 (dialog units) */}
-        <div className="desc-buttons" ref={okRef}>
+        <div className={`desc-buttons${buttons & DESC.SELL && !(buttons & (DESC.GET | DESC.DROP)) ? " has-sell" : ""}`} ref={okRef}>
           <Button isDefault onClick={ok}>
             OK
           </Button>
           {buttons & DESC.GET ? <Button className="slot-b" onClick={run("get")}>Get</Button> : null}
           {buttons & DESC.DROP ? <Button className="slot-b" onClick={run("drop")}>Drop</Button> : null}
           {buttons & DESC.BUY && !(buttons & (DESC.GET | DESC.DROP)) ? <Button className="slot-b" onClick={run("buy")}>Buy</Button> : null}
+          {buttons & DESC.SELL && !(buttons & (DESC.GET | DESC.DROP)) ? <Button className="slot-sell" onClick={run("sell")}>Sell</Button> : null}
           {buttons & DESC.INSIDE ? <Button className="slot-c" onClick={run("inside")}>Inside</Button> : null}
           {buttons & DESC.ACTIVATE ? <Button className="slot-c" onClick={run("activate")}>{buttons & DESC.TALK ? "Quests" : "Use"}</Button> : null}
           {buttons & DESC.APPLY ? <Button className="slot-c" onClick={run("apply")}>Use</Button> : null}

@@ -1993,6 +1993,19 @@ button.link {
   height: 100%;
 }
 
+/* Ours: Sell, beside Buy, for a shopkeeper that takes things: Buy, Sell and Use/Quests close up after OK */
+.desc-buttons.has-sell .mk-btn.slot-b {
+  left: calc(100% * 196 / 338);
+}
+
+.desc-buttons.has-sell .mk-btn.slot-sell {
+  left: calc(100% * 244 / 338);
+}
+
+.desc-buttons.has-sell .mk-btn.slot-c {
+  left: calc(100% * 292 / 338);
+}
+
 .desc-buttons .mk-btn.slot-b {
   left: calc(100% * 206 / 338);
 }

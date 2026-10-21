@@ -1861,6 +1861,8 @@ export function GameView({
     // Ours: a shopkeeper's or vault keeper's description has Buy, as a double click on them does
     const o = session.world.objects.get(id);
     if (o && o.info.flags & OF_BUYABLE && !(o.info.flags & OF_PLAYER)) buttons |= DESC.BUY;
+    // Sell: a shopkeeper (not a vault keeper or banker, who have Deposit) that takes things
+    if (o && o.info.flags & OF_BUYABLE && o.info.flags & OF_OFFERABLE && !(o.info.flags & OF_PLAYER)) buttons |= DESC.SELL;
     descParams.current = buttons;
     session.look(id);
   };
@@ -1936,10 +1938,19 @@ export function GameView({
   });
 
   /** dialog.c DescDialogProc's buttons, on the object the dialog shows. */
+  /** Ours: a shopkeeper who also takes things (OF_OFFERABLE, not a player): their Buy window has Sell */
+  const takesFromUs = (id: number) => {
+    const o = session.world.objects.get(id);
+    return !!o && (o.info.flags & OF_OFFERABLE) !== 0 && (o.info.flags & OF_PLAYER) === 0;
+  };
   const descAction = (a: DescAction, id: number, buttons: number) => {
     switch (a) {
       case "buy":
         return askTrader(id);
+      case "sell": {
+        const o = session.world.objects.get(id);
+        return setModal({ type: "give", kind: "offer", target: { id, name: (o && session.resource(o.info.nameRes)) ?? "" } });
+      }
       case "get":
         return session.pickUp(id);
       case "inside":
@@ -2472,7 +2483,13 @@ export function GameView({
           />
         )}
         {modal?.type === "trade" && (
-          <TradeDialog list={modal.list} session={session} icons={icons} onClose={() => setModal(null)} />
+          <TradeDialog
+            list={modal.list}
+            session={session}
+            icons={icons}
+            onClose={() => setModal(null)}
+            onSell={takesFromUs(modal.list.seller.id) ? () => descAction("sell", modal.list.seller.id, 0) : undefined}
+          />
         )}
         {modal?.type === "arena" && <ArenaDialog status={arena.status} session={session} onClose={() => setModal(null)} />}
         {modal?.type === "travel" && (

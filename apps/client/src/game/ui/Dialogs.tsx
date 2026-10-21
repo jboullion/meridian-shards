@@ -78,12 +78,14 @@ const refs = (chosen: Map<number, number>): ObjectRef[] =>
 
 /** buy.c BuyDialogProc / WithdrawalDialogProc. */
 export function TradeDialog({
-  list, session, icons, onClose,
+  list, session, icons, onClose, onSell,
 }: {
   list: TradeList;
   session: GameSession;
   icons: IconRenderer;
   onClose: () => void;
+  /** Ours: a shopkeeper that also takes things shows Sell, which swaps this window for the offer window */
+  onSell?: () => void;
 }) {
   const [chosen, setChosen] = useState(new Map<number, number>());
   const rs = (id: number) => session.resource(id) ?? "";
@@ -111,6 +113,7 @@ export function TradeDialog({
         <Button isDefault onClick={ok} disabled={!chosen.size}>
           {buying ? "Buy" : "Withdraw"}
         </Button>
+        {buying && onSell && <Button onClick={onSell}>Sell</Button>}
         <Button onClick={onClose}>Cancel</Button>
       </div>
     </Dialog>
