@@ -10,7 +10,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ANIMATE, DF, type ObjectInfo } from "@shards/protocol";
 import { DRAWFX } from "@shards/render";
-import { isNumberItem, type AmbientPersonInfo, type LookResult } from "@shards/world";
+import { isNumberItem, parseMarkup, type AmbientPersonInfo, type LookResult } from "@shards/world";
 import { neutralPose, type IconRenderer } from "../icons.ts";
 import { Button, scrollRowIntoList, Window } from "./kit.tsx";
 import { ObjIcon } from "./Sidebar.tsx";
@@ -154,7 +154,25 @@ export function DescriptionDialog({
           )}
           <div className="desc-main">
             <FittedName text={look.name} color={nameColor} />
-            {look.description && <div className="desc-fixed">{look.description}</div>}
+            {look.description && (
+              <div className="desc-fixed">
+                {/* The server's style codes (~B bold, ~I italic, colours), as chat has them: a revealed
+                    magic item's name is bold (shards-server item.kod item_magic_name) */}
+                {parseMarkup(look.description).map((s, j) => (
+                  <span
+                    key={j}
+                    style={{
+                      color: s.color,
+                      fontWeight: s.bold ? "bold" : undefined,
+                      fontStyle: s.italic ? "italic" : undefined,
+                      textDecoration: s.underline ? "underline" : undefined,
+                    }}
+                  >
+                    {s.text}
+                  </span>
+                ))}
+              </div>
+            )}
             {box !== null && (
               <div className="desc-box-row">
                 <span className={`mk-edit area desc-box${editable ? "" : " readonly"}`}>
