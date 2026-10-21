@@ -797,6 +797,8 @@ export const UC = {
   ARENA: 116,
   /** Ours: what a buyer would take from our inventory and pay for it (shards-server util/shardsabilities.kod SendSellable) */
   SELLABLE: 117,
+  /** Ours (the magic item revamp): an elder's reveal or a smith's repair menu (shards-server util/itemservicebook.kod) */
+  ITEM_SERVICE: 118,
 } as const;
 
 /**

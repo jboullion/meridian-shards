@@ -22,6 +22,7 @@ import { readSpellRefusal, type SpellRefusal } from "./spellRefusal.ts";
 import { readCompanion, type CompanionEvent } from "./companion.ts";
 import { readArena, type ArenaStatus } from "./arenaBouts.ts";
 import { readCosmetics, type CosmeticsEvent } from "./cosmetics.ts";
+import { readItemService } from "./itemservice.ts";
 import { readAppraisal, readSellable, readTraining, type Appraisal, type Sellable, type TrainingCost } from "./training.ts";
 
 /** A line for the chat window, with the original client's default colour for its kind. */
@@ -1144,6 +1145,10 @@ export class GameSession {
           } else if (uc === UC.COSMETICS) {
             // Ours (cosmeticsbook.kod SendTailorMenu, SendBarberMenu)
             const e = readCosmetics(r, (id) => this.resource(id));
+            if (e) this.events.cosmetics?.(e);
+          } else if (uc === UC.ITEM_SERVICE) {
+            // Ours (itemservicebook.kod SendRevealMenu, SendRepairMenu): opens as a tailor's does
+            const e = readItemService(r);
             if (e) this.events.cosmetics?.(e);
           } else if (uc === UC.TRAINING) {
             // Ours (shardsabilities.kod SendTraining)

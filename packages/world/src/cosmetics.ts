@@ -3,6 +3,7 @@
 // send back (UC_SHARDS "tailor ..." and "barber ...").
 
 import { objId, type ByteReader } from "@shards/protocol";
+import type { ItemServiceEvent } from "./itemservice.ts";
 
 /** A dye a tailor offers: its dye field (render xlat.ts dyeField: a palette ramp and a shade) and name */
 export interface Dye {
@@ -39,7 +40,9 @@ export interface BarberLook {
 
 export type CosmeticsEvent =
   | { type: "tailor"; npc: number; dyePrice: number; undyePrice: number; dyes: Dye[]; items: DyeableItem[] }
-  | { type: "barber"; npc: number; price: number; look: BarberLook };
+  | { type: "barber"; npc: number; price: number; look: BarberLook }
+  // Ours (the magic item revamp): an elder's or smith's menu, which opens the same way (itemservice.ts)
+  | ItemServiceEvent;
 
 /** UC_COSMETICS's body (after the UC byte) */
 export function readCosmetics(r: ByteReader, resource: (id: number) => string | null | undefined): CosmeticsEvent | null {

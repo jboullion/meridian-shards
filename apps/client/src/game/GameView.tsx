@@ -14,6 +14,7 @@ import { CompanionPanel } from "./ui/CompanionPanel.tsx";
 import { CompanionLooksDialog } from "./ui/CompanionLooksDialog.tsx";
 import { TailorDialog } from "./ui/TailorDialog.tsx";
 import { BarberDialog } from "./ui/BarberDialog.tsx";
+import { ItemServiceDialog } from "./ui/ItemServiceDialog.tsx";
 import { QuestWays } from "./questWays.ts";
 import { MM_OURS, MM_QUEST_NPC, MM_TALK_NPC } from "./markers.ts";
 import { QuestDialog, QuestInfoDialog } from "./ui/QuestDialog.tsx";
@@ -171,6 +172,14 @@ const STUDY_TICK_MS = 500;
 
 /** textin.c EDITBOX_HISTORY: lines the chat box remembers */
 const CHAT_HISTORY = 20;
+
+/** The quest window's button for an NPC's service window (cosmetics.ts, itemservice.ts) */
+const SERVICE_LABELS: Record<CosmeticsEvent["type"], string> = {
+  tailor: "Tailor…",
+  barber: "Barber…",
+  reveal: "Reveal…",
+  repair: "Repair…",
+};
 
 type Modal =
   | { type: "trade"; list: TradeList }
@@ -2548,7 +2557,7 @@ export function GameView({
             onClose={() => setModal(null)}
             service={
               modal.service
-                ? { label: modal.service.type === "tailor" ? "Tailor…" : "Barber…", open: () => setModal({ type: "cosmetics", menu: modal.service! }) }
+                ? { label: SERVICE_LABELS[modal.service.type], open: () => setModal({ type: "cosmetics", menu: modal.service! }) }
                 : undefined
             }
           />
@@ -2578,6 +2587,25 @@ export function GameView({
             info={companion.charInfo}
             icons={icons}
             onCommand={(line) => session.shardsCommand(line)}
+            onClose={() => setModal(null)}
+          />
+        )}
+        {modal?.type === "cosmetics" && (modal.menu.type === "reveal" || modal.menu.type === "repair") && (
+          <ItemServiceDialog
+            name={session.resource(session.world.objects.get(modal.menu.npc)?.info.nameRes ?? 0) ?? (modal.menu.type === "reveal" ? "The elder" : "The smith")}
+            menu={modal.menu}
+            session={session}
+            icons={icons}
+            onCommand={(line) => session.shardsCommand(line)}
+            onShop={
+              modal.menu.type === "repair"
+                ? () => {
+                    const npc = modal.menu.npc;
+                    setModal(null);
+                    askTrader(npc);
+                  }
+                : undefined
+            }
             onClose={() => setModal(null)}
           />
         )}

@@ -27,6 +27,7 @@ export * from "./quests.ts";
 export * from "./companion.ts";
 export * from "./arenaBouts.ts";
 export * from "./cosmetics.ts";
+export * from "./itemservice.ts";
 export * from "./training.ts";
 export * from "./questWay.ts";
 export * from "./ambient/names.ts";
