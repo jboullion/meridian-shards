@@ -6,7 +6,7 @@
 // black on white).
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { UC, type ObjectInfo, type ObjectRef } from "@shards/protocol";
+import { UC, objId, type ObjectInfo, type ObjectRef } from "@shards/protocol";
 import { isNumberItem, type GameSession, type OfferEvent, type TradeList, type TravelPlace } from "@shards/world";
 import type { IconRenderer } from "../icons.ts";
 import { Button, ListBox, TextField, Window } from "./kit.tsx";
@@ -184,26 +184,51 @@ export function TravelDialog({
 
 /** Choose inventory items to offer (sell) or deposit. */
 export function GiveDialog({
-  kind, target, session, icons, onClose,
+  kind, target, session, icons, onClose, onOffered, sellable, asking,
 }: {
   kind: "offer" | "deposit";
   target: { id: number; name: string };
   session: GameSession;
   icons: IconRenderer;
   onClose: () => void;
+  /** Ours: what a buyer would take from us and pay for it, by object (UC_SELLABLE); without it, everything we carry is listed */
+  sellable?: ReadonlyMap<number, number>;
+  /** Ours: still waiting for the buyer's list */
+  asking?: boolean;
+  /** Ours: an offer went out, so the caller can say so when nobody answers it (the server only says why in the chat) */
+  onOffered?: () => void;
 }) {
   const [chosen, setChosen] = useState(new Map<number, number>());
   const rs = (id: number) => session.resource(id) ?? "";
-  const items = [...session.world.inventory.values()].filter((o) => !session.world.inUse.has(o.id));
+  const items = [...session.world.inventory.values()].filter(
+    (o) => !session.world.inUse.has(o.id) && (!sellable || sellable.has(objId(o.id))),
+  );
   const ok = () => {
     if (!chosen.size) return;
-    if (kind === "offer") session.offerItems(target.id, refs(chosen));
-    else session.depositItems(target.id, refs(chosen));
+    if (kind === "offer") {
+      session.offerItems(target.id, refs(chosen));
+      onOffered?.();
+    } else session.depositItems(target.id, refs(chosen));
     onClose();
   };
   return (
     <Dialog title={`${kind === "offer" ? "Offer to" : "Deposit with"} ${target.name}`} onClose={onClose}>
-      <ItemPicker items={items} icons={icons} rs={rs} chosen={chosen} setChosen={setChosen} />
+      {asking && <p className="muted">Asking {target.name || "them"} what they buy…</p>}
+      {sellable && (
+        <p className="muted">
+          {items.length ? `${target.name || "They"} buys these:` : `${target.name || "They"} doesn't want anything you're carrying.`}
+        </p>
+      )}
+      {!asking && (sellable ? items.length > 0 : true) && (
+        <ItemPicker
+          items={items}
+          icons={icons}
+          rs={rs}
+          cost={sellable ? (o) => sellable.get(objId(o.id)) || undefined : undefined}
+          chosen={chosen}
+          setChosen={setChosen}
+        />
+      )}
       <div className="mk-buttons">
         <Button isDefault onClick={ok} disabled={!chosen.size}>
           {kind === "offer" ? "Offer" : "Deposit"}

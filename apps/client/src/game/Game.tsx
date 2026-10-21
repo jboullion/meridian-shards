@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CharInfo, CharacterSlot } from "@shards/protocol";
 import { SAY } from "@shards/protocol";
 import {
-  GameSession, type ChatLine, type ContainerContents, type DamageDealt, type LookResult, type OfferEvent, type QuestEvent, type CosmeticsEvent, type TrainingCost, type Appraisal, type SessionPhase, type SocialEvent, type TradeList, type TravelEvent,
+  GameSession, type ChatLine, type ContainerContents, type DamageDealt, type LookResult, type OfferEvent, type QuestEvent, type CosmeticsEvent, type TrainingCost, type Appraisal, type Sellable, type SessionPhase, type SocialEvent, type TradeList, type TravelEvent,
   type MailNewsEvent, type GuildEvent, type MinigameEvent, localResName } from "@shards/world";
 import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
@@ -57,6 +57,7 @@ interface Live {
   training: Relay<TrainingCost[]>;
   /** Ours: whether an item of ours can be appraised, and its price (docs/adr/0016-abilities.md) */
   appraisal: Relay<Appraisal>;
+  sellable: Relay<Sellable>;
   /** Ours (docs/adr/0010-followers.md): our companion, kept from its first status at logon */
   companion: CompanionStore;
   /** Ours (docs/adr/0019-arena-bouts.md): the arena's mock bouts and our records */
@@ -213,6 +214,7 @@ export function Game({
     const cosmetics = new Relay<CosmeticsEvent>();
     const training = new Relay<TrainingCost[]>();
     const appraisal = new Relay<Appraisal>();
+    const sellable = new Relay<Sellable>();
     const companion = new CompanionStore();
     const arena = new ArenaStore();
     const offers = new Relay<OfferEvent>();
@@ -285,6 +287,7 @@ export function Game({
         cosmetics: (e) => cosmetics.emit(e),
         training: training.emit,
         appraisal: appraisal.emit,
+        sellable: sellable.emit,
         companion: (e) => companion.handle(e),
         arena: (s) => arena.handle(s),
         offer: offers.emit,
@@ -298,7 +301,7 @@ export function Game({
     s.setLanguage(getSettings().language);
     void loadProfanity(assets);
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, quests, questOffers, cosmetics, training, appraisal, companion, arena, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, quests, questOffers, cosmetics, training, appraisal, sellable, companion, arena, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
   };
 
   const logout = () => {
@@ -409,6 +412,7 @@ export function Game({
       cosmetics={live.cosmetics.on}
       training={live.training.on}
       appraisal={live.appraisal.on}
+      sellable={live.sellable.on}
       companion={live.companion}
       arena={live.arena}
       offers={live.offers.on}

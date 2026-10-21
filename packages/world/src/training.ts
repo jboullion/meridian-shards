@@ -36,6 +36,26 @@ export function readAppraisal(r: ByteReader): Appraisal {
   return { id, appraisable, price: r.u32() };
 }
 
+/**
+ * What a buyer would take from our inventory (UC_SHARDS_OBJECT "sell list" on them, UC_SELLABLE
+ * back): each item and what they'd pay for it, the whole stack of a number item (0: they can't say).
+ */
+export interface Sellable {
+  npc: number;
+  items: { id: number; price: number }[];
+}
+
+/** UC_SELLABLE's body (after the UC byte): the buyer DWORD, a 2-byte count, then each item and its price, 4 bytes each */
+export function readSellable(r: ByteReader): Sellable {
+  const npc = objId(r.u32());
+  const items: Sellable["items"] = [];
+  for (let n = r.u16(); n > 0; n--) {
+    const id = objId(r.u32());
+    items.push({ id, price: r.u32() });
+  }
+  return { npc, items };
+}
+
 /** The most percent we can train an ability at `percent` now: to 99, and as far as `points` go */
 export function trainableAmount(percent: number, cost: number, points: number): number {
   if (cost <= 0) return 0;

@@ -23,6 +23,8 @@ export const MM_OURS = {
   QUEST_BRONZE: 0x400000,
   /** A tailor or barber (docs/adr/0012-cosmetics.md): a double-click talks to them, not their shop */
   SERVICE: 0x800000,
+  /** An NPC that pays shillings for what we offer (MOB_BUYER): only they get a Sell button */
+  BUYS: 0x1000000,
 } as const;
 
 /** A mark's colour: a quest's tier, or gold for a portal */

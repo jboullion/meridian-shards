@@ -22,7 +22,7 @@ import { readSpellRefusal, type SpellRefusal } from "./spellRefusal.ts";
 import { readCompanion, type CompanionEvent } from "./companion.ts";
 import { readArena, type ArenaStatus } from "./arenaBouts.ts";
 import { readCosmetics, type CosmeticsEvent } from "./cosmetics.ts";
-import { readAppraisal, readTraining, type Appraisal, type TrainingCost } from "./training.ts";
+import { readAppraisal, readSellable, readTraining, type Appraisal, type Sellable, type TrainingCost } from "./training.ts";
 
 /** A line for the chat window, with the original client's default colour for its kind. */
 /**
@@ -294,6 +294,8 @@ export interface SessionEvents {
   training?: (list: TrainingCost[]) => void;
   /** Ours: whether an item of ours can be appraised for the citizen's market, and its price (docs/adr/0016-abilities.md) */
   appraisal?: (a: Appraisal) => void;
+  /** Ours: what a buyer would take from our inventory, and for how much (UC_SELLABLE) */
+  sellable?: (s: Sellable) => void;
   offer?: (e: OfferEvent) => void;
   sound?: (e: SoundEvent) => void;
   /** We hurt something, and by how much (combatHit.ts: for damage numbers over its head) */
@@ -1149,6 +1151,9 @@ export class GameSession {
           } else if (uc === UC.APPRAISAL) {
             // Ours (shardsabilities.kod SendAppraisal)
             this.events.appraisal?.(readAppraisal(r));
+          } else if (uc === UC.SELLABLE) {
+            // Ours (shardsabilities.kod SendSellable)
+            this.events.sellable?.(readSellable(r));
           } else if (uc === UC.FRIENDS || uc === UC.PETS || uc === UC.AMBIENT) {
             // Ours (shards-server util/shardssocial.kod)
             const e = this.readSocial(uc, r);

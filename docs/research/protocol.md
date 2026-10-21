@@ -307,6 +307,7 @@ Our client and our server change together (ADR 0001 decision 4), so these are ou
   - **2, the barber's menu** (`SendBarberMenu`): the NPC DWORD, the price DWORD, then our look as BYTEs: gender (0 male, 1 female), hair, beard (0 none, else its place + 1), hair colour, head, eyes, nose, mouth, skin (places in `BP_CHARINFO`'s lists).
   - The commands back (`UC_SHARDS`): `tailor dye <place> <dye field>`, `tailor undye <place>`, `tailor` (the menu again), `barber <hair> <beard> <hair colour>`, `barber`.
   - **Minimap bit** `MM_SERVICE` 0x00800000 on a tailor or barber (`User.BuildMinimapDotFlag`).
+  - **Minimap bit** `MM_BUYS` 0x01000000 on an NPC with `MOB_BUYER` (pays shillings for offers): the client's Sell button shows only for them, since `OF_OFFERABLE` also covers NPCs that merely receive quest items.
 - **`UC_SHARDS_OBJECT` (111), client to server** (`user.kod ShardsObjectCommand` → `util/shardsabilities.kod`, ADR 0016): an object DWORD (without its number tag), then a STRING command line about it, as `UC_SHARDS`'s line can't name an object (Kod can't turn a number back into one; `blakserv/sprocket.c` parses it like `UC_MINIGAME_STATE`).
   - On a spell or skill we know: `train <percent>`.
   - On an item we carry: `appraise <price>`, `appraise clear`, `appraise ask` (`UC_APPRAISAL` back), `vault` (a stack, or a bag's stacks, to our vault for a shilling a unit of bulk: was Conveyance) and `guild` (to our guild hall's chest: was Transference). Our client has no buttons for `vault` and `guild` for now.
@@ -322,6 +323,7 @@ Our client and our server change together (ADR 0001 decision 4), so these are ou
   - our title, a resource DWORD, and its rank BYTE (0-5, from our mock wins in both);
   - how our bout just ended BYTE (0 not just now, 1 won, 2 beaten, 3 left, 4 time ran out, 5 called off).
 - **`UC_APPRAISAL` (113), server to client** (`ShardsAbilities.SendAppraisal`, on `appraise ask` and after each appraise or clear): an item we carry DWORD, whether it can be appraised BYTE (magical, or a base value of 5,000 or more: `IsAppraisable`) and its price now DWORD (0 for none).
+- **`UC_SELLABLE` (117), server to client** (`ShardsAbilities.SendSellable`, after `sell list` over `UC_SHARDS_OBJECT` on a buyer): the buyer DWORD, a count WORD, then for each inventory item it would take: the item DWORD and what it would pay DWORD (the whole stack of a number item; `Monster.GetOfferPrice`, the counteroffer's formula; 0 for the citizens' market, which prices by appraisal). Empty for anyone who isn't a `MOB_BUYER` in our room. The rules are `Monster.ReqOffer`'s: not in use, not shillings, `CanBeGivenToNPC`, `ObjectDesired`. Our Offer window asks only buyers (`MM_BUYS`) and lists just these, with the prices.
 
 ## Sources
 

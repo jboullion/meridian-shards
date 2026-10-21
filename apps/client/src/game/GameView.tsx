@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { CF, SAY, STAT_GROUP, UA, UC, objId, type ObjectInfo } from "@shards/protocol";
 import {
   PROFANITY_WARNING, isNumberItem, type SpellRefusal, OBSERVER, WHITE, BLACK, decodeBoard, type GuildEvent, type MinigameEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
-  type SocialEvent, type TradeList, type TravelEvent, type TravelPlace, petForKarma, petKind, type AmbientPersonInfo, type QuestEvent, type QuestOffer, type CosmeticsEvent, type TrainingCost, type Appraisal,
+  type SocialEvent, type TradeList, type TravelEvent, type TravelPlace, petForKarma, petKind, type AmbientPersonInfo, type QuestEvent, type QuestOffer, type CosmeticsEvent, type TrainingCost, type Appraisal, type Sellable,
   ARENA_ROOMS, BOUT_STATE, arenaCommand, floorTaken,
 } from "@shards/world";
 import type { QuestStore } from "./quests.ts";
@@ -214,7 +214,7 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, cosmetics, training, appraisal, companion, arena, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, cosmetics, training, appraisal, sellable, companion, arena, offers, serverPrefs, latency,
 }: {
   /** Ours: the arenas' mock bouts (docs/adr/0019-arena-bouts.md) */
   arena: ArenaStore;
@@ -266,6 +266,8 @@ export function GameView({
   training: (fn: (list: TrainingCost[]) => void) => () => void;
   /** Ours: whether an item of ours can be appraised, and its price (docs/adr/0016-abilities.md) */
   appraisal: (fn: (a: Appraisal) => void) => () => void;
+  /** Ours: what a buyer would take from our inventory (UC_SELLABLE) */
+  sellable: (fn: (s: Sellable) => void) => () => void;
   /** Ours: our companion (docs/adr/0010-followers.md) */
   companion: CompanionStore;
 }) {
@@ -490,6 +492,8 @@ export function GameView({
   const [annotating, setAnnotating] = useState<{ index: number; x: number; y: number; text: string; existed: boolean } | null>(null);
   /** A message box over the game (MessageBox with MB_OK) */
   const [alert, setAlert] = useState<string | null>(null);
+  /** The timer that says an offer wasn't taken (GiveDialog onOffered) */
+  const offerWait = useRef<number | undefined>(undefined);
   /** Android's back button with nothing left to close: log off and quit? */
   const [quitAsk, setQuitAsk] = useState(false);
   // Android's back button (host.ts): a window first, then the phone layout's panels, then ask
@@ -940,6 +944,40 @@ export function GameView({
   // Ours (docs/adr/0016-abilities.md): which of our items can be appraised, as the server last said
   const [appraisals, setAppraisals] = useState<ReadonlyMap<number, Appraisal>>(() => new Map());
   useEffect(() => appraisal((a) => setAppraisals((m) => new Map(m).set(a.id, a))), [appraisal]);
+  /**
+   * Ours: what the buyer our Offer window is for would take and pay (UC_SELLABLE), asked for when
+   * it opens (openOffer). `sellWait` ends the wait for a server that doesn't answer: the window
+   * then lists everything we carry.
+   */
+  const [sold, setSold] = useState<{ npc: number; prices: ReadonlyMap<number, number> } | null>(null);
+  const [sellWaitOver, setSellWaitOver] = useState(false);
+  const sellWait = useRef<number | undefined>(undefined);
+  useEffect(
+    () =>
+      sellable((s) => {
+        window.clearTimeout(sellWait.current);
+        setSold({ npc: s.npc, prices: new Map(s.items.map((i) => [i.id, i.price])) });
+      }),
+    [sellable],
+  );
+  /**
+   * Ours: the Offer window for someone. A buyer (MM_BUYS) is asked what it would take, and the
+   * window lists only that, with prices; anyone else (a quest NPC, a banker, a player) gets
+   * everything we carry.
+   */
+  const openOffer = (id: number) => {
+    const o = session.world.objects.get(id);
+    setSold(null);
+    setSellWaitOver(false);
+    window.clearTimeout(sellWait.current);
+    if (o && o.info.minimapFlags & MM_OURS.BUYS && !(o.info.flags & OF_PLAYER)) {
+      session.shardsObject(id, "sell list");
+      sellWait.current = window.setTimeout(() => setSellWaitOver(true), Math.max(1500, 2 * (latency ?? 150) + 1000));
+    } else {
+      setSellWaitOver(true);
+    }
+    setModal({ type: "give", kind: "offer", target: { id, name: (o && session.resource(o.info.nameRes)) ?? "" } });
+  };
   // Development: the admin dashboard changed the quests (tools/dev/questApi.ts); read them again
   useEffect(() => {
     const hot = import.meta.hot;
@@ -993,7 +1031,14 @@ export function GameView({
       }),
     [looks],
   );
-  useEffect(() => offers((e) => setOffer((prev) => reduceOffer(prev, e))), [offers]);
+  useEffect(
+    () =>
+      offers((e) => {
+        window.clearTimeout(offerWait.current); // answered: nothing to explain (GiveDialog onOffered)
+        setOffer((prev) => reduceOffer(prev, e));
+      }),
+    [offers],
+  );
   useEffect(() => damage((d) => sceneRef.current?.showDamage(d)), [damage]);
   useEffect(() => statChange(setStatChangeAt), [statChange]);
   // modules.c: BP_LOAD_MODULE "chess.dll" opens the chess window; BP_UNLOAD_MODULE closes it
@@ -1316,7 +1361,7 @@ export function GameView({
         const t = target !== null ? session.world.objects.get(target) : undefined;
         const o = t && t.info.flags & (OF_OFFERABLE | OF_PLAYER) ? t : nearest(OF_OFFERABLE);
         if (!o) return session.localMessage("There's nobody here to offer things to.");
-        return setModal({ type: "give", kind: "offer", target: { id: o.id, name: session.resource(o.info.nameRes) ?? "" } });
+        return openOffer(o.id);
       }
       case "buy": {
         const t = target !== null ? session.world.objects.get(target) : undefined;
@@ -1861,8 +1906,8 @@ export function GameView({
     // Ours: a shopkeeper's or vault keeper's description has Buy, as a double click on them does
     const o = session.world.objects.get(id);
     if (o && o.info.flags & OF_BUYABLE && !(o.info.flags & OF_PLAYER)) buttons |= DESC.BUY;
-    // Sell: a shopkeeper (not a vault keeper or banker, who have Deposit) that takes things
-    if (o && o.info.flags & OF_BUYABLE && o.info.flags & OF_OFFERABLE && !(o.info.flags & OF_PLAYER)) buttons |= DESC.SELL;
+    // Sell: someone who pays for what we offer (the server's MM_BUYS), not one who only receives quest items
+    if (o && o.info.flags & OF_BUYABLE && o.info.minimapFlags & MM_OURS.BUYS && !(o.info.flags & OF_PLAYER)) buttons |= DESC.SELL;
     descParams.current = buttons;
     session.look(id);
   };
@@ -1937,20 +1982,18 @@ export function GameView({
     lookRef.current = lookRoomObject;
   });
 
-  /** dialog.c DescDialogProc's buttons, on the object the dialog shows. */
-  /** Ours: a shopkeeper who also takes things (OF_OFFERABLE, not a player): their Buy window has Sell */
+  /** Ours: a shopkeeper who also pays for what we offer (the server's MM_BUYS, not a player): their Buy window has Sell */
   const takesFromUs = (id: number) => {
     const o = session.world.objects.get(id);
-    return !!o && (o.info.flags & OF_OFFERABLE) !== 0 && (o.info.flags & OF_PLAYER) === 0;
+    return !!o && (o.info.minimapFlags & MM_OURS.BUYS) !== 0 && (o.info.flags & OF_PLAYER) === 0;
   };
+  /** dialog.c DescDialogProc's buttons, on the object the dialog shows. */
   const descAction = (a: DescAction, id: number, buttons: number) => {
     switch (a) {
       case "buy":
         return askTrader(id);
-      case "sell": {
-        const o = session.world.objects.get(id);
-        return setModal({ type: "give", kind: "offer", target: { id, name: (o && session.resource(o.info.nameRes)) ?? "" } });
-      }
+      case "sell":
+        return openOffer(id);
       case "get":
         return session.pickUp(id);
       case "inside":
@@ -2548,7 +2591,24 @@ export function GameView({
           />
         )}
         {modal?.type === "give" && (
-          <GiveDialog kind={modal.kind} target={modal.target} session={session} icons={icons} onClose={() => setModal(null)} />
+          <GiveDialog
+            kind={modal.kind}
+            target={modal.target}
+            session={session}
+            icons={icons}
+            onClose={() => setModal(null)}
+            sellable={modal.kind === "offer" && sold?.npc === modal.target.id ? sold.prices : undefined}
+            asking={modal.kind === "offer" && !sellWaitOver && sold?.npc !== modal.target.id}
+            onOffered={() => {
+              // A taker answers with BP_OFFERED at once; with none, the server only said why in the chat
+              const name = modal.target.name || "They";
+              window.clearTimeout(offerWait.current);
+              offerWait.current = window.setTimeout(
+                () => setAlert(`${name} didn't take that. Shopkeepers only buy what suits their trade, and some people only accept quest items. Their answer is in the chat.`),
+                Math.max(800, 2 * (latency ?? 150) + 500),
+              );
+            }}
+          />
         )}
         {modal?.type === "amount" && (
           <AmountDialog

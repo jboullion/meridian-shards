@@ -795,6 +795,8 @@ export const UC = {
   SEASON: 115,
   /** Ours: mock bouts in the arenas (docs/adr/0019-arena-bouts.md) */
   ARENA: 116,
+  /** Ours: what a buyer would take from our inventory and pay for it (shards-server util/shardsabilities.kod SendSellable) */
+  SELLABLE: 117,
 } as const;
 
 /**
