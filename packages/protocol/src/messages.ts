@@ -799,6 +799,8 @@ export const UC = {
   SELLABLE: 117,
   /** Ours (the magic item revamp): an elder's reveal or a smith's repair menu (shards-server util/itemservicebook.kod) */
   ITEM_SERVICE: 118,
+  /** Ours (the magic item revamp, phase 2): a revealed magic item's full name (shards-server util/itemservicebook.kod SendMagicName) */
+  MAGIC_NAME: 119,
 } as const;
 
 /**

@@ -24,7 +24,6 @@ export function ItemServiceDialog({
 }) {
   const [slot, setSlot] = useState<number | null>(menu.items[0]?.slot ?? null);
   const reveal = menu.type === "reveal";
-  const rs = (id: number) => session.resource(id) ?? "";
   const item = menu.items.find((i) => i.slot === slot) ?? menu.items[0] ?? null;
   const worn = (id: number) => session.world.inUse.has(id);
   const condition = (hits: number, maxHits: number) => (hits <= 0 ? "broken" : `${hits}/${maxHits}`);
@@ -47,7 +46,7 @@ export function ItemServiceDialog({
                   <button type="button" className={i.slot === item?.slot ? "selected" : ""} onClick={() => setSlot(i.slot)}>
                     <ObjIcon icons={icons} object={o ?? null} />
                     <span>
-                      {o ? rs(o.nameRes) : "?"}
+                      {o ? session.itemName(o) : "?"}
                       {worn(i.id) ? " (worn)" : ""}
                       {!reveal && <em> {condition(i.hits, i.maxHits)}</em>}
                     </span>

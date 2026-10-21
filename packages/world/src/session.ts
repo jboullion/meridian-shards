@@ -23,6 +23,7 @@ import { readCompanion, type CompanionEvent } from "./companion.ts";
 import { readArena, type ArenaStatus } from "./arenaBouts.ts";
 import { readCosmetics, type CosmeticsEvent } from "./cosmetics.ts";
 import { readItemService } from "./itemservice.ts";
+import { MAGIC_SHOW, magicShow, readMagicName } from "./magic.ts";
 import { readAppraisal, readSellable, readTraining, type Appraisal, type Sellable, type TrainingCost } from "./training.ts";
 
 /** A line for the chat window, with the original client's default colour for its kind. */
@@ -858,6 +859,24 @@ export class GameSession {
     return this.world.dynamicResources.get(id) ?? this.opts.lookupResource(id, this.language);
   }
 
+  /**
+   * Ours (the magic item revamp): an item's name for lists: a revealed magic item's full name
+   * ("potent longsword of siphoning"), asked of the server the first time it's seen with those
+   * flags (UC_SHARDS_OBJECT "magicname"; it comes as UC_MAGIC_NAME and lists redraw), else its own.
+   */
+  itemName(o: { id: number; nameRes: number; flags: number }): string {
+    const own = this.resource(o.nameRes) ?? "";
+    if (magicShow(o.flags) < MAGIC_SHOW.REVEALED) return own;
+    const known = this.world.magicNames.get(o.id);
+    if (known?.flags === o.flags) return known.name;
+    const key = `${o.id}:${o.flags}`;
+    if (!this.world.magicNamesAsked.has(key)) {
+      this.world.magicNamesAsked.add(key);
+      this.shardsObject(o.id, "magicname");
+    }
+    return known?.name ?? own;
+  }
+
   /** Until then, server messages are the logon's, for the Server tab (LOGON_SERVER_TAB_MS) */
   private logonUntil = 0;
 
@@ -1150,6 +1169,10 @@ export class GameSession {
             // Ours (itemservicebook.kod SendRevealMenu, SendRepairMenu): opens as a tailor's does
             const e = readItemService(r);
             if (e) this.events.cosmetics?.(e);
+          } else if (uc === UC.MAGIC_NAME) {
+            // Ours (itemservicebook.kod SendMagicName): asked for by itemName
+            const m = readMagicName(r, (id) => this.resource(id));
+            if (m) this.world.setMagicName(m.id, m.flags, m.name);
           } else if (uc === UC.TRAINING) {
             // Ours (shardsabilities.kod SendTraining)
             this.events.training?.(readTraining(r));

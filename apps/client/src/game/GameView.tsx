@@ -2528,7 +2528,7 @@ export function GameView({
             amounts={modal.amounts}
             initial={modal.initial}
             icons={icons}
-            items={modal.items.map((o) => ({ object: o, name: (isNumberItem(o.id) ? `${o.amount} ` : "") + (session.resource(o.nameRes) ?? "") }))}
+            items={modal.items.map((o) => ({ object: o, name: (isNumberItem(o.id) ? `${o.amount} ` : "") + session.itemName(o) }))}
             onDone={modal.onDone}
             onLook={(id) => lookAt(id, DESC.NONE)}
             onClose={() => setModal(null)}

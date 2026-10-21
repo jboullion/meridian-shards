@@ -18,6 +18,7 @@ import { MiniMap } from "./MiniMap.tsx";
 import type { MapWay } from "../questWays.ts";
 import type { MapAnnotation } from "../annotations.ts";
 import { DRAG_SPELL } from "../quickSlots.ts";
+import { magicRing } from "./magicRing.ts";
 import { statRows } from "../statRows.ts";
 import { Button } from "./kit.tsx";
 
@@ -72,8 +73,16 @@ export function ObjIcon({
 }) {
   const key = object ? icons.key(object, opts) : "";
   const url = useAsyncImage(key, () => (object ? icons.object(object, opts) : null));
+  const ring = magicRing(object);
   return (
-    <span className={`obj-icon ${className ?? ""}`} title={title} onContextMenu={onContextMenu} onClick={onClick} onDoubleClick={onDoubleClick}>
+    <span
+      className={`obj-icon ${ring?.className ?? ""} ${className ?? ""}`}
+      style={ring?.style}
+      title={title}
+      onContextMenu={onContextMenu}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+    >
       {url && <img src={url} alt="" draggable={false} />}
     </span>
   );
@@ -553,7 +562,6 @@ export function Inventory({
   const [selected, setSelected] = useState<number | null>(null);
   const inUseImg = useKeyedImage(assets.url("ui/inuse.bmp"));
   const items = [...world.inventory.values()].filter((o) => !hidden?.has(o.id));
-  const rs = (id: number) => session.resource(id) ?? "";
   const gridRef = useRef<HTMLDivElement>(null);
   // inventry.c A_TOGGLEUSE: an appliable item is used on something; others go in or out of use
   const toggleUse = (o: ObjectInfo) =>
@@ -596,7 +604,7 @@ export function Inventory({
           key={o.id}
           className={selected === o.id ? "inv-item selected" : "inv-item"}
           style={selected === o.id ? { backgroundImage: `url(${assets.url("ui/icursor.bmp")})` } : undefined}
-          title={tooltips ? (isNumberItem(o.id) ? `${o.amount} ` : "") + rs(o.nameRes) : undefined}
+          title={tooltips ? (isNumberItem(o.id) ? `${o.amount} ` : "") + session.itemName(o) : undefined}
           draggable
           onDragStart={(e) => {
             e.dataTransfer.setData("application/x-shards-item", String(o.id));

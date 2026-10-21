@@ -41,7 +41,6 @@ export function TailorDialog({
     };
   }, [assets]);
 
-  const rs = (id: number) => session.resource(id) ?? "";
   const item = menu.items.find((i) => i.slot === slot) ?? null;
   const info = item ? (session.world.inventory.get(item.id) ?? null) : null;
   const dyeName = (f: number) => menu.dyes.find((d) => d.field === f)?.name ?? "";
@@ -66,7 +65,7 @@ export function TailorDialog({
                   <button type="button" className={i.slot === slot ? "selected" : ""} onClick={() => (setSlot(i.slot), setField(null))}>
                     <ObjIcon icons={icons} object={o ?? null} />
                     <span>
-                      {o ? rs(o.nameRes) : "?"}
+                      {o ? session.itemName(o) : "?"}
                       {i.worn ? " (worn)" : ""}
                       {i.field ? <em> {dyeName(i.field)}</em> : null}
                     </span>

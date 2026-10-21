@@ -254,6 +254,10 @@ export class WorldState {
   readonly inUse = new ObjectIdSet();
   /** Resource ids whose strings changed at runtime (BP_CHANGE_RESOURCE: player names etc.). */
   readonly dynamicResources = new Map<number, string>();
+  /** Ours (the magic item revamp): revealed magic items' full names, with the flags they had then (UC_MAGIC_NAME) */
+  readonly magicNames = new Map<number, { flags: number; name: string }>();
+  /** ...and the ones asked for that haven't come yet (`${id}:${flags}`, session.ts itemName) */
+  readonly magicNamesAsked = new Set<string>();
   private readonly listeners = new Set<(e: WorldEvent) => void>();
 
   on(fn: (e: WorldEvent) => void): () => void {
@@ -329,12 +333,20 @@ export class WorldState {
     return true;
   }
 
+  /** Ours: a revealed magic item's full name arrived (UC_MAGIC_NAME); lists redraw as for an inventory change */
+  setMagicName(id: number, flags: number, name: string): void {
+    this.magicNames.set(id, { flags, name });
+    this.emit({ type: "inventory" });
+  }
+
   setSpellSchools(schools: number[]): void {
     this.spellSchools = schools;
     this.emit({ type: "spells" });
   }
 
   emitIdsStale(): void {
+    this.magicNames.clear();
+    this.magicNamesAsked.clear();
     this.emit({ type: "idsStale" });
   }
 
@@ -383,6 +395,8 @@ export class WorldState {
     this.enchantments.player.clear();
     this.enchantments.room.clear();
     this.playerOverlays[0] = this.playerOverlays[1] = null;
+    this.magicNames.clear();
+    this.magicNamesAsked.clear();
     this.emit({ type: "idsStale" });
     this.emit({ type: "inventory" });
     this.emit({ type: "inUse" });

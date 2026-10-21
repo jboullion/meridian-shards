@@ -22,11 +22,12 @@ function Dialog({ title, children, onClose, wide }: { title: string; children: R
 
 /** Pick items with amounts for number items; shared by buying, withdrawing, offering and depositing. */
 function ItemPicker({
-  items, icons, rs, cost, chosen, setChosen,
+  items, icons, nameOf, cost, chosen, setChosen,
 }: {
   items: ObjectInfo[];
   icons: IconRenderer;
-  rs: (id: number) => string;
+  /** An item's name (ours: a revealed magic item's full name, session.itemName) */
+  nameOf: (o: ObjectInfo) => string;
   cost?: (o: ObjectInfo) => number | undefined;
   chosen: Map<number, number>;
   setChosen: (m: Map<number, number>) => void;
@@ -49,7 +50,7 @@ function ItemPicker({
               <ObjIcon icons={icons} object={o} className="pick-icon" />
               <span className="pick-name">
                 {isNumberItem(o.id) && o.amount ? `${o.amount} ` : ""}
-                {rs(o.nameRes)}
+                {nameOf(o)}
               </span>
               {c !== undefined && <span className="pick-cost">{c}</span>}
               {on && isNumberItem(o.id) && (
@@ -103,7 +104,7 @@ export function TradeDialog({
       <ItemPicker
         items={list.items.map((i) => i.object)}
         icons={icons}
-        rs={rs}
+        nameOf={(o) => session.itemName(o)}
         cost={buying ? (o) => costOf.get(o.id) : undefined}
         chosen={chosen}
         setChosen={setChosen}
@@ -199,7 +200,6 @@ export function GiveDialog({
   onOffered?: () => void;
 }) {
   const [chosen, setChosen] = useState(new Map<number, number>());
-  const rs = (id: number) => session.resource(id) ?? "";
   const items = [...session.world.inventory.values()].filter(
     (o) => !session.world.inUse.has(o.id) && (!sellable || sellable.has(objId(o.id))),
   );
@@ -223,7 +223,7 @@ export function GiveDialog({
         <ItemPicker
           items={items}
           icons={icons}
-          rs={rs}
+          nameOf={(o) => session.itemName(o)}
           cost={sellable ? (o) => sellable.get(objId(o.id)) || undefined : undefined}
           chosen={chosen}
           setChosen={setChosen}
@@ -277,7 +277,7 @@ export function OfferDialog({
             <ObjIcon icons={icons} object={o} className="pick-icon" />
             <span className="pick-name">
               {isNumberItem(o.id) ? `${o.amount} ` : ""}
-              {rs(o.nameRes)}
+              {session.itemName(o)}
             </span>
           </li>
         ))}
@@ -304,7 +304,7 @@ export function OfferDialog({
     const items = [...session.world.inventory.values()].filter((o) => !session.world.inUse.has(o.id));
     return (
       <Dialog title="Offer items" onClose={() => setPicking(false)}>
-        <ItemPicker items={items} icons={icons} rs={rs} chosen={chosen} setChosen={setChosen} />
+        <ItemPicker items={items} icons={icons} nameOf={(o) => session.itemName(o)} chosen={chosen} setChosen={setChosen} />
         <div className="mk-buttons">
           <Button isDefault onClick={() => answer(refs(chosen))} disabled={!chosen.size}>
             OK

@@ -262,7 +262,7 @@ export function CharacterWindow({
               <div className="equip-column">{EQUIP_COLUMNS[1].map((s) => box(s.key, s.label))}</div>
               <div className="cw-info">
                 <div className="cw-wield-label">Wielding</div>
-                <div className="cw-wield">{wielded ? rs(wielded.nameRes) : "nothing"}</div>
+                <div className="cw-wield">{wielded ? session.itemName(wielded) : "nothing"}</div>
                 {weight && (
                   <div className="cw-carried">
                     <span>Weight</span>

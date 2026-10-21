@@ -210,7 +210,7 @@ export function QuickSlotPicker({
     return (
       <li key={`${kind}:${o.id}`} role="option" aria-selected={chosen} className={chosen ? "selected" : ""} onClick={() => pick(kind, o)}>
         <ObjIcon icons={icons} object={o} className="pick-icon" />
-        <span className="look-list-name">{rs(o.nameRes)}</span>
+        <span className="look-list-name">{session.itemName(o)}</span>
       </li>
     );
   };
