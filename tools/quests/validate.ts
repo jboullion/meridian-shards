@@ -39,7 +39,7 @@ export interface ResolvedItem {
 }
 
 /** QuestBook's special rewards (questbook.kod QRW_*) */
-export const SPECIAL = { join: 1, insignia: 2, necroGuild: 3, renown: 4 } as const;
+export const SPECIAL = { join: 1, insignia: 2, necroGuild: 3, renown: 4, warEffort: 5 } as const;
 
 const FACTION_NAME = { duke: "Duke Akardius", princess: "Princess Kateriina", rebel: "Jonas and his rebels" } as const;
 
@@ -226,6 +226,10 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
       if (r?.renown) {
         special.push([SPECIAL.renown, r.renown]);
         specialText.push(`${r.renown} renown with your liege`);
+      }
+      if (r?.warEffort) {
+        special.push([SPECIAL.warEffort, r.warEffort]);
+        specialText.push("a stronger army for your liege's next battle");
       }
       return {
         xp: (r?.xp ?? 0) + (r?.xpPoints ? xpForPoints(r.xpPoints, q.band.min) : 0),

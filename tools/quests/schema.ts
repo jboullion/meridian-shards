@@ -126,6 +126,8 @@ export interface QuestRewards {
   necroGuild?: boolean;
   /** Renown with the player's faction, 1 to 100 (the faction revamp; nothing for a neutral) */
   renown?: number;
+  /** War effort for the player's liege's next battle, 1 to 4 (util/factionwar.kod; ADR 0021) */
+  warEffort?: number;
 }
 
 export interface Quest {
@@ -297,6 +299,7 @@ function checkRewards(r: Record<string, unknown>, where: string): string[] {
   if (r.insignia !== undefined && !((r.insignia as string) in INSIGNIA)) errs.push(`${where}.insignia: one of ${Object.keys(INSIGNIA).join(", ")}`);
   if (r.necroGuild !== undefined && typeof r.necroGuild !== "boolean") errs.push(`${where}.necroGuild: true or false`);
   if (r.renown !== undefined && !isInt(r.renown, 1, 100)) errs.push(`${where}.renown: 1 to 100`);
+  if (r.warEffort !== undefined && !isInt(r.warEffort, 1, 4)) errs.push(`${where}.warEffort: 1 to 4`);
   return errs;
 }
 

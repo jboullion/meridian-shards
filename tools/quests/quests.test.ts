@@ -267,14 +267,15 @@ describe("the quest generator", () => {
   });
 
   it("writes renown as a special reward and a renown minimum on offers (the faction revamp)", () => {
-    const g = generateFrom(sources([{ ...RATS, requires: { faction: "duke", renown: 25 }, rewards: { renown: 3 } }]), WORLD);
+    const g = generateFrom(sources([{ ...RATS, requires: { faction: "duke", renown: 25 }, rewards: { renown: 3, warEffort: 1 } }]), WORLD);
     expect(g.errors).toEqual([]);
-    expect(g.kod).toContain("0, 2, 1, $, 0, [ [ 4, 3 ] ], $, $, 25 ]");
-    const bad = { ...RATS, requires: { faction: "neutral", renown: 0 }, rewards: { renown: 101 } };
+    expect(g.kod).toContain("0, 2, 1, $, 0, [ [ 4, 3 ], [ 5, 1 ] ], $, $, 25 ]");
+    const bad = { ...RATS, requires: { faction: "neutral", renown: 0 }, rewards: { renown: 101, warEffort: 5 } };
     expect(generateFrom(sources([bad]), WORLD).errors).toEqual([
       "cellar-rats.json: requires.renown: 1 to 100",
       "cellar-rats.json: requires.renown: a neutral has no renown",
       "cellar-rats.json: rewards.renown: 1 to 100",
+      "cellar-rats.json: rewards.warEffort: 1 to 4",
     ]);
   });
 
