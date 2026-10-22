@@ -266,6 +266,16 @@ describe("the quest generator", () => {
     expect(generateFrom(sources([low]), WORLD).errors).toEqual(["cellar-rats.json: requires.healthBelow: a health above the band's min"]);
   });
 
+  it("writes battle and siege steps (the faction campaigns)", () => {
+    const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "battle", win: true }, { kind: "siege", against: "princess" }] }]), WORLD);
+    expect(g.errors).toEqual([]);
+    expect(g.kod).toContain("[ 22, $, 1, 0, &TosInnKeeper, 0, qd_1_s1, $, $, qd_1_t1,\r\n               1, $, $, $, 1 ]");
+    expect(g.kod).toContain("[ 23, $, 1, 0, &TosInnKeeper, 0, qd_1_s2, $, $, qd_1_t2,\r\n               1, $, $, $, 2 ]");
+    expect(g.catalog.quests[0]!.steps.map((s) => s.objective)).toEqual(["Win a battle for your liege", "Win the siege of Barloque"]);
+    const bad = { ...RATS, steps: [{ kind: "siege", against: "king" }] };
+    expect(generateFrom(sources([bad]), WORLD).errors).toEqual(["cellar-rats.json: step 1: against: duke, princess or rebel"]);
+  });
+
   it("writes renown as a special reward and a renown minimum on offers (the faction revamp)", () => {
     const g = generateFrom(sources([{ ...RATS, requires: { faction: "duke", renown: 25 }, rewards: { renown: 3, warEffort: 1 } }]), WORLD);
     expect(g.errors).toEqual([]);

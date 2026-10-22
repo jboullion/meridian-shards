@@ -1,6 +1,6 @@
 # ADR 0021: Factions, the Faction War, and no random PvP
 
-- Status: partly built (2026-10-22). Built: the prep, renown and the Faction War, no random PvP and its cleanup, Champion's Gifts, Roq's contracts, per-viewer name colours, the battles, and the world's reactions. Planned: campaigns, and the client's war panel.
+- Status: built (2026-10-22), but for the client's war panel: the prep, renown and the Faction War, no random PvP and its cleanup, Champion's Gifts, Roq's contracts, per-viewer name colours, the battles, the world's reactions and the campaigns.
 - Builds on: [ADR 0009](0009-quests.md), quests (its "Renown" section); [ADR 0011](0011-fast-travel.md), the PvP lockout; [ADR 0019](0019-arena-bouts.md), arena bouts; the magic item revamp, where broken items keep their magic and a smith repairs them.
 - Design page, with decisions D1-D28 and a phase tracker: https://claude.ai/artifact/L6bNhsUXTTgXPXk62d1NBF
 
@@ -133,9 +133,47 @@ The game is becoming mostly single-player. So the factions are to drive the worl
     - **Left out:** the plan's lighting and music moods (they would need our client), and dialogue that changes with the war beyond the lament.
     - **For the admin:** `EndAllCelebrations`, `RaiseFlags`.
 
-15. **Planned: campaigns.**
-    - Each faction gets a five-act campaign, gated by renown and health, through the liege and their two schools' priestesses. Act V is a scripted siege.
-    - `Parliament`'s school bonuses get realigned to the same mapping as the battle mages.
+15. **The campaigns** (built 2026-10-22). Each liege has five acts of QuestBook quests (300-304 the Duke, 305-309 the Princess, 310-314 Jonas). They're gold, each needs the act before it (the first needs the soldier quest), and they're gated by renown and health:
+
+    | Act | Renown | Health from | Pays |
+    |---|---|---|---|
+    | I | 10 | 55 | 5 renown, 1,000 shillings |
+    | II | 25 | 65 | 6 renown, 1,500 shillings |
+    | III | 35 | 80 | 8 renown, 2,500 shillings |
+    | IV | 45 | 95 | 10 renown, 4,000 shillings |
+    | V | 70 | 105 | 15 renown, 10,000 shillings |
+
+    Every act also pays XP.
+
+    - **The Duke** (order through strength):
+      - I hunt Jonas's soldiers, then hear Zuxana's omens (Qor);
+      - II carry his offer to the Monk of Riija and thin the Princess's scouts;
+      - III win a battle for him and claim a pole;
+      - IV take Zuxana an offering and kill three bandit captains in Jonas's pay;
+      - V *The Siege of Barloque*.
+    - **The Princess** (the rightful heir, healing):
+      - I drive off the Duke's raiders and bring Xiana's healers (Shal'ille);
+      - II blue dragon scales for Tenuv'vyal's wards (Faren) and Jonas's raiders;
+      - III a battle and a pole;
+      - IV the treaty to Ko'catan's captain and ten avars on the jungle paths;
+      - V *The Siege of Tos*.
+    - **Jonas** (freedom):
+      - I the Duke's tax men, then Themala's songs (Jala);
+      - II the Princess's supply guards and an offering for Qerti'nya's blessing (Kraanan);
+      - III a battle and a pole;
+      - IV ten of the lords' knights and Kraanan's oath;
+      - V *Storm the Keep* at Tos.
+    - **New step kinds** (`QuestBook`):
+      - `battle` (`QK_BATTLE` 22; with `win`, only a battle won), counted for each soldier who stood in it (`FactionWar.Resolve` → `BattleDone`);
+      - `siege` (`QK_SIEGE` 23; `against` the faction besieged, its amount).
+    - **The siege:** a player on the siege step says "march" to their liege (`Factions.SomeoneSaid` → `QuestBook.SiegeAgainst` → `FactionWar.StartSiege`).
+      - It's a story battle at a random capture point of the rival's capital, the one ground the regular battles never touch. It's announced to everyone, and the army gathers two minutes later.
+      - **When the leader never comes,** it fails.
+      - **Won:** it counts for the step (`SiegeDone`), the winner's capital celebrates (`fw_siege_won`), and the soldiers who fought are paid as for any battle. It takes no pole.
+      - **Refused** while another battle is under way. The regular two-hour schedule isn't disturbed.
+    - **The Champion's Gift** now waits on the fourth act as well (`ChampionGifts.CampaignAct4`, `champion_need_campaign`).
+    - **The schools:** `Parliament.IsFactionSchool` gives the spell-power and learning bonuses to the same schools as the battle mages: the Duke Qor and Riija, the Princess Shal'ille and Faren, Jonas Kraanan and Jala. Before, the Duke had Kraanan too, the Princess had Jala too, and Jonas had none. Jonas keeps the learning bonus for skills.
+    - **Left out:** separate rank-milestone quests. The acts mark the ranks.
 
 ## Consequences
 
@@ -189,7 +227,24 @@ The game is becoming mostly single-player. So the factions are to drive the worl
     - a three-win streak celebrated in Jasper;
     - the town of a room, the ledger's score, and ending and raising everything.
   - **Kod names:** a message `Towns` and the parameters `room` and `towns` were all rejected as duplicate identifiers.
+- **Campaigns (2026-10-22).**
+  - Quests: `quests/{duke,princess,rebel}-act1..5-*.json` (300-314).
+  - `questbook.kod`: `QK_BATTLE`, `QK_SIEGE`, `BattleDone`, `SiegeDone`, `SiegeAgainst`.
+  - `factionwar.kod`: `StartSiege`, sieges in `Resolve` and `ResolveByRoll`, the quest calls.
+  - `factions.kod`: "march".
+  - `championgifts.kod`: the Act IV gate.
+  - `parlia.kod`: `IsFactionSchool`.
+  - `player.kod`: a player who becomes eligible for a faction (`PlayerIsIntriguing`) loses any old renown too.
+  - Our tools and client: the quest tool's `battle` and `siege` kinds (with a test), and the dashboard's Quests tab.
+  - **Tried over the maintenance port on Scout, then reset:**
+    - the school mapping;
+    - a lost battle not counting and a won one moving Act III on;
+    - "march" finding the siege, against the Princess;
+    - the siege called at a Barloque capture point, won, with no pole taken and Tos celebrating;
+    - Act V completing;
+    - the gift refused without Act IV.
 - **Not yet tried in the game:**
+  - a campaign played through, and a siege actually led and fought;
   - a real war death (the gear breaking, the regroup protection, a smith mending it);
   - attacking your own side;
   - a monster death above 50 health;

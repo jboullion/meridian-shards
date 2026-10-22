@@ -31,11 +31,11 @@ export const ARENAS = {
 } as const;
 export type ArenaName = keyof typeof ARENAS;
 
-export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim"] as const;
+export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
 /** Steps that happen by doing something, once (the guide chains' kinds): done by themselves unless `auto` is false */
-export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim"];
+export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege"];
 
 /** How a quest's markers look: gold for the main and levelling chains, silver for story quests, bronze for errands */
 export const TIERS = ["main", "story", "errand"] as const;
@@ -50,7 +50,9 @@ export type Tier = (typeof TIERS)[number];
  * bond with every mana node, have a companion (docs/adr/0010-followers.md), learn a skill (one of
  * `skills`, or done at once if we know them all), attune to a portal (`point`, docs/adr/0011; a
  * quest that starts with one isn't offered once we're attuned), fight a mock bout in an arena
- * (`arena`; with `win`, only a bout won: docs/adr/0019-arena-bouts.md).
+ * (`arena`; with `win`, only a bout won: docs/adr/0019-arena-bouts.md), fight in a lieges' battle
+ * (`battle`; with `win`, only one won), or win the campaign's siege on a rival's capital (`siege`,
+ * `against`: saying "march" to one's liege on the step calls it; docs/adr/0021).
  */
 export interface QuestStep {
   kind: StepKind;
@@ -76,8 +78,10 @@ export interface QuestStep {
   node?: string;
   /** arena: whose mock bouts count (the Arena of Kraanan's melee, the Arena of Death's duel) */
   arena?: ArenaName;
-  /** arena: only a bout won counts */
+  /** arena, battle: only a bout or battle won counts */
   win?: boolean;
+  /** siege: the faction besieged */
+  against?: "duke" | "princess" | "rebel";
   /** The tracker's line ("Rats slain"); made up from the step when left out */
   objective?: string;
   /** What the giver says as the step begins (the offer window, the log); the quest's offer for the first */
@@ -371,6 +375,12 @@ function checkStepShape(s: unknown, where: string): string[] {
       if (typeof s.arena !== "string" || !Object.hasOwn(ARENAS, s.arena)) errs.push(`${where}: arena: ${Object.keys(ARENAS).join(" or ")}`);
       if (s.win !== undefined && typeof s.win !== "boolean") errs.push(`${where}: win: true or false`);
       if (s.with !== undefined) errs.push(`${where}: with: an arena step is counted by its arena's watcher`);
+      break;
+    case "battle":
+      if (s.win !== undefined && typeof s.win !== "boolean") errs.push(`${where}: win: true or false`);
+      break;
+    case "siege":
+      if (!["duke", "princess", "rebel"].includes(s.against as string)) errs.push(`${where}: against: duke, princess or rebel`);
       break;
   }
   return errs;

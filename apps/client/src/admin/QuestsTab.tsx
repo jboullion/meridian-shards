@@ -11,10 +11,10 @@ import {
 
 type Act = (what: string, fn: () => Promise<string | void>) => () => void;
 
-const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim"];
+const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege"];
 
 /** The kinds that happen once by doing something: done by themselves unless Auto is unticked */
-const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim"];
+const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege"];
 
 const TIER_LABEL = { main: "Main (gold)", story: "Story (silver)", errand: "Errand (bronze)" } as const;
 
@@ -448,6 +448,21 @@ function QuestForm({
               <input type="checkbox" checked={!!s.win} onChange={(e) => setStep(i, { win: e.target.checked || undefined })} /> only a bout won
             </label>
           )}
+          {s.kind === "battle" && (
+            <label>
+              <input type="checkbox" checked={!!s.win} onChange={(e) => setStep(i, { win: e.target.checked || undefined })} /> only a battle won
+            </label>
+          )}
+          {s.kind === "siege" && (
+            <label>
+              Besiege{" "}
+              <select value={s.against ?? "duke"} onChange={(e) => setStep(i, { against: e.target.value as "duke" | "princess" | "rebel" })}>
+                <option value="duke">the Duke (Tos)</option>
+                <option value="princess">the Princess (Barloque)</option>
+                <option value="rebel">Jonas (Jasper)</option>
+              </select>
+            </label>
+          )}
           {(s.kind === "health" || s.kind === "nodes") && (
             <label>
               {s.kind === "health" ? "Base health to reach" : "Mana nodes"}{" "}
@@ -689,6 +704,8 @@ function clean(q: QuestFile): QuestFile {
       if (s.kind === "attune") out.point = s.point ?? 1;
       if (s.kind === "node") out.node = s.node;
       if (s.kind === "arena") Object.assign(out, { arena: s.arena ?? "kraanan" }, s.win ? { win: true } : {});
+      if (s.kind === "battle" && s.win) out.win = true;
+      if (s.kind === "siege") out.against = s.against ?? "duke";
       if (s.kind === "deposit" || s.kind === "health" || (s.kind === "nodes" && s.amount !== undefined && s.amount !== 12)) out.amount = s.amount ?? (s.kind === "health" ? 50 : 1);
       if (s.auto !== undefined && s.auto !== ACTION_KINDS.includes(s.kind) && s.kind !== "talk" && s.kind !== "deliver") out.auto = s.auto;
       const sr = cleanRewards(s.rewards ?? {});

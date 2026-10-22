@@ -230,7 +230,7 @@ export interface QuestFile {
 }
 
 export interface QuestStepFile {
-  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune" | "arena" | "train" | "node" | "claim";
+  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune" | "arena" | "train" | "node" | "claim" | "battle" | "siege";
   auto?: boolean;
   rewards?: QuestRewardsFile;
   spell?: string;
@@ -248,6 +248,7 @@ export interface QuestStepFile {
   /** arena: whose mock bouts count, and whether only a bout won does (docs/adr/0019-arena-bouts.md) */
   arena?: "kraanan" | "death";
   win?: boolean;
+  against?: "duke" | "princess" | "rebel";
   objective?: string;
   brief?: string;
   target?: string;
