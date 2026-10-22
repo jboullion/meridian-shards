@@ -230,6 +230,11 @@ export const ANIMATE = {
   EFFECT: 10,
   /** Ours (docs/adr/0012-cosmetics.md): a dye WORD in place of a translation byte (render xlat.ts DYE_BASE) */
   DYE: 11,
+  /**
+   * Ours (the magic item revamp, phase 4): before an overlay's colour, a byte: a revealed magic
+   * weapon's object-flag magic bits shifted down 20 (shards-server item.kod AddMagicMark)
+   */
+  MAGIC: 12,
 } as const;
 
 /** Server angle units per full circle. */

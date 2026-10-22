@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { FINENESS, SF, ceilingHeightAt, floorHeightAt, leafAt, type Bgf, type Room } from "@shards/formats";
 import { compositeSprite, frameFor, type Composite, type SpritePart } from "./sprites.ts";
+import { magicColourRgb, MAGIC_COLOURS, outlineCode } from "./magicOutline.ts";
 import type { XlatTable } from "./xlat.ts";
 import { colorTexture, compositeToRgba } from "./colorTexture.ts";
 import { glowPass, moodFogGlsl, moodUniforms } from "./lighting.ts";
@@ -54,7 +55,8 @@ export interface ViewObject {
   /** The look to draw now (normal, or the motion look while moving). */
   look: {
     anim: { group: number };
-    overlays: { iconRes: number; hotspot: number; translation: number; anim: { group: number } }[];
+    /** magic: a wielded magic weapon's object-flag magic bits (protocol Overlay.magic), for its ring */
+    overlays: { iconRes: number; hotspot: number; translation: number; anim: { group: number }; magic?: number }[];
     translation: number;
   };
 }
@@ -141,7 +143,26 @@ uniform float uFaceOn;
 uniform vec4 uFaceRect;
 uniform sampler2D uFaceMap;
 uniform sampler2D uFaceColorMap;
+// Ours (the magic item revamp, phase 4): the ring round a wielded magic weapon (sprites.ts
+// Composite.outline): an outline code per pixel, its colour from the table (magicOutline.ts),
+// drawn unlit and glowing more the higher its tier
+uniform float uOutlineOn;
+uniform sampler2D uOutlineMap;
+uniform vec3 uOutlineColors[${MAGIC_COLOURS.length}];
 void main() {
+  if (uOutlineOn > 0.5) {
+    int code = int(floor(texture(uOutlineMap, vUv).r * 255.0 + 0.5));
+    if (code > 0) {
+      vec3 ring = uOutlineColors[code & 15];
+      float tier = float((code >> 4) & 3);
+      if (uGlowPass > 0.5) {
+        fragColor = vec4(ring * (0.35 + 0.25 * tier), 1.0);
+        return;
+      }
+      fragColor = vec4(ring, uAlpha);
+      return;
+    }
+  }
   bool face = uFaceOn > 0.5 && all(greaterThanEqual(vUv, uFaceRect.xy)) && all(lessThan(vUv, uFaceRect.zw));
   vec2 faceUv = (vUv - uFaceRect.xy) / max(uFaceRect.zw - uFaceRect.xy, vec2(1e-6));
   vec3 rgb;
@@ -168,6 +189,9 @@ void main() {
   fragColor = vec4(uFog > 0.5 ? moodFog(rgb * uBrightness, fog, vDepth) : rgb * uBrightness, uAlpha);
 }
 `;
+
+/** Ours (phase 4): the magic colours for the weapon ring's table (magicOutline.ts) */
+const OUTLINE_COLORS = MAGIC_COLOURS.map((_, i) => new THREE.Vector3(...magicColourRgb(i)));
 
 /**
  * The target halo (d3drender.c, isTargeted chunks): the sprite's shape, stretched HALO_GROW /
@@ -266,6 +290,8 @@ interface Entry {
   /** The face's index image and RGBA copy (Composite.face), drawn over its box */
   faceTexture: THREE.DataTexture | null;
   faceColorTexture: THREE.DataTexture | null;
+  /** Ours (phase 4): the rings round a wielded magic weapon (Composite.outline) */
+  outlineTexture: THREE.DataTexture | null;
   /** Ours: its shadow on the floor (shadows under figures), made when first needed */
   shadow: THREE.Mesh | null;
   /** client position and ground height */
@@ -425,7 +451,7 @@ export class ObjectsView {
       for (const ov of look.overlays) {
         const b = this.getBgf(ov.iconRes);
         if (b === undefined) ready = false;
-        else if (b) overlays.push({ bgf: b, group: ov.anim.group, translation: ov.translation, hotspot: ov.hotspot });
+        else if (b) overlays.push({ bgf: b, group: ov.anim.group, translation: ov.translation, hotspot: ov.hotspot, outline: outlineCode(ov.magic) });
       }
       if (!ready) continue;
       const frameNum = (bgf: Bgf, group: number) => {
@@ -436,7 +462,7 @@ export class ObjectsView {
       };
       const key = [
         o.version, o.info.iconRes, look.anim.group, frameNum(base, look.anim.group), look.translation, o.info.drawingType,
-        ...overlays.map((p) => `${p.bgf.name}:${p.group}:${p.translation}:${frameNum(p.bgf, p.group)}`),
+        ...overlays.map((p) => `${p.bgf.name}:${p.group}:${p.translation}:${frameNum(p.bgf, p.group)}:${p.outline}`),
       ].join("|");
 
       let e = this.entries.get(o.id);
@@ -464,6 +490,9 @@ export class ObjectsView {
             uFaceRect: { value: new THREE.Vector4() },
             uFaceMap: { value: null },
             uFaceColorMap: { value: null },
+            uOutlineOn: { value: 0 },
+            uOutlineMap: { value: null },
+            uOutlineColors: { value: OUTLINE_COLORS },
           },
           side: THREE.DoubleSide,
         });
@@ -471,7 +500,7 @@ export class ObjectsView {
         mesh.name = `object ${o.id}`;
         this.group.add(mesh);
         e = {
-          mesh, halo: null, key: "", composite: null, cached: null, texture: null, colorTexture: null, faceTexture: null, faceColorTexture: null, shadow: null,
+          mesh, halo: null, key: "", composite: null, cached: null, texture: null, colorTexture: null, faceTexture: null, faceColorTexture: null, outlineTexture: null, shadow: null,
           x, y, z: 0, flashTime: 0, lightAdjust: 0, bounceTime: 0, scale: 1, inSun: 0,
         };
         this.entries.set(o.id, e);
@@ -486,7 +515,7 @@ export class ObjectsView {
           o.info.iconRes, look.anim.group, frameNum(base, look.anim.group), look.translation, dt,
           ...look.overlays.map((ov) => {
             const b = this.getBgf(ov.iconRes);
-            return b ? `${ov.iconRes}:${ov.anim.group}:${ov.translation}:${ov.hotspot}:${frameNum(b, ov.anim.group)}` : "-";
+            return b ? `${ov.iconRes}:${ov.anim.group}:${ov.translation}:${ov.hotspot}:${frameNum(b, ov.anim.group)}:${outlineCode(ov.magic)}` : "-";
           }),
         ].join("|");
         e.cached = this.cachedComposite(shared, () =>
@@ -800,13 +829,21 @@ export class ObjectsView {
     e.texture = null;
     e.faceTexture?.dispose();
     e.faceTexture = null;
+    e.outlineTexture?.dispose();
+    e.outlineTexture = null;
     const c = e.composite;
     const u = e.mesh.material.uniforms;
     this.setColorTexture(e);
     u.uFaceOn.value = 0;
+    u.uOutlineOn.value = 0;
     if (!c) return;
     e.texture = indexTexture(c.pixels, c.width, c.height);
     u.uMap.value = e.texture;
+    if (c.outline) {
+      e.outlineTexture = indexTexture(c.outline, c.width, c.height);
+      u.uOutlineMap.value = e.outlineTexture;
+      u.uOutlineOn.value = 1;
+    }
     const f = c.face;
     if (f) {
       // the face over its box, in the body's uv (v = 0 is the top row)
@@ -840,6 +877,7 @@ export class ObjectsView {
     e.colorTexture?.dispose();
     e.faceTexture?.dispose();
     e.faceColorTexture?.dispose();
+    e.outlineTexture?.dispose();
     this.unsmoothed.delete(e);
     if (e.shadow) this.shadows.remove(e.shadow);
   }

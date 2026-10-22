@@ -5,27 +5,11 @@
 // so it shows in the inventory, the hotbar, shops, trades and the description window alike.
 
 import type { CSSProperties } from "react";
+import { MAGIC_COLOURS } from "@shards/render";
 import { MAGIC_SHOW, magicColour, magicShow } from "@shards/world";
 
-/** blakston.khd MAGIC_COLOUR_*, in order from 1 */
-export const MAGIC_RING_COLOURS: readonly string[] = [
-  "#9aa0a8", // none: hidden magic, or revealed with no colour of its own
-  "#d0303a", // crimson: vampirism
-  "#3f7fe0", // blue: siphoning
-  "#e8cc3a", // yellow: blinding, shocking
-  "#2fb5b0", // teal: holding, icy
-  "#4cb848", // green: venom, acidic
-  "#c4c9d4", // silver: purging
-  "#a46be0", // violet: sorcery, unholy
-  "#e0a830", // gold: enchanted, expert, glowing, ceremonial
-  "#e08a2a", // amber: adventuring, durable, transcendent, indestructible
-  "#f0661e", // orange: fiery
-  "#f4f4f0", // white: holy
-  "#2b52c9", // the duke
-  "#d36fb0", // the princess
-  "#6f8f2f", // the rebellion
-  "#5e3a6e", // the necromancers
-];
+/** blakston.khd MAGIC_COLOUR_*, shared with the ring round a wielded weapon (@shards/render magicOutline.ts) */
+export const MAGIC_RING_COLOURS: readonly string[] = MAGIC_COLOURS;
 
 const SHOW_CLASS: Record<number, string> = {
   [MAGIC_SHOW.UNREVEALED]: "magic magic-hidden",

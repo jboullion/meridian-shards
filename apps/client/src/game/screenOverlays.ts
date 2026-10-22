@@ -7,7 +7,7 @@
 
 import { TRANSPARENT_INDEX, type Bgf } from "@shards/formats";
 import { HOTSPOT } from "@shards/protocol";
-import { compositeSprite, compositeToRgba, type SpritePart, type XlatTable } from "@shards/render";
+import { MAGIC_COLOURS, compositeSprite, compositeToRgba, magicColourRgb, outlineCode, outlineColour, outlineTier, type SpritePart, type XlatTable } from "@shards/render";
 import type { Effects, PlayerOverlayState } from "@shards/world";
 
 /**
@@ -39,6 +39,11 @@ function flashColor(xlat: number): [number, number, number, number] {
 interface Cached {
   key: string;
   canvas: HTMLCanvasElement | null;
+  /** Ours (the magic item revamp, phase 4): a magic weapon's ring, drawn glowing under the hand */
+  ring: HTMLCanvasElement | null;
+  /** its glow's colour and blur (base-bitmap pixels) */
+  glow: string;
+  blur: number;
   originX: number;
   originY: number;
   /** canvas pixels per base-bitmap pixel */
@@ -122,7 +127,18 @@ export class ScreenOverlays {
       ctx.globalAlpha = alpha;
       // the picture can be finer than the base bitmap (Composite.resolution)
       const r = c.resolution;
-      ctx.drawImage(c.canvas, x - (c.originX / r) * sx, y - (c.originY / r) * sy, (c.canvas.width / r) * sx, (c.canvas.height / r) * sy);
+      const dx = x - (c.originX / r) * sx,
+        dy = y - (c.originY / r) * sy,
+        dw = (c.canvas.width / r) * sx,
+        dh = (c.canvas.height / r) * sy;
+      if (c.ring) {
+        ctx.shadowColor = c.glow;
+        ctx.shadowBlur = c.blur * sx * dpr;
+        ctx.drawImage(c.ring, dx, dy, dw, dh);
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = "transparent";
+      }
+      ctx.drawImage(c.canvas, dx, dy, dw, dh);
       ctx.globalAlpha = 1;
     });
 
@@ -162,8 +178,10 @@ export class ScreenOverlays {
       if (b) parts.push({ bgf: b, group: o.anim.group, translation: o.translation, hotspot: o.hotspot });
     }
     const q = light.map((v) => Math.round(v * 32) / 32);
+    // Ours (phase 4): a revealed magic weapon's ring (player.kod ChangeWindowOverlay sends its magic bits as the flags)
+    const ringCode = outlineCode(ov.info.flags);
     const partsKey = [
-      ov.info.iconRes, ov.look.anim.group, ov.look.translation, this.smooth,
+      ov.info.iconRes, ov.look.anim.group, ov.look.translation, this.smooth, ringCode,
       // by resource: the server's art has no name
       ...ov.look.overlays.map((o) => `${o.iconRes}:${o.anim.group}:${o.translation}:${o.hotspot}`),
     ].join("|");
@@ -174,7 +192,7 @@ export class ScreenOverlays {
     let made = this.parts[slot];
     if (made?.key !== partsKey) {
       const c = compositeSprite(
-        { base: { bgf: base, group: ov.look.anim.group, translation: ov.look.translation, hotspot: 0 }, overlays: parts, viewAngle: 0 },
+        { base: { bgf: base, group: ov.look.anim.group, translation: ov.look.translation, hotspot: 0, outline: ringCode }, overlays: parts, viewAngle: 0 },
         this.xlats,
       );
       // filtered: each part magnified on its own (compositeToRgba), as the D3D client draws them
@@ -185,6 +203,25 @@ export class ScreenOverlays {
     const g = base.groups[ov.look.anim.group];
     const bmp = g?.length ? base.bitmaps[g[0]] : undefined;
     let canvas: HTMLCanvasElement | null = null;
+    let ring: HTMLCanvasElement | null = null;
+    if (comp?.outline && bmp) {
+      // unlit: the ring shines in the dark as it does on figures (objectsView.ts)
+      ring = document.createElement("canvas");
+      ring.width = comp.width;
+      ring.height = comp.height;
+      const rx = ring.getContext("2d")!;
+      const img = rx.createImageData(comp.width, comp.height);
+      for (let i = 0; i < comp.outline.length; i++) {
+        const code = comp.outline[i];
+        if (!code) continue;
+        const [r, g, b] = magicColourRgb(outlineColour(code));
+        img.data[i * 4] = r * 255;
+        img.data[i * 4 + 1] = g * 255;
+        img.data[i * 4 + 2] = b * 255;
+        img.data[i * 4 + 3] = 255;
+      }
+      rx.putImageData(img, 0, 0);
+    }
     if (comp && bmp) {
       canvas = document.createElement("canvas");
       canvas.width = comp.width;
@@ -213,7 +250,9 @@ export class ScreenOverlays {
       cx.putImageData(img, 0, 0);
     }
     const c: Cached = {
-      key, canvas, originX: comp?.originX ?? 0, originY: comp?.originY ?? 0, resolution: comp?.resolution ?? 1,
+      key, canvas, ring,
+      glow: MAGIC_COLOURS[outlineColour(ringCode)], blur: ring ? 2 + 2 * outlineTier(ringCode) : 0,
+      originX: comp?.originX ?? 0, originY: comp?.originY ?? 0, resolution: comp?.resolution ?? 1,
       baseW: bmp?.width ?? 0, baseH: bmp?.height ?? 0, xOffset: bmp?.xOffset ?? 0, yOffset: bmp?.yOffset ?? 0,
     };
     this.cache[slot] = c;

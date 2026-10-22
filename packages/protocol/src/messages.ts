@@ -175,6 +175,11 @@ export interface Overlay {
   translation: number;
   effect: number;
   animation: Animation;
+  /**
+   * Ours (the magic item revamp, phase 4): a revealed magic weapon's magic bits, as its object
+   * flags carry them (bits 20-26; @shards/world magic.ts), for the ring drawn round it; 0 for none
+   */
+  magic?: number;
 }
 
 export interface ObjectInfo {
@@ -204,16 +209,25 @@ export interface RoomObject extends ObjectInfo {
   motion: { translation: number; effect: number; animation: Animation; overlays: Overlay[] };
 }
 
-/** Optional palette-translation / effect prefix (server.c ExtractPaletteTranslation). */
-function readTranslation(r: ByteReader): { translation: number; effect: number } {
-  const start = r.pos;
-  const t = r.u8();
-  if (t === ANIMATE.TRANSLATION) return { translation: r.u8(), effect: 0 };
+/**
+ * Optional palette-translation / effect prefix (server.c ExtractPaletteTranslation). Ours: a
+ * magic weapon's mark (ANIMATE.MAGIC) may come first; it's returned as object-flag bits.
+ */
+function readTranslation(r: ByteReader): { translation: number; effect: number; magic: number } {
+  let magic = 0;
+  let start = r.pos;
+  let t = r.u8();
+  if (t === ANIMATE.MAGIC) {
+    magic = r.u8() * 0x100000;
+    start = r.pos;
+    t = r.u8();
+  }
+  if (t === ANIMATE.TRANSLATION) return { translation: r.u8(), effect: 0, magic };
   // Ours: a dye, kept as 0x10000 | code (packages/render/src/xlat.ts DYE_BASE)
-  if (t === ANIMATE.DYE) return { translation: 0x10000 | r.u16(), effect: 0 };
-  if (t === ANIMATE.EFFECT) return { translation: 0, effect: r.u8() };
+  if (t === ANIMATE.DYE) return { translation: 0x10000 | r.u16(), effect: 0, magic };
+  if (t === ANIMATE.EFFECT) return { translation: 0, effect: r.u8(), magic };
   r.pos = start;
-  return { translation: 0, effect: 0 };
+  return { translation: 0, effect: 0, magic };
 }
 
 /** Bitmap groups arrive 1-based from the server (BitmapGroupSToC). Kept as sent. */
@@ -237,8 +251,8 @@ function readOverlays(r: ByteReader): Overlay[] {
   for (let i = 0; i < n; i++) {
     const iconRes = r.u32();
     const hotspot = r.u8();
-    const { translation, effect } = readTranslation(r);
-    out.push({ iconRes, hotspot, translation, effect, animation: readAnimation(r) });
+    const { translation, effect, magic } = readTranslation(r);
+    out.push({ iconRes, hotspot, translation, effect, animation: readAnimation(r), ...(magic ? { magic } : {}) });
   }
   return out;
 }

@@ -10,6 +10,7 @@
 
 import { TRANSPARENT_INDEX, type Bgf, type BgfBitmap } from "@shards/formats";
 import type { XlatTable } from "./xlat.ts";
+import { outlineTier, outlineWidth } from "./magicOutline.ts";
 
 /** Hotspot draw layers (clientd3d/object3d.h), back to front by the D3D z-bias. OVERFIGURE and OVERFACE are ours. */
 const LAYER = { UNDERUNDER: 1, UNDER: 3, UNDEROVER: 6, BASE: 10, OVERFIGURE: 10.25, HELM: 10.5, OVERUNDER: 11, OVER: 13, OVERFACE: 14, OVEROVER: 15 } as const;
@@ -34,6 +35,8 @@ export interface SpritePart {
   translation: number;
   /** hotspot number this part hangs from (0 for the base) */
   hotspot: number;
+  /** Ours (the magic item revamp, phase 4): a ring round this part (magicOutline.ts outlineCode), 0 for none */
+  outline?: number;
 }
 
 export interface SpriteInput {
@@ -75,6 +78,8 @@ export interface Composite {
   resolution: number;
   /** The parts as drawn, back to front, for the filtered copy (colorTexture.ts compositeToRgba) */
   layers: CompositeLayer[];
+  /** Ours (phase 4): the rings round outlined parts (CompositeImage.outline) */
+  outline: Uint8Array | null;
   /** With `faceApart`: the face, finer than the rest, to draw over its box (null without one) */
   face: CompositeDetail | null;
 }
@@ -88,6 +93,12 @@ export interface CompositeImage {
   /** Image pixels per base-bitmap pixel */
   resolution: number;
   layers: CompositeLayer[];
+  /**
+   * Ours (the magic item revamp, phase 4): the rings round outlined parts (a wielded magic weapon),
+   * one outline code per pixel (magicOutline.ts), 0 elsewhere; null when nothing is outlined.
+   * Drawn over the picture, unlit and glowing (objectsView.ts).
+   */
+  outline: Uint8Array | null;
 }
 
 /**
@@ -161,6 +172,8 @@ interface Placed {
   xlat: Uint8Array;
   /** The hotspot it hangs from (0 for the base): a face's parts set the image's fineness (MAX_DETAIL) */
   hotspot: number;
+  /** Ours: its ring's outline code (SpritePart.outline), 0 for none */
+  outline?: number;
 }
 
 export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite | null {
@@ -172,7 +185,7 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
   const xlatFor = (t: number) => (input.secondOnly ? xlats.compose(0, second) : xlats.compose(t, second));
 
   const drawBase = input.drawBase ?? true;
-  const placed: Placed[] = drawBase ? [{ bmp, x: 0, y: 0, scale: 1, layer: LAYER.BASE, xlat: xlatFor(base.translation), hotspot: 0 }] : [];
+  const placed: Placed[] = drawBase ? [{ bmp, x: 0, y: 0, scale: 1, layer: LAYER.BASE, xlat: xlatFor(base.translation), hotspot: 0, outline: base.outline ?? 0 }] : [];
 
   // Overlays on the base, then overlays on overlays (d3drender.c D3DRenderOverlaysDraw).
   const firstLevel: { part: SpritePart; bmp: BgfBitmap; x: number; y: number; over: boolean }[] = [];
@@ -185,7 +198,7 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
     const x = hs.x + ob.xOffset;
     const y = hs.y + ob.yOffset;
     const layer = overFigure(ob) ? LAYER.OVERFACE : hs.helm ? LAYER.HELM : hs.over ? LAYER.OVER : LAYER.UNDER;
-    placed.push({ bmp: ob, x, y, scale: s / part.bgf.shrink, layer, xlat: xlatFor(part.translation), hotspot: part.hotspot });
+    placed.push({ bmp: ob, x, y, scale: s / part.bgf.shrink, layer, xlat: xlatFor(part.translation), hotspot: part.hotspot, outline: part.outline ?? 0 });
     firstLevel.push({ part, bmp: ob, x: hs.x, y: hs.y, over: hs.over });
   }
   for (const part of input.overlays) {
@@ -207,7 +220,7 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
         : parent.over
           ? LAYER.OVERUNDER
           : LAYER.UNDERUNDER;
-      placed.push({ bmp: ob, x, y, scale: s / part.bgf.shrink, layer, xlat: xlatFor(part.translation), hotspot: part.hotspot });
+      placed.push({ bmp: ob, x, y, scale: s / part.bgf.shrink, layer, xlat: xlatFor(part.translation), hotspot: part.hotspot, outline: part.outline ?? 0 });
       break;
     }
   }
@@ -219,10 +232,12 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
     maxX = drawBase ? bmp.width : -Infinity,
     maxY = drawBase ? bmp.height : -Infinity;
   for (const p of placed) {
-    minX = Math.min(minX, Math.floor(p.x));
-    minY = Math.min(minY, Math.floor(p.y));
-    maxX = Math.max(maxX, Math.ceil(p.x + p.bmp.width * p.scale));
-    maxY = Math.max(maxY, Math.ceil(p.y + p.bmp.height * p.scale));
+    // Ours: room round an outlined part for its ring (magicOutline.ts outlineWidth)
+    const pad = outlineWidth(p.outline ?? 0);
+    minX = Math.min(minX, Math.floor(p.x) - pad);
+    minY = Math.min(minY, Math.floor(p.y) - pad);
+    maxX = Math.max(maxX, Math.ceil(p.x + p.bmp.width * p.scale) + pad);
+    maxY = Math.max(maxY, Math.ceil(p.y + p.bmp.height * p.scale) + pad);
   }
   // image pixels per base pixel: enough that a face's parts (the head and its features, on a
   // figure with features) aren't drawn smaller than their own pixels; nothing else counts
@@ -282,7 +297,15 @@ function raster(placed: Placed[], res: number, x0: number, y0: number, w: number
     height = h * res;
   const pixels = new Uint8Array(width * height).fill(TRANSPARENT_INDEX);
   const layers: CompositeLayer[] = [];
-  for (const p of placed) {
+  // Ours (phase 4): which pixels each outlined part covers, for its ring after
+  const rings: { code: number; covered: Uint8Array; part: number }[] = [];
+  // which part drew each pixel last (1-based), so a ring stays off parts drawn over its own
+  const owner = new Uint16Array(width * height);
+  for (let n = 0; n < placed.length; n++) {
+    const p = placed[n];
+    const code = p.outline ?? 0;
+    const covered = code ? new Uint8Array(width * height) : null;
+    if (covered) rings.push({ code, covered, part: n + 1 });
     const k = p.scale * res; // image pixels per part pixel
     const pw = Math.round(p.bmp.width * k),
       ph = Math.round(p.bmp.height * k);
@@ -299,9 +322,45 @@ function raster(placed: Placed[], res: number, x0: number, y0: number, w: number
       const row = (oy + y) * width + ox;
       for (let x = xa; x < xb; x++) {
         const src = p.bmp.pixels[sy * p.bmp.width + Math.min(p.bmp.width - 1, Math.floor(x / k))];
-        if (src !== TRANSPARENT_INDEX) pixels[row + x] = p.xlat[src];
+        if (src !== TRANSPARENT_INDEX) {
+          pixels[row + x] = p.xlat[src];
+          owner[row + x] = n + 1;
+          if (covered) covered[row + x] = 1;
+        }
       }
     }
   }
-  return { width, height, pixels, resolution: res, layers };
+  return { width, height, pixels, resolution: res, layers, outline: rings.length ? ringMask(rings, owner, width, height, res) : null };
+}
+
+/**
+ * Ours (the magic item revamp, phase 4): the rings round outlined parts: every pixel within the
+ * ring's width (magicOutline.ts outlineWidth, in base pixels) of a part's own, but not on it,
+ * takes the part's outline code; where two rings meet, the higher tier's. A ring stays off the
+ * parts drawn over its own (`owner`, raster's), so a hand over a hilt keeps its look.
+ */
+function ringMask(rings: { code: number; covered: Uint8Array; part: number }[], owner: Uint16Array, width: number, height: number, res: number): Uint8Array {
+  const out = new Uint8Array(width * height);
+  for (const { code, covered, part } of rings) {
+    const w = outlineWidth(code) * res;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (!covered[y * width + x]) continue;
+        const y0 = Math.max(0, y - w),
+          y1 = Math.min(height - 1, y + w),
+          x0 = Math.max(0, x - w),
+          x1 = Math.min(width - 1, x + w);
+        for (let ny = y0; ny <= y1; ny++) {
+          for (let nx = x0; nx <= x1; nx++) {
+            const i = ny * width + nx;
+            if (covered[i] || owner[i] > part) continue;
+            // a round-cornered ring: skip the square's far corners
+            if (w > 1 && Math.abs(nx - x) === w && Math.abs(ny - y) === w) continue;
+            if (outlineTier(code) >= outlineTier(out[i])) out[i] = code;
+          }
+        }
+      }
+    }
+  }
+  return out;
 }

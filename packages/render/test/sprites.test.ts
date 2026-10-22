@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import { parseBgf, parsePaletteBin, type Bgf } from "@shards/formats";
 import { XLAT, XlatTable } from "../src/xlat.ts";
 import { compositeSprite, frameFor, HS_OVER_FIGURE } from "../src/sprites.ts";
+import { outlineCode, outlineWidth } from "../src/magicOutline.ts";
 import { compositeToRgba, paletteToRgba } from "../src/colorTexture.ts";
 import { lightIndex, objectBrightness, dlightScale, lightColor } from "../src/objectLighting.ts";
 
@@ -249,5 +250,40 @@ describe.skipIf(!have)("player sprite composite (real files)", () => {
     const c = compositeSprite({ base: { bgf: body, group: 0, translation: 0, hotspot: 0 }, overlays: [], viewAngle: 0 }, xl)!;
     expect(c.resolution).toBe(1);
     expect(compositeToRgba(c, pal.rgb, 3)).toEqual(paletteToRgba(c.pixels, c.width, c.height, pal.rgb, 3));
+  });
+});
+
+describe("magic weapon ring (phase 4)", () => {
+  const one = (w: number, h: number, colour: number, hotspots: { number: number; x: number; y: number }[] = []): Bgf => ({
+    name: "t", version: 10, shrink: 1, groups: [[0]],
+    bitmaps: [{ width: w, height: h, xOffset: 0, yOffset: 0, hotspots, pixels: new Uint8Array(w * h).fill(colour) }],
+  });
+  // revealed, moderate (show 4), teal (colour 4): code 0x14, a 1px ring
+  const moderateTeal = (4 << 20) | (4 << 23);
+  test("outline codes: only a revealed tier past slight gets a ring", () => {
+    expect(outlineCode(undefined)).toBe(0);
+    expect(outlineCode(3 << 20)).toBe(0); // slight
+    expect(outlineCode(2 << 20)).toBe(0); // revealed, no tier (armour)
+    expect(outlineCode(moderateTeal)).toBe(0x14);
+    expect(outlineWidth(0x14)).toBe(1);
+    expect(outlineWidth(outlineCode((6 << 20) | (1 << 23)))).toBe(2); // enormous
+  });
+  test("the ring hugs the weapon, padded into the picture, and stays off parts over it", () => {
+    const blade = one(2, 2, 10, [{ number: 1, x: 0, y: 0 }]);
+    const c = compositeSprite(
+      { base: { bgf: blade, group: 0, translation: 0, hotspot: 0, outline: 0x14 }, overlays: [{ bgf: one(1, 1, 20), group: 0, translation: 0, hotspot: 1 }], viewAngle: 0 },
+      new XlatTable(grayPalette(), null),
+    )!;
+    expect(c.width).toBe(4); // a pixel of room each side
+    const ring = c.outline!;
+    expect(ring[0 * 4 + 1]).toBe(0x14); // above the blade
+    expect(ring[2 * 4 + 3]).toBe(0x14); // right of it
+    expect(ring[1 * 4 + 2]).toBe(0); // on the blade itself
+    expect(c.pixels[1 * 4 + 1]).toBe(20); // the hand's pixel, over the blade
+    expect(ring[1 * 4 + 1]).toBe(0); // no ring on it
+  });
+  test("nothing outlined, no mask", () => {
+    const c = compositeSprite({ base: { bgf: one(2, 2, 10), group: 0, translation: 0, hotspot: 0 }, overlays: [], viewAngle: 0 }, new XlatTable(grayPalette(), null))!;
+    expect(c.outline).toBeNull();
   });
 });

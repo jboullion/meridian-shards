@@ -4,7 +4,7 @@
 import { describe, expect, test } from "vitest";
 import {
   BP, ByteReader, ByteWriter, STATS, STAT_TAG, UC, buildReqBuyItems, buildReqCast, buildReqCounteroffer, buildReqLook, readRoomChange, buildReqOffer,
-  buildSayGroup, buildUserCommand, CF, buildChangeDescription, buildChangeUrl, buildReqApply, buildReqGetFromContainer, buildReqObjectContents, buildReqPut, readBgOverlay, ANIMATE, readBuyList, readPlayWave, readSpells, readStat, readStatGroup,
+  buildSayGroup, buildUserCommand, CF, buildChangeDescription, buildChangeUrl, buildReqApply, buildReqGetFromContainer, buildReqObjectContents, buildReqPut, readBgOverlay, readObject, ANIMATE, readBuyList, readPlayWave, readSpells, readStat, readStatGroup,
 } from "../src/index.ts";
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
@@ -207,5 +207,20 @@ describe("mini-games and the admin console (module/chess, module/admin)", () => 
     expect(hex(m.buildMinigameState(9765, state))).toBe(hex(new ByteWriter().u8(BP.USERCOMMAND).u8(UC.MINIGAME_STATE).u32(9765).u16(3).u8(2).u8(0x87).u8(0x3d).finish()));
     expect(hex(m.buildMinigameResetPlayers(9765))).toBe(hex(new ByteWriter().u8(BP.USERCOMMAND).u8(UC.MINIGAME_RESET_PLAYERS).u32(9765).finish()));
     expect(hex(m.buildReqAdmin("show status"))).toBe(hex(new ByteWriter().u8(BP.REQ_ADMIN).string("show status").finish()));
+  });
+});
+
+describe("magic weapon overlays (ours, the magic item revamp phase 4)", () => {
+  test("ANIMATE_MAGIC before an overlay's colour carries the weapon's magic bits", () => {
+    const w = new ByteWriter().u32(7).u32(100).u32(200).u32(0).u8(0).u32(0).u32(0).u8(0).u8(0).u16(0).u8(1).u16(1);
+    w.u8(2);
+    // a potent (show 5) teal (4) sword in translation 0x14, then a plain shield
+    w.u32(300).u8(5).u8(ANIMATE.MAGIC).u8((5 | (4 << 3)) & 0xff).u8(ANIMATE.TRANSLATION).u8(0x14).u8(ANIMATE.NONE).u16(1);
+    w.u32(301).u8(6).u8(ANIMATE.NONE).u16(1);
+    const r = new ByteReader(w.finish());
+    const o = readObject(r);
+    expect(o.overlays[0]).toMatchObject({ iconRes: 300, translation: 0x14, magic: (5 << 20) | (4 << 23) });
+    expect(o.overlays[1].magic).toBeUndefined();
+    expect(r.remaining).toBe(0);
   });
 });
