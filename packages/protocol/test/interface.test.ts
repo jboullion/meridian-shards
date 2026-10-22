@@ -81,7 +81,7 @@ describe("trade", () => {
     expect(hex(buildUserCommand(UC.DEPOSIT, 100))).toBe(hex(new ByteWriter().u8(BP.USERCOMMAND).u8(35).i32(100).finish()));
     expect(hex(buildUserCommand(UC.BALANCE))).toBe(hex(Uint8Array.of(BP.USERCOMMAND, 37)));
     // UC_SEND_PREFERENCES with the CF_* flags (merintr.h SendPreferences)
-    expect(hex(buildUserCommand(UC.SEND_PREFERENCES, CF.AUTOLOOT | CF.TEMPSAFE))).toBe(hex(new ByteWriter().u8(BP.USERCOMMAND).u8(9).i32(0x0a).finish()));
+    expect(hex(buildUserCommand(UC.SEND_PREFERENCES, CF.AUTOLOOT | CF.GROUPING))).toBe(hex(new ByteWriter().u8(BP.USERCOMMAND).u8(9).i32(0x0c).finish()));
   });
 });
 

@@ -21,9 +21,10 @@ describe("parse.c ParseCommand", () => {
   });
 
   test("two-word names (the arguments start after the first word)", () => {
-    expect(parseCommand("safety off")).toEqual({ id: "safetyOff", args: "off" });
+    expect(parseCommand("grouping off")).toEqual({ id: "groupingOff", args: "off" });
     expect(parseCommand("autoloot on")?.id).toBe("autolootOn");
-    expect(parseCommand("safety")?.id).toBe("safetyOn"); // the first "safety ..." in the table
+    expect(parseCommand("autoloot")?.id).toBe("autolootOn"); // the first "autoloot ..." in the table
+    expect(parseCommand("safety off")).toBeNull(); // no safety toggle in Meridian Shards
   });
 });
 
@@ -37,7 +38,8 @@ describe("what a typed line means", () => {
     expect(interpretLine("drop", none, false)).toEqual({ kind: "command", id: "drop", args: "" });
     expect(interpretLine("yell help", none, false)).toEqual({ kind: "command", id: "yell", args: "help" });
     expect(interpretLine("cast heal", none, false)).toEqual({ kind: "command", id: "cast", args: "heal" });
-    expect(interpretLine("safety off", none, false)).toEqual({ kind: "command", id: "safetyOff", args: "off" });
+    expect(interpretLine("grouping off", none, false)).toEqual({ kind: "command", id: "groupingOff", args: "off" });
+    expect(interpretLine("safety off", none, false)).toEqual({ kind: "say", text: "safety off" });
     expect(interpretLine(":waves", none, false)).toEqual({ kind: "command", id: "emote", args: "waves" });
     expect(interpretLine("bc hi", none, false)).toEqual({ kind: "command", id: "broadcast", args: "hi" });
   });

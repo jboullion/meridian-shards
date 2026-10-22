@@ -39,7 +39,7 @@ export interface ResolvedItem {
 }
 
 /** QuestBook's special rewards (questbook.kod QRW_*) */
-export const SPECIAL = { join: 1, insignia: 2, necroGuild: 3 } as const;
+export const SPECIAL = { join: 1, insignia: 2, necroGuild: 3, renown: 4 } as const;
 
 const FACTION_NAME = { duke: "Duke Akardius", princess: "Princess Kateriina", rebel: "Jonas and his rebels" } as const;
 
@@ -102,6 +102,8 @@ export interface ResolvedQuest {
   needs: number;
   /** Offered only while base health is under this (null: no cap) */
   healthBelow: number | null;
+  /** Offered only from this much renown with the player's faction (null: any) */
+  renownMin: number | null;
   /** null: once */
   cooldownSeconds: number | null;
   timeLimitSeconds: number | null;
@@ -220,6 +222,10 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
       if (r?.necroGuild) {
         special.push([SPECIAL.necroGuild, 0]);
         specialText.push("the necromancer guild, with you its master");
+      }
+      if (r?.renown) {
+        special.push([SPECIAL.renown, r.renown]);
+        specialText.push(`${r.renown} renown with your liege`);
       }
       return {
         xp: (r?.xp ?? 0) + (r?.xpPoints ? xpForPoints(r.xpPoints, q.band.min) : 0),
@@ -381,6 +387,7 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
       excludes: q.requires?.notQuests ?? [],
       needs: (q.requires?.intriguing ? 1 : 0) | (q.requires?.guildMaster ? 2 : 0) | (q.requires?.guildShield ? 4 : 0) | (q.requires?.noGuild ? 8 : 0) | (q.paused ? 16 : 0) | (q.start === "death" ? 32 : 0),
       healthBelow: q.requires?.healthBelow ?? null,
+      renownMin: q.requires?.renown ?? null,
       cooldownSeconds: q.repeat ? Math.round(q.repeat.cooldownHours * 3600) : null,
       timeLimitSeconds: q.timeLimitMinutes ? q.timeLimitMinutes * 60 : null,
       text: { offer: q.text.offer, progress: q.text.progress ?? "", complete: q.text.complete },

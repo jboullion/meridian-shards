@@ -860,9 +860,11 @@ export function buildReqInventoryMove(id: number, before: number): Uint8Array {
 /**
  * The game options the server keeps for each player (include/proto.h CF_*): sent with
  * UC_SEND_PREFERENCES, read back with UC_REQ_PREFERENCES / UC_RECEIVE_PREFERENCES.
+ * Ours: not CF_SAFETY_OFF (0x0001) or CF_TEMPSAFE (0x0002): with no random PvP there's no
+ * safety toggle or guardian angel. The bits still round-trip untouched with the others.
  */
 export const CF = {
-  SAFETY_OFF: 0x0001, TEMPSAFE: 0x0002, GROUPING: 0x0004, AUTOLOOT: 0x0008, AUTOCOMBINE: 0x0010, BAGS: 0x0020, SPELLPOWER: 0x0040,
+  GROUPING: 0x0004, AUTOLOOT: 0x0008, AUTOCOMBINE: 0x0010, BAGS: 0x0020, SPELLPOWER: 0x0040,
 } as const;
 
 /** UC_CHANGE_URL: a player's web page (dialog.c IDOK RequestChangeURL). */

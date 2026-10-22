@@ -427,7 +427,7 @@ function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }
         <h3>The ☰ menu</h3>
         <dl className="help-defs">
           <dt>Preferences… (O, F10)</dt>
-          <dd>The game's options: sound and music, the halo round your target, tooltips, the profanity filter, the server's game options (safety, what others can do to you), and more.</dd>
+          <dd>The game's options: sound and music, the halo round your target, tooltips, the profanity filter, the server's game options (grouping, autoloot, autocombine, bags, spellpower), and more.</dd>
           <dt>Configuration…</dt>
           <dd>The Bind Editor: your keys and mouse buttons, and options of ours (the interface, lighting, ambient life, pets, HUD size).</dd>
           {admin && (

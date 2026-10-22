@@ -7,7 +7,7 @@
 //            karma min, karma max, cooldown seconds ($ once), time limit seconds ($ none),
 //            steps, xp, shillings, items, training points, tier, faction ($ any, -1 any but
 //            neutral, else FACTION_*), one of these items, requirement bits (QBQ_*), special rewards,
-//            quests that keep it from being offered ]
+//            quests that keep it from being offered, health below ($ any), renown min ($ any) ]
 //   step:  [ kind, class, count, exact (1; 2: only kills in its rooms count),  turn-in class, turn-in placed id, objective, rooms, parcel,
 //            turn-in's name, auto, rewards ([ xp, shillings, training points, items, one of, special ] or $),
 //            with (an NPC class), classes (equip's), amount ]
@@ -88,7 +88,7 @@ export function writeQuestDefs(quests: ResolvedQuest[], givers: ResolvedGiver[],
         `         [ ${q.id}, qd_${q.id}_name, ${cls(q.giver.cls)}, ${q.giver.placed}, ${q.band.min}, ${q.band.max}, ${list(q.prereqs.map(String))},`,
         `           ${opt(q.karmaMin)}, ${opt(q.karmaMax)}, ${opt(q.cooldownSeconds)}, ${opt(q.timeLimitSeconds)},`,
         `           [ ${steps.join(",\n             ")} ],`,
-        `           ${q.rewards.xp}, ${q.rewards.shillings}, ${itemList(q.rewards.items)}, ${q.rewards.trainingPoints}, ${TIER_NUM[q.tier]}, ${q.faction === null ? "$" : FACTION_NUM[q.faction]}, ${itemList(q.rewards.oneOf)}, ${q.needs}, ${specialList(q.rewards)}, ${list(q.excludes.map(String))}, ${opt(q.healthBelow)} ]`,
+        `           ${q.rewards.xp}, ${q.rewards.shillings}, ${itemList(q.rewards.items)}, ${q.rewards.trainingPoints}, ${TIER_NUM[q.tier]}, ${q.faction === null ? "$" : FACTION_NUM[q.faction]}, ${itemList(q.rewards.oneOf)}, ${q.needs}, ${specialList(q.rewards)}, ${list(q.excludes.map(String))}, ${opt(q.healthBelow)}, ${opt(q.renownMin)} ]`,
       ].join("\n"),
     );
   }

@@ -113,7 +113,7 @@ describe("the quest generator", () => {
     expect(kod).toContain("[ 1, &SmallRat, 20, 0, &TosInnKeeper, 0, qd_1_s1, $, $, qd_1_t1,\r\n               0, $, $, $, 0 ]");
     expect(kod).toContain("[ 5, $, 1, 0, &TosInnKeeper, 0, qd_1_s3, [ 53 ], $, qd_1_t3,\r\n               0, $, $, $, 0 ]");
     expect(kod).toContain("[ 4, $, 1, 0, $, 3, qd_1_s4, $, qd_1_p4, qd_1_t4,\r\n               0, $, $, $, 0 ]");
-    expect(kod).toContain("300, 50, [ [ &OrcTooth, 2 ] ], 0, 2, $, $, 0, $, $, $ ]");
+    expect(kod).toContain("300, 50, [ [ &OrcTooth, 2 ] ], 0, 2, $, $, 0, $, $, $, $ ]");
     expect(kod).toContain("[ 3, qg_3_name, qg_3_icon, qg_3_desc, 53, 4, 5, 32, 32, ANGLE_WEST, 0 ]");
     expect(kod).toContain("   qg_3_icon = tsinnk.bgf");
     expect(kod).toContain('   qd_1_p4 = "a sealed letter"');
@@ -144,7 +144,7 @@ describe("the quest generator", () => {
     expect(g.kod).toContain("[ 10, $, 1, 0, &TosInnKeeper, 0, qd_1_s4, $, $, qd_1_t4,\r\n               0, $, $, [ &OrcTooth ], 0 ]");
     expect(g.kod).toContain("[ 13, $, 1, 0, &TosInnKeeper, 0, qd_1_s6, $, $, qd_1_t6,\r\n               1, $, $, $, 12 ]");
     expect(g.kod).toContain("1, [ 0, 10, 600, [ [ &OrcTooth, 1 ] ], $, $ ], $, $, 0 ]");
-    expect(g.kod).toContain("0, 0, $, 1000, 1, $, $, 0, $, $, $ ]");
+    expect(g.kod).toContain("0, 0, $, 1000, 1, $, $, 0, $, $, $, $ ]");
     expect(g.kod).toContain("[ 1, 76, 1 ],\r\n            [ 2, 0, 1 ]");
     const steps = g.catalog.quests[0]!.steps;
     expect(steps.map((s) => s.objective)).toEqual([
@@ -224,7 +224,7 @@ describe("the quest generator", () => {
     };
     const g = generateFrom(sources([q]), WORLD);
     expect(g.errors).toEqual([]);
-    expect(g.kod).toContain("0, 0, [ [ &OrcTooth, 1, 2 ] ], 0, 2, $, $, 5, [ [ 1, 1 ], [ 2, 8 ] ], $, $ ]");
+    expect(g.kod).toContain("0, 0, [ [ &OrcTooth, 1, 2 ] ], 0, 2, $, $, 5, [ [ 1, 1 ], [ 2, 8 ] ], $, $, $ ]");
     expect(g.catalog.quests[0]!.rewards.special).toEqual(["a place in the service of Duke Akardius", "the sign of Shal'ille on your guild shield"]);
     expect(g.catalog.quests[0]!.rewards.items[0]!.name).toBe("orc tooth (Qor)");
     const bad = { ...RATS, requires: { guildMaster: "yes" }, rewards: { joinFaction: "king", insignia: "none", items: [{ class: "OrcTooth", school: "x" }] } };
@@ -250,7 +250,7 @@ describe("the quest generator", () => {
     const g = generateFrom(sources([q, other]), WORLD);
     expect(g.errors).toEqual([]);
     expect(g.kod).toContain("[ 1, &SmallRat, 3, 2, &TosInnKeeper, 0, qd_1_s1, [ 53 ], $, qd_1_t1,");
-    expect(g.kod).toContain(", [ 2 ], $ ]");
+    expect(g.kod).toContain(", [ 2 ], $, $ ]");
     const noRooms = { ...RATS, steps: [{ kind: "kill", target: "SmallRat", inRooms: true }] };
     expect(generateFrom(sources([noRooms]), WORLD).errors).toEqual(["cellar-rats.json: step 1: inRooms: a kill step with rooms"]);
     expect(generateFrom(sources([{ ...RATS, requires: { notQuests: [9] } }]), WORLD).errors).toEqual(["cellar-rats.json: requires.notQuests: quest 9 isn't there"]);
@@ -261,15 +261,27 @@ describe("the quest generator", () => {
     expect(g.errors).toEqual([]);
     // A cooldown of 0 hours: offered again at once
     expect(g.kod).toMatch(/\[ 1, qd_1_name, &TosInnKeeper, 0, 20, 30, \$,\s+\$, \$, 0, \$,/);
-    expect(g.kod).toContain("0, 2, $, $, 0, $, $, 30 ]");
+    expect(g.kod).toContain("0, 2, $, $, 0, $, $, 30, $ ]");
     const low = { ...RATS, band: { min: 20, max: 30 }, requires: { healthBelow: 20 } };
     expect(generateFrom(sources([low]), WORLD).errors).toEqual(["cellar-rats.json: requires.healthBelow: a health above the band's min"]);
+  });
+
+  it("writes renown as a special reward and a renown minimum on offers (the faction revamp)", () => {
+    const g = generateFrom(sources([{ ...RATS, requires: { faction: "duke", renown: 25 }, rewards: { renown: 3 } }]), WORLD);
+    expect(g.errors).toEqual([]);
+    expect(g.kod).toContain("0, 2, 1, $, 0, [ [ 4, 3 ] ], $, $, 25 ]");
+    const bad = { ...RATS, requires: { faction: "neutral", renown: 0 }, rewards: { renown: 101 } };
+    expect(generateFrom(sources([bad]), WORLD).errors).toEqual([
+      "cellar-rats.json: requires.renown: 1 to 100",
+      "cellar-rats.json: requires.renown: a neutral has no renown",
+      "cellar-rats.json: rewards.renown: 1 to 100",
+    ]);
   });
 
   it("writes a paused quest as never offered, and says so in the catalogue only for it", () => {
     const g = generateFrom(sources([{ ...RATS, paused: true }, { ...RATS, id: 2, key: "other" }]), WORLD);
     expect(g.errors).toEqual([]);
-    expect(g.kod).toContain("0, 2, $, $, 16, $, $, $ ]");
+    expect(g.kod).toContain("0, 2, $, $, 16, $, $, $, $ ]");
     expect(g.catalog.quests[0]!.paused).toBe(true);
     expect("paused" in g.catalog.quests[1]!).toBe(false);
     expect(generateFrom(sources([{ ...RATS, paused: "yes" }]), WORLD).errors).toEqual(["cellar-rats.json: paused: true or false"]);
@@ -278,7 +290,7 @@ describe("the quest generator", () => {
   it("writes a quest that starts on a death with its needs bit, and says so in the catalogue", () => {
     const g = generateFrom(sources([{ ...RATS, start: "death" }, { ...RATS, id: 2, key: "other" }]), WORLD);
     expect(g.errors).toEqual([]);
-    expect(g.kod).toContain("0, 2, $, $, 32, $, $, $ ]");
+    expect(g.kod).toContain("0, 2, $, $, 32, $, $, $, $ ]");
     expect(g.catalog.quests[0]!.onDeath).toBe(true);
     expect("onDeath" in g.catalog.quests[1]!).toBe(false);
     expect(generateFrom(sources([{ ...RATS, start: "dawn" }]), WORLD).errors).toEqual(['cellar-rats.json: start: "death", or left out']);

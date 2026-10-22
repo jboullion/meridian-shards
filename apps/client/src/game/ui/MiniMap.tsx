@@ -13,11 +13,11 @@ import { currentSocial } from "../social.ts";
 import { markerFor, TIER_COLOR, type MarkerTier } from "../markers.ts";
 import type { MapWay } from "../questWays.ts";
 
-/** include/proto.h MM_* */
+/** include/proto.h MM_* (ours: not MM_TEMPSAFE, 0x200, or MM_NO_PVP, 0x2000: the guardian angel's
+ *  light blue and the PvP opt-out's white went with random PvP) */
 const MM = {
   PLAYER: 0x1, ENEMY: 0x2, FRIEND: 0x4, GUILDMATE: 0x8, BUILDER_GROUP: 0x10, MONSTER: 0x20, NPC: 0x40,
-  MINION_OTHER: 0x80, MINION_SELF: 0x100, TEMPSAFE: 0x200, MINIBOSS: 0x400, BOSS: 0x800, RARE_ITEM: 0x1000,
-  NO_PVP: 0x2000,
+  MINION_OTHER: 0x80, MINION_SELF: 0x100, MINIBOSS: 0x400, BOSS: 0x800, RARE_ITEM: 0x1000,
 } as const;
 
 const COLOR = {
@@ -30,9 +30,7 @@ const COLOR = {
   enemy: "rgb(255,0,0)",
   guildmate: "rgb(255,255,0)",
   builder: "rgb(0,255,0)",
-  noPvp: "rgb(255,255,255)",
   npc: "rgb(0,0,0)",
-  tempsafe: "rgb(0,170,255)",
   miniboss: "rgb(160,66,194)",
   boss: "rgb(127,0,0)",
   rareItem: "rgb(237,255,9)",
@@ -213,8 +211,6 @@ export function MiniMap({
           if (mm & MM.GUILDMATE) dot(COLOR.guildmate, COLOR.player, 1.6 * radius, x, y, 4);
         }
         if (mm & MM.PLAYER) dot(COLOR.player, COLOR.player, radius, x, y);
-        else if (mm & MM.TEMPSAFE) dot(COLOR.tempsafe, COLOR.tempsafe, radius, x, y);
-        else if (mm & MM.NO_PVP) dot(COLOR.noPvp, COLOR.noPvp, radius, x, y);
         else if (mm & MM.MINION_SELF) dot(COLOR.minion, COLOR.minion, radius, x, y);
         else if (mm & MM.MINION_OTHER) dot(COLOR.minionOther, COLOR.minionOther, radius, x, y);
         else if (mm & MM.MONSTER) dot(COLOR.object, COLOR.object, radius, x, y);
@@ -270,7 +266,6 @@ export function MiniMap({
       // The player. Ours: a filled arrowhead, outlined, at fractional pixels. The original's
       // (MapDrawPlayer: a line through us with a head in front) rounded each point on its own,
       // so it bent and twitched as we turned.
-      const mm = self.info.minimapFlags;
       const a = (self.angle * 2 * Math.PI) / 4096;
       const size = Math.max(scale * ((PLAYER_WIDTH * 3) / 4), MIN_ARROW);
       const cx = xo + px * scale,
@@ -286,7 +281,7 @@ export function MiniMap({
       ctx.lineTo(...at(-0.35, 0));
       ctx.lineTo(...at(-0.7, -0.62));
       ctx.closePath();
-      ctx.fillStyle = mm & MM.TEMPSAFE ? COLOR.tempsafe : mm & MM.NO_PVP ? COLOR.noPvp : COLOR.player;
+      ctx.fillStyle = COLOR.player;
       ctx.fill();
       ctx.lineJoin = "round";
       ctx.lineWidth = 1.5;

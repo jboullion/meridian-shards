@@ -124,6 +124,8 @@ export interface QuestRewards {
   insignia?: Insignia;
   /** The necromancer guild is established, with the player its master (the Lich in the Inner Sanctum) */
   necroGuild?: boolean;
+  /** Renown with the player's faction, 1 to 100 (the faction revamp; nothing for a neutral) */
+  renown?: number;
 }
 
 export interface Quest {
@@ -155,6 +157,8 @@ export interface Quest {
     karmaMin?: number | null;
     karmaMax?: number | null;
     faction?: Faction;
+    /** At least this much renown with the player's faction, 1 to 100 (the faction revamp); never a neutral */
+    renown?: number;
     /** Of interest to the royal court (Player.PlayerIsIntriguing): may join a faction */
     intriguing?: boolean;
     /** The master of a guild with colours */
@@ -255,6 +259,8 @@ export function checkQuestShape(q: unknown, where: string): string[] {
       for (const k of ["karmaMin", "karmaMax"] as const)
         if (r[k] !== undefined && r[k] !== null && !isInt(r[k], -100, 100)) errs.push(`${where}: requires.${k}: -100 to 100`);
       if (r.faction !== undefined && !FACTIONS.includes(r.faction as Faction)) errs.push(`${where}: requires.faction: one of ${FACTIONS.join(", ")}`);
+      if (r.renown !== undefined && !isInt(r.renown, 1, 100)) errs.push(`${where}: requires.renown: 1 to 100`);
+      if (r.renown !== undefined && r.faction === "neutral") errs.push(`${where}: requires.renown: a neutral has no renown`);
       if (r.notQuests !== undefined && (!Array.isArray(r.notQuests) || !r.notQuests.every((x) => Number.isInteger(x)))) errs.push(`${where}: requires.notQuests: quest ids`);
       if (r.healthBelow !== undefined && (!isInt(r.healthBelow, 1, 10000) || (isObj(q.band) && isInt(q.band.min) && r.healthBelow <= q.band.min)))
         errs.push(`${where}: requires.healthBelow: a health above the band's min`);
@@ -290,6 +296,7 @@ function checkRewards(r: Record<string, unknown>, where: string): string[] {
   if (r.joinFaction !== undefined && !["duke", "princess", "rebel"].includes(r.joinFaction as string)) errs.push(`${where}.joinFaction: duke, princess or rebel`);
   if (r.insignia !== undefined && !((r.insignia as string) in INSIGNIA)) errs.push(`${where}.insignia: one of ${Object.keys(INSIGNIA).join(", ")}`);
   if (r.necroGuild !== undefined && typeof r.necroGuild !== "boolean") errs.push(`${where}.necroGuild: true or false`);
+  if (r.renown !== undefined && !isInt(r.renown, 1, 100)) errs.push(`${where}.renown: 1 to 100`);
   return errs;
 }
 

@@ -14,7 +14,7 @@ export type CommandId =
   | "delgroup" | "newgroup" | "buy" | "drop" | "look" | "offer" | "cast" | "map" | "wave" | "point" | "dance"
   | "alias" | "cmdalias" | "rest" | "yell" | "stand" | "suicid" | "suicide" | "neutral" | "happy" | "sad" | "wry"
   | "guild" | "password" | "withdraw" | "deposit" | "balance" | "group" | "appeal" | "tellguild"
-  | "safetyOn" | "safetyOff" | "tempsafeOn" | "tempsafeOff" | "groupingOn" | "groupingOff" | "autolootOn"
+  | "groupingOn" | "groupingOff" | "autolootOn"
   | "autolootOff" | "autocombineOn" | "autocombineOff" | "reagentbagOn" | "reagentbagOff" | "spellpowerOn"
   | "spellpowerOff" | "time" | "mail" | "study" | "companion" | "train" | "arena";
 
@@ -36,9 +36,8 @@ export const COMMAND_TABLE: readonly (readonly [string, CommandId])[] = [
   ["withdraw", "withdraw"], ["abheben", "withdraw"], ["deposit", "deposit"], ["einzahlen", "deposit"], ["balance", "balance"],
   ["kontostand", "balance"], ["group", "group"], ["gruppen", "group"], ["appeal", "appeal"], ["aufrufen", "appeal"],
   ["tellguild", "tellguild"], ["telgilde", "tellguild"], ["tguild", "tellguild"], ["tgilde", "tellguild"],
-  ["safety on", "safetyOn"], ["sicherheit an", "safetyOn"], ["safety off", "safetyOff"], ["sicherheit aus", "safetyOff"],
-  ["tempsafe on", "tempsafeOn"], ["tempsicherheit an", "tempsafeOn"], ["tempsafe off", "tempsafeOff"],
-  ["tempsicherheit aus", "tempsafeOff"], ["grouping on", "groupingOn"], ["gruppenbildung an", "groupingOn"],
+  // (Ours: no "safety" or "tempsafe": there's no random PvP to be safe from, nor guardian angels)
+  ["grouping on", "groupingOn"], ["gruppenbildung an", "groupingOn"],
   ["grouping off", "groupingOff"], ["gruppenbildung aus", "groupingOff"], ["autoloot on", "autolootOn"],
   ["autoloot an", "autolootOn"], ["autoloot off", "autolootOff"], ["autoloot aus", "autolootOff"],
   ["autocombine on", "autocombineOn"], ["autocombine an", "autocombineOn"], ["autocombine off", "autocombineOff"],
@@ -77,7 +76,7 @@ export interface ParsedCommand {
  * parse.c ParseCommand: the command whose name the line starts with. A whole name wins at
  * once; otherwise the longest shared start of the line's first word (ties go to the first
  * in the table). A word longer than a name doesn't match it. The arguments start after
- * the line's first word, even for two-word names ("safety on").
+ * the line's first word, even for two-word names ("autoloot on").
  */
 export function parseCommand(line: string, table: readonly (readonly [string, CommandId])[] = COMMAND_TABLE): ParsedCommand | null {
   const str = line.replace(/^ +/, "");

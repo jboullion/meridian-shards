@@ -2,8 +2,8 @@
 // the original client's three places for options:
 //   Preferences    client.rc IDD_SETTINGS / config.c (Web Browser left out). Some options
 //                  aren't implemented yet; they're kept so they work once they are
-//                  (docs/missing-features.md). The Game Options and "Can attack innocent
-//                  players" live on the server instead (CF_* via UC_SEND_PREFERENCES).
+//                  (docs/missing-features.md). The Game Options live on the server
+//                  instead (CF_* via UC_SEND_PREFERENCES).
 //   Configuration  the Bind Editor (m59bind.exe, config.ini [config] and [keys]) without
 //                  Classic Key Binding or Software Renderer.
 //   Actions        Who (ignore lists), groups (groups.c), hotkey and command aliases (alias.c).

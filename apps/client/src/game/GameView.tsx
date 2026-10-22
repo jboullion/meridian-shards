@@ -148,7 +148,6 @@ const USER_ACTIONS: Partial<Record<CommandId, number>> = {
 
 /** command.c: the game options typed commands turn on and off (SendPreferences) */
 const OPTION_COMMANDS: Partial<Record<CommandId, [flag: number, on: boolean]>> = {
-  safetyOn: [CF.SAFETY_OFF, false], safetyOff: [CF.SAFETY_OFF, true], tempsafeOn: [CF.TEMPSAFE, true], tempsafeOff: [CF.TEMPSAFE, false],
   groupingOn: [CF.GROUPING, true], groupingOff: [CF.GROUPING, false], autolootOn: [CF.AUTOLOOT, true], autolootOff: [CF.AUTOLOOT, false],
   autocombineOn: [CF.AUTOCOMBINE, true], autocombineOff: [CF.AUTOCOMBINE, false], reagentbagOn: [CF.BAGS, true], reagentbagOff: [CF.BAGS, false],
   spellpowerOn: [CF.SPELLPOWER, true], spellpowerOff: [CF.SPELLPOWER, false],

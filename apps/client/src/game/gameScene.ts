@@ -10,6 +10,7 @@
 //   PgUp/PgDn/Home: look up, down, straight; End: turn around;  Enter: chat
 
 import * as THREE from "three";
+import { SAY } from "@shards/protocol";
 import { FINENESS, SF, ceilingHeightAt, floorHeightAt, gridTextureName, leafAt, skyboxForBackground, type Bgf, type Room } from "@shards/formats";
 import {
   DRAWFX, Flyers, GroundCover, Lightning, Nature, OF, ObjectsView, Puddles, type PuddleRoom, type GroundKind, type GroundRoom, type NatureRoom, type RockArt, PARTICLE_STEPS_PER_SECOND, PostFx, RoomView, SkyOverlaysView, TrailBlur, WeatherParticles, XlatTable, type ParticleRoom, disposeSkybox, fogEnd, objectBrightness, paletteTexture, postFxActive, type LightSource,
@@ -399,6 +400,9 @@ export class GameScene {
   private last = performance.now();
   private disposed = false;
   private readonly unsubscribe: () => void;
+  /** Ours: what real NPCs and monsters said lately (BP_SAID), by object id, drawn as speech bubbles */
+  private npcSpeech = new Map<number, { text: string; until: number }>();
+  private offChat: (() => void) | null = null;
   private readonly resizeObserver: ResizeObserver;
   private labelPool: HTMLDivElement[] = [];
   /** Ours: what ambient townsfolk say, over their heads */
@@ -527,6 +531,21 @@ export class GameScene {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
     this.resize();
+    this.offChat = session.listen({
+      chat: (line) => {
+        const sender = line.sender;
+        if (!sender || line.channel !== "chat") return;
+        if (line.sayType !== SAY.NORMAL && line.sayType !== SAY.YELL && line.sayType !== SAY.RESOURCE) return;
+        const o = session.world.objects.get(sender.id);
+        if (!o || o.id === session.world.self?.id || o.info.flags & OF.PLAYER) return;
+        // "Name says, "..."": the bubble holds just the words
+        let text = line.spans.map((sp) => sp.text).join("").trim();
+        const q = text.indexOf('"');
+        if (q >= 0 && text.lastIndexOf('"') > q) text = text.slice(q + 1, text.lastIndexOf('"'));
+        if (!text) return;
+        this.npcSpeech.set(o.id, { text, until: performance.now() + Math.min(9000, 3000 + text.length * 60) });
+      },
+    });
     this.unsubscribe = session.world.on((e) => {
       const self = session.world.self;
       switch (e.type) {
@@ -1426,7 +1445,18 @@ export class GameScene {
 
   /** Ours: lines the townsfolk say, over their heads (never in the chat), hidden by walls as names are */
   private drawSpeech(): void {
-    const said = [...(this.ambient?.speech() ?? []), ...(this.arena?.speech() ?? [])];
+    const now = performance.now();
+    const real: { obj: { id: number }; text: string; lift: number }[] = [];
+    for (const [id, s] of this.npcSpeech) {
+      if (s.until < now || !this.session.world.objects.has(id)) this.npcSpeech.delete(id);
+      else {
+        // Over the name label, and over a quest marker when it has one (30px glyph, bobbing, up to 1.4x)
+        const o = this.session.world.objects.get(id)!;
+        const marked = markerFor(o.info.minimapFlags, this.settings.questMarkers)?.glyph;
+        real.push({ obj: { id }, text: s.text, lift: marked ? 88 : 26 });
+      }
+    }
+    const said: { obj: { id: number }; text: string; lift?: number }[] = [...real, ...(this.ambient?.speech() ?? []), ...(this.arena?.speech() ?? [])];
     const w = this.canvas.clientWidth,
       h = this.canvas.clientHeight;
     const eye = this.camera.position;
@@ -1450,7 +1480,7 @@ export class GameScene {
       if (!this.speechPool[n]) el.className = "speech-bubble";
       this.speechPool[n++] = el;
       if (el.textContent !== s.text) el.textContent = s.text;
-      el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -100%) translateY(-10px)`;
+      el.style.transform = `translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px) translate(-50%, -100%) translateY(-${s.lift ?? 10}px)`;
       el.style.display = "";
     }
     for (let i = n; i < this.speechPool.length; i++) this.speechPool[i].style.display = "none";
@@ -3339,6 +3369,7 @@ export class GameScene {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.unsubscribe();
+    this.offChat?.();
     this.offSettings();
     this.resizeObserver.disconnect();
     window.removeEventListener("mouseup", this.onDragEnd);

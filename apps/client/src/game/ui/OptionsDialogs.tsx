@@ -63,14 +63,17 @@ function usePlayers(session: GameSession): { id: number; name: string }[] {
 
 // ---------------------------------------------------------------------------- Preferences
 
-/** The game options the server keeps (IDD_SETTINGS Game Options and "Can attack innocent players"). */
+/**
+ * The game options the server keeps (IDD_SETTINGS Game Options). Ours: without "Receive
+ * temporary angel on death" or "Can attack innocent players": there's no random PvP, so no
+ * safety toggle and no guardian angel.
+ */
 const SERVER_OPTIONS = [
-  ["Receive temporary angel on death", CF.TEMPSAFE, [15, 116, 123, 9]],
-  ["Join building groups", CF.GROUPING, [192, 116, 75, 9]],
-  ["Autoloot stackable items from kills", CF.AUTOLOOT, [15, 128, 123, 9]],
-  ["Autocombine spell items", CF.AUTOCOMBINE, [192, 128, 90, 9]],
-  ["Stash things into the appropriate bag automatically", CF.BAGS, [15, 140, 170, 9]],
-  ["Display spellpower for spells cast", CF.SPELLPOWER, [192, 140, 119, 9]],
+  ["Join building groups", CF.GROUPING, [15, 116, 75, 9]],
+  ["Autoloot stackable items from kills", CF.AUTOLOOT, [192, 116, 123, 9]],
+  ["Autocombine spell items", CF.AUTOCOMBINE, [15, 128, 90, 9]],
+  ["Stash things into the appropriate bag automatically", CF.BAGS, [192, 128, 170, 9]],
+  ["Display spellpower for spells cast", CF.SPELLPOWER, [15, 140, 119, 9]],
 ] as const;
 
 /** Options the client keeps but doesn't do anything with yet (docs/missing-features.md). */
@@ -119,18 +122,9 @@ export function PreferencesDialog({
       <DluDialog title="Preferences" size={[375, 288]} wide={1.3} onClose={onClose}>
         <form onSubmit={ok}>
           <GroupBox at={[6, 3, 91, 67]} label="Targeting" />
-          <Check
-            at={[16, 14, 73, 17]}
-            className="wrap"
-            label="Can attack innocent players"
-            title={known ? "Kept on the server" : "Waiting for the server"}
-            disabled={!known}
-            checked={(flags & CF.SAFETY_OFF) !== 0}
-            onChange={(v) => flag(CF.SAFETY_OFF, v)}
-          />
-          {halo("Red Highlight", "red", [16, 34, 70, 10])}
-          {halo("Blue Highlight", "blue", [16, 45, 70, 10])}
-          {halo("Green Highlight", "green", [16, 56, 70, 10])}
+          {halo("Red Highlight", "red", [16, 16, 70, 10])}
+          {halo("Blue Highlight", "blue", [16, 28, 70, 10])}
+          {halo("Green Highlight", "green", [16, 40, 70, 10])}
 
           <GroupBox at={[108, 3, 262, 67]} label="Special Effects" />
           {check("Show your pain when you get hurt", [117, 16, 122, 9], "pain")}
