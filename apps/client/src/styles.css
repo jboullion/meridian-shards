@@ -464,8 +464,11 @@ button.link {
   inset: 0;
   border-radius: 3px;
   pointer-events: none;
+  /* The ring, then a dark line just inside it, so a pale ring still shows on pale art (a silver
+     ring on chain mail) */
   box-shadow:
     inset 0 0 0 var(--magic-w) var(--magic-ring),
+    inset 0 0 0 calc(var(--magic-w) + 1px) rgba(0, 0, 0, 0.6),
     inset 0 0 var(--magic-glow) color-mix(in srgb, var(--magic-ring) var(--magic-glow-mix), transparent);
 }
 
