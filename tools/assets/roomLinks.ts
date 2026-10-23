@@ -205,14 +205,15 @@ export interface RoomListing {
 export function buildRoomList(kodFiles: KodFile[], khd: string): RoomListing[] {
   const rids = parseRids(khd);
   const className = (src: string) => /^\s*(\w+)\s+is\s+(\w+)/m.exec(src);
-  const strings = (src: string) => new Map([...src.matchAll(/^[ \t]*(\w+)[ \t]*=[ \t]*"([^"\n]*)"/gm)].map((m) => [m[1], m[2]]));
+  // Kod's names ignore case: the Jasper tavern names room_name_JasperTavern as room_name_jaspertavern
+  const strings = (src: string) => new Map([...src.matchAll(/^[ \t]*(\w+)[ \t]*=[ \t]*"([^"\n]*)"/gm)].map((m) => [m[1]!.toLowerCase(), m[2]]));
   const classes = new Map<string, { parent: string; name?: string }>();
   for (const f of kodFiles) {
     const src = stripComments(f.text);
     const head = className(src);
     if (!head) continue;
     const vr = /\bvrName\s*=\s*(\w+)/.exec(src)?.[1];
-    classes.set(head[1].toLowerCase(), { parent: head[2].toLowerCase(), name: vr ? strings(src).get(vr) : undefined });
+    classes.set(head[1].toLowerCase(), { parent: head[2].toLowerCase(), name: vr ? strings(src).get(vr.toLowerCase()) : undefined });
   }
   const nameOf = (cls: string): string | undefined => {
     for (let c = classes.get(cls), n = 0; c && n < 20; c = classes.get(c.parent), n++) if (c.name) return c.name;

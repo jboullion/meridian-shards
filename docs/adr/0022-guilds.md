@@ -527,3 +527,34 @@ Nothing pointed players at the Fallen Halls: they sit behind their old doors, an
     - A guild made over the maintenance port has no name, because `quote` strings are temporary. Its announcement went out with an empty name and broke both test clients' connections.
     - `FallenHall` and `SendHalls` now treat a guild with no name as none. To name a test guild, set its message of the day (`SetGuildMOTD`), which stores a real string, then point `vrName` at that string.
   - **Not tried:** reading the new packet in a client, which waits for 5c's reader.
+- **Phase 5b, the Guild Masters and the guild story (shards-server and this repo, 2026-10-23, not yet committed).**
+  - **`GuildMaster is Human`** (`monster/human/guildmaster.kod`), the project's first new NPCs:
+    - an NPC that never fights (`AI_NPC | AI_NOMOVE | AI_NOFIGHT`, `MOB_NOFIGHT`), built from player body parts;
+    - each subclass fixes its looks with `viLooks_*`/`vrLooks_*` classvars (gender, hair, eyes, nose, mouth, beard, hair colour, skin, shirt and trousers), where `Human` picks at random;
+    - the base class's name, "any Guild Master", is how the quests name all three ("Return to any Guild Master").
+  - **The three** (`human/guildmaster/`), each made by its room's `CreateStandardObjects`:
+
+    | Guild Master | Looks | Room, square |
+    |---|---|---|
+    | `DukeGuildMaster`, Master Aldric Vane | grey hair and a short beard, a purple shirt | the Chambers of Duke Akardius (952), 28,32 facing south |
+    | `PrincessGuildMaster`, Dame Seraphine Dawnmere | platinum hair, an orange shirt | the Assembly Chamber (852), 33,25 facing north |
+    | `RebelGuildMaster`, Brannoc the Red | red hair and a braided beard, a red shirt | Pietro's Wicked Brews, the Jasper tavern (371), 7,7 facing north |
+
+    The squares were checked open on the room maps; the survey's 32,21 by the Princess is blocked.
+  - **The guild story** (29): `quests/guild-story-*.json`, ids 330-338, given by `GuildMaster` (any of the three) with the three rooms named for the client.
+    - 330, "A Guild's Calling": a guild member at 80 HP visits the Den of Shadows and reports back.
+    - 331-338, "The Fallen Halls I-VIII": a `fallen` step for each hall in ladder order, handed in to any Guild Master, each needing the one before.
+    - Each hand-in tells the next piece of the Order's plan: the grove's life drawn into vessels, bound spirits, the dwarves' runes smuggled through the Ports and the sewers, an army of the dead, and at last the Queen waiting in the Inner Sanctum below Castle Brax.
+    - Rewards: 1.0 to 1.7 `xpPoints`, 1,000 to 4,500 shillings, and 2 to 9 prestige.
+  - **The dailies now unlock with the story** (30, the default): each daily needs its hall's story quest.
+  - **The tool:** room names now ignore case, as Kod's names do (`tools/assets/roomLinks.ts`). The Jasper tavern's name resource is spelt two ways and showed as "Room".
+  - **Tried on the dev server over the maintenance port** (the Duke's Guild Master placed by hand, since the running world predates the class):
+    - 330 was offered and taken, the visit counted, and the hand-in paid 1,640 XP and 250 shillings;
+    - 331 was refused at 31 base HP (it asks 80), then taken at 150;
+    - clearing the Den marked it done ("Return to any Guild Master"), and the hand-in paid 6,561 XP, 1,000 shillings and 2 prestige;
+    - the Den's daily was then offered, and the Forest's wasn't;
+    - the Guild Master offered 332 next;
+    - no server errors.
+  - **Seen in the browser client:** Master Aldric Vane beside the Duke, in his purple shirt, with the quest marker over his head.
+  - **Test trap:** setting a player's `piBase_Max_Health` by hand doesn't last, because the next XP gain sets it back from their XP. Send them `ResetXPToLevel` afterwards.
+  - **Not tried:** the Princess's and Jonas's Guild Masters in the game (they need a fresh world, or a hand placement), and the quest windows' look.
