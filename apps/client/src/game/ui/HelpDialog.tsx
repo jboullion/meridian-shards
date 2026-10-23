@@ -505,6 +505,12 @@ function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }
             in the Arena of Kraanan, a duel against an elite in the Arena of Death, matched to your health. Losing one is never a death: you wake in the stands. Player battles:
             the watcher's matches of players (in the Arena of Death, a real death). Record: your mock wins and losses, and your title.
           </dd>
+          <dt>The Faction War (J)</dt>
+          <dd>
+            J (or typed war) opens the War window: your rank and renown with your liege, your war record, the battle called or being fought and when the next is, the towns and who
+            holds them, a map of the realm's flagpoles, the last battles, and your liege's war ledger. While the lieges' armies march or fight, a banner at the top of the view
+            says where; click it to open the window.
+          </dd>
           <dt>Containers</dt>
           <dd>Double click a box to see inside and take things out; put stores things in one.</dd>
           <dt>The full map</dt>

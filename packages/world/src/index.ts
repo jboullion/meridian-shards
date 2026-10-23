@@ -26,6 +26,7 @@ export * from "./pets.ts";
 export * from "./quests.ts";
 export * from "./companion.ts";
 export * from "./arenaBouts.ts";
+export * from "./factionWar.ts";
 export * from "./cosmetics.ts";
 export * from "./itemservice.ts";
 export * from "./magic.ts";

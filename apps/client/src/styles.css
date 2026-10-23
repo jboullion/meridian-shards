@@ -3574,6 +3574,252 @@ canvas.server-wait {
   font-weight: normal;
 }
 
+/* Ours (docs/adr/0021-factions-and-the-faction-war.md): the lieges' colours, as their soldiers'
+   shields (the Duke purple, the Princess orange, Jonas red) */
+.liege-duke {
+  --liege: rgb(170, 110, 230);
+}
+
+.liege-princess {
+  --liege: rgb(240, 150, 50);
+}
+
+.liege-rebel {
+  --liege: rgb(225, 70, 60);
+}
+
+.liege-none {
+  --liege: rgb(150, 150, 150);
+}
+
+.war-liege {
+  color: var(--liege);
+  font-weight: bold;
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* The battle banner at the top of the view (BattleBanner.tsx); below the study banner if both */
+.view .battle-banner {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  z-index: 6;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px 10px;
+  max-width: calc(100% - 32px);
+  padding: 4px 12px;
+  border: 1px solid rgba(214, 180, 90, 0.55);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.62);
+  font: bold 13px Georgia, "Times New Roman", serif;
+  color: #e8dcc2;
+  cursor: pointer;
+}
+
+.view .battle-banner:has(~ .study-banner) {
+  top: 44px;
+}
+
+/* The Modern interface: between the portrait's bars and the map, or under them where narrow */
+.modern-ui .view .battle-banner {
+  max-width: min(420px, calc(100% - 480px));
+}
+
+@media (max-width: 1000px) {
+  .modern-ui .view .battle-banner {
+    top: 96px;
+    max-width: calc(100% - 32px);
+  }
+}
+
+.view .battle-banner.ours {
+  border-color: rgb(240, 208, 25);
+  box-shadow: 0 0 8px rgba(240, 208, 25, 0.5);
+}
+
+.battle-banner-title {
+  color: rgb(240, 208, 25);
+}
+
+.battle-banner-vs,
+.battle-banner-time {
+  font-weight: normal;
+}
+
+/* The War window (WarDialog.tsx) */
+.mk-window.game-dialog.war-window {
+  width: min(520px, calc(100% - 16px));
+}
+
+.war-page {
+  min-height: 260px;
+  padding: 8px 2px;
+}
+
+.war-page p {
+  margin: 0 0 8px;
+  line-height: 1.35;
+}
+
+.war-rank {
+  font: 18px var(--font-title);
+}
+
+.war-renown {
+  margin: 0 0 8px;
+  padding: 2px 6px;
+  background: linear-gradient(to right, rgb(150, 110, 30) var(--renown), rgb(40, 32, 24) var(--renown));
+  border: 1px solid #000;
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.war-note {
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.war-battle {
+  font-weight: bold;
+}
+
+.war-battle.ours {
+  color: rgb(240, 208, 25);
+}
+
+.war-record {
+  border-collapse: collapse;
+}
+
+.war-record th {
+  padding: 1px 6px 1px 0;
+  text-align: left;
+  font-weight: normal;
+}
+
+.war-record td {
+  padding: 1px 18px 1px 0;
+  font-weight: bold;
+}
+
+.war-towns,
+.war-history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.war-towns li,
+.war-history li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 2px 0;
+}
+
+.war-town-name {
+  flex: 0 0 120px;
+}
+
+.war-history-place {
+  font-weight: bold;
+}
+
+.war-ago {
+  margin-left: auto;
+  font-style: italic;
+  opacity: 0.75;
+}
+
+.war-tag {
+  padding: 0 5px;
+  border: 1px solid rgb(240, 208, 25);
+  border-radius: 2px;
+  font-size: 11px;
+  color: rgb(240, 208, 25);
+}
+
+.war-tag.sad {
+  border-color: rgb(140, 140, 160);
+  color: rgb(170, 170, 190);
+}
+
+/* The realm's flag rooms on its grid (factionWar.ts gridCell): columns A to K, rows 1 to 9 */
+.war-map {
+  display: grid;
+  grid-template-columns: repeat(11, 1fr);
+  grid-template-rows: repeat(9, 1fr);
+  gap: 3px;
+  aspect-ratio: 11 / 9;
+  max-width: 400px;
+  margin: 0 auto 8px;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(214, 180, 90, 0.4);
+}
+
+.war-pole {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 18%;
+  background: var(--liege);
+  border: 1px solid #000;
+  border-radius: 2px;
+  font: bold 11px Georgia, serif;
+  color: #000;
+  cursor: default;
+}
+
+.war-pole.town {
+  margin: 0;
+  border: 2px solid #e8dcc2;
+}
+
+.war-pole.half {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+.war-pole.battle {
+  margin: 0;
+  outline: 2px solid rgb(240, 208, 25);
+  animation: war-pole-battle 1s ease-in-out infinite alternate;
+}
+
+@keyframes war-pole-battle {
+  to {
+    outline-color: rgba(240, 208, 25, 0.2);
+  }
+}
+
+.war-map-caption,
+.war-legend {
+  text-align: center;
+}
+
+.war-ledger {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.war-ledger th,
+.war-ledger td {
+  padding: 2px 6px;
+  text-align: left;
+}
+
+.war-ledger tbody th {
+  font-weight: bold;
+}
+
 .map-room-name {
   max-width: 100%;
   overflow: hidden;

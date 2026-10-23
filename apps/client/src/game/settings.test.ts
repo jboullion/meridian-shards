@@ -17,7 +17,7 @@ describe("settings", () => {
 
   it("migrates version 2 settings: one mouse speed, right click looks", () => {
     const s = migrate({ version: 2, preset: "modern", mouseSpeed: 2, rightClickLooks: true, musicVolume: 40 } as never);
-    expect(s.version).toBe(15);
+    expect(s.version).toBe(16);
     expect(s.mouseXScale).toBe(30);
     expect(s.mouseYScale).toBe(30);
     expect(s.keys.examine).toEqual([{ code: "Mouse1" }]);
@@ -58,6 +58,12 @@ describe("settings", () => {
     expect(migrate({ version: 13, preset: "modern" } as never).keys.companion).toEqual([{ code: "KeyC" }]);
     expect(migrate({ version: 13, preset: "modern", keys: { map: [{ code: "KeyC" }] } } as never).keys.companion).toEqual([]);
     expect(migrate({ version: 13, preset: "original" } as never).keys.companion).toEqual([]);
+  });
+
+  it("the War window on J (version 16), unless J was already taken", () => {
+    expect(migrate({ version: 15, preset: "modern" } as never).keys.war).toEqual([{ code: "KeyJ" }]);
+    expect(migrate({ version: 15, preset: "modern", keys: { map: [{ code: "KeyJ" }] } } as never).keys.war).toEqual([]);
+    expect(migrate({ version: 15, preset: "original" } as never).keys.war).toEqual([]);
   });
 
   it("G gets (version 15) beside F, unless G was already taken", () => {

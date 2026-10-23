@@ -20,6 +20,7 @@ import { IconRenderer } from "./icons.ts";
 import { QuestStore } from "./quests.ts";
 import { CompanionStore } from "./companion.ts";
 import { ArenaStore } from "./arenaBouts.ts";
+import { FactionWarStore } from "./factionWar.ts";
 import { ConnectingScreen, LoginScreen, rememberName } from "./LoginScreen.tsx";
 
 /** A tiny event relay: session events that arrive before (or without) a listener are dropped. */
@@ -62,6 +63,8 @@ interface Live {
   companion: CompanionStore;
   /** Ours (docs/adr/0019-arena-bouts.md): the arena's mock bouts and our records */
   arena: ArenaStore;
+  /** Ours (docs/adr/0021): the Faction War, kept from logon */
+  factionWar: FactionWarStore;
   offers: Relay<OfferEvent>;
   looks: Relay<LookResult>;
   contents: Relay<ContainerContents>;
@@ -217,6 +220,7 @@ export function Game({
     const sellable = new Relay<Sellable>();
     const companion = new CompanionStore();
     const arena = new ArenaStore();
+    const factionWar = new FactionWarStore();
     const offers = new Relay<OfferEvent>();
     const looks = new Relay<LookResult>();
     const contents = new Relay<ContainerContents>();
@@ -290,6 +294,7 @@ export function Game({
         sellable: sellable.emit,
         companion: (e) => companion.handle(e),
         arena: (s) => arena.handle(s),
+        factionWar: (e) => factionWar.handle(e),
         offer: offers.emit,
         sound: (e) => audio.handle(e),
         damageDealt: damage.emit,
@@ -301,7 +306,7 @@ export function Game({
     s.setLanguage(getSettings().language);
     void loadProfanity(assets);
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, quests, questOffers, cosmetics, training, appraisal, sellable, companion, arena, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, quests, questOffers, cosmetics, training, appraisal, sellable, companion, arena, factionWar, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
   };
 
   const logout = () => {
@@ -415,6 +420,7 @@ export function Game({
       sellable={live.sellable.on}
       companion={live.companion}
       arena={live.arena}
+      factionWar={live.factionWar}
       offers={live.offers.on}
       phase={phase}
       chat={chat}

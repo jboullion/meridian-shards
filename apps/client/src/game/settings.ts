@@ -24,7 +24,7 @@ export const ACTION_TABS = {
   Map: ["map", "mapZoomIn", "mapZoomOut"],
   // Ours: keys for our own panels and menus, and the quick slots (quickSlots.ts)
   Interface: [
-    "inventory", "settings", "configuration", "actions", "quickEmotes", "friends", "pets", "companion", "cameraView", "hideInterface",
+    "inventory", "settings", "configuration", "actions", "quickEmotes", "friends", "pets", "companion", "war", "cameraView", "hideInterface",
     "quickSlot1", "quickSlot2", "quickSlot3", "quickSlot4", "quickSlot5", "quickSlot6", "quickSlot7", "quickSlot8", "quickSlot9",
     "quickSlot10",
     // The Modern interface's second row
@@ -86,6 +86,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   friends: "Friends",
   pets: "Pets",
   companion: "Companion",
+  war: "The Faction War",
   quickSlot1: "Quick Slot 1",
   quickSlot2: "Quick Slot 2",
   quickSlot3: "Quick Slot 3",
@@ -177,6 +178,8 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     pets: k("KeyN"),
     // Ours: the Companion tab (docs/adr/0010-followers.md 9.2)
     companion: k("KeyC"),
+    // Ours: the War window (docs/adr/0021-factions-and-the-faction-war.md)
+    war: k("KeyJ"),
     // Ours: first person, chase, behind, front (the Modern interface only; gameScene.ts ViewMode)
     cameraView: k("KeyV"),
     // Ours: the Modern interface's HUD away and back, for screenshots (GameView hudHidden)
@@ -251,6 +254,7 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     friends: [],
     pets: [],
     companion: [],
+    war: [],
     cameraView: [],
     hideInterface: [],
     // Typing starts a chat line in the original preset, digits too: no keys unless the player adds them
@@ -494,7 +498,7 @@ export function touchUi(s: Settings): boolean {
   return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 }
 
-const SETTINGS_VERSION = 15;
+const SETTINGS_VERSION = 16;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
@@ -662,6 +666,11 @@ export function migrate(s: SavedSettings): Settings {
   if (version < 15 && preset === "modern") {
     const taken = Object.values(keys).some((list) => list.some((b) => b.code === "KeyG" && !b.alt && !b.ctrl));
     if (!taken) keys.interact = [{ code: "KeyG" }, ...keys.interact];
+  }
+  // Version 16 (the War window on J): not if the player had put J to another use
+  if (version < 16) {
+    const taken = Object.entries(keys).some(([a, list]) => a !== "war" && list.some((b) => b.code === "KeyJ" && !b.alt && !b.ctrl));
+    if (taken) keys.war = keys.war.filter((b) => b.code !== "KeyJ" || b.alt || b.ctrl);
   }
   delete (out as SavedSettings).mouseSpeed;
   delete (out as SavedSettings).rightClickLooks;

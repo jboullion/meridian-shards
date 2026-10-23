@@ -3308,6 +3308,7 @@ export class GameScene {
       case "friends":
       case "pets":
       case "companion":
+      case "war":
       case "who":
       case "offer":
       case "buy":

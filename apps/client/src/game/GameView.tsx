@@ -10,6 +10,9 @@ import type { QuestStore } from "./quests.ts";
 import { useCompanion, type CompanionStore } from "./companion.ts";
 import { useArena, type ArenaStore } from "./arenaBouts.ts";
 import { ArenaDialog } from "./ui/ArenaDialog.tsx";
+import type { FactionWarStore } from "./factionWar.ts";
+import { WarDialog } from "./ui/WarDialog.tsx";
+import { BattleBanner } from "./ui/BattleBanner.tsx";
 import { CompanionPanel } from "./ui/CompanionPanel.tsx";
 import { CompanionLooksDialog } from "./ui/CompanionLooksDialog.tsx";
 import { TailorDialog } from "./ui/TailorDialog.tsx";
@@ -193,6 +196,8 @@ type Modal =
   | { type: "companionLooks" }
   // Ours (docs/adr/0019-arena-bouts.md): the Arena window
   | { type: "arena" }
+  // Ours (docs/adr/0021-factions-and-the-faction-war.md): the War window
+  | { type: "war" }
   | { type: "amount"; object: ObjectInfo }
   | { type: "suicide" }
   | { type: "quickSlot"; index: number }
@@ -222,10 +227,12 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, cosmetics, training, appraisal, sellable, companion, arena, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, cosmetics, training, appraisal, sellable, companion, arena, factionWar, offers, serverPrefs, latency,
 }: {
   /** Ours: the arenas' mock bouts (docs/adr/0019-arena-bouts.md) */
   arena: ArenaStore;
+  /** Ours: the Faction War, for the War window and the battle banner (docs/adr/0021) */
+  factionWar: FactionWarStore;
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
   /** The game options the server keeps for us (CF_* flags), null until it has said */
@@ -817,6 +824,12 @@ export function GameView({
     scene.arenaFloorBusy = floorTaken(s);
   }, [arena, arenaVersion, inArena, status]);
   const openArena = () => setModal({ type: "arena" });
+  // Ours (docs/adr/0021): where we stand in the Faction War, once at logon (the battle banner
+  // needs our liege); the server sends the battle to everyone as it changes
+  useEffect(() => {
+    session.shardsCommand("war");
+  }, [session]);
+  const openWar = () => setModal({ type: "war" });
   const comp = companion.status;
   const compObject = comp?.id ? (session.world.objects.get(comp.id)?.info ?? null) : null;
   const companionPanel = (
@@ -1330,7 +1343,7 @@ export function GameView({
       if (i >= QUICK_SLOTS && !(modern && settings.secondHotbar)) return;
       return activateSlot(i);
     }
-    const toggle = (type: "preferences" | "configuration" | "actions") => setModal((m) => (m?.type === type ? null : { type }));
+    const toggle = (type: "preferences" | "configuration" | "actions" | "war") => setModal((m) => (m?.type === type ? null : { type }));
     switch (a) {
       case "hideInterface":
         if (!modern) return;
@@ -1347,6 +1360,9 @@ export function GameView({
         return toggle("configuration");
       case "actions":
         return toggle("actions");
+      case "war":
+        // Ours: the War window (docs/adr/0021)
+        return toggle("war");
       case "quickEmotes":
         return setEmoteMenu((v) => !v);
       case "friends":
@@ -1800,6 +1816,9 @@ export function GameView({
       case "arena":
         // Ours: "arena join", "arena leave"...; alone, the Arena window (docs/adr/0019-arena-bouts.md)
         return args ? session.shardsCommand(`arena ${args}`) : setModal({ type: "arena" });
+      case "war":
+        // Ours: the War window (docs/adr/0021-factions-and-the-faction-war.md)
+        return openWar();
       case "map":
         return setFullMap((v) => !v);
       case "get":
@@ -2472,6 +2491,7 @@ export function GameView({
           </div>
         )}
         <FriendsNotices link={social} onOpen={() => openTab("friends")} />
+        <BattleBanner store={factionWar} onOpen={openWar} />
         {studying && (
           <div className="study-banner" role="status">
             <span>{studying}</span>
@@ -2543,6 +2563,7 @@ export function GameView({
           />
         )}
         {modal?.type === "arena" && <ArenaDialog status={arena.status} session={session} onClose={() => setModal(null)} />}
+        {modal?.type === "war" && <WarDialog store={factionWar} session={session} onClose={() => setModal(null)} />}
         {modal?.type === "travel" && (
           <TravelDialog here={modal.here} places={modal.places} pvpUntil={pvpUntil} session={session} onClose={() => setModal(null)} />
         )}

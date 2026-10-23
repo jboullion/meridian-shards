@@ -21,6 +21,7 @@ import { readDamageDealt, type DamageDealt } from "./combatHit.ts";
 import { readSpellRefusal, type SpellRefusal } from "./spellRefusal.ts";
 import { readCompanion, type CompanionEvent } from "./companion.ts";
 import { readArena, type ArenaStatus } from "./arenaBouts.ts";
+import { readFactionWar, type FactionWarEvent } from "./factionWar.ts";
 import { readCosmetics, type CosmeticsEvent } from "./cosmetics.ts";
 import { readItemService } from "./itemservice.ts";
 import { MAGIC_SHOW, magicShow, readMagicName } from "./magic.ts";
@@ -290,6 +291,8 @@ export interface SessionEvents {
   companion?: (e: CompanionEvent) => void;
   /** Ours: the arena's mock bouts, where we stand in them, and our records (docs/adr/0019-arena-bouts.md) */
   arena?: (s: ArenaStatus) => void;
+  /** Ours: the Faction War, all of it or the battle alone (docs/adr/0021-factions-and-the-faction-war.md) */
+  factionWar?: (e: FactionWarEvent) => void;
   /** Ours: a tailor's or barber's menu (docs/adr/0012-cosmetics.md) */
   cosmetics?: (e: CosmeticsEvent) => void;
   /** Ours: the abilities we can train, and what 1% of each costs (docs/adr/0016-abilities.md) */
@@ -1157,6 +1160,10 @@ export class GameSession {
             // Ours (arenabouts.kod SendStatus)
             const s = readArena(r, (id) => this.resource(id));
             if (s) this.events.arena?.(s);
+          } else if (uc === UC.FACTION_WAR) {
+            // Ours (factionwar.kod SendWar, SendBattle)
+            const e = readFactionWar(r);
+            if (e) this.events.factionWar?.(e);
           } else if (uc === UC.COMPANION) {
             // Ours (companionbook.kod SendStatus, HealthChanged)
             const e = readCompanion(r, (id) => this.resource(id));

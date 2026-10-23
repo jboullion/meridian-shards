@@ -1,6 +1,6 @@
 # ADR 0021: Factions, the Faction War, and no random PvP
 
-- Status: built (2026-10-22), but for the client's war panel: the prep, renown and the Faction War, no random PvP and its cleanup, Champion's Gifts, Roq's contracts, per-viewer name colours, the battles, the world's reactions and the campaigns.
+- Status: built (2026-10-22): the prep, renown and the Faction War, no random PvP and its cleanup, Champion's Gifts, Roq's contracts, per-viewer name colours, the battles, the world's reactions, the campaigns, and our client's War window and battle banner.
 - Builds on: [ADR 0009](0009-quests.md), quests (its "Renown" section); [ADR 0011](0011-fast-travel.md), the PvP lockout; [ADR 0019](0019-arena-bouts.md), arena bouts; the magic item revamp, where broken items keep their magic and a smith repairs them.
 - Design page, with decisions D1-D28 and a phase tracker: https://claude.ai/artifact/L6bNhsUXTTgXPXk62d1NBF
 
@@ -175,6 +175,13 @@ The game is becoming mostly single-player. So the factions are to drive the worl
     - **The schools:** `Parliament.IsFactionSchool` gives the spell-power and learning bonuses to the same schools as the battle mages: the Duke Qor and Riija, the Princess Shal'ille and Faren, Jonas Kraanan and Jala. Before, the Duke had Kraanan too, the Princess had Jala too, and Jonas had none. Jonas keeps the learning bonus for skills.
     - **Left out:** separate rank-milestone quests. The acts mark the ranks.
 
+16. **Our client shows the war** (phase 5, built 2026-10-22). One message, `UC_FACTION_WAR` (120), in two kinds (layout in [the protocol notes](../research/protocol.md)):
+    - **Kind 2, the battle alone** (`FactionWar.SendBattle`): its state, sides, room, the seconds to the clash or left of the fight, each army's troops standing and raised, and the seconds to the next battle called. It goes to everyone logged on when a battle is called, opens or ends, and every five seconds of a fight (`BroadcastBattle`).
+    - **Kind 1, all of it** (`SendWar`), on our client's `war` (`UC_SHARDS`): our faction, renown, rank, war record, whether our shield is worn and whether we're regrouping; the battle; the war effort; every flag room with its liege, whether it's a town's own pole, at half-staff, or the battle's; the towns, their lieges and any celebration; the last ten battles; and our liege's ledger (`FactionWorld.LedgerOf`, which the spoken ledger now uses too).
+    - **The War window** (`WarDialog.tsx`; J, typed `war`, or the banner): tabs for the war (our service, the battle and the next, the towns), a map of the flag rooms on the realm's grid (their RIDs are the grid: `RID_D4` is 544; the towns are placed by hand beside their capture points), the ledger, and the last battles. It asks for all of it as it opens and again whenever a battle's state changes.
+    - **The battle banner** (`BattleBanner.tsx`) at the top of the view while a battle is called or fought: the place, the two lieges in their shields' colours with their troops standing, and the countdown. It's lit when our liege fights there, and a click opens the window. Our client asks for all of it once at logon, so the banner knows our liege and a battle already under way.
+    - **The lieges' colours** are their soldiers' shields': the Duke purple, the Princess orange, Jonas red.
+
 ## Consequences
 
 - **Dying is much softer.** No death drops your things and none costs skills or XP outside the newbie rules. The cost is broken gear and a smith's bill, which leans on the magic revamp's repairs. Players who used to fear the walk back to a corpse don't have that walk any more.
@@ -243,13 +250,20 @@ The game is becoming mostly single-player. So the factions are to drive the worl
     - the siege called at a Barloque capture point, won, with no pole taken and Tos celebrating;
     - Act V completing;
     - the gift refused without Act IV.
+- **Playtest fixes (shards-server 231aed45; this repo's 5131178), from the 2026-10-22 playtests of the Duke's campaign:**
+  - A lone soldier arriving at a battle was killed in seconds. Now the army of whoever brings a battle to life gathers round them (`SpawnArmies`), and every soldier who reaches the field has eight seconds' grace (`FactionWar.InGrace`, read by `FactionTroop.IsBattleFoe`), which ends if they strike first (`CanMonsterFight` → `EndGrace`).
+  - Acts III and V end with a hand-in to the liege (`auto: false`), so the liege's closing words are heard. Our quest list's row button now shows the closing window too.
+  - The gift lines' missing name, and the muster's "1 minutes".
+- **The War window and the battle banner (2026-10-22).**
+  - shards-server: `protocol.khd UC_FACTION_WAR`; `factionwar.kod` `WarCommand`, `SendWar`, `SendBattle`, `AddBattlePacket`, `BroadcastBattle`; `factionworld.kod LedgerOf`; `flag.kod IsHalfStaff`; `user.kod` "war".
+  - This repo: `packages/world/src/factionWar.ts` (with a test), the session's `factionWar` event, `apps/client/src/game/factionWar.ts`, `ui/WarDialog.tsx`, `ui/BattleBanner.tsx`, the War key (J, settings version 16), the `war` command and the Help entry.
+  - **Tried in our client on the dev server, as Scout (no liege):** the window from J and from `war`; a battle called with the banner counting down to the clash, the armies' numbers once they took the field, the banner gone as the battle ended, and the battle in the window's list; the map of the 38 flag rooms with the battle's marked.
+- **Tried by the playtests:** the Duke's campaign to Act V, battles won and lost and their pay, a war death (the gear broken, the regroup, joining a battle ending it), the Champion's Gift gate, a siege led, won and celebrated, a siege nobody led, a three-win celebration, and the ledger.
 - **Not yet tried in the game:**
-  - a campaign played through, and a siege actually led and fought;
-  - a real war death (the gear breaking, the regroup protection, a smith mending it);
-  - attacking your own side;
-  - a monster death above 50 health;
-  - the gifts, the contracts and the name colours;
-  - a player in a battle: the muster and result messages, the pay, bystanders being turned away, and a lone soldier going for a captain;
-  - a player at a celebration (the boon, the cheers and the look of the revellers and standards), a discount at a merchant, and the ledger as a player hears it.
-
-  Renown, the war death's gear breaking, the anti-grief rules and `MayAttackPlayer` were checked over the maintenance port on Scout. The in-game playtest has to run from this repo, where the meridian MCP server loads.
+  - the Princess's and Jonas's campaigns;
+  - attacking your own side, and a monster death above 50 health;
+  - a smith mending war-broken gear;
+  - the contracts and the name colours;
+  - mourning and the merchants' discounts;
+  - a fight between two players' soldiers;
+  - the War window's service, ledger and half-staff for a player with a liege.
