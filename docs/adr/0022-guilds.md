@@ -1,6 +1,6 @@
 # ADR 0022: Guilds, halls, Fallen Halls and trophies
 
-- Status: partly built (2026-10-22). Built: phase 0, the cleanup (shards-server 146967e0), and phase 1, the halls (f735b043). Neither has been tried in the game client. Phase 2, prestige and the guild bonus (5fb122b5), and the old Necromancer/Hunter scenario's cleanup are built too. Planned: phases 3-7, with the Order of Necromancers (26) as the frame for 4 and 5.
+- Status: partly built (2026-10-22). Built: phase 0, the cleanup (shards-server 146967e0), and phase 1, the halls (f735b043). Neither has been tried in the game client. Phase 2, prestige and the guild bonus (5fb122b5), the old Necromancer/Hunter scenario's cleanup (dbf0e91a) and phase 3, the recruiting boards (not yet committed), are built too. Planned: phases 4-7, with the Order of Necromancers (26) as the frame for 4 and 5.
 - Builds on: [ADR 0021](0021-factions-and-the-faction-war.md), the faction revamp and its no-random-PvP rule; [ADR 0011](0011-fast-travel.md), fast travel's checks; [ADR 0012](0012-cosmetics.md), the dye code and decals; the magic item revamp, whose items the Fallen Halls drop.
 - Design page, with decisions G1-G25, numbered as here and a phase tracker: https://claude.ai/artifact/Nvvnp6oGKoutiwwHpbGvfK
 
@@ -131,6 +131,10 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
 23. **The globes in the nine adventurers' halls become Guild Recruitment boards:** Tos (`toshall`, which holds the master), Barloque, Cor Noth, Jasper, Jixa, Ko'catan, Marion, Raza and Berg. They link to a new `NID_GUILD_RECRUIT` board (`NewsRecruiting`). Inns keep `NID_ANNOUNCEMENTS`. Berg's swapped pair is put right.
 
 24. **One notice per guild.** An Officer or the Leader posts it, and a new one replaces the old. The server heads it with the Leader, member count, hall, prestige and trophy count. Anyone can read it. The notice goes when the guild does.
+    - **As built (phase 3):**
+      - The notice's title is the guild's name, with the poster's title after it.
+      - The header is built each time the notice is read (`NewsRecruiting.GetNewsBody`), so it's never stale. It carries the Commander, the member count, the hall and whether it's open, and the prestige. The trophy count joins in phase 5.
+      - The poster is told the notice is up.
 
 25. **The General News board (`NID_TOS_HALL`) retires,** because the adventurers' halls were its only globes.
 
@@ -280,7 +284,7 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
     - The rent countdown takes the hall back (`AbandonGuildHall`) in place of deleting the guild.
     - `guild_rent_nonpayment`, `guild_rent_due`, Frular's `gcreator_*_til_rent` and the founding mail's RENT paragraph say so; their old translations are gone.
     - Tried over the maintenance port: no hall meant no rent, and 900 owed was cleared; a leased hall accrued rent; a run-out countdown released the hall and kept the guild; and -2000 of credit stayed.
-- **The Necromancer/Hunter scenario's cleanup (27; shards-server, 2026-10-23).** About 1,400 lines out of 30 files.
+- **The Necromancer/Hunter scenario's cleanup (27; shards-server dbf0e91a, 2026-10-23).** About 1,400 lines out of 30 files.
   - **Deleted:**
     - `NecromancerGuild` (`object/passive/guild/`, the whole folder) and its checks in `Guild`, `GuildCommand.ResetCommand` (its `necro` argument and `viNecro_enabled`), the six guild commands (with their refusals) and Frular;
     - `DeadLich`;
@@ -294,3 +298,20 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
   - **Kept:** Brax's rooms, maze, levers and globes, Queen Venya'cyr, the necromancer troops and effigies, Tendrath, and the Champion's Gifts (still undead to Final Rites, and the amulet's illusion slip).
   - **Stale bofs:** the server's `memmap` still held bofs for every class deleted since phase 0 (`GuildLever`, `GuildVote`, `Shatterlock`, `GuildSetPassword`, `NecromancerGuild`, `DeadLich`), so the server went on loading them. They were deleted. Deleting a class's source doesn't remove its bof from `run/server/memmap`.
   - The build was clean, and the dev world reloaded.
+- **Phase 3, the recruiting boards (shards-server, 2026-10-23, not yet committed).**
+  - New `object/passive/news/newsrecr.kod` (`NewsRecruiting`, newsgroup `NID_GUILD_RECRUIT` 21):
+    - `GetNewsPermission`: Lieutenants and up of any guild, and DMs, may write;
+    - `PostNews` keeps one notice per guild (`plGuildNotices`) and titles it with the guild's name;
+    - `GetNewsBody` adds the live header;
+    - `RemoveGuildNotice`, which `Guild.Delete` calls, and `DeleteMail`/`DeleteAllMessages` keep the list tidy.
+  - The nine adventurers' halls: Tos's hall makes the board (in place of the General News `News`), and the other eight link to it, now named "Guild Recruitment". Their old translations are gone. `NID_TOS_HALL` stays, retired (25).
+  - Frular's maturity mail has a RECRUITING paragraph.
+  - **Tried on the dev server over the maintenance port** (the nine halls rebuilt with `Recreate`):
+    - Tos holds the board and Barloque links to it, both named "Guild Recruitment";
+    - a Commander may write and a guildless player only read;
+    - a second post from the same guild replaced the first;
+    - another guild's notice stood beside it, and went when that guild was deleted;
+    - the title read "The Playtesters";
+    - the header read "Led by Commander Shardbot.  Members: 1.  No hall yet.  Prestige: 0."
+  - The notice bodies posted over the maintenance port were blank, because the port passes temporary strings. The client's posts are real strings, as for every globe.
+  - **Not tried in the game client:** reading and posting through the globe window.
