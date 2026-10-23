@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import {
-  ANIMATE, GC, GUILD_GENDER, UC, buildClaimShield, buildGuildCreate, buildGuildObjectCommand, buildGuildPassword, buildGuildRent,
+  ANIMATE, GC, GUILD_GENDER, UC, buildClaimShield, buildGuildCreate, buildGuildObjectCommand, buildGuildRent,
   buildSetRank, buildUserCommand, type GuildInfo,
 } from "@shards/protocol";
 import type { GameSession, GuildEvent } from "@shards/world";
@@ -66,7 +66,6 @@ export function GuildWindow({
   if (info.flags & GC.INVITE) tabs.push("Invite");
   if (info.flags & GC.DISBAND) tabs.push("Guildmaster", "Shield");
   const [tab, setTab] = useState<Tab>("Membership");
-  const [password, setPassword] = useState(info.password ?? "");
   const [confirm, setConfirm] = useState<{ text: string; then: () => void } | null>(null);
   const send = (b: Uint8Array) => session.send(b);
   // guildmem.c / guildshi.c WM_INITDIALOG: the shield patterns and our shield
@@ -74,11 +73,8 @@ export function GuildWindow({
     session.userCommand(UC.GUILD_SHIELDS);
     session.userCommand(UC.GUILD_SHIELD);
   }, [session]);
-  const close = () => {
-    // guildmtr.c WM_DESTROY: a changed hall password goes to the server
-    if (info.password !== null && password.toLowerCase() !== info.password.toLowerCase()) send(buildGuildPassword(password));
-    onClose();
-  };
+  // Halls have no password since ADR 0022 (Lords say "open" for the sanctum), so nothing goes back on close
+  const close = () => onClose();
   const ask = (text: string, then: () => void) => setConfirm({ text, then });
   const pageProps = { session, state, icons, send, ask, onClose: close };
   return (
@@ -90,7 +86,7 @@ export function GuildWindow({
             {tab === "Membership" && <MembersPage {...pageProps} />}
             {tab === "Alliances" && <AlliesPage {...pageProps} />}
             {tab === "Invite" && <InvitePage {...pageProps} />}
-            {tab === "Guildmaster" && <MasterPage {...pageProps} password={password} setPassword={setPassword} />}
+            {tab === "Guildmaster" && <MasterPage {...pageProps} />}
             {tab === "Shield" && <ShieldPage {...pageProps} />}
           </div>
         </div>
@@ -122,12 +118,11 @@ interface PageProps {
   onClose: () => void;
 }
 
-/** guildmem.c: members (red ones logged on), their rank, exile, support for guildmaster, abdicating, leaving */
+/** guildmem.c: members (red ones logged on), their rank, exile, abdicating, leaving */
 function MembersPage({ session, state, icons, send, ask, onClose }: PageProps) {
   const { info, shield } = state;
   const [members, setMembers] = useState(info.members);
   const [selected, setSelected] = useState<number | null>(null);
-  const [vote, setVote] = useState(info.currentVote);
   const me = session.world.player?.id ?? 0;
   const myRank = members.find((m) => m.id === me)?.rank ?? 0;
   const member = members.find((m) => m.id === selected) ?? null;
@@ -186,28 +181,7 @@ function MembersPage({ session, state, icons, send, ask, onClose }: PageProps) {
           Exile
         </Button>
       )}
-      <Text at={[98, 59, 71, 8]}>Currently supporting:</Text>
-      <Text at={[171, 58, 105, 10]} className="sunken">
-        {members.find((m) => m.id === vote)?.name ?? "nobody"}
-      </Text>
-      {!!(f & GC.VOTE) && (
-        <>
-          <Button
-            at={[98, 73, 54, 12]}
-            disabled={!member}
-            onClick={() => {
-              if (!member) return;
-              send(buildGuildObjectCommand(UC.VOTE, member.id));
-              setVote(member.id);
-            }}
-          >
-            Shift support to:
-          </Button>
-          <Text at={[171, 75, 105, 10]} className="sunken">
-            {member?.name ?? ""}
-          </Text>
-        </>
-      )}
+      {/* No votes for leader since ADR 0022: a Leader abdicates, or is succeeded after 30 days away. */}
       {!!(f & GC.ABDICATE) && (
         <>
           <Button
@@ -215,7 +189,7 @@ function MembersPage({ session, state, icons, send, ask, onClose }: PageProps) {
             disabled={!member}
             onClick={() =>
               member &&
-              ask("Are you sure you want to abdicate as guildmaster?", () => {
+              ask("Are you sure you want to step down as leader?", () => {
                 send(buildGuildObjectCommand(UC.ABDICATE, member.id));
                 onClose();
               })
@@ -342,19 +316,17 @@ function InvitePage({ session, send }: PageProps) {
   );
 }
 
-/** guildmtr.c: the hall's password, abandoning the hall, disbanding the guild */
-function MasterPage({ session, state, ask, onClose, password, setPassword }: PageProps & { password: string; setPassword: (p: string) => void }) {
+/** guildmtr.c: abandoning the hall, disbanding the guild (the hall's password went with ADR 0022) */
+function MasterPage({ session, state, ask, onClose }: PageProps) {
   const { info } = state;
   return (
     <>
       <GroupBox at={[4, 4, 272, 48]} label="Guild Hall" />
-      {info.password === null ? (
-        <Text at={[10, 15, 156, 8]}>Your guild does not have a guild hall.</Text>
+      {/* The server offers abandoning only to a guild with a hall (gcaband.kod ResetCommand) */}
+      {info.flags & GC.ABANDON ? (
+        <Text at={[10, 15, 170, 24]}>Say &quot;hall public&quot; or &quot;hall private&quot; in the hall to open or close it to visitors.</Text>
       ) : (
-        <>
-          <Text at={[10, 31, 55, 8]}>Guild Password:</Text>
-          <TextField at={[65, 29, 101, 14]} value={password} onChange={setPassword} maxLength={MAX_GUILD_NAME} />
-        </>
+        <Text at={[10, 15, 156, 8]}>Your guild does not have a guild hall.</Text>
       )}
       {!!(info.flags & GC.ABANDON) && (
         <Button
@@ -448,8 +420,9 @@ function ShieldPage({ state, icons, send }: PageProps) {
 /** guildbuy.c IDD_GUILDCREATE: the name, ten rank names, the secret option and its cost */
 export function GuildCreateDialog({ session, cost, secretCost, onClose }: { session: GameSession; cost: number; secretCost: number; onClose: () => void }) {
   const [name, setName] = useState("");
-  const [male, setMale] = useState(["Initiate", "Member", "Lord", "Hero", "Guildmaster"]);
-  const [female, setFemale] = useState(["Initiate", "Member", "Lady", "Heroine", "Guildmistress"]);
+  // ADR 0022's default rank names, lowest first
+  const [male, setMale] = useState(["Apprentice", "Sir", "Lord", "Lieutenant", "Commander"]);
+  const [female, setFemale] = useState(["Apprentice", "Madame", "Lady", "Lieutenant", "Commander"]);
   const [secret, setSecret] = useState(false);
   const [error, setError] = useState("");
   const rankField = (list: string[], set: (l: string[]) => void, i: number, x: number) => (
@@ -498,10 +471,9 @@ export function GuildCreateDialog({ session, cost, secretCost, onClose }: { sess
   );
 }
 
-/** guildhal.c IDD_GUILDHALLS: a hall (sorted by name, with cost and daily rent) and the guild's password */
+/** guildhal.c IDD_GUILDHALLS: a hall (sorted by name, with cost and daily rent); no password since ADR 0022 */
 export function GuildHallsDialog({ session, halls, onClose }: { session: GameSession; halls: GuildHall[]; onClose: () => void }) {
   const [selected, setSelected] = useState<number | null>(null);
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const name = (h: GuildHall) => session.resource(h.nameRes) ?? "";
   const sorted = [...halls].sort((a, b) => name(a).localeCompare(name(b)));
@@ -521,16 +493,15 @@ export function GuildHallsDialog({ session, halls, onClose }: { session: GameSes
         <Text at={[98, 179, 144, 11]} className="sunken">
           {chosen ? name(chosen) : ""}
         </Text>
-        <Text at={[6, 198, 200, 8]}>The guild password protects certain areas of your guild hall.</Text>
-        <Text at={[6, 213, 55, 8]}>Guild Password:</Text>
-        <TextField at={[60, 211, 94, 12]} value={password} onChange={setPassword} maxLength={MAX_GUILD_NAME} />
+        <Text at={[6, 198, 236, 24]}>Your Lords and above open the hall&apos;s sanctum by saying &quot;open&quot; inside it.</Text>
         <Button
           at={[66, 237, 50, 14]}
           isDefault
           onClick={() => {
             if (selected === null) return;
-            if (!password) return setError("You must specify a guild password.");
-            session.send(buildGuildRent(selected, password));
+            if (!chosen) return setError("Select a guild hall first.");
+            // The protocol still carries a password; the server ignores it
+            session.send(buildGuildRent(selected, ""));
             onClose();
           }}
         >
