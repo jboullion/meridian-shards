@@ -410,3 +410,32 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
     - Kept: 90% damage and 1,200 HP. Two buffed players win; one loses narrowly, so potions or a companion might let a solo player squeak through. **For the other halls:** bosses about 15 above their garrison's level, with their toughness in hit points and damage, not level.
     - The garrison: one maxed player killed one Order soldier (level 185) in about 29 s, losing 32 of 150 HP. Pulling the whole main hall at once would be deadly.
   - **Not tried in the game client:** a real fight against the garrison, with spells, heals and companions; the messages; and how the Order's soldiers and mages look.
+- **Phase 4, the other seven Fallen Halls (shards-server, 2026-10-23, not yet committed).** All eight halls are now Fallen Halls. Seven read-only surveys mapped each hall's rooms, secret door and themed monsters first.
+
+  | Hall | Garrison (level) | Sanctum guard | Boss (level, HP) | Prize | Sanctum door |
+  |---|---|---|---|---|---|
+  | 3 Den of Shadows | 4 Order soldiers, 3 Order illusionists, 3 shadowbeasts (90) | 2 illusionists | Mistress Ysolde, an Order illusionist (105, 630) | 5 | the bridge, sector 2 |
+  | 11 Friends of the Forest | 3 soldiers, 2 Order mages, 2 diseased trees, 2 death spiders, a wolf (105) | a wolf, a death spider | Old Blackroot, a diseased tree (120, 720) | 6 | the floor at column 18, sector 2 |
+  | 20 Muskgate Post | 3 soldiers, 2 mages, 3 ice elementals, 2 wendigos (120) | an ice elemental, a wendigo | Hrimvald, an ice elemental (135, 810) | 6 | a lift, sector 1 |
+  | 7 Old Dwarven Hall | 4 soldiers, 2 mages, 2 daemon skeletons, 2 tusked skeletons (135) | 2 daemon skeletons | Thane Durrek, a giant daemon skeleton (150, 900) | 7 | the steps, sectors 1-6 |
+  | 9 Abandoned Warehouse | 4 soldiers, 3 mages, 3 bandit snipers (150) | 2 soldiers | Captain Vesk, a bandit captain who doesn't flee (165, 990) | 7 | the floor at column 12, sector 2 |
+  | 8 Sewer Hideout | 4 lupoggs, 3 dusk rats, 2 soldiers, a mage (165) | 2 mages | Grisk, the Sewer King, a lupogg king (180, 1,080) | 8 | walls 5-7 |
+  | 13 Slaughtered Command | as above (185) | 2 captain knights | Marshal Corvane (200, 1,200) | 9 | the hidden wall, by speech |
+  | 19 Wetland Fortress | 4 thrashers, 3 soldiers, 3 mages (200) | 2 thrashers | Lieutenant Morvaine, a dark angel (215, 1,290) | 10 | the floor at (5,28-29), sector 6 |
+
+  - Every boss follows Corvane's tuning: about 15 levels above its garrison, five times the usual hit points, and 90% damage. Only Corvane was timed; the lower halls scale with the level, for lower-level players.
+  - **New classes:**
+    - `OrderIllusionist` (a Riija `OrderMage`); `OrderMage` now casts from the classvar `viSchool`, since a subclass's `Constructed` runs before its parent's;
+    - the bosses `FallenIllusionist`, `OldBlackroot` (`monster/evilent/`), `Frostwarden` (`elemental/iceleme/`), `FallenThane` (`skel/gdaemskel/`), `SmugglerCaptain` (`human/bandit/bandcapt/`), `SewerKing` (`lupking/`) and `FallenLieutenant` (`dangel/`).
+  - **Shared changes the surveys called for:**
+    - The halls' secret doors closed themselves after 5-10 seconds, which could seal players in or let the boss out. Each hall's `OpenSanctum` now opens its door for good and `CloseSanctum` shuts it at the reset. Muskgate's door is a lift nobody could climb out of while it stayed down, so it keeps its old cycle, and "open" brings it down (`SanctumWordSaid`).
+    - "open" said in a hall before then says the sanctum is sealed (`FallenHall.SomeoneSaid` â†’ `SanctumWordSaid`). Hall 13 overrides it with its walk-through wall.
+    - A player who logs off in a sanctum and returns after a reset is moved to the hall's door (`InSanctum`, in each hall, checked in `Greet`).
+    - `User.UserMove` asks every room numbered 701-720 `IsMoveOK`; `FallenHall` now answers TRUE (hall 13 had been missing it).
+    - A garrison monster attacks everyone, even kinds that spare good-karma players (ents, wolves), and never fights through walls (dark angels): `Monster.ResetBehaviorFlags` when `piGarrisonLevel` is set.
+    - `ClearDoor` moves only players off a closing door, not monsters.
+    - The Den of Shadows' balcony door from F8 leads straight into its sanctum, so it opens only once the sanctum does (`FallenHall.IsDoorWord`, F8's `SomethingTryGo`).
+    - Every hall lost its chests and wooden boxes, its news ball and foyer rules, and its dead guild classvars. Halls 7 and 19 lost their foyer move checks, and their outer doors open for anyone.
+  - **Left out:** the necromancer effigy. It can't move, it targets any player in the room through walls, and it never deletes its spell timer, so it needs work first. Frogmen spare good-karma players and have their resistances swapped. Napalm slimes cast Earthquake as they die. Bandit snipers fight hand to hand, since they carry axes.
+  - **Tried on a fresh world over the maintenance port** (the hall-13 world is in `run/server/savegame-guild-phase4-hall13-2026-10-23`): in all eight halls a player's entry brought out the 13 at their squares and levels, aggressive; clearing the main hall opened the sanctum; the boss's death cleared the hall and gave the player's guild 2 prestige (16 over the eight); the reset emptied it; no new server errors. Morvaine lost the dark angels' fight-through-walls flag.
+  - **Not tried:** real fights in the lower seven halls; how the sanctum doors look when they stay open; the messages in the client.
