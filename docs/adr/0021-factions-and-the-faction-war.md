@@ -127,8 +127,8 @@ The game is becoming mostly single-player. So the factions are to drive the worl
       - 10% off at the merchants there for members.
 
       A celebration already going is lengthened and spreads to the new town.
-    - **Mourning** (`Mourn`): the liege who lost a town flies the flags of their capital and its capture points at half-staff for two hours, and laments it to whoever is in their hall. Their celebration in that town ends (`EndCelebrationIn`).
-    - **Occupation** (`SyncSentries`): each town's liege keeps two sentries at its pole (`DUTY_SENTRY`), changed with the town. Its merchants sell to that liege's members for 10% less. `Parliament.GetFactionPriceBonus` asks `GetPriceBonus`, and it stacks with a celebration and with the Princess's own 5%.
+    - **Mourning** (`Mourn`): the liege who lost a town flies the flags of their capital and its capture points at half-staff for two hours, and laments it to whoever is in their hall. Any celebration of theirs ends, everywhere: a capital doesn't celebrate under half-staff flags. A town taken by neutrals has fallen to "the unfactioned".
+    - **Occupation** (`SyncSentries`): each town's liege keeps two sentries at its pole (`DUTY_SENTRY`), changed with the town. Its merchants sell to that liege's members for 10% less. A shop belongs to a town by its room's class, or else by its RID, as each town's rooms are numbered together (`TownOf`): many shops and inns are plain rooms. `Parliament.GetFactionPriceBonus` asks `GetPriceBonus`, and it stacks with a celebration and with the Princess's own 5%.
     - **The ledger:** a member who says "ledger" to their liege (`Factions.SomeoneSaid`) hears the ten best of their soldiers. The score is kills + 3 × battles won + battles fought. It's spoken rather than an object in the hall, because a list that long doesn't fit an object's description.
     - **Left out:** the plan's lighting and music moods (they would need our client), and dialogue that changes with the war beyond the lament.
     - **For the admin:** `EndAllCelebrations`, `RaiseFlags`.
@@ -179,7 +179,7 @@ The game is becoming mostly single-player. So the factions are to drive the worl
     - **Kind 2, the battle alone** (`FactionWar.SendBattle`): its state, sides, room, the seconds to the clash or left of the fight, each army's troops standing and raised, and the seconds to the next battle called. It goes to everyone logged on when a battle is called, opens or ends, and every five seconds of a fight (`BroadcastBattle`).
     - **Kind 1, all of it** (`SendWar`), on our client's `war` (`UC_SHARDS`): our faction, renown, rank, war record, whether our shield is worn and whether we're regrouping; the battle; the war effort; every flag room with its liege, whether it's a town's own pole, at half-staff, or the battle's; the towns, their lieges and any celebration; the last ten battles; and our liege's ledger (`FactionWorld.LedgerOf`, which the spoken ledger now uses too).
     - **The War window** (`WarDialog.tsx`; J, typed `war`, or the banner): tabs for the war (our service, the battle and the next, the towns), a map of the flag rooms on the realm's grid (their RIDs are the grid: `RID_D4` is 544; the towns are placed by hand beside their capture points), the ledger, and the last battles. It asks for all of it as it opens and again whenever a battle's state changes.
-    - **The battle banner** (`BattleBanner.tsx`) at the top of the view while a battle is called or fought: the place, the two lieges in their shields' colours with their troops standing, and the countdown. It's lit when our liege fights there, and a click opens the window. Our client asks for all of it once at logon, so the banner knows our liege and a battle already under way.
+    - **The battle banner** (`BattleBanner.tsx`) at the top of the view while a battle is called or fought: the place, the two lieges in their shields' colours with their troops standing, and the countdown. It's lit when our liege fights there, and a click opens the window. Our client asks for all of it once at logon, so the banner knows our liege and a battle already under way, and the server sends it again whenever our faction changes (`Player.NameColorsChanged`).
     - **The lieges' colours** are their soldiers' shields': the Duke purple, the Princess orange, Jonas red.
 
 ## Consequences
@@ -254,6 +254,16 @@ The game is becoming mostly single-player. So the factions are to drive the worl
   - A lone soldier arriving at a battle was killed in seconds. Now the army of whoever brings a battle to life gathers round them (`SpawnArmies`), and every soldier who reaches the field has eight seconds' grace (`FactionWar.InGrace`, read by `FactionTroop.IsBattleFoe`), which ends if they strike first (`CanMonsterFight` → `EndGrace`).
   - Acts III and V end with a hand-in to the liege (`auto: false`), so the liege's closing words are heard. Our quest list's row button now shows the closing window too.
   - The gift lines' missing name, and the muster's "1 minutes".
+- **Fixes from the third playtest (2026-10-22), of phase 5 and the Princess's and Jonas's campaigns:**
+  - Shops and inns that are plain rooms (Marion's smithy and inn, the Tos inn, Barloque's tavern) gave no occupation or celebration discount: `FactionWorld.TownOf` also goes by RID.
+  - A town taken by neutrals made a garbled mourning line: `LiegeName` names no liege "the unfactioned".
+  - A liege's capital could celebrate under half-staff flags: losing a town now ends its celebrations.
+  - The banner stayed unlit for a player who joined a liege while playing: `NameColorsChanged` sends the war again.
+  - A soldier who came to a battle after the first fell in seconds, alone: one who comes once the armies are out brings three of their liege's soldiers (`Reinforce`), as well as the grace.
+  - The Princess's Act IV says Cital ko'Manca keeps the East Tower by day (`koctower.kod` swaps the captains at the eighth and twentieth hours).
+  - The town rooms' status line said "Murderer, Guild and Faction Combat Only": now "Guild and Faction Combat Only".
+  - Our quest window shows a later step's own brief before the quest's progress text, which tells its start.
+  - Kept as it is, the user's choice: guildmates in rival lieges' service can't fight each other in the war.
 - **The War window and the battle banner (2026-10-22).**
   - shards-server: `protocol.khd UC_FACTION_WAR`; `factionwar.kod` `WarCommand`, `SendWar`, `SendBattle`, `AddBattlePacket`, `BroadcastBattle`; `factionworld.kod LedgerOf`; `flag.kod IsHalfStaff`; `user.kod` "war".
   - This repo: `packages/world/src/factionWar.ts` (with a test), the session's `factionWar` event, `apps/client/src/game/factionWar.ts`, `ui/WarDialog.tsx`, `ui/BattleBanner.tsx`, the War key (J, settings version 16), the `war` command and the Help entry.

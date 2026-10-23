@@ -216,7 +216,9 @@ export function QuestDialog({
   let story: string;
   if (state === QUEST_OFFER.OFFER || state === QUEST_OFFER.SOON) story = quest.text.offer;
   else if (state === QUEST_OFFER.READY) story = step >= quest.steps.length ? "Is it done?" : "You're back.";
-  else story = quest.text.progress || current?.brief || "Come back when it's done.";
+  // Past the first step, the step's own brief says what's left: the quest's progress text tells
+  // its start (the first step's brief is the offer)
+  else story = (step > 1 && current?.brief) || quest.text.progress || current?.brief || "Come back when it's done.";
 
   const accept = () => {
     session.shardsCommand(`quest accept ${quest.id}`);
