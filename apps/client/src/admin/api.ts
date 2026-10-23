@@ -194,7 +194,12 @@ export interface QuestRewardsFile {
   oneOf?: { class: string; count?: number; school?: SchoolName }[];
   joinFaction?: "duke" | "princess" | "rebel";
   insignia?: InsigniaName;
-  necroGuild?: boolean;
+  /** Renown with the player's faction, 1 to 100 (ADR 0021) */
+  renown?: number;
+  /** War effort for the player's liege's next battle, 1 to 4 (ADR 0021) */
+  warEffort?: number;
+  /** Prestige for the player's guild, 1 to 20 (ADR 0022) */
+  prestige?: number;
 }
 
 export interface QuestFile {
@@ -203,7 +208,8 @@ export interface QuestFile {
   name: string;
   tier?: QuestTierName;
   replaces?: string[];
-  giver: NpcRef;
+  /** Left out only for a quest taken from the guild window (start "guild") */
+  giver?: NpcRef;
   band: { min: number; max: number };
   requires?: {
     quests?: number[];
@@ -217,20 +223,22 @@ export interface QuestFile {
     guildMaster?: boolean;
     guildShield?: boolean;
     noGuild?: boolean;
+    /** In any guild (ADR 0022) */
+    inGuild?: boolean;
   };
   repeat?: { cooldownHours: number } | null;
   timeLimitMinutes?: number | null;
   /** Not offered for now; one going can be finished (tools/quests/schema.ts) */
   paused?: boolean;
-  /** "death": starts by itself on a death, never from its giver */
-  start?: "death";
+  /** "death": starts by itself on a death, never from its giver. "guild": taken from the guild window, with no giver */
+  start?: "death" | "guild";
   text: { offer: string; progress?: string; complete: string };
   steps: QuestStepFile[];
   rewards: QuestRewardsFile;
 }
 
 export interface QuestStepFile {
-  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune" | "arena" | "train" | "node" | "claim" | "battle" | "siege";
+  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune" | "arena" | "train" | "node" | "claim" | "battle" | "siege" | "fallen";
   auto?: boolean;
   rewards?: QuestRewardsFile;
   spell?: string;
@@ -249,6 +257,8 @@ export interface QuestStepFile {
   arena?: "kraanan" | "death";
   win?: boolean;
   against?: "duke" | "princess" | "rebel";
+  /** fallen: the Fallen Hall, as its RID_ name or number (ADR 0022) */
+  hall?: string | number;
   objective?: string;
   brief?: string;
   target?: string;

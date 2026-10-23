@@ -8,7 +8,7 @@ import { classOf, iconOf, isItem, isMonster, isNpc, isNumberItem, isSkill, isSpe
 
 /** QuestBook's step kinds (questbook.kod QK_*) */
 export const KIND_NUM: Record<StepKind, number> = {
-  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17, arena: 18, train: 19, node: 20, claim: 21, battle: 22, siege: 23,
+  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17, arena: 18, train: 19, node: 20, claim: 21, battle: 22, siege: 23, fallen: 24,
 };
 
 /** The faction a quest needs, as QuestBook reads it: the FACTION_ number, -1 any but neutral, $ none */
@@ -40,7 +40,10 @@ export interface ResolvedItem {
 
 /** QuestBook's special rewards (questbook.kod QRW_*) */
 // 3 was the necromancer guild's founding, retired with the Order (ADR 0022 decision 27)
-export const SPECIAL = { join: 1, insignia: 2, renown: 4, warEffort: 5 } as const;
+export const SPECIAL = { join: 1, insignia: 2, renown: 4, warEffort: 5, prestige: 6 } as const;
+
+/** The giver of a quest taken from the guild window (`start`: "guild"): no NPC */
+const GUILD_WINDOW: ResolvedNpc = { cls: null, placed: 0, name: "the guild window", rids: [] };
 
 const FACTION_NAME = { duke: "Duke Akardius", princess: "Princess Kateriina", rebel: "Jonas and his rebels" } as const;
 
@@ -99,7 +102,7 @@ export interface ResolvedQuest {
   faction: Faction | null;
   /** Quests that, done or going, keep this one from being offered */
   excludes: number[];
-  /** QuestBook's requirement bits (QBQ_*): 1 intriguing, 2 a guild master, 4 a guild shield, 8 no guild, 16 paused (never offered), 32 starts on a death */
+  /** QuestBook's requirement bits (QBQ_*): 1 intriguing, 2 a guild master, 4 a guild shield, 8 no guild, 16 paused (never offered), 32 starts on a death, 64 in a guild, 128 taken from the guild window */
   needs: number;
   /** Offered only while base health is under this (null: no cap) */
   healthBelow: number | null;
@@ -199,7 +202,7 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
     kodText(q.name, `${file}: name`, errs);
     for (const k of ["offer", "progress", "complete"] as const) if (q.text[k]) clientText(q.text[k], `${file}: text.${k}`, errs);
 
-    const giver = npc(q.giver, `${file}: giver`);
+    const giver = q.giver ? npc(q.giver, `${file}: giver`) : GUILD_WINDOW;
     const itemsOf = (list: { class: string; count?: number; school?: keyof typeof SCHOOLS }[] | undefined, where: string): ResolvedItem[] =>
       (list ?? []).map((it, i) => {
         const cls = classOf(w, it.class);
@@ -227,6 +230,10 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
       if (r?.warEffort) {
         special.push([SPECIAL.warEffort, r.warEffort]);
         specialText.push("a stronger army for your liege's next battle");
+      }
+      if (r?.prestige) {
+        special.push([SPECIAL.prestige, r.prestige]);
+        specialText.push(`${r.prestige} prestige for your guild`);
       }
       return {
         xp: (r?.xp ?? 0) + (r?.xpPoints ? xpForPoints(r.xpPoints, q.band.min) : 0),
@@ -288,6 +295,12 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
       // A node step's amount is the node's bit (QuestBook checks the player's GetNodeList)
       const nodeBit = s.kind === "node" && s.node ? w.consts.get(s.node) : undefined;
       if (s.kind === "node" && (nodeBit === undefined || nodeBit <= 0)) errs.push(`${where}: node: no ${s.node} in blakston.khd`);
+      // A fallen step's amount is the hall's room number (FallenHall.BossSlain sends it)
+      const hallRid = s.kind === "fallen" && s.hall !== undefined ? (typeof s.hall === "number" ? s.hall : w.rids.get(s.hall)) : undefined;
+      if (s.kind === "fallen" && (hallRid === undefined || !w.rooms.has(hallRid))) errs.push(`${where}: hall: no room ${s.hall}`);
+      // Nobody to hand a step in to on the guild window: every step there is done by itself
+      if (q.start === "guild" && !(s.auto ?? ACTION_KINDS.includes(s.kind)))
+        errs.push(`${where}: a quest taken from the guild window has no one to hand in to, so its steps must be done by themselves (auto)`);
       const amount =
         s.kind === "attune"
           ? (s.point ?? 0)
@@ -299,7 +312,9 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
               ? FACTION_NUM[s.against!]
               : s.kind === "node"
                 ? (nodeBit ?? 0)
-                : (s.amount ?? (s.kind === "nodes" ? 12 : s.kind === "deposit" ? 1 : 0));
+                : s.kind === "fallen"
+                  ? (hallRid ?? 0)
+                  : (s.amount ?? (s.kind === "nodes" ? 12 : s.kind === "deposit" ? 1 : 0));
       const ridsOf = (list: (string | number)[] | undefined) =>
         (list ?? []).map((r) => {
           const n = typeof r === "number" ? r : w.rids.get(r);
@@ -359,6 +374,8 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
                                                 ? `${s.win ? "Win" : "Fight in"} a battle for your liege`
                                                 : s.kind === "siege"
                                                   ? `Win the siege of ${{ duke: "Tos", princess: "Barloque", rebel: "Jasper" }[s.against!]}`
+                                                : s.kind === "fallen"
+                                                  ? `Drive the Order from ${(hallRid !== undefined && w.rooms.get(hallRid)) || s.hall}`
                                         : arena
                                           ? `${s.win ? "Win" : "Fight"} a mock bout in ${arena.name}`
                                         : "Bond with every mana node");
@@ -373,7 +390,8 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
         inRooms: s.inRooms ?? false,
         count,
         rooms: s.kind === "visit" || s.inRooms ? rooms : [],
-        area,
+        // A fallen step's area is its hall (the tracker's "where")
+        area: s.kind === "fallen" && hallRid !== undefined ? [hallRid] : area,
         objective,
         brief: s.brief ?? "",
         parcel: s.parcel ?? null,
@@ -400,7 +418,15 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
       karmaMax: q.requires?.karmaMax ?? null,
       faction: q.requires?.faction ?? null,
       excludes: q.requires?.notQuests ?? [],
-      needs: (q.requires?.intriguing ? 1 : 0) | (q.requires?.guildMaster ? 2 : 0) | (q.requires?.guildShield ? 4 : 0) | (q.requires?.noGuild ? 8 : 0) | (q.paused ? 16 : 0) | (q.start === "death" ? 32 : 0),
+      needs:
+        (q.requires?.intriguing ? 1 : 0) |
+        (q.requires?.guildMaster ? 2 : 0) |
+        (q.requires?.guildShield ? 4 : 0) |
+        (q.requires?.noGuild ? 8 : 0) |
+        (q.paused ? 16 : 0) |
+        (q.start === "death" ? 32 : 0) |
+        (q.requires?.inGuild ? 64 : 0) |
+        (q.start === "guild" ? 128 : 0),
       healthBelow: q.requires?.healthBelow ?? null,
       renownMin: q.requires?.renown ?? null,
       cooldownSeconds: q.repeat ? Math.round(q.repeat.cooldownHours * 3600) : null,

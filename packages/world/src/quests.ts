@@ -14,7 +14,7 @@ export interface CatalogNpc {
   rooms: { rid: number; name: string }[];
 }
 
-export type QuestStepKind = "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune" | "arena" | "train" | "node" | "claim" | "battle" | "siege";
+export type QuestStepKind = "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune" | "arena" | "train" | "node" | "claim" | "battle" | "siege" | "fallen";
 
 /** How a quest's markers look: gold (main and levelling chains), silver (story), bronze (errands) */
 export type QuestTier = "main" | "story" | "errand";
@@ -70,6 +70,8 @@ export interface CatalogQuest {
   paused?: boolean;
   /** Starts by itself on a death, never from its giver (tools/quests/schema.ts Quest.start) */
   onDeath?: boolean;
+  /** Taken from the guild window ("quest board-accept"), never from an NPC (Quest.start "guild"; ADR 0022) */
+  guildBoard?: boolean;
   text: { offer: string; progress: string; complete: string };
   steps: CatalogStep[];
   rewards: CatalogRewards;

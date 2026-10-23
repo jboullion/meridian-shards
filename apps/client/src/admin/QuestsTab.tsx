@@ -11,10 +11,10 @@ import {
 
 type Act = (what: string, fn: () => Promise<string | void>) => () => void;
 
-const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege"];
+const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen"];
 
 /** The kinds that happen once by doing something: done by themselves unless Auto is unticked */
-const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege"];
+const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen"];
 
 const TIER_LABEL = { main: "Main (gold)", story: "Story (silver)", errand: "Errand (bronze)" } as const;
 
@@ -28,6 +28,7 @@ const NEEDS = [
   ["guildMaster", "A guild master (guild with colours)"],
   ["guildShield", "Carries a guild shield"],
   ["noGuild", "In no guild"],
+  ["inGuild", "In a guild"],
 ] as const;
 
 const blank = (id: number): QuestFile => ({
@@ -90,7 +91,8 @@ export function QuestsTab({ act, needMe, me, catalog }: { act: Act; needMe: () =
     });
 
   const npcName = (r: NpcRef | undefined): string => {
-    if (!r || !list) return "?";
+    if (!r) return "the guild window";
+    if (!list) return "?";
     if ("placed" in r) return list.givers.find((g) => g.key === r.placed)?.name ?? `${r.placed} (missing)`;
     return list.npcs.find((n) => n.className === r.class)?.name ?? r.class;
   };
@@ -228,7 +230,8 @@ function QuestForm({
         <input value={q.key} placeholder={slug(q.name) || "made from the name"} onChange={(e) => set({ key: slug(e.target.value) })} />
       </label>
       <label>
-        Giver <NpcSelect value={q.giver} list={list} onChange={(giver) => giver && set({ giver })} />
+        Giver{" "}
+        {q.start === "guild" ? <em>the guild window</em> : <NpcSelect value={q.giver} list={list} onChange={(giver) => giver && set({ giver })} />}
       </label>
       <div className="row3">
         <label>
@@ -329,6 +332,14 @@ function QuestForm({
         </label>
         <label className="check" title="Never offered by its giver; it starts by itself when a player dies for real and may take it">
           <input type="checkbox" checked={q.start === "death"} onChange={(e) => set({ start: e.target.checked ? "death" : undefined })} /> Starts on death
+        </label>
+        <label className="check" title="No NPC offers it: it's taken from the guild window, and every step must be done by itself (ADR 0022)">
+          <input
+            type="checkbox"
+            checked={q.start === "guild"}
+            onChange={(e) => set(e.target.checked ? { start: "guild", giver: undefined } : { start: undefined, giver: q.giver ?? { class: "" } })}
+          />{" "}
+          From the guild window
         </label>
       </div>
       <label>
@@ -451,6 +462,21 @@ function QuestForm({
           {s.kind === "battle" && (
             <label>
               <input type="checkbox" checked={!!s.win} onChange={(e) => setStep(i, { win: e.target.checked || undefined })} /> only a battle won
+            </label>
+          )}
+          {s.kind === "fallen" && (
+            <label>
+              Fallen Hall{" "}
+              <select value={String(s.hall ?? "")} onChange={(e) => setStep(i, { hall: e.target.value || undefined })}>
+                <option value="">(pick one)</option>
+                {list.rooms
+                  .filter((r) => r.ridName?.startsWith("RID_GUILDH"))
+                  .map((r) => (
+                    <option key={r.rid} value={r.ridName!}>
+                      {r.name}
+                    </option>
+                  ))}
+              </select>
             </label>
           )}
           {s.kind === "siege" && (
@@ -608,9 +634,9 @@ function QuestForm({
             ))}
           </select>
         </label>
-        <label className="check">
-          <input type="checkbox" checked={!!q.rewards.necroGuild} onChange={(e) => set({ rewards: { ...q.rewards, necroGuild: e.target.checked || undefined } })} /> Raises the
-          necromancer guild, with them its master
+        <label title="Prestige for the player's guild, 1 to 20; nothing without a guild (ADR 0022)">
+          Guild prestige{" "}
+          <input type="number" min={0} max={20} value={q.rewards.prestige ?? ""} onChange={(e) => set({ rewards: { ...q.rewards, prestige: num(e.target.value) || undefined } })} />
         </label>
       </div>
 
@@ -706,6 +732,7 @@ function clean(q: QuestFile): QuestFile {
       if (s.kind === "arena") Object.assign(out, { arena: s.arena ?? "kraanan" }, s.win ? { win: true } : {});
       if (s.kind === "battle" && s.win) out.win = true;
       if (s.kind === "siege") out.against = s.against ?? "duke";
+      if (s.kind === "fallen") out.hall = s.hall;
       if (s.kind === "deposit" || s.kind === "health" || (s.kind === "nodes" && s.amount !== undefined && s.amount !== 12)) out.amount = s.amount ?? (s.kind === "health" ? 50 : 1);
       if (s.auto !== undefined && s.auto !== ACTION_KINDS.includes(s.kind) && s.kind !== "talk" && s.kind !== "deliver") out.auto = s.auto;
       const sr = cleanRewards(s.rewards ?? {});
@@ -747,7 +774,9 @@ function cleanRewards(r: QuestRewardsFile): QuestRewardsFile {
     ...(r.oneOf?.length ? { oneOf: r.oneOf } : {}),
     ...(r.joinFaction ? { joinFaction: r.joinFaction } : {}),
     ...(r.insignia ? { insignia: r.insignia } : {}),
-    ...(r.necroGuild ? { necroGuild: true } : {}),
+    ...(r.renown ? { renown: r.renown } : {}),
+    ...(r.warEffort ? { warEffort: r.warEffort } : {}),
+    ...(r.prestige ? { prestige: r.prestige } : {}),
   };
 }
 

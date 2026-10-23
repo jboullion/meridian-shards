@@ -304,7 +304,42 @@ describe("the quest generator", () => {
     expect(g.kod).toContain("0, 2, $, $, 32, $, $, $, $ ]");
     expect(g.catalog.quests[0]!.onDeath).toBe(true);
     expect("onDeath" in g.catalog.quests[1]!).toBe(false);
-    expect(generateFrom(sources([{ ...RATS, start: "dawn" }]), WORLD).errors).toEqual(['cellar-rats.json: start: "death", or left out']);
+    expect(generateFrom(sources([{ ...RATS, start: "dawn" }]), WORLD).errors).toEqual(['cellar-rats.json: start: "death" or "guild", or left out']);
+  });
+
+  it("writes a guild window quest: no giver, its needs bits, a fallen step and a prestige reward (ADR 0022 decision 31)", () => {
+    const { giver: _giver, ...noGiver } = RATS;
+    const daily = {
+      ...noGiver,
+      start: "guild",
+      requires: { inGuild: true },
+      repeat: { cooldownHours: 24 },
+      steps: [{ kind: "fallen", hall: "RID_RAT_CAVE" }],
+      rewards: { xp: 300, prestige: 3 },
+    };
+    const g = generateFrom(sources([daily, { ...RATS, id: 2, key: "other" }]), WORLD);
+    expect(g.errors).toEqual([]);
+    expect(g.kod).toContain("[ 1, qd_1_name, $, 0, 0, 40,");
+    expect(g.kod).toContain("0, 2, $, $, 192, [ [ 6, 3 ] ], $, $, $ ]");
+    expect(g.kod).toContain("[ 24, $, 1, 0, $, 0, qd_1_s1, $, $, qd_1_t1,\r\n               1, $, $, $, 60 ]");
+    const c = g.catalog.quests[0]!;
+    expect(c.guildBoard).toBe(true);
+    expect("guildBoard" in g.catalog.quests[1]!).toBe(false);
+    expect(c.giver.name).toBe("the guild window");
+    expect(c.steps[0]!.objective).toBe("Drive the Order from Rat Cave");
+    expect(c.steps[0]!.rooms.map((r) => r.rid)).toEqual([60]);
+    expect(c.rewards.special).toEqual(["3 prestige for your guild"]);
+
+    const errorsOf = (q: unknown) => generateFrom(sources([q]), WORLD).errors;
+    expect(errorsOf({ ...daily, giver: { class: "TosInnKeeper" } })).toEqual(["cellar-rats.json: giver: a quest taken from the guild window has none"]);
+    expect(errorsOf(noGiver)).toEqual(['cellar-rats.json: giver: { "class": ... } or { "placed": ... }']);
+    expect(errorsOf({ ...daily, steps: [{ kind: "kill", target: "SmallRat" }] })).toEqual([
+      "cellar-rats.json: step 1: a quest taken from the guild window has no one to hand in to, so its steps must be done by themselves (auto)",
+    ]);
+    expect(errorsOf({ ...daily, steps: [{ kind: "fallen" }] })).toEqual(["cellar-rats.json: step 1: hall: the Fallen Hall's RID_ name or number"]);
+    expect(errorsOf({ ...daily, steps: [{ kind: "fallen", hall: "RID_NOWHERE" }] })).toEqual(["cellar-rats.json: step 1: hall: no room RID_NOWHERE"]);
+    expect(errorsOf({ ...daily, requires: { inGuild: true, noGuild: true } })).toEqual(["cellar-rats.json: requires: inGuild and noGuild together"]);
+    expect(errorsOf({ ...daily, rewards: { xp: 300, prestige: 50 } })).toEqual(["cellar-rats.json: rewards.prestige: 1 to 20"]);
   });
 
   it("writes the claim kind (claiming a flagpole, Flagpole.ClaimAttempt)", () => {

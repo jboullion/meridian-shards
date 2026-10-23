@@ -31,11 +31,11 @@ export const ARENAS = {
 } as const;
 export type ArenaName = keyof typeof ARENAS;
 
-export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege"] as const;
+export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
 /** Steps that happen by doing something, once (the guide chains' kinds): done by themselves unless `auto` is false */
-export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege"];
+export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen"];
 
 /** How a quest's markers look: gold for the main and levelling chains, silver for story quests, bronze for errands */
 export const TIERS = ["main", "story", "errand"] as const;
@@ -51,8 +51,9 @@ export type Tier = (typeof TIERS)[number];
  * `skills`, or done at once if we know them all), attune to a portal (`point`, docs/adr/0011; a
  * quest that starts with one isn't offered once we're attuned), fight a mock bout in an arena
  * (`arena`; with `win`, only a bout won: docs/adr/0019-arena-bouts.md), fight in a lieges' battle
- * (`battle`; with `win`, only one won), or win the campaign's siege on a rival's capital (`siege`,
- * `against`: saying "march" to one's liege on the step calls it; docs/adr/0021).
+ * (`battle`; with `win`, only one won), win the campaign's siege on a rival's capital (`siege`,
+ * `against`: saying "march" to one's liege on the step calls it; docs/adr/0021), or be there when a
+ * Fallen Hall's boss falls, having struck it (`fallen`, `hall`; docs/adr/0022 decision 31).
  */
 export interface QuestStep {
   kind: StepKind;
@@ -82,6 +83,8 @@ export interface QuestStep {
   win?: boolean;
   /** siege: the faction besieged */
   against?: "duke" | "princess" | "rebel";
+  /** fallen: the Fallen Hall, as its RID_ name or number ("RID_GUILDH3", the Den of Shadows) */
+  hall?: string | number;
   /** The tracker's line ("Rats slain"); made up from the step when left out */
   objective?: string;
   /** What the giver says as the step begins (the offer window, the log); the quest's offer for the first */
@@ -130,6 +133,8 @@ export interface QuestRewards {
   renown?: number;
   /** War effort for the player's liege's next battle, 1 to 4 (util/factionwar.kod; ADR 0021) */
   warEffort?: number;
+  /** Prestige for the player's guild, 1 to 20 (Guild.AddPrestige; nothing without a guild; ADR 0022) */
+  prestige?: number;
 }
 
 export interface Quest {
@@ -140,7 +145,8 @@ export interface Quest {
   name: string;
   /** The markers' colour (default story) */
   tier?: Tier;
-  giver: NpcRef;
+  /** Who offers it; left out only for a quest taken from the guild window (`start`: "guild") */
+  giver?: NpcRef;
   /**
    * What it replaces from before (docs/adr/0009-quests.md 7.3): old QuestEngine templates' QST_ID_
    * names, and the guide chain (HP*_CHAIN) it ports. A player who finished one has this done
@@ -171,6 +177,8 @@ export interface Quest {
     guildShield?: boolean;
     /** In no guild */
     noGuild?: boolean;
+    /** In any guild (ADR 0022 decision 31) */
+    inGuild?: boolean;
   };
   /** null: once. Else again after the cooldown */
   repeat?: { cooldownHours: number } | null;
@@ -182,9 +190,11 @@ export interface Quest {
   paused?: boolean;
   /**
    * "death": never offered by its giver; it starts by itself when a player dies for real and may
-   * take it (QuestBook's QBQ_ON_DEATH need, PlayerDied: the Underworld's node)
+   * take it (QuestBook's QBQ_ON_DEATH need, PlayerDied: the Underworld's node). "guild": no NPC
+   * offers it; it's taken from the guild window (QBQ_ON_BOARD, "quest board-accept"; ADR 0022
+   * decision 31), so it has no giver and every step is done by itself
    */
-  start?: "death";
+  start?: "death" | "guild";
   timeLimitMinutes?: number | null;
   text: { offer: string; progress?: string; complete: string };
   steps: QuestStep[];
@@ -252,7 +262,9 @@ export function checkQuestShape(q: unknown, where: string): string[] {
   if (q.tier !== undefined && !TIERS.includes(q.tier as Tier)) errs.push(`${where}: tier: one of ${TIERS.join(", ")}`);
   if (q.replaces !== undefined && (!Array.isArray(q.replaces) || !q.replaces.every((r) => typeof r === "string" && /^(QST_ID_\w+|HP\d+_\w+_CHAIN)$/.test(r))))
     errs.push(`${where}: replaces: QST_ID_ or HP*_CHAIN names`);
-  npcRef(q.giver, `${where}: giver`, errs);
+  if (q.start === "guild") {
+    if (q.giver !== undefined) errs.push(`${where}: giver: a quest taken from the guild window has none`);
+  } else npcRef(q.giver, `${where}: giver`, errs);
   if (!isObj(q.band) || !isInt(q.band.min, 0, 10000) || !isInt(q.band.max, 0, 10000) || q.band.max < q.band.min)
     errs.push(`${where}: band: { min, max } with max >= min`);
   if (q.requires !== undefined && q.requires !== null) {
@@ -268,13 +280,14 @@ export function checkQuestShape(q: unknown, where: string): string[] {
       if (r.notQuests !== undefined && (!Array.isArray(r.notQuests) || !r.notQuests.every((x) => Number.isInteger(x)))) errs.push(`${where}: requires.notQuests: quest ids`);
       if (r.healthBelow !== undefined && (!isInt(r.healthBelow, 1, 10000) || (isObj(q.band) && isInt(q.band.min) && r.healthBelow <= q.band.min)))
         errs.push(`${where}: requires.healthBelow: a health above the band's min`);
-      for (const k of ["intriguing", "guildMaster", "guildShield", "noGuild"] as const) if (r[k] !== undefined && typeof r[k] !== "boolean") errs.push(`${where}: requires.${k}: true or false`);
+      for (const k of ["intriguing", "guildMaster", "guildShield", "noGuild", "inGuild"] as const) if (r[k] !== undefined && typeof r[k] !== "boolean") errs.push(`${where}: requires.${k}: true or false`);
+      if (r.inGuild && r.noGuild) errs.push(`${where}: requires: inGuild and noGuild together`);
     }
   }
   if (q.repeat !== undefined && q.repeat !== null && (!isObj(q.repeat) || typeof q.repeat.cooldownHours !== "number" || q.repeat.cooldownHours < 0 || q.repeat.cooldownHours > 24 * 365))
     errs.push(`${where}: repeat: null, or { cooldownHours }`);
   if (q.paused !== undefined && typeof q.paused !== "boolean") errs.push(`${where}: paused: true or false`);
-  if (q.start !== undefined && q.start !== "death") errs.push(`${where}: start: "death", or left out`);
+  if (q.start !== undefined && q.start !== "death" && q.start !== "guild") errs.push(`${where}: start: "death" or "guild", or left out`);
   if (q.timeLimitMinutes !== undefined && q.timeLimitMinutes !== null && !isInt(q.timeLimitMinutes, 1, 60 * 24 * 30))
     errs.push(`${where}: timeLimitMinutes: null, or minutes`);
   if (!isObj(q.text) || !isText(q.text.offer) || !isText(q.text.complete) || (q.text.progress !== undefined && typeof q.text.progress !== "string"))
@@ -301,6 +314,7 @@ function checkRewards(r: Record<string, unknown>, where: string): string[] {
   if (r.insignia !== undefined && !((r.insignia as string) in INSIGNIA)) errs.push(`${where}.insignia: one of ${Object.keys(INSIGNIA).join(", ")}`);
   if (r.renown !== undefined && !isInt(r.renown, 1, 100)) errs.push(`${where}.renown: 1 to 100`);
   if (r.warEffort !== undefined && !isInt(r.warEffort, 1, 4)) errs.push(`${where}.warEffort: 1 to 4`);
+  if (r.prestige !== undefined && !isInt(r.prestige, 1, 20)) errs.push(`${where}.prestige: 1 to 20`);
   return errs;
 }
 
@@ -378,6 +392,9 @@ function checkStepShape(s: unknown, where: string): string[] {
       break;
     case "siege":
       if (!["duke", "princess", "rebel"].includes(s.against as string)) errs.push(`${where}: against: duke, princess or rebel`);
+      break;
+    case "fallen":
+      if (!(isText(s.hall) || isInt(s.hall, 1))) errs.push(`${where}: hall: the Fallen Hall's RID_ name or number`);
       break;
   }
   return errs;

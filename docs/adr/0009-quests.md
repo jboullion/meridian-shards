@@ -504,6 +504,15 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
   - A quest file's `"start": "death"` sets the `QBQ_ON_DEATH` need (32). Its giver never offers it, and the catalogue says `onDeath`, so Suggested for you leaves it out.
   - `Underworld.NewDeath` (a real death: a player's corpse) posts `QuestBook.PlayerDied`. That starts each such quest `CanOffer` allows (death) while the log has room.
   - The Skull's Five Fires (263) explains the Underworld's brazier puzzle. Once it's done, or the node is bonded, it never comes back. Its giver (Xiana, whose voice it speaks in) is only for the catalogue.
+- **Guild quests** (2026-10-23, [ADR 0022](0022-guilds.md) decision 31):
+  - **`requires.inGuild`:** the `QBQ_IN_GUILD` need (64), any guild member (`MeetsNeeds`). It can't go with `noGuild`.
+  - **`"start": "guild"`:** the `QBQ_ON_BOARD` need (128). No NPC offers it, and it has no `giver`; it's resolved as "the guild window", and the catalogue says `guildBoard`. Every step must be done by itself, since there's no one to hand in to.
+    - It's taken from the guild window: `quest board` sends `UC_QUEST_OFFERS` with NPC 0 (`SendBoard`), and `quest board-accept <id>` starts it (`BoardAccept`), both with no NPC near. `CanOffer` and `MeetsNeeds` take `board`, as they take `death`.
+    - `BoardState` gives the guild window a quest's state for a player: not offered, offered, taken, or done with the seconds until it's offered again.
+  - **The `fallen` kind** (`QK_FALLEN` 24): be in a Fallen Hall when its boss falls, having struck it (`hall`, its room, as the step's amount). `FallenHall.BossSlain` calls `QuestBook.FallenHallCleared` for every such player. A kill step on the boss wouldn't do: it credits only the killing blow and the killer's group.
+  - **The `prestige` reward** (`QRW_PRESTIGE` 6, 1-20): prestige for the player's guild (`Guild.AddPrestige`); nothing without a guild.
+  - The eight daily hall quests (320-327) are the first: `fallen-daily-*.json`.
+  - The dashboard's quest tab edits all four. It now keeps renown and war effort rewards when it saves a quest, which it used to drop, and it no longer offers the retired necromancer guild reward.
 - **The Vale of Sorrows** (`feyforst.kod`, `feyforst/c2.kod`):
   - **The gate is back:** the fey node shows only while all eight rooms are very good or all very evil. The elhai (good) or dirhai (evil) node is the same `NODE_FAERIE`. Its karma check (`FeyNode.LashOut`) stays off, so anyone may bond either way.
   - **Locks** (`FeyForest.CastLock`): casting Detect Evil (Shal'ille) in a vale room locks it good, and Detect Good (Qor) locks it evil, for a Meridian day (`FEY_LOCK_TIME`, 2 real hours). Potions don't count.

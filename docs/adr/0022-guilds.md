@@ -186,7 +186,7 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
 
 ### The Order of Necromancers (decided 2026-10-23)
 
-26. **The Order of Necromancers took the Fallen Halls** (planned, for phases 4 and 5).
+26. **The Order of Necromancers took the Fallen Halls** (planned, for phases 4 and 6; phase 4 built).
     - **The story:** the eight halls fell to Queen Venya'cyr's Order of Necromancers, the guild of the old Necromancer/Hunter scenario.
     - **The garrisons:** each Fallen Hall's garrison is drawn from the Order's forces (`NecromancerTroop`, `NecromancerEffigy`, dark angels) alongside the hall's own theme, and each boss is one of the Queen's lieutenants.
     - **The capstone:** a guild that holds all eight Fallen Hall trophies may open the way down through the lever maze under Castle Brax (`LichMaze`, RID 825) to the Inner Sanctum (RID 749). The sanctum is itself a fallen guild hall: it is built on hall 15's map, the one hall never sold.
@@ -211,6 +211,59 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
 
     **What stays:** Brax's rooms, maze, levers and spy globes, Queen Venya'cyr, the necromancer troops and effigies, Tendrath and his quests, and the gifts.
 
+### Finding the Fallen Halls (planned 2026-10-23)
+
+Nothing pointed players at the Fallen Halls: they sit behind their old doors, and Frular no longer lists them. Players already don't need a guild hall to fight them. What was missing was a way to find them and a reason to come back. The user chose four parts: a Guild Master beside each faction leader for the guild story, daily hall quests in the guild window, announcements when a hall falls, and the guild window as the place for repeatable guild quests.
+
+28. **Three Guild Masters, the project's first new NPCs.** One stands beside each liege, so players who come to talk to their faction find their faction's Guild Master too:
+
+    | Guild Master | Beside | Room | Square to try |
+    |---|---|---|---|
+    | the Duke's | Duke Akardius | `RID_DUKE3` 952, `duke3.kod` | 28,32 or 28,36 |
+    | the Princess's | Princess Kateriina | `RID_CASTLE2C` 852, `castle2c.kod` | 32,21 or 33,25 |
+    | the rebels' | Jonas D'Accor, the Jasper tavern | `RID_JAS_BAR` 371, `jastavrn.kod` | 8,6 or 7,7 |
+
+    - **The class:** `GuildMaster is Human`, an NPC (`AI_NPC | AI_NOMOVE | AI_NOFIGHT`, `MOB_NOFIGHT | LISTEN | RECEIVE`), with one subclass per faction. It's built from player body parts, as `FactionTroop` and `Companion` are, and dressed in its liege's colours (`SetClothes`, `SetDefaultClothes`, `SetTroopLegs`), with its own face, hair and a fixed weapon or none. So it needs no new art. A bespoke sprite can come later through the Sprites tab as a new `.bgf`.
+    - **Placing:** each room's `CreateStandardObjects` makes its Guild Master (`NewHold`). The lieges come from `Parliament.RecreateLieges`, but the Guild Masters stay put whoever holds power.
+    - **Who they serve (default, to confirm):** every Guild Master serves any guild member, whatever their faction, so guildless and neutral players aren't shut out. A Guild Master's faction only colours its words. A neutral player can use any of the three.
+    - **Names (placeholders, to confirm):** Master Aldric Vane for the Duke, Dame Seraphine Dawnmere for the Princess, and Brannoc the Red for Jonas.
+
+29. **The guild story: one quest per Fallen Hall, in ladder order,** from any Guild Master (`"giver": {"class": "GuildMaster"}`; `IsClass` matches the subclasses). The chain is "The Order of the Fallen Halls": the Guild Master tells how the Order of Necromancers took the old guild halls, and sends the guild up the ladder.
+    - **Quest 1, "A Guild's Calling":** needs a guild. The Guild Master explains the Fallen Halls and sends the player to the Den of Shadows' door (a `visit` step).
+    - **Quests 2-9:** each a first clear of the next hall (the new `fallen` step, 31), with the hall's HP gate (30) and the previous quest as its prerequisite. Each story text reveals a piece of the Order's plan and names the hall's lieutenant.
+    - **The end:** the last points at the Inner Sanctum capstone (26), which waits for phase 6's trophies.
+    - **Rewards:** XP (`xpPoints`) and shillings, rising with the ladder, and guild prestige (the new `prestige` reward, 31).
+
+30. **Daily hall quests, the "End Game" dungeons.** Each Fallen Hall has a repeatable quest with a 24-hour cooldown, so guilds have a reason to run them every day. They are offered in the guild window (32), not by an NPC.
+    - **Gate:** a guild member (the new `inGuild` requirement, 31) with at least the hall's base max HP. The Den of Shadows opens at 80 HP, the Friends of the Forest at 90, and the other six at 100.
+    - **Rank:** each hall has a difficulty rank shown with its name, so players know which are harder. Rank I is the Den of Shadows, II the Friends of the Forest, III Muskgate Post, IV the Old Dwarven Hall, V the Abandoned Warehouse, VI the Sewer Hideout, VII the Slaughtered Command and VIII the Wetland Fortress. All eight are marked End Game.
+    - **Done:** when the hall's boss dies with the player present who struck it (31). It completes on its own, with no turn-in.
+    - **Rewards:** XP and shillings by rank. Prestige already comes from the boss itself (16).
+    - **Unlock (default, to confirm):** a hall's daily is offered once the player has done that hall's story quest (29), so the story leads into the dailies.
+    - **Halls reset more often:** a Fallen Hall re-arms every Meridian day (two real hours), but its daily quest pays once a real day. A hall can be run again for its loot.
+
+31. **Quest system additions** (`util/questbook.kod`, the generated `questdefs.kod`, and the tool in `tools/quests`):
+    - **`requires.inGuild`:** a new needs bit, `QBQ_IN_GUILD` 64, checked in `MeetsNeeds` (`GetGuild <> $`). Today there are only guild master, guild shield and no guild.
+    - **A `fallen` step** (`QK_FALLEN` 24), naming a hall's room. `FallenHall.BossSlain` sends the quest book `FallenHallCleared` for each present player who struck the boss, which calls `ActionDone`. A kill step on the boss class wouldn't do: it credits only the killing blow and its group.
+    - **`start: "guild"`:** a quest with no NPC giver. A new needs bit (128) keeps NPCs from offering it, the way death quests work. New `QuestCommand` verbs, `quest board` (the guild quests the player may take, past `CanOffer`) and `quest board-accept <id>`, skip `NpcNear` and go to `StartQuest`. The tool makes `giver` optional when `start` is "guild", in `schema.ts`, `validate.ts` and `catalog.ts`.
+    - **A `prestige` reward** for the story quests, through `Guild.AddPrestige`.
+    - **Also to update:** `kodWriter.ts`'s columns and the tests that check them, the admin dashboard's quest tab, and ADR 0009.
+
+32. **The guild window gets a Fallen Halls tab and a Guild Quests tab** (`GuildDialogs.tsx`). The story stays with the Guild Masters; the window holds what's current and repeatable.
+    - **Fallen Halls:** one row per hall, with its rank, name, minimum HP, where its door is, and its state:
+      - held by the Order;
+      - its sanctum open;
+      - or cleared today, and by which guild;
+      - and when it resets.
+
+      Each row also shows the player's own daily: offered (with an Accept button), taken, or done until a time. The window replaces the "live board" globe idea.
+    - **Guild Quests:** the guild's other repeatable quests, empty until there are some.
+    - **The packet:** a new `UC_FALLEN_HALLS` (121), built in `FallenHalls` like `UC_FACTION_WAR`. It's asked for with the command "halls" (`UC_SHARDS` â†’ `ShardsCommand` â†’ `SYS@GetFallenHalls`). It's pushed to guild members on every change (a boss's death, a sanctum opening, a reset).
+    - **The countdown:** the client counts down from "seconds to reset", sent with the packet. That means working out the time to the next game day from the game hour.
+    - **Accepting:** the window sends "quest board-accept <id>". The page area is small (`dlu` 284Ã—160), so eight rows need a list.
+
+33. **World announcements when a hall falls.** `FallenHalls.Announce` tells every logged-on player, as `FactionWar.Announce` does: "[Halls] The Testers have driven the Order from the Den of Shadows." With no guild present it names the player who struck last. The client's `chatChannel.ts` `ANNOUNCEMENT` pattern gains `[Halls]`, so these lines stay in the Server tab instead of the combat tab. No announcement for the resets (default, to confirm): one every two hours would be noise.
+
 ## Order to build
 
 0. **Cleanup:** 5, 6, 3, 2 and 1 (rank names and the moved powers). Also two bugs: `RID_GUILDH_MAX` is 716, so the foyer check in `user.kod` skips halls 17, 19 and 20; and Berg's globes.
@@ -218,9 +271,16 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
 2. **Prestige and the guild bonus:** 20, 21 and 10.
 3. **Recruiting boards:** 23 to 25.
 4. **Fallen Halls:** 12 to 16, with the Order's forces as their garrisons (26), one hall at a time, starting with the Slaughtered Command.
-5. **Trophies:** 17 to 19, and the Inner Sanctum capstone (26).
-6. **Cloaks:** 22, the art and the client overlay.
-7. **Client:** the guild window (`GuildDialogs.tsx`). This means the new rank names, no Vote, and a Hall tab with the public toggle, chests, prestige and trophies. The recruiting board reads like any news globe.
+5. **Finding the Fallen Halls** (28-33), in three parts:
+   - **5a, the server:**
+     - the quest system additions (31) and the eight daily hall quests (30);
+     - the announcements (33);
+     - the `UC_FALLEN_HALLS` packet and the "halls" command.
+   - **5b, the Guild Masters:** the three NPCs (28) and the story chain (29).
+   - **5c, the client:** the guild window's Fallen Halls and Guild Quests tabs (32), and `[Halls]` in the announcement pattern.
+6. **Trophies:** 17 to 19, and the Inner Sanctum capstone (26).
+7. **Cloaks:** 22, the art and the client overlay.
+8. **Client:** the rest of the guild window (`GuildDialogs.tsx`). This means the new rank names, no Vote, and a Hall tab with the public toggle, chests, prestige and trophies. The recruiting board reads like any news globe.
 
 ## Consequences
 
@@ -439,3 +499,31 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
   - **Left out:** the necromancer effigy. It can't move, it targets any player in the room through walls, and it never deletes its spell timer, so it needs work first. Frogmen spare good-karma players and have their resistances swapped. Napalm slimes cast Earthquake as they die. Bandit snipers fight hand to hand, since they carry axes.
   - **Tried on a fresh world over the maintenance port** (the hall-13 world is in `run/server/savegame-guild-phase4-hall13-2026-10-23`): in all eight halls a player's entry brought out the 13 at their squares and levels, aggressive; clearing the main hall opened the sanctum; the boss's death cleared the hall and gave the player's guild 2 prestige (16 over the eight); the reset emptied it; no new server errors. Morvaine lost the dark angels' fight-through-walls flag.
   - **Not tried:** real fights in the lower seven halls; how the sanctum doors look when they stay open; the messages in the client.
+- **Phase 5a, finding the Fallen Halls: the server (shards-server and this repo, 2026-10-23, not yet committed).** The user started 5a without changing the defaults in 28-33.
+  - **The quest system** (31; ADR 0009 has the details):
+    - `requires.inGuild` (`QBQ_IN_GUILD` 64);
+    - `"start": "guild"` (`QBQ_ON_BOARD` 128), a quest with no giver taken from the guild window. `quest board` sends the board's offers as `UC_QUEST_OFFERS` with NPC 0, `quest board-accept <id>` takes one, and `QuestBook.BoardState` gives a quest's state for the window;
+    - the `fallen` step (`QK_FALLEN` 24, `QuestBook.FallenHallCleared`, sent from `FallenHall.BossSlain` for each player there who struck the boss);
+    - the `prestige` reward (`QRW_PRESTIGE` 6).
+    - None of them needed a new column in the generated table.
+  - **The eight daily hall quests** (30): `quests/fallen-daily-*.json`, ids 320-327, "Rank I: The Den of Shadows" to "Rank VIII: The Wetland Fortress".
+    - Each is for a guild member at 80, 90 or 100 base HP, repeats every 24 hours, and is one `fallen` step.
+    - Rewards: 0.5 to 0.85 `xpPoints` and 500 to 2,250 shillings, rising with the rank.
+    - Unlocking a daily after its hall's story quest waits for 5b, which makes the story quests.
+  - **Each hall** gives the window its rank (`viRank`), base health (`viMin_health`), daily quest (`viDaily_quest`) and door (`vrDoor`), and keeps who cleared it since its reset (`poClearedGuild`, `poClearedBy`).
+  - **The guild window's data** (32): `UC_FALLEN_HALLS` 121, built by `FallenHalls.SendHalls`. It's asked for with "halls" (`User.ShardsCommand`) and sent after `board-accept`. `FallenHalls.Broadcast` pushes it to every guild member online when a sanctum opens, a hall is cleared or a hall resets. The seconds to the reset come from the clock (`SecondsToReset`), with a Meridian day of two real hours. The layout is in `docs/research/protocol.md`.
+  - **Announcements** (33): `FallenHalls.Announce`, to everyone online:
+    - "[Halls] %s%q has driven the Order of Necromancers from %s." for one guild;
+    - "... and their allies ..." for several;
+    - or the player's name when no guild struck the boss.
+  - **The tool** (`tools/quests`): the schema, validation (a guild window quest's steps must be auto; the `fallen` step's objective is "Drive the Order from <hall>"), the catalogue's `guildBoard`, a new test, and `fallen` in the client's step kinds. The dashboard's quest tab edits the four additions, and now keeps renown and war effort rewards, which it used to drop on save.
+  - **Tried on the dev server over the maintenance port**, with two players listening through the AI playtester's headless body (`tools/agent/_listen.tmp.ts`, temporary):
+    - a guild member took the Den of Shadows' and the Wetland Fortress's dailies from the board, and a guildless player was refused;
+    - a player at 25 base HP wasn't offered the Den's (it asks 80);
+    - clearing the Den completed only the Den's quest, with 3,281 XP and 500 shillings, and its state became done for 86,397 seconds;
+    - the guild gained the boss's 2 prestige, and both players heard the announcement;
+    - no server errors.
+  - **Two test traps:**
+    - A guild made over the maintenance port has no name, because `quote` strings are temporary. Its announcement went out with an empty name and broke both test clients' connections.
+    - `FallenHall` and `SendHalls` now treat a guild with no name as none. To name a test guild, set its message of the day (`SetGuildMOTD`), which stores a real string, then point `vrName` at that string.
+  - **Not tried:** reading the new packet in a client, which waits for 5c's reader.

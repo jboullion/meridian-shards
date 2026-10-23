@@ -34,6 +34,8 @@ export function buildCatalog(quests: ResolvedQuest[], _givers: ResolvedGiver[], 
     ...(q.needs & 16 ? { paused: true } : {}),
     // Only when it starts on a death (QBQ_ON_DEATH, 32): no NPC offers it
     ...(q.needs & 32 ? { onDeath: true } : {}),
+    // Only when it's taken from the guild window (QBQ_ON_BOARD, 128): no NPC offers it either
+    ...(q.needs & 128 ? { guildBoard: true } : {}),
     timeLimitMinutes: q.timeLimitSeconds === null ? null : q.timeLimitSeconds / 60,
     text: q.text,
     steps: q.steps.map((s) => ({
