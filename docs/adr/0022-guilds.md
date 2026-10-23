@@ -89,6 +89,52 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
 
 16. **Rewards:** the boss drops a magic item from the item revamp and shillings; its trophy (17) is earned; every guild that took part gets 2 prestige.
 
+    **The phase 4 plan (decided 2026-10-23, all four of the recommended options):**
+    - **The room class:** `FallenHall is MonsterRoom` replaces `GuildHall` for the eight.
+      - Each hall keeps its `.roo`, exits and sector or wall doors. It loses the chests, the news ball, the rank and foyer rules and the hall-is-safe rules.
+      - Frular no longer lists them, because only `GuildHall`s join `plGuild_halls`.
+      - `FallenHall` carries shims for the names the hall files share with `GuildHall` (`plGuild_doors`, `plEntrance`, `ptEntrance`, `ClearDoor`, `TimeStampDoor`, `InFoyer`, `CanEnter`, the door sounds), and for the calls that F8 (the Den of Shadows' balcony) and Ko'catan south (the Slaughtered Command's porch) make into their halls.
+      - A room's class only changes when the room is built, so this needs a fresh world.
+    - **A high-end ladder.** Each hall is harder than the last, at about these levels:
+
+      | Hall | Level |
+      |---|---|
+      | Den of Shadows | 90 |
+      | Friends of the Forest | 105 |
+      | Muskgate Post | 120 |
+      | Old Dwarven Hall | 135 |
+      | Abandoned Warehouse | 150 |
+      | Sewer Hideout | 165 |
+      | Slaughtered Command | 185 |
+      | Wetland Fortress | 200 |
+
+      Each boss is 1.5 to 2 times its garrison. The Queen's capstone (26) comes above them all. *Changed 2026-10-23 after timed fights (As built, phase 4): each boss is about 15 levels above its garrison, with its toughness in hit points and damage.*
+    - **The sanctum holds the boss.** Each hall's old secret door (its own `OpenSecretDoor`, stairs, lift or wall) becomes the way in. It opens once the garrison in the main hall has fallen.
+    - **A fixed garrison,** tuned for about three strong players.
+      - Each hall lists its forces as class, square and role.
+      - They are spawned on the first entry after a reset, placed as `FactionWar.PlaceTroop` places troops, and kept from being tidied away (`SetDontDispose`).
+      - They never regenerate (`pbGenerateMonsters` FALSE).
+    - **The reset** comes on `System.NewGameDay`, through a lazy `FallenHalls` singleton. A hall with players in it resets when the last one leaves.
+    - **The Order's forces:**
+      - an Order soldier: a `NecromancerTroop` subclass that hates every player, since the troop's own rules spare the unshielded;
+      - a new Order mage: Qor or Riija spells, after `FactionMage.SetBattleSchool`;
+      - the effigy, with its treasure bug fixed (it has `viTreasure_type = $`, so it drops nothing);
+      - dark angels, only as a boss's guards in the larger halls.
+    - **Themes alongside the Order:**
+      - Den of Shadows: Riija casters, shadowbeasts and reflections.
+      - Friends of the Forest: evil ents, death spiders, wolves and effigies.
+      - Muskgate Post: ice elementals, the wendigo and snow rats.
+      - Old Dwarven Hall: skeletons and spirits as the dwarves' dead.
+      - Abandoned Warehouse: bandits and snipers, smuggling the Order's relics.
+      - Sewer Hideout: lupoggs, dusk rats and bandits.
+      - Slaughtered Command: undead knights and captains.
+      - Wetland Fortress: thrashers, frogmen and napalm slimes, with a Dark Angel lieutenant.
+
+      The bosses are named after `icelech.kod` (`vbNamedMob`, own names, raised level and hit points).
+    - **The boss's drop:** a guaranteed magic item, carried in its inventory so it drops at death. Its tier rises with the ladder: moderate low down, potent in the middle, and a chance of enormous at the top (`ItemAttribute.AddToItem` with `iPower`). It drops shillings as well.
+      - Killing the boss clears the hall: every guild that struck it gets 2 prestige.
+    - **Build order:** the shared parts and the Slaughtered Command end to end, then a playtest, then the other seven in batches.
+
 ### Trophies and prestige
 
 17. **One trophy per guild for each listed creature** (`Monster.GetTrophyId`, set on the class):
@@ -298,7 +344,7 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
   - **Kept:** Brax's rooms, maze, levers and globes, Queen Venya'cyr, the necromancer troops and effigies, Tendrath, and the Champion's Gifts (still undead to Final Rites, and the amulet's illusion slip).
   - **Stale bofs:** the server's `memmap` still held bofs for every class deleted since phase 0 (`GuildLever`, `GuildVote`, `Shatterlock`, `GuildSetPassword`, `NecromancerGuild`, `DeadLich`), so the server went on loading them. They were deleted. Deleting a class's source doesn't remove its bof from `run/server/memmap`.
   - The build was clean, and the dev world reloaded.
-- **Phase 3, the recruiting boards (shards-server, 2026-10-23, not yet committed).**
+- **Phase 3, the recruiting boards (shards-server 0c0de565, 2026-10-23).**
   - New `object/passive/news/newsrecr.kod` (`NewsRecruiting`, newsgroup `NID_GUILD_RECRUIT` 21):
     - `GetNewsPermission`: Lieutenants and up of any guild, and DMs, may write;
     - `PostNews` keeps one notice per guild (`plGuildNotices`) and titles it with the guild's name;
@@ -315,3 +361,52 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
     - the header read "Led by Commander Shardbot.  Members: 1.  No hall yet.  Prestige: 0."
   - The notice bodies posted over the maintenance port were blank, because the port passes temporary strings. The client's posts are real strings, as for every globe.
   - **Not tried in the game client:** reading and posting through the globe window.
+- **Phase 4, the Fallen Halls: the shared parts and the Slaughtered Command (shards-server, 2026-10-23, not yet committed).** The other seven halls are still guild halls.
+  - New `room/ghall/fallenhall.kod` (`FallenHall is MonsterRoom`), built first in the folder:
+    - states `READY`, `HELD`, `SANCTUM` and `CLEARED` (`piState`);
+    - `GetGarrison` (the subclass's `[class, row, col, role]`, the roles `FALLEN_ROLE_HALL`, `_SANCTUM` and `_BOSS` in `blakston.khd`) and the classvars `viGarrison_level`, `viBoss_level`, `viBoss_hp_percent`, `viBoss_damage_percent` and `viPrize_seed`;
+    - `SpawnGarrison` on the first player in after a reset. The boss carries the prize: `TreasureType.GenerateItemAtt` at `viPrize_seed`, unrolled (`raw`), from the necromancer treasure. It drops as the boss dies.
+    - `LeaveHold` keeps the lists. The last of the hall's guard gone calls `StartSanctum` (`OpenSanctum` in the subclass), and the boss gone calls `BossSlain`: 2 prestige, once, to each guild with a member present who struck it (`WasStruckBy`, so spells count).
+    - `NewGameDay` resets an empty hall at once (`ResetHall`), and otherwise sets `pbResetDue` for `LastUserLeft`.
+    - The door shims: `plGuild_doors`, `plEntrance`, `ptEntrance`, `TimeStampDoor`, `CloseEntranceDoor`, `ClearDoor` and the door sounds. The outer doors open for anyone, and `CanEnter`, `GetGuildOwner` and `IsDoorWord` answer as for an open, unowned hall.
+    - Not a `GuildHall`, so it isn't in Frular's list, isn't safe, and has no chests or news ball.
+  - New `util/fallenhalls.kod` (`FallenHalls`, `SYS@GetFallenHalls`, made on demand). Each hall adds itself as it's built, and `System.NewGameDay` passes the day on. Over the maintenance port, `send object <FallenHalls> NewGameDay` resets them all.
+  - **The Order's forces:**
+    - `Monster.SetGarrisonStrength(level, hp, damage_percent)` sets offence, defence, damage and hit points for a level (`piGarrisonLevel`, which `GetLevel` returns, so kill XP follows it) and keeps the monster from being tidied away. `damage_percent` scales the damage alone.
+    - `FactionTroop.pbHuntsAll`: hates every player, the nearest most, and leaves other monsters be.
+    - New `OrderSoldier` (a `NecromancerTroop`) and `OrderMage` (a `FactionMage` of the Order, casting Qor's spells).
+    - New `FallenMarshal` (a `CaptainKnight`), Marshal Corvane, the Slaughtered Command's boss.
+    - Soldier shields and war deaths ignore the Order's kills (`soldshld.kod`, `Player.IsWarDeath`), since it isn't a liege.
+  - **Hall 13, the Slaughtered Command (`GuildHall13 is FallenHall`):**
+    - level 185; the boss at level 200 with five times the hit points (1,200) and 90% damage (12-18), after the timed fights below; the prize at difficulty 9;
+    - the main hall: four Order soldiers, two Order mages, two half knights and two tusked skeletons;
+    - the sanctum, behind the old secret wall (columns 26 and 27): two captain knights and Marshal Corvane;
+    - "open" said beside the wall goes through it once the hall's guard has fallen, and back out at any time;
+    - the chests are gone. Ko'catan south's porch check still works through `CanEnter`.
+  - The effigy's treasure fix waits for a hall that uses effigies.
+  - **Tried on the dev server over the maintenance port** (a fresh world; the old one is in `run/server/savegame-before-guild-phase4-2026-10-23`):
+    - the first player in brought out all 13 at the planned squares, at level 185 with 222 hit points, and the boss carrying a magic short sword;
+    - a level-1 player at the wall was killed by the guard;
+    - "open" was refused while the guard stood. With it dead, the hall went to `SANCTUM` and "open" took the player into the sanctum;
+    - the boss struck and killed by a Testers member: `CLEARED`, Testers 0 to 2 prestige, and the sword on the floor;
+    - a day turned with players inside set `pbResetDue`, and their leaving reset the hall; the next entry brought the garrison back; a day turned on an empty hall reset it at once;
+    - the porch from Ko'catan south still let a player in.
+  - **Tuning the boss (2026-10-23)**, with timed fights through the AI playtester's headless body (`tools/agent/_bossfight.tmp.ts`, temporary). The fighters were maxed: 150 HP, 99 in every combat skill, plate, a knight's shield and helm, and a hammer. They were buffed with Bless, Super Strength, Magic Shield and Armor of Gort at spell power 99, which high-level players are expected to use.
+    - **The goal (the user's):** a boss almost impossible solo and killable by two; tough halls that aren't impossible.
+    - **What we learned:**
+      - A monster's level isn't on the player's 150-HP scale. It sets offence and defence (4 x level + 8 x aim or agility), damage (level / 15 to level / 10) and hit points (1.2 x level).
+      - At level 300 (offence and defence 1,600, damage 20-30) Corvane hit a maxed player about 96% of the time, and was hit about a third of the time. He killed a lone fighter in about 20 s, and a pair in under 50 s, losing only 18% of his health.
+      - Armour takes a flat amount off each hit: about 8-9 for plate, shield and helm, and about 2 more for Gort. So small damage changes matter a lot. At 8-12 damage an armoured player barely lost health; at 13-20 one lost about 5-6 HP a second.
+      - Knights resist slashing by 60% and bludgeoning by 40%, so hammers and maces beat swords against them.
+      - Each death costs a test fighter max HP and drops its gear; the harness restores both before every fight.
+    - **The settings and results** (all at level 200):
+
+      | Damage | HP | Duo, buffed | Solo, buffed |
+      |---|---|---|---|
+      | 60% (8-12) | 960 | won in about 75 s, untouched | 5 min in, boss at 33% and player untouched |
+      | 80% (10-16) | 960 | won in about 70 s, tank at 117 of 150 | won in about 130 s, at 72 of 150 |
+      | 90% (12-18) | 1,200 | won in about 80 s, tank at 92 of 150 | died at about 155 s, boss at 18% |
+
+    - Kept: 90% damage and 1,200 HP. Two buffed players win; one loses narrowly, so potions or a companion might let a solo player squeak through. **For the other halls:** bosses about 15 above their garrison's level, with their toughness in hit points and damage, not level.
+    - The garrison: one maxed player killed one Order soldier (level 185) in about 29 s, losing 32 of 150 HP. Pulling the whole main hall at once would be deadly.
+  - **Not tried in the game client:** a real fight against the garrison, with spells, heals and companions; the messages; and how the Order's soldiers and mages look.
