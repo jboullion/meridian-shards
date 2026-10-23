@@ -126,8 +126,6 @@ export interface QuestRewards {
   joinFaction?: "duke" | "princess" | "rebel";
   /** The player's guild shield is embossed with this sign */
   insignia?: Insignia;
-  /** The necromancer guild is established, with the player its master (the Lich in the Inner Sanctum) */
-  necroGuild?: boolean;
   /** Renown with the player's faction, 1 to 100 (the faction revamp; nothing for a neutral) */
   renown?: number;
   /** War effort for the player's liege's next battle, 1 to 4 (util/factionwar.kod; ADR 0021) */
@@ -171,7 +169,7 @@ export interface Quest {
     guildMaster?: boolean;
     /** Carries a guild shield */
     guildShield?: boolean;
-    /** In no guild (raising the necromancer guild makes the player its master) */
+    /** In no guild */
     noGuild?: boolean;
   };
   /** null: once. Else again after the cooldown */
@@ -301,7 +299,6 @@ function checkRewards(r: Record<string, unknown>, where: string): string[] {
       errs.push(`${where}.${k}: [{ class, count?, school? }]`);
   if (r.joinFaction !== undefined && !["duke", "princess", "rebel"].includes(r.joinFaction as string)) errs.push(`${where}.joinFaction: duke, princess or rebel`);
   if (r.insignia !== undefined && !((r.insignia as string) in INSIGNIA)) errs.push(`${where}.insignia: one of ${Object.keys(INSIGNIA).join(", ")}`);
-  if (r.necroGuild !== undefined && typeof r.necroGuild !== "boolean") errs.push(`${where}.necroGuild: true or false`);
   if (r.renown !== undefined && !isInt(r.renown, 1, 100)) errs.push(`${where}.renown: 1 to 100`);
   if (r.warEffort !== undefined && !isInt(r.warEffort, 1, 4)) errs.push(`${where}.warEffort: 1 to 4`);
   return errs;

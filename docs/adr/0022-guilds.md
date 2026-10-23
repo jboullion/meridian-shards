@@ -1,6 +1,6 @@
 # ADR 0022: Guilds, halls, Fallen Halls and trophies
 
-- Status: partly built (2026-10-22). Built: phase 0, the cleanup (shards-server 146967e0), and phase 1, the halls (f735b043). Neither has been tried in the game client. Planned: phases 2-7, paused until the faction revamp work lands.
+- Status: partly built (2026-10-22). Built: phase 0, the cleanup (shards-server 146967e0), and phase 1, the halls (f735b043). Neither has been tried in the game client. Phase 2, prestige and the guild bonus (5fb122b5), and the old Necromancer/Hunter scenario's cleanup are built too. Planned: phases 3-7, with the Order of Necromancers (26) as the frame for 4 and 5.
 - Builds on: [ADR 0021](0021-factions-and-the-faction-war.md), the faction revamp and its no-random-PvP rule; [ADR 0011](0011-fast-travel.md), fast travel's checks; [ADR 0012](0012-cosmetics.md), the dye code and decals; the magic item revamp, whose items the Fallen Halls drop.
 - Design page, with decisions G1-G25, numbered as here and a phase tracker: https://claude.ai/artifact/Nvvnp6oGKoutiwwHpbGvfK
 
@@ -44,6 +44,11 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
 
 4. **An inactive guild loses its hall, not itself.** When no member has logged on within `USER_INACTIVE_TIME`, the hall is released (`AbandonGuildHall`). The guild keeps its name, trophies and prestige.
 
+   **Rent is only for a hall** (decided 2026-10-23).
+   - A guild without a hall accrues no rent, and owes nothing (`Guild.AccrueRent`); rent it has prepaid stays to its credit.
+   - Unpaid rent costs the guild its hall, never its charter. The warnings and Frular's lines say so.
+   - Before this, a hall-less guild still built up rent and was disbanded for it, which undid this decision.
+
 ### Halls
 
 5. **No conquest.** Out go: `GuildLever` (`gldlever.kod`); `GuildLeverFlipped`, `CanRaidGuildhall`, `ConquerTimer`, `WarnGuildMembers`, `AreDefensesDown`/`DefensesUp`/`DefensesDown` and the `STATUS_RAIDED`/`STATUS_CONQUERED` branches in `ghall.kod` (and the overrides in `guildh10` and `guildh12`); `GuildHallConquered` and the last-raid properties in `guild.kod` and `necguild.kod`; the abandon check in `gcaband.kod`; `pbGuildHallRaids` and `piGuildHallRaidDelay` in `settings.kod`; the raid help text. `GuildWarNews` stays: it records war declarations, not raids.
@@ -63,7 +68,7 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
    - **Who may use them:** only the owner guild, from each chest's rank up (`CanUseChest`). That includes looking inside (`User.UserObjectContents`). Allies and visitors may not use them. An unowned hall's chests are open to anyone, as before.
    - The Vault isn't always in the sanctum; placing it there is left for when the halls are revisited.
 
-10. **Chests get a size limit that prestige raises:** 50 items, plus 25 per prestige tier, up to 150 (a count in `ReqNewHold`, alongside bulk and weight). A chest already over its limit keeps its contents but takes nothing new.
+10. **Chests get a size limit that prestige raises:** 50 items, plus 25 per prestige tier, up to 150 (`Guild.GetChestLimit`). `StorageBox.ReqNewHold` asks `GuildHall.ChestHasRoom` after the rank check, and a stack counts once (`GetItemCount`). A chest already over its limit keeps its contents but takes nothing new. Admins aren't limited.
 
 11. **The recall stone** (`GuildRecallStone`).
     - **Who gets one:** a Member or higher of a guild with a hall says "recall stone" in the hall. One is carried at a time. It's tinted in the guild's first colour.
@@ -102,12 +107,16 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
       - a world trophy, 10;
       - a Fallen Hall cleared, 2 to each guild that took part;
       - kills that earned the guild bonus, 1 per 50, at most 5 a day.
-    - **Tiers** at 0, 50, 150, 300 and 500 set the chest limit (10). That's its only use for now.
+    - **Tiers** at 0, 50, 150, 300 and 500 (`GetPrestigeTier`) set the chest limit (10). That's its only use for now. Reaching a tier tells the guild's online members.
+    - **Seeing it:** any member says "prestige" in the hall.
+    - **The daily cap** counts real days (`GetTime() / 86400`).
 
 ### The guild bonus
 
 21. **+20% experience for monster kills with a guildmate.**
-    - **When it applies:** in `AdvancementCheck`, when another member of your guild is in the room, in the monster's `plAttackers`, and on another account.
+    - **When it applies:** in `AdvancementCheck`, when another member of your guild is in the room and has struck the monster (`Player.HasGuildmateOn`).
+    - **Who struck it:** `Monster.plStruckBy` (`WasStruckBy`), a new list of the players who struck it, at most 15. `plAttackers` is kept only for event mobs, and the dragons and the lich use it for their own rewards.
+    - **Other accounts:** an account has only one character in the game at a time, so two guildmates in a room are always two accounts. No check is needed.
     - **How much:** 20% of the kill XP, before the flat item and monster bonuses.
     - **What the player sees:** "Guild member questing bonus experience: +X" after the usual XP message.
     - **What doesn't count:** quest XP, allied guilds, and arena kills.
@@ -125,14 +134,41 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
 
 25. **The General News board (`NID_TOS_HALL`) retires,** because the adventurers' halls were its only globes.
 
+### The Order of Necromancers (decided 2026-10-23)
+
+26. **The Order of Necromancers took the Fallen Halls** (planned, for phases 4 and 5).
+    - **The story:** the eight halls fell to Queen Venya'cyr's Order of Necromancers, the guild of the old Necromancer/Hunter scenario.
+    - **The garrisons:** each Fallen Hall's garrison is drawn from the Order's forces (`NecromancerTroop`, `NecromancerEffigy`, dark angels) alongside the hall's own theme, and each boss is one of the Queen's lieutenants.
+    - **The capstone:** a guild that holds all eight Fallen Hall trophies may open the way down through the lever maze under Castle Brax (`LichMaze`, RID 825) to the Inner Sanctum (RID 749). The sanctum is itself a fallen guild hall: it is built on hall 15's map, the one hall never sold.
+      - Its ten levers, whose effects are shuffled, and the four spy globes become the dungeon's puzzle, reshuffled every Meridian day.
+      - The fight with Queen Venya'cyr there earns a capstone trophy, worth more prestige than a Fallen Hall.
+      - Queen Venya'cyr stays a world trophy (17), and Tendrath's quest 169 still has players kill her as now.
+      - How the capstone fight differs from that kill is settled when it's built.
+    - **The lore:** the Order's founding mails, the Queen's lines, the hunger and tribute warnings, and the Watcher's journal in the Brax Arena are the source text. They are kept in git history when the code goes (27).
+
+27. **The old Necromancer/Hunter scenario's code goes** (cleanup, 2026-10-23). It has been unreachable since the faction revamp:
+    - nothing creates the Ghostly Remains (`DeadLich`);
+    - no live quest founds the Order;
+    - the amulet and sword spawners are commented out;
+    - the two artifacts are now Champion's Gifts (ADR 0021 decision 11).
+
+    **What goes:**
+    - the Order's guild class (`NecromancerGuild`) and the guild commands' checks for it;
+    - the Order's quest template and its QuestBook and QuestEngine prize (`QRW_NECRO_GUILD`, `EstablishNecromancerGuild`);
+    - `DeadLich`;
+    - `NecromancerBalance`'s artifact generator, hunger balancing and PK statistics;
+    - the sword-against-amulet PvP branches and kill announcements.
+
+    **What stays:** Brax's rooms, maze, levers and spy globes, Queen Venya'cyr, the necromancer troops and effigies, Tendrath and his quests, and the gifts.
+
 ## Order to build
 
 0. **Cleanup:** 5, 6, 3, 2 and 1 (rank names and the moved powers). Also two bugs: `RID_GUILDH_MAX` is 716, so the foyer check in `user.kod` skips halls 17, 19 and 20; and Berg's globes.
 1. **Halls:** 7, 8, 9, 11 and 4.
 2. **Prestige and the guild bonus:** 20, 21 and 10.
 3. **Recruiting boards:** 23 to 25.
-4. **Fallen Halls:** 12 to 16, one hall at a time, starting with the Slaughtered Command.
-5. **Trophies:** 17 to 19.
+4. **Fallen Halls:** 12 to 16, with the Order's forces as their garrisons (26), one hall at a time, starting with the Slaughtered Command.
+5. **Trophies:** 17 to 19, and the Inner Sanctum capstone (26).
 6. **Cloaks:** 22, the art and the client overlay.
 7. **Client:** the guild window (`GuildDialogs.tsx`). This means the new rank names, no Vote, and a Hall tab with the public toggle, chests, prestige and trophies. The recruiting board reads like any news globe.
 
@@ -149,7 +185,7 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
 
 - Each Fallen Hall's theme, garrison and boss, and how hard they are.
 - The cloak's art and where the client draws it.
-- Rent: halls still pay `viQuality × 50` an hour, doubled on non-PK servers. Should it change now that halls can't be lost?
+- Rent's amount: halls still pay `viQuality × 50` an hour, doubled on non-PK servers. Whether to charge rent at all was settled under decision 4.
 - What prestige buys beyond chest space.
 
 ## As built
@@ -216,3 +252,45 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
     - A compile that failed partway left `kodbase.txt` with forward references and its classes out of order, and `bc` then crashed on every file. It was rebuilt from a good copy's class order (`deploy/.stage/gamedata/kodbase.txt`) with the current entries.
     - Files built during the bad run held stale IDs (`player.kod` didn't find the stone), so they were rebuilt.
   - **Not tried in the game client:** how the new chests look and where they stand, the messages, and the dialogs.
+- **Phase 2, prestige and the guild bonus (shards-server 5fb122b5, 2026-10-22).**
+  - `player.kod`: `GUILD_BONUS_XP_PERCENT` (20), the bonus in `AdvancementCheck` (its own `AddXP`, then "Guild member questing bonus experience: +X"), and `HasGuildmateOn`.
+  - `monster.kod`: `plStruckBy` and `WasStruckBy`, kept in `AssessDamage`.
+  - `guild.kod`: `piPrestige`, `GetPrestige`, `GetPrestigeTier`, `GetChestLimit`, `AddPrestige` and `GuildBonusKill`. Frular's maturity mail mentions prestige.
+  - `ghall.kod`: `ChestHasRoom` and "prestige". `storebox.kod`: `GetItemCount`, and the room check in `ReqNewHold`.
+  - **Tried on the dev server over the maintenance port:**
+    - the tiers and chest limits from 0 to 499 prestige;
+    - 50 bonus kills giving a point, and 300 giving only today's 5;
+    - a common chest refusing a 51st mace, then taking more after the guild passed 50 prestige;
+    - Shardbot killing an orc struck by both him and Scout: 99 XP with Scout in the room, 83 without (83 plus a fifth).
+  - **Not tried in the game:** a real fight with two players, and the messages.
+  - The build was clean.
+  - Removed a stale `m Towns` forward reference from `kodbase.txt`, left by an earlier build; it made `LoadKodBase` warn on every boot.
+- **Fixes from the phases 0-2 playtest (shards-server 5fb122b5, 2026-10-22).**
+  - **The hall icon:** halls showed "PvP Combat Allowed". `GuildHall.SendRoomIcons` now shows the safe room's icon. The halls aren't made `ROOM_NO_COMBAT`, because that would also stop members casting buffs on one another (`PersonalEnchantment`).
+  - **Hall 17** had `ROOM_GUILD_PK_ONLY` in place of the sanctuary flag, and now has `ROOM_SANCTUARY`. The running world was set by hand; a fresh one gets it when the hall is built.
+  - **Frular's ALLIES paragraph** said allies enter "as if it were their own". It now matches decision 7: allies of the named rank and higher, and never your chests.
+  - **"hall public" from a rank below Lieutenant** now says who may do it, instead of nothing. This wasn't tried: the test hall had been given up.
+  - **Not bugs:**
+    - a disbanded guild object stays until the next save's garbage collection;
+    - a Leader has no renounce command, by design, so a raw command does nothing;
+    - the rent window still lists the eight halls phase 4 turns into Fallen Halls;
+    - texts that didn't show came from a stale `dist/assets/rsc0000.rsb`.
+  - **Rent only for halls (2026-10-23):**
+    - `AccrueRent` charges nothing without a hall and clears any debt, though prepaid credit stays.
+    - The rent countdown takes the hall back (`AbandonGuildHall`) in place of deleting the guild.
+    - `guild_rent_nonpayment`, `guild_rent_due`, Frular's `gcreator_*_til_rent` and the founding mail's RENT paragraph say so; their old translations are gone.
+    - Tried over the maintenance port: no hall meant no rent, and 900 owed was cleared; a leased hall accrued rent; a run-out countdown released the hall and kept the guild; and -2000 of credit stayed.
+- **The Necromancer/Hunter scenario's cleanup (27; shards-server, 2026-10-23).** About 1,400 lines out of 30 files.
+  - **Deleted:**
+    - `NecromancerGuild` (`object/passive/guild/`, the whole folder) and its checks in `Guild`, `GuildCommand.ResetCommand` (its `necro` argument and `viNecro_enabled`), the six guild commands (with their refusals) and Frular;
+    - `DeadLich`;
+    - the QuestEngine's founding quest and its checks (`Q_R2_NUM_AMULETS`, `Q_R2_NECRO_GUILD_ACTIVE`), `QN_PRIZETYPE_ESTABLISH_NECROGUILD` and `QRW_NECRO_GUILD`;
+    - `System`'s `poNecromancerBalance`, its PK counters and its creation;
+    - the sword-against-amulet PvP branches in `Player` (`AllowBattlerAttack`, `KilledSomething`, `Killed`), with `UserKilled`'s `Sword`/`Amulet` messages;
+    - the amulet's `OrderOfNecromancersDisbanded`;
+    - the commented-out intruder warnings in the maze and the Necropolis;
+    - the quest tool's `necroGuild` reward (this repo).
+  - **Kept as empty stubs** for a saved world: `NecromancerBalance` (`util/necbal.kod`) and `NecroGuildQuest`. The first reload of a saved world logs their dropped properties and timer once.
+  - **Kept:** Brax's rooms, maze, levers and globes, Queen Venya'cyr, the necromancer troops and effigies, Tendrath, and the Champion's Gifts (still undead to Final Rites, and the amulet's illusion slip).
+  - **Stale bofs:** the server's `memmap` still held bofs for every class deleted since phase 0 (`GuildLever`, `GuildVote`, `Shatterlock`, `GuildSetPassword`, `NecromancerGuild`, `DeadLich`), so the server went on loading them. They were deleted. Deleting a class's source doesn't remove its bof from `run/server/memmap`.
+  - The build was clean, and the dev world reloaded.

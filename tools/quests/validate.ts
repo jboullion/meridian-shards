@@ -39,7 +39,8 @@ export interface ResolvedItem {
 }
 
 /** QuestBook's special rewards (questbook.kod QRW_*) */
-export const SPECIAL = { join: 1, insignia: 2, necroGuild: 3, renown: 4, warEffort: 5 } as const;
+// 3 was the necromancer guild's founding, retired with the Order (ADR 0022 decision 27)
+export const SPECIAL = { join: 1, insignia: 2, renown: 4, warEffort: 5 } as const;
 
 const FACTION_NAME = { duke: "Duke Akardius", princess: "Princess Kateriina", rebel: "Jonas and his rebels" } as const;
 
@@ -218,10 +219,6 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
       if (r?.insignia) {
         special.push([SPECIAL.insignia, INSIGNIA[r.insignia]]);
         specialText.push(`the sign of ${r.insignia === "shalille" ? "Shal'ille" : r.insignia[0]!.toUpperCase() + r.insignia.slice(1)} on your guild shield`);
-      }
-      if (r?.necroGuild) {
-        special.push([SPECIAL.necroGuild, 0]);
-        specialText.push("the necromancer guild, with you its master");
       }
       if (r?.renown) {
         special.push([SPECIAL.renown, r.renown]);

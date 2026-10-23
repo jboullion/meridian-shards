@@ -2,7 +2,7 @@
 title: "Guild halls show \"PvP Combat Allowed\" although fighting inside is now banned"
 severity: minor
 category: "other"
-status: new
+status: fixed
 reported: 2026-10-22T18:53:51.852Z
 character: "Scout"
 room: "The Hall of Explorers [guildh2.roo, RID 702]"
