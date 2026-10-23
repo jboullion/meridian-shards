@@ -52,3 +52,6 @@ ReferenceServers/
 
 # The emblem cutout's working files (tools/icons/cutout-emblem.py)
 tools/icons/.cutout/
+
+# The Playwright MCP server's logs and screenshots (playtests in a real browser)
+.playwright-mcp/
