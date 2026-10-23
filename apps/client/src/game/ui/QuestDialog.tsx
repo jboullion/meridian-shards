@@ -104,9 +104,12 @@ export function QuestDialog({
       }
       return x.state;
     };
-    const fromList = (command: "accept" | "turnin", id: number) => {
-      session.shardsCommand(`quest ${command} ${id}`);
-      setSent((t) => new Set(t).add(id));
+    const fromList = (command: "accept" | "turnin", x: QuestOffer) => {
+      session.shardsCommand(`quest ${command} ${x.id}`);
+      setSent((t) => new Set(t).add(x.id));
+      // A hand-in shows what comes next, or the giver's closing words and the reward, as the
+      // quest's own Complete does
+      if (command === "turnin") setView({ kind: "after", id: x.id, step: x.step });
     };
     // A row's button: Accept an offer, or hand in a step that's ready (Complete on the last)
     const rowButton = (x: QuestOffer, state: number) => {
@@ -121,7 +124,7 @@ export function QuestDialog({
           // its own click: neither picking the row nor opening the quest
           onMouseDown={(e) => e.stopPropagation()}
           onDoubleClick={(e) => e.stopPropagation()}
-          onClick={() => fromList(state === QUEST_OFFER.OFFER ? "accept" : "turnin", x.id)}
+          onClick={() => fromList(state === QUEST_OFFER.OFFER ? "accept" : "turnin", x)}
         >
           {label}
         </button>
@@ -197,6 +200,7 @@ export function QuestDialog({
           )
         )}
         <div className="mk-buttons">
+          {back && <Button onClick={back}>Back</Button>}
           <Button isDefault onClick={onClose}>OK</Button>
         </div>
       </Window>
