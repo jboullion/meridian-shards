@@ -11,6 +11,7 @@ import { useCompanion, type CompanionStore } from "./companion.ts";
 import { useArena, type ArenaStore } from "./arenaBouts.ts";
 import { ArenaDialog } from "./ui/ArenaDialog.tsx";
 import type { FactionWarStore } from "./factionWar.ts";
+import type { FallenHallsStore } from "./fallenHalls.ts";
 import { WarDialog } from "./ui/WarDialog.tsx";
 import { BattleBanner } from "./ui/BattleBanner.tsx";
 import { CompanionPanel } from "./ui/CompanionPanel.tsx";
@@ -227,12 +228,14 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, cosmetics, training, appraisal, sellable, companion, arena, factionWar, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, cosmetics, training, appraisal, sellable, companion, arena, factionWar, fallenHalls, offers, serverPrefs, latency,
 }: {
   /** Ours: the arenas' mock bouts (docs/adr/0019-arena-bouts.md) */
   arena: ArenaStore;
   /** Ours: the Faction War, for the War window and the battle banner (docs/adr/0021) */
   factionWar: FactionWarStore;
+  /** Ours: the Fallen Halls and the guild window's quests (docs/adr/0022) */
+  fallenHalls: FallenHallsStore;
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
   /** The game options the server keeps for us (CF_* flags), null until it has said */
@@ -2826,7 +2829,9 @@ export function GameView({
             onClose={() => setChess(null)}
           />
         )}
-        {guildState && <GuildWindow session={session} state={guildState} icons={icons} onClose={() => setGuildState(null)} />}
+        {guildState && (
+          <GuildWindow session={session} state={guildState} icons={icons} fallenHalls={fallenHalls} quests={quests} onClose={() => setGuildState(null)} />
+        )}
         {guildAsk && <GuildCreateDialog session={session} cost={guildAsk.cost} secretCost={guildAsk.secretCost} onClose={() => setGuildAsk(null)} />}
         {guildHalls && <GuildHallsDialog session={session} halls={guildHalls} onClose={() => setGuildHalls(null)} />}
         {offer && (

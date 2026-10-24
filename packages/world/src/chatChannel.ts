@@ -14,8 +14,8 @@
 
 export type ChatChannel = "chat" | "combat" | "server" | "debug";
 
-/** Announcements ("[###] Your safety is now ON", "[Event] ..."), even when they mention fighting */
-const ANNOUNCEMENT = /^(~[a-zA-Z])*\s*\[(###|Event)\]/;
+/** Announcements ("[###] Your safety is now ON", "[Event] ...", "[Halls] ..."), even when they mention fighting */
+const ANNOUNCEMENT = /^(~[a-zA-Z])*\s*\[(###|Event|Halls)\]/;
 
 const COMBAT = new RegExp(
   "\\b(" +

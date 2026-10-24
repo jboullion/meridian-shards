@@ -1,15 +1,23 @@
 // Guilds (module/merintr guild*.c, merintr.rc): the guild window, a property sheet of
 // Membership, Alliances, Invite, Guildmaster and Shield (the last three only for those whose
 // rank allows them), plus Create New Guild (UC_GUILD_ASK) and Rent Guild Hall
-// (UC_GUILD_HALLS), both offered by the guild creator NPC.
+// (UC_GUILD_HALLS), both offered by the guild creator NPC. Ours (docs/adr/0022-guilds.md decision
+// 32): the Fallen Halls tab, the eight End Game dungeons and our daily quest for each, and the
+// Quests tab, the guild window's other quests (the board).
 
 import { useEffect, useState } from "react";
 import {
   ANIMATE, GC, GUILD_GENDER, UC, buildClaimShield, buildGuildCreate, buildGuildObjectCommand, buildGuildRent,
   buildSetRank, buildUserCommand, type GuildInfo,
 } from "@shards/protocol";
-import type { GameSession, GuildEvent } from "@shards/world";
+import {
+  DAILY_STATE, QUEST_OFFER, boardAcceptCommand, boardCommand, hallStateText, hallsCommand, rankNumeral, type FallenHall, type GameSession,
+  type GuildEvent,
+} from "@shards/world";
+import { formatCountdown, useSecondTick } from "../factionWar.ts";
+import { useFallenHalls, type FallenHallsStore } from "../fallenHalls.ts";
 import type { IconRenderer } from "../icons.ts";
+import type { QuestStore } from "../quests.ts";
 import { Button, Check, GroupBox, ListBox, MessageBox, Select, Tabs, Text, TextField, Window, at, type Rect } from "./kit.tsx";
 import { ObjIcon } from "./Sidebar.tsx";
 
@@ -28,7 +36,7 @@ export const legalShield = (c1: number, c2: number) => c1 !== 9 || c2 !== 9;
 const OF_PLAYER = 0x4;
 const DRAWFX_INVISIBLE = 5;
 
-type Tab = "Membership" | "Alliances" | "Invite" | "Guildmaster" | "Shield";
+type Tab = "Membership" | "Alliances" | "Invite" | "Guildmaster" | "Shield" | "Fallen Halls" | "Quests";
 
 /** A guild shield picture: the pattern in the two colours (guildshi.c GuildShieldDraw) */
 function Shield({ icons, pattern, color1, color2, className }: { icons: IconRenderer; pattern: number; color1: number; color2: number; className?: string }) {
@@ -54,17 +62,21 @@ export interface GuildState {
 
 /** guild.c GuildConfigInitInfo: the property sheet, titled with the guild's name; Done closes it */
 export function GuildWindow({
-  session, state, icons, onClose,
+  session, state, icons, fallenHalls, quests, onClose,
 }: {
   session: GameSession;
   state: GuildState;
   icons: IconRenderer;
+  /** Ours (docs/adr/0022): the Fallen Halls and the guild window's quests */
+  fallenHalls: FallenHallsStore;
+  quests: QuestStore;
   onClose: () => void;
 }) {
   const { info } = state;
   const tabs: Tab[] = ["Membership", "Alliances"];
   if (info.flags & GC.INVITE) tabs.push("Invite");
   if (info.flags & GC.DISBAND) tabs.push("Guildmaster", "Shield");
+  tabs.push("Fallen Halls", "Quests");
   const [tab, setTab] = useState<Tab>("Membership");
   const [confirm, setConfirm] = useState<{ text: string; then: () => void } | null>(null);
   const send = (b: Uint8Array) => session.send(b);
@@ -88,6 +100,8 @@ export function GuildWindow({
             {tab === "Invite" && <InvitePage {...pageProps} />}
             {tab === "Guildmaster" && <MasterPage {...pageProps} />}
             {tab === "Shield" && <ShieldPage {...pageProps} />}
+            {tab === "Fallen Halls" && <FallenHallsPage session={session} store={fallenHalls} />}
+            {tab === "Quests" && <GuildQuestsPage session={session} store={fallenHalls} quests={quests} />}
           </div>
         </div>
         <Button at={[230, 145, 50, 13]} isDefault onClick={close}>
@@ -106,6 +120,96 @@ export function GuildWindow({
         />
       )}
     </div>
+  );
+}
+
+/** A hall's line in the list: its rank, name and state, and our daily's */
+function hallLine(h: FallenHall): string {
+  const daily = h.dailyState === DAILY_STATE.OFFERED ? " (daily ready)" : h.dailyState === DAILY_STATE.TAKEN ? " (daily taken)" : h.dailyState === DAILY_STATE.DONE ? " (daily done)" : "";
+  return `Rank ${rankNumeral(h.rank)}: ${h.name}. ${hallStateText(h)}${daily}`;
+}
+
+/**
+ * Ours (docs/adr/0022 decisions 30 and 32): the eight Fallen Halls, the End Game dungeons, rank
+ * I to VIII; how each stands since the last reset, and our daily quest for it, taken here
+ * ("quest board-accept"). Asked for as the tab opens ("halls"); the server sends it again
+ * whenever a hall changes, and the countdowns run here in between.
+ */
+function FallenHallsPage({ session, store }: { session: GameSession; store: FallenHallsStore }) {
+  useFallenHalls(store);
+  useSecondTick(true);
+  const [selected, setSelected] = useState<number | null>(null);
+  useEffect(() => session.shardsCommand(hallsCommand()), [session]);
+  const status = store.status;
+  if (!status) return <Text at={[4, 4, 272, 8]}>Asking the Guild Masters...</Text>;
+  const hall = status.halls.find((h) => h.rid === selected) ?? status.halls[0] ?? null;
+  const daily = (h: FallenHall): string => {
+    if (h.dailyState === DAILY_STATE.OFFERED) return "Its daily quest is yours to take.";
+    if (h.dailyState === DAILY_STATE.TAKEN) return "You've taken its daily quest: bring down its boss.";
+    if (h.dailyState === DAILY_STATE.DONE) return `You've done its daily quest. It's offered again in ${formatCountdown(store.dailySeconds(h))}.`;
+    return `Its daily quest opens at ${h.minHealth} base health, once you've done its story quest with a Guild Master.`;
+  };
+  return (
+    <>
+      <Text at={[4, 2, 272, 8]}>End Game dungeons. The Order retakes every hall in {formatCountdown(store.resetSeconds())}.</Text>
+      <ListBox
+        at={[4, 12, 272, 62]}
+        label="The Fallen Halls"
+        items={status.halls.map((h) => ({ key: h.rid, label: hallLine(h) }))}
+        selected={hall?.rid ?? null}
+        onSelect={setSelected}
+      />
+      {hall && (
+        <>
+          <Text at={[4, 78, 206, 42]} wrap>
+            {`${hall.name}, rank ${rankNumeral(hall.rank)} of VIII, from ${hall.minHealth} base health. Its door is off ${hall.door}. ${daily(hall)}`}
+          </Text>
+          <Button at={[214, 80, 62, 13]} disabled={hall.dailyState !== DAILY_STATE.OFFERED} onClick={() => session.shardsCommand(boardAcceptCommand(hall.dailyQuest))}>
+            Take the daily
+          </Button>
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * Ours (docs/adr/0022 decision 32): the guild window's other quests, the repeatable ones taken
+ * here rather than from an NPC (the board, "quest board"). The halls' dailies are on the Fallen
+ * Halls tab, and the guild's story is with the Guild Masters.
+ */
+function GuildQuestsPage({ session, store, quests }: { session: GameSession; store: FallenHallsStore; quests: QuestStore }) {
+  useFallenHalls(store);
+  const [selected, setSelected] = useState<number | null>(null);
+  useEffect(() => session.shardsCommand(boardCommand()), [session]);
+  const board = store.board;
+  if (!board) return <Text at={[4, 4, 272, 8]}>Asking the Guild Masters...</Text>;
+  const dailies = store.dailyIds();
+  const offers = board.filter((o) => !dailies.has(o.id));
+  if (!offers.length)
+    return (
+      <Text at={[4, 4, 272, 40]} wrap>
+        No other guild quests for now. Your daily hall quests are on the Fallen Halls tab, and the Guild Masters beside the lieges tell your guild's story.
+      </Text>
+    );
+  const offer = offers.find((o) => o.id === selected) ?? offers[0]!;
+  const quest = quests.quest(offer.id);
+  return (
+    <>
+      <ListBox
+        at={[4, 4, 272, 62]}
+        label="Guild quests"
+        items={offers.map((o) => ({ key: o.id, label: quests.quest(o.id)?.name ?? `Quest ${o.id}` }))}
+        selected={offer.id}
+        onSelect={setSelected}
+      />
+      <Text at={[4, 70, 206, 50]} wrap>
+        {quest?.text.offer ?? ""}
+      </Text>
+      <Button at={[214, 72, 62, 13]} disabled={offer.state !== QUEST_OFFER.OFFER} onClick={() => session.shardsCommand(boardAcceptCommand(offer.id))}>
+        Take it
+      </Button>
+    </>
   );
 }
 

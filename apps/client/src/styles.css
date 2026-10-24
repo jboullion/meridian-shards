@@ -1880,6 +1880,12 @@ button.link {
   font-size: 105%;
 }
 
+/* The guild window's tabs: a Commander sees seven (Fallen Halls and Quests are ours, ADR 0022), so they're tighter */
+.guild-window .mk-tabs button {
+  padding: 0 calc(var(--dx) * 3);
+  font-size: 105%;
+}
+
 /* ---- looking at things (LookDialogs.tsx): client.rc IDD_DESC / IDD_DESCPLAYER, 338 dialog units across ---- */
 .look-modal {
   z-index: 40;

@@ -22,6 +22,7 @@ import { readSpellRefusal, type SpellRefusal } from "./spellRefusal.ts";
 import { readCompanion, type CompanionEvent } from "./companion.ts";
 import { readArena, type ArenaStatus } from "./arenaBouts.ts";
 import { readFactionWar, type FactionWarEvent } from "./factionWar.ts";
+import { readFallenHalls, type FallenHallsStatus } from "./fallenHalls.ts";
 import { readCosmetics, type CosmeticsEvent } from "./cosmetics.ts";
 import { readItemService } from "./itemservice.ts";
 import { MAGIC_SHOW, magicShow, readMagicName } from "./magic.ts";
@@ -211,6 +212,8 @@ export interface QuestLogEntry {
 export type QuestEvent =
   /** What the NPC we just talked to has for us; the steps to hand in come first */
   | { type: "offers"; npc: number; offers: QuestOffer[] }
+  /** Ours: the quests taken from the guild window (UC_QUEST_OFFERS with no NPC: QuestBook.SendBoard; docs/adr/0022) */
+  | { type: "board"; offers: QuestOffer[] }
   | { type: "log"; hash: number; active: QuestLogEntry[]; done: { id: number; times: number }[] }
   /** A step's count went up */
   | { type: "progress"; id: number; step: number; count: number }
@@ -293,6 +296,8 @@ export interface SessionEvents {
   arena?: (s: ArenaStatus) => void;
   /** Ours: the Faction War, all of it or the battle alone (docs/adr/0021-factions-and-the-faction-war.md) */
   factionWar?: (e: FactionWarEvent) => void;
+  /** Ours: the Fallen Halls, for the guild window (docs/adr/0022-guilds.md) */
+  fallenHalls?: (s: FallenHallsStatus) => void;
   /** Ours: a tailor's or barber's menu (docs/adr/0012-cosmetics.md) */
   cosmetics?: (e: CosmeticsEvent) => void;
   /** Ours: the abilities we can train, and what 1% of each costs (docs/adr/0016-abilities.md) */
@@ -1131,7 +1136,9 @@ export class GameSession {
             const npc = objId(r.u32());
             const offers: QuestOffer[] = [];
             for (let i = r.u8(); i > 0; i--) offers.push({ id: r.u32(), state: r.u8(), step: r.u8() });
-            this.events.quest?.({ type: "offers", npc, offers });
+            // No NPC: the guild window's board (questbook.kod SendBoard)
+            if (npc === 0) this.events.quest?.({ type: "board", offers });
+            else this.events.quest?.({ type: "offers", npc, offers });
           } else if (uc === UC.QUEST_LOG) {
             // Ours (questbook.kod SendLog): the catalogue's hash, the active quests, the quests done
             const hash = r.u32();
@@ -1164,6 +1171,9 @@ export class GameSession {
             // Ours (factionwar.kod SendWar, SendBattle)
             const e = readFactionWar(r);
             if (e) this.events.factionWar?.(e);
+          } else if (uc === UC.FALLEN_HALLS) {
+            // Ours (fallenhalls.kod SendHalls)
+            this.events.fallenHalls?.(readFallenHalls(r));
           } else if (uc === UC.COMPANION) {
             // Ours (companionbook.kod SendStatus, HealthChanged)
             const e = readCompanion(r, (id) => this.resource(id));

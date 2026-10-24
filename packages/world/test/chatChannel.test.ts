@@ -32,6 +32,9 @@ describe("chat tabs (chatChannel.ts)", () => {
       "System is saving: please wait.",
       "~B~k[###]~n Your safety is now ~BON~n:  You can no longer strike innocents.",
       "~B~k[Event]~n ~B~v An army of skeletons have risen from the dead and are advancing on Tos.",
+      // Ours (docs/adr/0022 decision 33): a Fallen Hall falls
+      "~B~k[Halls]~n ~BThe Testers has driven the Order of Necromancers from The Den of Shadows.",
+      "~B~k[Halls]~n ~BShardbot has slain the Order's guard and driven it from The Wetland Fortress.",
       "The %s is empty.",
       "Near Death Studios was co-founded by former Meridian 59 developers.",
     ])

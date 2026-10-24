@@ -558,3 +558,19 @@ Nothing pointed players at the Fallen Halls: they sit behind their old doors, an
   - **Seen in the browser client:** Master Aldric Vane beside the Duke, in his purple shirt, with the quest marker over his head.
   - **Test trap:** setting a player's `piBase_Max_Health` by hand doesn't last, because the next XP gain sets it back from their XP. Send them `ResetXPToLevel` afterwards.
   - **Not tried:** the Princess's and Jonas's Guild Masters in the game (they need a fresh world, or a hand placement), and the quest windows' look.
+- **Phase 5c, the guild window's tabs (this repo, 2026-10-23, not yet committed).**
+  - **The reader:** `packages/world/src/fallenHalls.ts`. It reads `UC_FALLEN_HALLS` (`UC.FALLEN_HALLS` 121) into each hall's rank, minimum health, name, door, state, who cleared it and our daily's state, and builds the commands (`halls`, `quest board`, `quest board-accept <id>`). The session raises it as `fallenHalls`, and `UC_QUEST_OFFERS` with no NPC as a `board` quest event, so the board never opens an NPC's offer window.
+  - **The store:** `apps/client/src/game/fallenHalls.ts` (`FallenHallsStore`, kept from logon). It counts the reset and each done daily down from when the packet came, as the War window's store does.
+  - **The guild window** (`GuildDialogs.tsx`) gains two tabs for every member:
+    - **Fallen Halls:** "End Game dungeons. The Order retakes every hall in h:mm:ss." Each hall is listed as "Rank I: The Den of Shadows. Held by the Order (daily ready)". The one picked shows its rank, base health, door and our daily, with a "Take the daily" button.
+    - **Quests:** the board's quests other than the halls' dailies, each with its offer text and "Take it". It says so when there are none yet.
+    - The seven tabs a Commander sees are tighter (`.guild-window .mk-tabs` in `styles.css`), so they fit.
+  - **Announcements:** `[Halls]` joins `[###]` and `[Event]` in `chatChannel.ts`, so a hall's fall stays in the Server tab even when it mentions fighting.
+  - **Tests:** the reader and the names (`packages/world/test/fallenHalls.test.ts`) and two `[Halls]` lines in `chatChannel.test.ts`. The full suite passes (517), as do lint and the type check.
+  - **Tried in the browser client** as Shardbot, a Commander:
+    - the tab listed all eight halls from the real packet, with the reset counting down;
+    - the Den's daily, opened by its story quest, showed "daily ready";
+    - "Take the daily" took it ("You take on the quest Rank I: The Den of Shadows") and the row became "daily taken";
+    - a daily abandoned over the maintenance port showed "daily ready" again when the server pushed the halls.
+    - The first "Take the daily" left the row as it was until the tab was opened again; it didn't happen again in two more tries.
+  - The temporary `tools/agent/_listen.tmp.ts` is deleted. `_bossfight.tmp.ts` stays until the ladder's tuning is settled.

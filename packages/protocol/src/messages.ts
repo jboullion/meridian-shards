@@ -817,6 +817,8 @@ export const UC = {
   MAGIC_NAME: 119,
   /** Ours (the faction revamp, phase 5): the Faction War for the War window and the battle banner (shards-server util/factionwar.kod; docs/adr/0021) */
   FACTION_WAR: 120,
+  /** Ours (the guild revamp, phase 5): the Fallen Halls for the guild window (shards-server util/fallenhalls.kod SendHalls; docs/adr/0022) */
+  FALLEN_HALLS: 121,
 } as const;
 
 /**
