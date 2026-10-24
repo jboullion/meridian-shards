@@ -1,6 +1,6 @@
 # ADR 0022: Guilds, halls, Fallen Halls and trophies
 
-- Status: partly built (2026-10-23). Built: phase 0, the cleanup (shards-server 146967e0); phase 1, the halls (f735b043); phase 2, prestige and the guild bonus (5fb122b5); the old Necromancer/Hunter scenario's cleanup (dbf0e91a); phase 3, the recruiting boards (0c0de565); phase 4, the Fallen Halls (9bf79252, fb27fe48); phase 5, finding them (7845e040, 5fe3ae57 and this repo's 5dccfc1); phase 6, the trophies and the Inner Sanctum capstone (shards-server 0eee2fa5); and phase 7, the guild cloaks (shards-server 0d136fa9). Planned: phase 8.
+- Status: partly built (2026-10-23). Built: phase 0, the cleanup (shards-server 146967e0); phase 1, the halls (f735b043); phase 2, prestige and the guild bonus (5fb122b5); the old Necromancer/Hunter scenario's cleanup (dbf0e91a); phase 3, the recruiting boards (0c0de565); phase 4, the Fallen Halls (9bf79252, fb27fe48); phase 5, finding them (7845e040, 5fe3ae57 and this repo's 5dccfc1); phase 6, the trophies and the Inner Sanctum capstone (shards-server 0eee2fa5); phase 7, the guild cloaks (shards-server 0d136fa9); and phase 8, the rest of the guild window (shards-server be8fd061). Every phase is built.
 - Builds on: [ADR 0021](0021-factions-and-the-faction-war.md), the faction revamp and its no-random-PvP rule; [ADR 0011](0011-fast-travel.md), fast travel's checks; [ADR 0012](0012-cosmetics.md), the dye code and decals; the magic item revamp, whose items the Fallen Halls drop.
 - Design page, with decisions G1-G25, numbered as here and a phase tracker: https://claude.ai/artifact/Nvvnp6oGKoutiwwHpbGvfK
 
@@ -670,3 +670,23 @@ Nothing pointed players at the Fallen Halls: they sit behind their old doors, an
     - A hand-set test fighter can be too loaded to take anything (Shardbot carries spare gear from every fight), which is why the cloak weighs nothing.
     - Turning a figure from the maintenance port: `send object <room> SomethingTurned what object <player> new_angle int <0-4095>` (0 east, 1024 south, 2048 west, 3072 north).
   - **Not yet tried:** the classic Windows client, another guild's colours on the same screen, the logoff ghost, and women in the client (only on the preview sheet).
+- **Phase 8, the rest of the guild window (shards-server be8fd061 and this repo, 2026-10-24).** Most of it was already done: the rank names come from the server and the creation dialog offers the new defaults, there's no Vote (phase 0), and the recruiting board reads like any news globe.
+  - **The Hall tab** (`GuildDialogs.tsx` `HallPage`, for every member) replaces the classic Guildmaster page, so a Commander's eight tabs still fit. It shows:
+    - the hall's name and an "Open to visitors" box, which an Officer or the Leader may tick (`guildhall public` / `private`);
+    - each chest, with the rank that may use it and how full it is: "Members' chest: Sir and up, 0 of 75 items";
+    - where the recall stone and the cloak come from, or that the cloaks wait on the guild's colours;
+    - the prestige and its tier: "Prestige 105, tier 1 of 4: each chest holds 75 items. The next tier comes at 150.";
+    - the rent: owed (and the hours left when the hall is at risk), paid ahead, or paid up;
+    - the trophies held, and the Leader's Abandon Guild Hall and Disband Guild buttons, moved here.
+    - A guild with no hall is told that Frular in Barloque leases them.
+  - **The server:** `UC_GUILD_HALL` (122, `docs/research/protocol.md`).
+    - `Guild.HallCommand` answers `guildhall`, and opens or closes the hall from anywhere for an Officer or the Leader. Anyone else hears which rank may.
+    - `Guild.SendHallInfo` builds the packet and `BroadcastHallInfo` sends it to every member online. `GuildHall.SetPublic` calls it, however the hall was opened.
+    - `GuildHall.GetGuildChests` lists the chests in the order the hall made them (`AssignChestRanks` uses it too), and `Guild.GetNextTierAt` gives where the next prestige tier starts.
+  - **Our client:** `packages/world/src/guildHall.ts` reads the packet and words the rent and the prestige (tested in `guildHall.test.ts`). The session raises it as `guildHall`, and the guild window's store (`FallenHallsStore.hall`) keeps it.
+  - **Tried in the browser client** as Shardbot:
+    - the Hall tab with hall 1's three chests, the prestige, the rent owed and the trophies;
+    - ticking "Open to visitors" opened the hall on the server, and the box followed the pushed update; unticking closed it;
+    - the Guild Recruitment board in Barloque's adventurers' hall opened as a news globe. A notice posted from it carried the server's header ("Led by Commander Shardbot. Members: 1. Hall: Mercenary Alley. Prestige: 105. Trophies: 9.").
+  - **Tests:** the full suite passes but for `colorTexture.test.ts`'s timing test, which fails now and then while the dev server and the browser are busy. It fails alone too, one run in three, and nothing here touches it. Lint and the type check pass.
+  - **Not yet tried:** the tab as a member below Officer (the box should be greyed), and as a guild with no hall.

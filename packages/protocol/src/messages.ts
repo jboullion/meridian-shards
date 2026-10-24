@@ -819,6 +819,7 @@ export const UC = {
   FACTION_WAR: 120,
   /** Ours (the guild revamp, phase 5): the Fallen Halls for the guild window (shards-server util/fallenhalls.kod SendHalls; docs/adr/0022) */
   FALLEN_HALLS: 121,
+  GUILD_HALL: 122,
 } as const;
 
 /**

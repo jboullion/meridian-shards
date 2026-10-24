@@ -300,6 +300,7 @@ export function Game({
         arena: (s) => arena.handle(s),
         factionWar: (e) => factionWar.handle(e),
         fallenHalls: (s) => fallenHalls.handle(s),
+        guildHall: (s) => fallenHalls.handleHall(s),
         offer: offers.emit,
         sound: (e) => audio.handle(e),
         damageDealt: damage.emit,

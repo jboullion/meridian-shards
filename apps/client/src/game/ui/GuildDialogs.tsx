@@ -1,9 +1,10 @@
 // Guilds (module/merintr guild*.c, merintr.rc): the guild window, a property sheet of
-// Membership, Alliances, Invite, Guildmaster and Shield (the last three only for those whose
-// rank allows them), plus Create New Guild (UC_GUILD_ASK) and Rent Guild Hall
+// Membership, Alliances, Invite and Shield (the last two only for those whose rank allows them),
+// plus Create New Guild (UC_GUILD_ASK) and Rent Guild Hall
 // (UC_GUILD_HALLS), both offered by the guild creator NPC. Ours (docs/adr/0022-guilds.md decision
 // 32): the Fallen Halls tab, the eight End Game dungeons and our daily quest for each; the
-// Quests tab, the guild window's other quests (the board); and the Trophies tab (decisions 17-19).
+// Quests tab, the guild window's other quests (the board); the Trophies tab (decisions 17-19); and
+// the Hall tab (phase 8), in place of the classic Guildmaster page, for every member.
 
 import { useEffect, useState } from "react";
 import {
@@ -11,7 +12,8 @@ import {
   buildSetRank, buildUserCommand, type GuildInfo,
 } from "@shards/protocol";
 import {
-  DAILY_STATE, QUEST_OFFER, TROPHY, boardAcceptCommand, boardCommand, capstoneText, hallStateText, hallsCommand, rankNumeral, trophyAgeText,
+  DAILY_STATE, QUEST_OFFER, TROPHY, boardAcceptCommand, boardCommand, capstoneText, guildHallCommand, guildHallPublicCommand, hallStateText, hallsCommand,
+  prestigeText, rankNumeral, rentText, trophyAgeText,
   type FallenHall, type FallenHallsStatus, type GameSession, type GuildEvent,
 } from "@shards/world";
 import { formatCountdown, useSecondTick } from "../factionWar.ts";
@@ -36,7 +38,7 @@ export const legalShield = (c1: number, c2: number) => c1 !== 9 || c2 !== 9;
 const OF_PLAYER = 0x4;
 const DRAWFX_INVISIBLE = 5;
 
-type Tab = "Membership" | "Alliances" | "Invite" | "Guildmaster" | "Shield" | "Fallen Halls" | "Quests" | "Trophies";
+type Tab = "Membership" | "Alliances" | "Invite" | "Hall" | "Shield" | "Fallen Halls" | "Quests" | "Trophies";
 
 /** A guild shield picture: the pattern in the two colours (guildshi.c GuildShieldDraw) */
 function Shield({ icons, pattern, color1, color2, className }: { icons: IconRenderer; pattern: number; color1: number; color2: number; className?: string }) {
@@ -75,7 +77,8 @@ export function GuildWindow({
   const { info } = state;
   const tabs: Tab[] = ["Membership", "Alliances"];
   if (info.flags & GC.INVITE) tabs.push("Invite");
-  if (info.flags & GC.DISBAND) tabs.push("Guildmaster", "Shield");
+  tabs.push("Hall");
+  if (info.flags & GC.DISBAND) tabs.push("Shield");
   tabs.push("Fallen Halls", "Quests", "Trophies");
   const [tab, setTab] = useState<Tab>("Membership");
   const [confirm, setConfirm] = useState<{ text: string; then: () => void } | null>(null);
@@ -98,7 +101,7 @@ export function GuildWindow({
             {tab === "Membership" && <MembersPage {...pageProps} />}
             {tab === "Alliances" && <AlliesPage {...pageProps} />}
             {tab === "Invite" && <InvitePage {...pageProps} />}
-            {tab === "Guildmaster" && <MasterPage {...pageProps} />}
+            {tab === "Hall" && <HallPage {...pageProps} store={fallenHalls} />}
             {tab === "Shield" && <ShieldPage {...pageProps} />}
             {tab === "Fallen Halls" && <FallenHallsPage session={session} store={fallenHalls} />}
             {tab === "Quests" && <GuildQuestsPage session={session} store={fallenHalls} quests={quests} />}
@@ -466,21 +469,28 @@ function InvitePage({ session, send }: PageProps) {
   );
 }
 
-/** guildmtr.c: abandoning the hall, disbanding the guild (the hall's password went with ADR 0022) */
-function MasterPage({ session, state, ask, onClose }: PageProps) {
+/**
+ * Ours (docs/adr/0022 phase 8): the Hall tab, for every member, in place of guildmtr.c's Guildmaster
+ * page. The hall and whether it's open to visitors (an Officer or the Leader may change that), its
+ * chests and how full they are, the prestige and what its tier gives, the rent, and the trophies.
+ * The Leader's Abandon Guild Hall and Disband Guild are here too. Asked for as the tab opens
+ * ("guildhall"); the server sends it again when the hall opens or closes.
+ */
+function HallPage({ session, state, ask, onClose, store }: PageProps & { store: FallenHallsStore }) {
+  useFallenHalls(store);
   const { info } = state;
-  return (
+  useEffect(() => session.shardsCommand(guildHallCommand()), [session]);
+  const s = store.hall;
+  const me = info.members.find((m) => m.id === session.world.player?.id);
+  const ranks = me?.gender === GUILD_GENDER.FEMALE ? info.femaleRanks : info.maleRanks;
+  const rankName = (rank: number) => ranks[rank - 1] ?? `rank ${rank}`;
+  const chestLine = (c: { name: string; rank: number; items: number }, limit: number) =>
+    `${c.name.charAt(0).toUpperCase()}${c.name.slice(1)}: ${c.rank <= 1 ? "every member" : `${rankName(c.rank)} and up`}, ${c.items} of ${limit} items`;
+  const leader = (
     <>
-      <GroupBox at={[4, 4, 272, 48]} label="Guild Hall" />
-      {/* The server offers abandoning only to a guild with a hall (gcaband.kod ResetCommand) */}
-      {info.flags & GC.ABANDON ? (
-        <Text at={[10, 15, 170, 24]}>Say &quot;hall public&quot; or &quot;hall private&quot; in the hall to open or close it to visitors.</Text>
-      ) : (
-        <Text at={[10, 15, 156, 8]}>Your guild does not have a guild hall.</Text>
-      )}
       {!!(info.flags & GC.ABANDON) && (
         <Button
-          at={[185, 23, 72, 14]}
+          at={[130, 106, 72, 13]}
           onClick={() =>
             ask("Are you sure you want to abandon your guild hall?", () => {
               session.userCommand(UC.ABANDON_GUILD_HALL);
@@ -491,17 +501,59 @@ function MasterPage({ session, state, ask, onClose }: PageProps) {
           Abandon Guild Hall
         </Button>
       )}
-      <Button
-        at={[92, 78, 95, 14]}
-        onClick={() =>
-          ask("Are you sure you want to disband the guild?", () => {
-            session.userCommand(UC.DISBAND);
-            onClose();
-          })
-        }
-      >
-        Disband Guild
-      </Button>
+      {!!(info.flags & GC.DISBAND) && (
+        <Button
+          at={[206, 106, 70, 13]}
+          onClick={() =>
+            ask("Are you sure you want to disband the guild?", () => {
+              session.userCommand(UC.DISBAND);
+              onClose();
+            })
+          }
+        >
+          Disband Guild
+        </Button>
+      )}
+    </>
+  );
+  if (!s) return <Text at={[4, 4, 272, 8]}>Asking after your hall...</Text>;
+  const hall = s.hall;
+  return (
+    <>
+      <GroupBox at={[4, 2, 272, 70]} label="Guild Hall" />
+      {hall ? (
+        <>
+          <Text at={[10, 13, 176, 8]}>{hall.name}</Text>
+          <Check
+            at={[192, 12, 80, 10]}
+            label="Open to visitors"
+            checked={hall.isPublic}
+            disabled={!hall.mayToggle}
+            title={hall.mayToggle ? undefined : `Only the ${rankName(4)} rank and above may open or close the hall.`}
+            onChange={(open) => session.shardsCommand(guildHallPublicCommand(open))}
+          />
+          {hall.chests.map((c, i) => (
+            <Text key={i} at={[10, 24 + i * 9, 262, 8]}>
+              {chestLine(c, s.chestLimit)}
+            </Text>
+          ))}
+          <Text at={[10, 51, 262, 18]} wrap>
+            {`Say "recall stone" in the hall for a recall stone. ${s.hasColours ? "Take a cloak from the rack beside the news globe." : "Your cloaks wait on the guild's colours, chosen on the Shield tab."}`}
+          </Text>
+        </>
+      ) : (
+        <Text at={[10, 13, 262, 20]} wrap>
+          Your guild has no hall. Frular in Barloque leases them to a guild of two or more members.
+        </Text>
+      )}
+      <Text at={[4, 75, 272, 8]}>
+        {prestigeText(s)}
+      </Text>
+      <Text at={[4, 86, 272, 18]} wrap>
+        {rentText(s)}
+      </Text>
+      <Text at={[4, 108, 124, 8]}>{`Trophies: ${s.trophies} of ${s.trophyTotal}.`}</Text>
+      {leader}
     </>
   );
 }

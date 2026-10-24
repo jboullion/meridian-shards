@@ -1,17 +1,20 @@
 // Ours (docs/adr/0022-guilds.md decision 32): what our client knows of the Fallen Halls, from
 // UC_FALLEN_HALLS (shards-server util/fallenhalls.kod: asked for with "halls" as the guild window
 // opens, and sent to every guild member whenever a hall changes), and the guild window's own
-// quests (the board: UC_QUEST_OFFERS with no NPC, asked for with "quest board"). Kept from logon,
+// quests (the board: UC_QUEST_OFFERS with no NPC, asked for with "quest board"), and its Hall tab's
+// (UC_GUILD_HALL, asked for with "guildhall", phase 8). Kept from logon,
 // as the Faction War's is (factionWar.ts); the countdowns run from when each came.
 
 import { useEffect, useState } from "react";
-import type { FallenHall, FallenHallsStatus, QuestOffer, Trophy } from "@shards/world";
+import type { FallenHall, FallenHallsStatus, GuildHallStatus, QuestOffer, Trophy } from "@shards/world";
 
 export class FallenHallsStore {
   status: FallenHallsStatus | null = null;
   statusAt = 0;
   /** The board's quests we may take now (QO_OFFER or QO_SOON) */
   board: QuestOffer[] | null = null;
+  /** Ours (phase 8): our guild's hall, prestige and rent, for the Hall tab (UC_GUILD_HALL) */
+  hall: GuildHallStatus | null = null;
   /** Goes up with every change */
   version = 0;
   private listeners = new Set<() => void>();
@@ -29,6 +32,11 @@ export class FallenHallsStore {
   handle(s: FallenHallsStatus, now = Date.now()): void {
     this.status = s;
     this.statusAt = now;
+    this.changed();
+  }
+
+  handleHall(s: GuildHallStatus): void {
+    this.hall = s;
     this.changed();
   }
 

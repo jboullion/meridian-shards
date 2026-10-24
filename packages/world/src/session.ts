@@ -23,6 +23,7 @@ import { readCompanion, type CompanionEvent } from "./companion.ts";
 import { readArena, type ArenaStatus } from "./arenaBouts.ts";
 import { readFactionWar, type FactionWarEvent } from "./factionWar.ts";
 import { readFallenHalls, type FallenHallsStatus } from "./fallenHalls.ts";
+import { readGuildHall, type GuildHallStatus } from "./guildHall.ts";
 import { readCosmetics, type CosmeticsEvent } from "./cosmetics.ts";
 import { readItemService } from "./itemservice.ts";
 import { MAGIC_SHOW, magicShow, readMagicName } from "./magic.ts";
@@ -298,6 +299,8 @@ export interface SessionEvents {
   factionWar?: (e: FactionWarEvent) => void;
   /** Ours: the Fallen Halls, for the guild window (docs/adr/0022-guilds.md) */
   fallenHalls?: (s: FallenHallsStatus) => void;
+  /** Ours: our guild's hall, prestige and rent, for the guild window's Hall tab (docs/adr/0022-guilds.md) */
+  guildHall?: (s: GuildHallStatus) => void;
   /** Ours: a tailor's or barber's menu (docs/adr/0012-cosmetics.md) */
   cosmetics?: (e: CosmeticsEvent) => void;
   /** Ours: the abilities we can train, and what 1% of each costs (docs/adr/0016-abilities.md) */
@@ -1174,6 +1177,9 @@ export class GameSession {
           } else if (uc === UC.FALLEN_HALLS) {
             // Ours (fallenhalls.kod SendHalls)
             this.events.fallenHalls?.(readFallenHalls(r));
+          } else if (uc === UC.GUILD_HALL) {
+            // Ours (guild.kod SendHallInfo)
+            this.events.guildHall?.(readGuildHall(r));
           } else if (uc === UC.COMPANION) {
             // Ours (companionbook.kod SendStatus, HealthChanged)
             const e = readCompanion(r, (id) => this.resource(id));
