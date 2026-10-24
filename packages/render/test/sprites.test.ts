@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { parseBgf, parsePaletteBin, type Bgf } from "@shards/formats";
 import { XLAT, XlatTable } from "../src/xlat.ts";
-import { compositeSprite, frameFor, HS_OVER_FIGURE } from "../src/sprites.ts";
+import { compositeSprite, frameFor, HS_BEHIND_FIGURE, HS_OVER_BODY, HS_OVER_FIGURE, marksFigureDepth } from "../src/sprites.ts";
 import { outlineCode, outlineWidth } from "../src/magicOutline.ts";
 import { compositeToRgba, paletteToRgba } from "../src/colorTexture.ts";
 import { lightIndex, objectBrightness, dlightScale, lightColor } from "../src/objectLighting.ts";
@@ -86,6 +86,38 @@ describe("overlay depth", () => {
       new XlatTable(grayPalette(), null),
     )!;
     expect(c.pixels[1 * 2 + 1]).toBe(30); // the beard over the mouth
+  });
+
+  // Ours (the guild cloak): a cape hanging from the neck, which on the plain rules is under the body
+  const cape = (marker: number) => one(4, 4, 50, [{ number: marker, x: 0, y: 0 }]);
+  // a leg hanging over the body, as the legs do from behind
+  const leg = one(1, 1, 70);
+  const legBody = one(4, 4, 10, [{ number: -1, x: 0, y: 0 }, { number: 41, x: 2, y: 2 }]);
+  const drawCape = (marker: number) =>
+    compositeSprite(
+      {
+        base: { bgf: legBody, group: 0, translation: 0, hotspot: 0 },
+        overlays: [
+          { bgf: cape(marker), group: 0, translation: 0, hotspot: 1 },
+          { bgf: leg, group: 0, translation: 0, hotspot: 41 },
+        ],
+        viewAngle: 0,
+      },
+      new XlatTable(grayPalette(), null),
+    )!;
+  test("a cape marked HS_OVER_BODY covers the body and what hangs over it", () => {
+    const c = drawCape(HS_OVER_BODY);
+    expect(c.pixels[0]).toBe(50);
+    expect(c.pixels[2 * 4 + 2]).toBe(50); // over the leg
+  });
+  test("a cape marked HS_BEHIND_FIGURE is behind everything", () => {
+    const c = drawCape(HS_BEHIND_FIGURE);
+    expect(c.pixels[0]).toBe(10);
+    expect(c.pixels[2 * 4 + 2]).toBe(70);
+  });
+  test("marksFigureDepth finds a cape, not a plain part", () => {
+    expect(marksFigureDepth(cape(HS_OVER_BODY))).toBe(true);
+    expect(marksFigureDepth(leg)).toBe(false);
   });
 });
 

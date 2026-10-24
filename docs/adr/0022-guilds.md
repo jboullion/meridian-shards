@@ -1,6 +1,6 @@
 # ADR 0022: Guilds, halls, Fallen Halls and trophies
 
-- Status: partly built (2026-10-23). Built: phase 0, the cleanup (shards-server 146967e0); phase 1, the halls (f735b043); phase 2, prestige and the guild bonus (5fb122b5); the old Necromancer/Hunter scenario's cleanup (dbf0e91a); phase 3, the recruiting boards (0c0de565); phase 4, the Fallen Halls (9bf79252, fb27fe48); phase 5, finding them (7845e040, 5fe3ae57 and this repo's 5dccfc1); and phase 6, the trophies and the Inner Sanctum capstone (shards-server 0eee2fa5). Planned: phases 7 and 8.
+- Status: partly built (2026-10-23). Built: phase 0, the cleanup (shards-server 146967e0); phase 1, the halls (f735b043); phase 2, prestige and the guild bonus (5fb122b5); the old Necromancer/Hunter scenario's cleanup (dbf0e91a); phase 3, the recruiting boards (0c0de565); phase 4, the Fallen Halls (9bf79252, fb27fe48); phase 5, finding them (7845e040, 5fe3ae57 and this repo's 5dccfc1); phase 6, the trophies and the Inner Sanctum capstone (shards-server 0eee2fa5); and phase 7, the guild cloaks (shards-server 0d136fa9). Planned: phase 8.
 - Builds on: [ADR 0021](0021-factions-and-the-faction-war.md), the faction revamp and its no-random-PvP rule; [ADR 0011](0011-fast-travel.md), fast travel's checks; [ADR 0012](0012-cosmetics.md), the dye code and decals; the magic item revamp, whose items the Fallen Halls drop.
 - Design page, with decisions G1-G25, numbered as here and a phase tracker: https://claude.ai/artifact/Nvvnp6oGKoutiwwHpbGvfK
 
@@ -187,6 +187,12 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
 ### Cloaks
 
 22. **A guild cloak in the guild's colours** for every member, once the Leader has set them (`HasGuildColors`). It's taken free from the hall and is for looks only: it's worn over armour and put on or off with a command. It uses ADR 0012's dye code: cloth is `GetPrimaryGuildColor` and trim is `GetSecondaryGuildColor`. The shield's insignia becomes a hotspot-51 decal when decals arrive. It needs new art through `garmentforge` and a client overlay above the torso, because nothing draws a cloak today.
+    - **As decided for phase 7 (2026-10-23, the user's answers):** these replace the details above.
+      - **The art is drawn by a script,** not by a model (`garmentforge` was never built): a cape is modelled from the torsos' own silhouettes and seen from each of their views, so the views agree by construction. The user reviews a sheet of every frame.
+      - **A cloak rack in the hall,** beside the news globe on the other side from the trophy case. A member uses it for a free cloak.
+      - **An item in no armour slot:** used to put it on or take it off, worn over everything else. It can't be dropped, given or stored, and it crumbles when its bearer leaves the guild, as the recall stone does.
+      - **No device on the back.** The user first asked for the guild's shield on the cape's back, then didn't like it on the cape. A school symbol isn't possible, as a guild has no school (the school emblems are the disciple robes' and some special shields'), so the cloak carries the colours alone.
+      - **Its colours are the shield's translation, not the dye code:** the art is drawn in the red and dark-blue ramps that a guild's colour translation changes (`EncodeTwoColorXLAT`, `GUILDCOLOR` in our client), the cloth in colour 1 and the collar, edges and hem in colour 2. A guild's colours can't change once set, so a cloak never needs recolouring.
 
 ### Recruiting boards
 
@@ -635,3 +641,32 @@ Nothing pointed players at the Fallen Halls: they sit behind their old doors, an
     - A failed build compiles some files without staging them in `loadkod`. The next build skips them, as they're up to date, so copy them by hand.
     - Leaving the underworld applies the death penalties. Teleport a dead test character out through another room, then restore their health.
   - **Not yet played:** the whole climb by a real guild, the capstone fight unweakened with a full party, and the announcement as seen in the client.
+- **Phase 7, the guild cloaks (shards-server 0d136fa9 and this repo, 2026-10-23).** Decision 22 as decided above.
+  - **The art** (`shards-server/tools/iconforge/cloak.ts`, run with `node`; `--install` copies to `resource/graphics/shards/`):
+    - A cape is a sheet hanging from the shoulders and wrapped half round the back, with seven folds that deepen towards a hem that ripples with them. It's sized from the union of every torso of that gender aligned on the neck (the head's hotspot): men's shoulders 56 pixels, women's 48. It's 70% of the way from the neck to the soles, to the calves.
+    - It's lit from the viewer's upper left, darker in the folds' valleys, and darker inside than out.
+    - `cloakm.bgf` and `cloakf.bgf` have one bitmap for each of a torso's six views (front, two front quarters, two sides, back) and the torso's 22 groups, so a cape shows the body's view whatever its pose. It hangs from `HS_HEAD`, so it follows the neck of whatever torso and pose is drawn.
+    - `cloakic.bgf` is the inventory icon and `cloakrk.bgf` the hall's rack, a wooden stand with a cape hung from its bar.
+    - `build/iconforge/cloak/preview.png` shows both genders in a shirt, a robe and plate from every view, in four colour pairs, drawn by our compositor.
+  - **Our client's compositor** (`packages/render/src/sprites.ts`) gains two depth markers, hotspots a part's frames carry:
+    - `HS_OVER_BODY` (125): over the body and what hangs over it. From behind the legs hang over the body, so a cape has to go above them.
+    - `HS_BEHIND_FIGURE` (126): behind the whole figure, for a cape seen from the front or the side.
+    - The classic client ignores both, so there a cape hangs under the body in every view.
+    - The portrait (`icons.ts`) leaves out anything with a marker: it draws whatever hangs from hotspots 1-20, and the cape hangs from the head's hotspot.
+  - **The server:**
+    - `ITEM_USE_CLOAK` (0x2000) in `blakston.khd`, with room for one (`Player.TryUseItem`).
+    - `GuildCloak` (`item/passitem/gcloak.kod`): its guild, and the guild's colour translation as its own. It's weightless and bound like the recall stone: it can't be dropped, given, stored, swapped or shattered, and it isn't dropped on death. Worn, it's one overlay, in the guild's translation. `ReqUse` refuses anyone outside its guild.
+    - `Player.ResetGuildStuff` makes it crumble when its bearer leaves the guild: "Your guild cloak falls to threads as you leave the guild."
+    - `CloakRack` (`passive/cloakrack.kod`, activatable): it hangs in the hall's guild's colours, grey when none. Double-clicking it, a member within three squares takes a cloak. It refuses a non-member, a guild with no colours (and points to the Shield tab), and a second cloak.
+    - `GuildHall.viRack_row`/`_col` and `PlaceCloakRack`, beside the globe on the trophy case's other side, chosen in each of the ten halls from its walls. A saved world's halls get theirs with `send object <hall> PlaceCloakRack`.
+  - **Tests:** the two markers and `marksFigureDepth` (`packages/render/test/sprites.test.ts`). The full suite passes (523), as do lint and the type check.
+  - **Tried** with the Hallrunners in purple and gold:
+    - Shardbot took a cloak from hall 1's rack and wore it. Seen by Shardpal in the browser client, it was behind the figure from the front and over the body and legs from behind.
+    - Shardbot's own inventory figure wears it, and their portrait shows the helmet again.
+    - The look window shows the cloak and its description, and Drop is refused.
+    - Shardpal, outside the guild, was refused by the rack, and so was a second cloak. The worn cloak crumbled (`Crumble`) and a new one was taken.
+  - **First try, dropped:** a small copy of the guild's shield on the cape's back, made from the four guild shields' icons (`gsha`-`gshd`) and hung from its own hotspot. The user didn't like it on the cape, so it went, and with it the compositor rule that hung parts over a cape.
+  - **Traps:**
+    - A hand-set test fighter can be too loaded to take anything (Shardbot carries spare gear from every fight), which is why the cloak weighs nothing.
+    - Turning a figure from the maintenance port: `send object <room> SomethingTurned what object <player> new_angle int <0-4095>` (0 east, 1024 south, 2048 west, 3072 north).
+  - **Not yet tried:** the classic Windows client, another guild's colours on the same screen, the logoff ghost, and women in the client (only on the preview sheet).

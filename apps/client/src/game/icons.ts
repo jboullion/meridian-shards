@@ -6,7 +6,7 @@
 
 import { TRANSPARENT_INDEX, type Bgf } from "@shards/formats";
 import { ANIMATE, type Animation, type ObjectInfo } from "@shards/protocol";
-import { XlatTable, compositeSprite, type SpritePart } from "@shards/render";
+import { XlatTable, compositeSprite, marksFigureDepth, type SpritePart } from "@shards/render";
 import type { AssetStore } from "../assets.ts";
 
 /** A bitmap group from an animation as sent (1-based) -> 0-based, as animate.c starts it. */
@@ -111,6 +111,8 @@ export class IconRenderer {
     const parts: SpritePart[] = [];
     list.forEach((v, i) => {
       const b = overlays[i];
+      // Ours: a guild cloak hangs from the head's hotspot too, but it's no part of the face
+      if (b && range && marksFigureDepth(b)) return;
       if (b) parts.push({ bgf: b, group: groupOf(v.animation), translation: v.translation, hotspot: v.hotspot });
     });
     const group = opts.group ?? groupOf(o.animation);

@@ -12,8 +12,8 @@ import { TRANSPARENT_INDEX, type Bgf, type BgfBitmap } from "@shards/formats";
 import type { XlatTable } from "./xlat.ts";
 import { outlineTier, outlineWidth } from "./magicOutline.ts";
 
-/** Hotspot draw layers (clientd3d/object3d.h), back to front by the D3D z-bias. OVERFIGURE and OVERFACE are ours. */
-const LAYER = { UNDERUNDER: 1, UNDER: 3, UNDEROVER: 6, BASE: 10, OVERFIGURE: 10.25, HELM: 10.5, OVERUNDER: 11, OVER: 13, OVERFACE: 14, OVEROVER: 15 } as const;
+/** Hotspot draw layers (clientd3d/object3d.h), back to front by the D3D z-bias. BEHIND, OVERBODY, OVERFIGURE and OVERFACE are ours. */
+const LAYER = { BEHIND: 0.5, UNDERUNDER: 1, UNDER: 3, UNDEROVER: 6, BASE: 10, OVERFIGURE: 10.25, HELM: 10.5, OVERUNDER: 11, OVER: 13, OVERBODY: 13.5, OVERFACE: 14, OVEROVER: 15 } as const;
 const HS_HELM = 2;
 
 /**
@@ -27,6 +27,21 @@ const HS_HELM = 2;
  */
 export const HS_OVER_FIGURE = 127;
 const overFigure = (b: BgfBitmap) => b.hotspots.some((h) => h.number === HS_OVER_FIGURE);
+
+/**
+ * Ours (docs/adr/0022-guilds.md decision 22, the guild cloak): a part whose frame carries one of
+ * these is drawn behind the whole figure (a cape seen from the front or the side) or over the
+ * body and what hangs over it (seen from the back, where the legs hang over the body), under a
+ * beard and a face's parts, wherever it hangs. The classic client ignores them,
+ * so there a cape hangs under the body in every view. shards-server tools/iconforge cloak.ts
+ * writes them into each frame.
+ */
+export const HS_OVER_BODY = 125;
+export const HS_BEHIND_FIGURE = 126;
+const markedLayer = (b: BgfBitmap): number | null =>
+  b.hotspots.some((h) => h.number === HS_BEHIND_FIGURE) ? LAYER.BEHIND : b.hotspots.some((h) => h.number === HS_OVER_BODY) ? LAYER.OVERBODY : null;
+/** Whether a part sets its own depth round the figure (a cape): a face-only picture leaves it out */
+export const marksFigureDepth = (bgf: Bgf): boolean => bgf.bitmaps.some((b) => markedLayer(b) !== null);
 
 export interface SpritePart {
   bgf: Bgf;
@@ -197,7 +212,7 @@ export function compositeSprite(input: SpriteInput, xlats: XlatTable): Composite
     // overlay offsets are scaled by the base's shrink in the C code
     const x = hs.x + ob.xOffset;
     const y = hs.y + ob.yOffset;
-    const layer = overFigure(ob) ? LAYER.OVERFACE : hs.helm ? LAYER.HELM : hs.over ? LAYER.OVER : LAYER.UNDER;
+    const layer = markedLayer(ob) ?? (overFigure(ob) ? LAYER.OVERFACE : hs.helm ? LAYER.HELM : hs.over ? LAYER.OVER : LAYER.UNDER);
     placed.push({ bmp: ob, x, y, scale: s / part.bgf.shrink, layer, xlat: xlatFor(part.translation), hotspot: part.hotspot, outline: part.outline ?? 0 });
     firstLevel.push({ part, bmp: ob, x: hs.x, y: hs.y, over: hs.over });
   }
