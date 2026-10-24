@@ -2,8 +2,8 @@
 // Membership, Alliances, Invite, Guildmaster and Shield (the last three only for those whose
 // rank allows them), plus Create New Guild (UC_GUILD_ASK) and Rent Guild Hall
 // (UC_GUILD_HALLS), both offered by the guild creator NPC. Ours (docs/adr/0022-guilds.md decision
-// 32): the Fallen Halls tab, the eight End Game dungeons and our daily quest for each, and the
-// Quests tab, the guild window's other quests (the board).
+// 32): the Fallen Halls tab, the eight End Game dungeons and our daily quest for each; the
+// Quests tab, the guild window's other quests (the board); and the Trophies tab (decisions 17-19).
 
 import { useEffect, useState } from "react";
 import {
@@ -11,8 +11,8 @@ import {
   buildSetRank, buildUserCommand, type GuildInfo,
 } from "@shards/protocol";
 import {
-  DAILY_STATE, QUEST_OFFER, boardAcceptCommand, boardCommand, hallStateText, hallsCommand, rankNumeral, type FallenHall, type GameSession,
-  type GuildEvent,
+  DAILY_STATE, QUEST_OFFER, TROPHY, boardAcceptCommand, boardCommand, capstoneText, hallStateText, hallsCommand, rankNumeral, trophyAgeText,
+  type FallenHall, type FallenHallsStatus, type GameSession, type GuildEvent,
 } from "@shards/world";
 import { formatCountdown, useSecondTick } from "../factionWar.ts";
 import { useFallenHalls, type FallenHallsStore } from "../fallenHalls.ts";
@@ -36,7 +36,7 @@ export const legalShield = (c1: number, c2: number) => c1 !== 9 || c2 !== 9;
 const OF_PLAYER = 0x4;
 const DRAWFX_INVISIBLE = 5;
 
-type Tab = "Membership" | "Alliances" | "Invite" | "Guildmaster" | "Shield" | "Fallen Halls" | "Quests";
+type Tab = "Membership" | "Alliances" | "Invite" | "Guildmaster" | "Shield" | "Fallen Halls" | "Quests" | "Trophies";
 
 /** A guild shield picture: the pattern in the two colours (guildshi.c GuildShieldDraw) */
 function Shield({ icons, pattern, color1, color2, className }: { icons: IconRenderer; pattern: number; color1: number; color2: number; className?: string }) {
@@ -76,7 +76,7 @@ export function GuildWindow({
   const tabs: Tab[] = ["Membership", "Alliances"];
   if (info.flags & GC.INVITE) tabs.push("Invite");
   if (info.flags & GC.DISBAND) tabs.push("Guildmaster", "Shield");
-  tabs.push("Fallen Halls", "Quests");
+  tabs.push("Fallen Halls", "Quests", "Trophies");
   const [tab, setTab] = useState<Tab>("Membership");
   const [confirm, setConfirm] = useState<{ text: string; then: () => void } | null>(null);
   const send = (b: Uint8Array) => session.send(b);
@@ -102,6 +102,7 @@ export function GuildWindow({
             {tab === "Shield" && <ShieldPage {...pageProps} />}
             {tab === "Fallen Halls" && <FallenHallsPage session={session} store={fallenHalls} />}
             {tab === "Quests" && <GuildQuestsPage session={session} store={fallenHalls} quests={quests} />}
+            {tab === "Trophies" && <TrophiesPage session={session} store={fallenHalls} />}
           </div>
         </div>
         <Button at={[230, 145, 50, 13]} isDefault onClick={close}>
@@ -123,10 +124,11 @@ export function GuildWindow({
   );
 }
 
-/** A hall's line in the list: its rank, name and state, and our daily's */
-function hallLine(h: FallenHall): string {
+/** A hall's line in the list: a mark if our guild holds its boss's trophy, its rank, name and state, and our daily's */
+function hallLine(h: FallenHall, status: FallenHallsStatus): string {
   const daily = h.dailyState === DAILY_STATE.OFFERED ? " (daily ready)" : h.dailyState === DAILY_STATE.TAKEN ? " (daily taken)" : h.dailyState === DAILY_STATE.DONE ? " (daily done)" : "";
-  return `Rank ${rankNumeral(h.rank)}: ${h.name}. ${hallStateText(h)}${daily}`;
+  const trophy = status.trophies.some((t) => t.id === h.rank && t.held) ? "★ " : "";
+  return `${trophy}Rank ${rankNumeral(h.rank)}: ${h.name}. ${hallStateText(h)}${daily}`;
 }
 
 /**
@@ -155,7 +157,7 @@ function FallenHallsPage({ session, store }: { session: GameSession; store: Fall
       <ListBox
         at={[4, 12, 272, 62]}
         label="The Fallen Halls"
-        items={status.halls.map((h) => ({ key: h.rid, label: hallLine(h) }))}
+        items={status.halls.map((h) => ({ key: h.rid, label: hallLine(h, status) }))}
         selected={hall?.rid ?? null}
         onSelect={setSelected}
       />
@@ -169,6 +171,50 @@ function FallenHallsPage({ session, store }: { session: GameSession; store: Fall
           </Button>
         </>
       )}
+    </>
+  );
+}
+
+/** The world's trophies are named as in a sentence ("the Ice Dragon"); a list or a line starts with a capital */
+const capitalised = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * Ours (docs/adr/0022 decisions 17-19 and 26): our guild's trophies, one for each great creature
+ * that falls to its members, held or not: who took part and when. The eight Fallen Halls' trophies
+ * open the Inner Sanctum's capstone. They come with the halls (UC_FALLEN_HALLS), sent again as one
+ * is earned.
+ */
+function TrophiesPage({ session, store }: { session: GameSession; store: FallenHallsStore }) {
+  useFallenHalls(store);
+  const [selected, setSelected] = useState<number | null>(null);
+  useEffect(() => session.shardsCommand(hallsCommand()), [session]);
+  const status = store.status;
+  if (!status) return <Text at={[4, 4, 272, 8]}>Asking the Guild Masters...</Text>;
+  if (!status.trophies.length) return <Text at={[4, 4, 272, 8]}>No word of trophies yet.</Text>;
+  const held = status.trophies.filter((t) => t.held).length;
+  const fallen = status.trophies.filter((t) => t.id >= TROPHY.FALLEN_FIRST && t.id <= TROPHY.FALLEN_LAST);
+  const fallenHeld = fallen.filter((t) => t.held).length;
+  const trophy = status.trophies.find((t) => t.id === selected) ?? status.trophies[0]!;
+  const detail = (): string => {
+    const where = `${capitalised(trophy.name)}, in ${trophy.where}.`;
+    if (trophy.held) return `${where} Taken ${trophyAgeText(store.trophyAge(trophy))}${trophy.names.length ? ` by ${trophy.names.join(", ")}` : ""}.`;
+    if (trophy.id === TROPHY.CAPSTONE)
+      return `${where} ${fallenHeld < fallen.length ? `Its seal opens for a guild holding all eight Fallen Hall trophies: you hold ${fallenHeld}.` : "Your guild may break its seal: say \"open\" before the sealed door."} ${capstoneText(status.capstone)}`;
+    return `${where} Not yet taken.`;
+  };
+  return (
+    <>
+      <Text at={[4, 2, 272, 8]}>{`Your guild holds ${held} of ${status.trophies.length} trophies.`}</Text>
+      <ListBox
+        at={[4, 12, 272, 70]}
+        label="Trophies"
+        items={status.trophies.map((t) => ({ key: t.id, label: `${t.held ? "★" : "–"} ${capitalised(t.name)}` }))}
+        selected={trophy.id}
+        onSelect={setSelected}
+      />
+      <Text at={[4, 86, 272, 34]} wrap>
+        {detail()}
+      </Text>
     </>
   );
 }

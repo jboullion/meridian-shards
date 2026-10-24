@@ -1,6 +1,6 @@
 # ADR 0022: Guilds, halls, Fallen Halls and trophies
 
-- Status: partly built (2026-10-22). Built: phase 0, the cleanup (shards-server 146967e0), and phase 1, the halls (f735b043). Neither has been tried in the game client. Phase 2, prestige and the guild bonus (5fb122b5), the old Necromancer/Hunter scenario's cleanup (dbf0e91a) and phase 3, the recruiting boards (not yet committed), are built too. Planned: phases 4-7, with the Order of Necromancers (26) as the frame for 4 and 5.
+- Status: partly built (2026-10-23). Built: phase 0, the cleanup (shards-server 146967e0); phase 1, the halls (f735b043); phase 2, prestige and the guild bonus (5fb122b5); the old Necromancer/Hunter scenario's cleanup (dbf0e91a); phase 3, the recruiting boards (0c0de565); phase 4, the Fallen Halls (9bf79252, fb27fe48); phase 5, finding them (7845e040, 5fe3ae57 and this repo's 5dccfc1); and phase 6, the trophies and the Inner Sanctum capstone (shards-server 0eee2fa5). Planned: phases 7 and 8.
 - Builds on: [ADR 0021](0021-factions-and-the-faction-war.md), the faction revamp and its no-random-PvP rule; [ADR 0011](0011-fast-travel.md), fast travel's checks; [ADR 0012](0012-cosmetics.md), the dye code and decals; the magic item revamp, whose items the Fallen Halls drop.
 - Design page, with decisions G1-G25, numbered as here and a phase tracker: https://claude.ai/artifact/Nvvnp6oGKoutiwwHpbGvfK
 
@@ -143,9 +143,25 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
 
     Left off for now: the Dark Angel and the Thrasher (ordinary spawns), the Yeti (no fixed home), arena and event bosses, and the death-realm bosses.
 
+    - **As built (phase 6):** the trophy is the class's `viTrophy` (`TROPHY_*` in `blakston.khd`: the Fallen Halls' bosses 1-8 by rank, the world's 21-32, the capstone 41). The user chose all twelve world bosses, with fixes:
+      - **Bergentaal's event** (`berg8.kod StartSpinebeastEvent`) spawned a giant rat king where it meant the Spinebeast Behemoth. It now spawns the Behemoth.
+      - **Xeochicatl's** trophy is on the ne'xeochicatl (`XeoNeru`), the valley's boss.
+      - **The ghost of Far'Nohl** gives it only in its throne room (`RID_THRONE2`), not as a common spawn elsewhere.
+      - The world's common bosses stay as they are: they're the easier trophies, earned once per guild.
+
 18. **Who earns it:** when a trophy creature dies (`Monster.Killed`), every guilded player who is in the room and in its `plAttackers` earns the trophy for their guild, if the guild doesn't have it yet (`Guild.plTrophies`: id, date, members' names). The guild's online members are told. Later kills earn nothing more.
+    - **As built (phase 6):** `util/guildtrophies.kod` (`GuildTrophies`, `SYS@GetGuildTrophies`).
+      - It uses `plStruckBy` (`WasStruckBy`, decision 21), not `plAttackers`, which only event mobs keep.
+      - A copy, a minion, an event or invasion spawn, and a survival or arena kill earn nothing.
+      - Each guild that took part gets the trophy, 25 prestige for a Fallen Hall's, 10 for the world's or 50 for the capstone, and its online members hear "[Trophy] The Hallrunners has earned a trophy: Marshal Corvane, slain in the Hall of the Slaughtered Command, worth 25 prestige." Their guild windows get it at once.
+      - `Guild.plTrophies` keeps `[ id, GetTime(), [ names ] ]`, oldest first (`HasTrophy`, `AddTrophy`, `CountTrophies`).
 
 19. **A trophy case in every guild hall** lists the guild's trophies with the date and the members who took part. The count also shows on the recruiting notice and in the guild window. Mounted trophies as decorations are later.
+    - **As built (phase 6):**
+      - **The case:** `object/passive/trophycase.kod` (`TrophyCase`), a marble plinth with a gold bowl (`guildaltar2.bgf`, unused before). It stands beside each guild hall's news globe along the same wall (`GuildHall.viTrophy_row`/`_col`, `PlaceTrophyCase`). Looking at it lists the trophies of the guild that holds the hall: "Marshal Corvane, slain in the Hall of the Slaughtered Command, by Shardbot (today)." It says how many days ago, as Kod's time isn't a calendar date.
+      - **A saved world's halls** get their case from the maintenance port: `send object <hall> PlaceTrophyCase`. A fresh world's get them as they're made.
+      - **The recruiting notice** adds "Trophies: N" after the prestige.
+      - **The guild window** gains a Trophies tab (below).
 
 20. **Guild prestige** (`Guild.piPrestige`, `AddPrestige`) never decays.
     - **Earned from:**
@@ -179,7 +195,7 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
 24. **One notice per guild.** An Officer or the Leader posts it, and a new one replaces the old. The server heads it with the Leader, member count, hall, prestige and trophy count. Anyone can read it. The notice goes when the guild does.
     - **As built (phase 3):**
       - The notice's title is the guild's name, with the poster's title after it.
-      - The header is built each time the notice is read (`NewsRecruiting.GetNewsBody`), so it's never stale. It carries the Commander, the member count, the hall and whether it's open, and the prestige. The trophy count joins in phase 5.
+      - The header is built each time the notice is read (`NewsRecruiting.GetNewsBody`), so it's never stale. It carries the Commander, the member count, the hall and whether it's open, the prestige and, since phase 6, the trophy count.
       - The poster is told the notice is up.
 
 25. **The General News board (`NID_TOS_HALL`) retires,** because the adventurers' halls were its only globes.
@@ -194,6 +210,11 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
       - The fight with Queen Venya'cyr there earns a capstone trophy, worth more prestige than a Fallen Hall.
       - Queen Venya'cyr stays a world trophy (17), and Tendrath's quest 169 still has players kill her as now.
       - How the capstone fight differs from that kill is settled when it's built.
+    - **The capstone as decided (2026-10-23, the user's answers for phase 6):** these replace the lever puzzle above.
+      - **Where:** the Inner Sanctum itself. The ordinary Queen and her dark angels keep its east chamber for quests 168 and 169. The sealed lever room south of the hall (rows 20-25, cols 11-16, behind sector 1) becomes the capstone's arena.
+      - **The puzzle:** just a gated door. A member of a guild holding all eight Fallen Hall trophies says "open" beside it. Anyone else hears that only such a guild may break the seal.
+      - **The fight:** the Ascended Queen, with phases. She is stronger than the halls' bosses, and at set points she calls the Order's guards and dark angels to her.
+      - **The trophy** goes only to a guild that holds the eight. She returns with each Meridian day, as the halls do.
     - **The lore:** the Order's founding mails, the Queen's lines, the hunger and tribute warnings, and the Watcher's journal in the Brax Arena are the source text. They are kept in git history when the code goes (27).
 
 27. **The old Necromancer/Hunter scenario's code goes** (cleanup, 2026-10-23). It has been unreachable since the faction revamp:
@@ -421,7 +442,7 @@ Nothing pointed players at the Fallen Halls: they sit behind their old doors, an
     - the header read "Led by Commander Shardbot.  Members: 1.  No hall yet.  Prestige: 0."
   - The notice bodies posted over the maintenance port were blank, because the port passes temporary strings. The client's posts are real strings, as for every globe.
   - **Not tried in the game client:** reading and posting through the globe window.
-- **Phase 4, the Fallen Halls: the shared parts and the Slaughtered Command (shards-server, 2026-10-23, not yet committed).** The other seven halls are still guild halls.
+- **Phase 4, the Fallen Halls: the shared parts and the Slaughtered Command (shards-server 9bf79252, 2026-10-23).** The other seven halls are still guild halls.
   - New `room/ghall/fallenhall.kod` (`FallenHall is MonsterRoom`), built first in the folder:
     - states `READY`, `HELD`, `SANCTUM` and `CLEARED` (`piState`);
     - `GetGarrison` (the subclass's `[class, row, col, role]`, the roles `FALLEN_ROLE_HALL`, `_SANCTUM` and `_BOSS` in `blakston.khd`) and the classvars `viGarrison_level`, `viBoss_level`, `viBoss_hp_percent`, `viBoss_damage_percent` and `viPrize_seed`;
@@ -470,7 +491,7 @@ Nothing pointed players at the Fallen Halls: they sit behind their old doors, an
     - Kept: 90% damage and 1,200 HP. Two buffed players win; one loses narrowly, so potions or a companion might let a solo player squeak through. **For the other halls:** bosses about 15 above their garrison's level, with their toughness in hit points and damage, not level.
     - The garrison: one maxed player killed one Order soldier (level 185) in about 29 s, losing 32 of 150 HP. Pulling the whole main hall at once would be deadly.
   - **Not tried in the game client:** a real fight against the garrison, with spells, heals and companions; the messages; and how the Order's soldiers and mages look.
-- **Phase 4, the other seven Fallen Halls (shards-server, 2026-10-23, not yet committed).** All eight halls are now Fallen Halls. Seven read-only surveys mapped each hall's rooms, secret door and themed monsters first.
+- **Phase 4, the other seven Fallen Halls (shards-server fb27fe48, 2026-10-23).** All eight halls are now Fallen Halls. Seven read-only surveys mapped each hall's rooms, secret door and themed monsters first.
 
   | Hall | Garrison (level) | Sanctum guard | Boss (level, HP) | Prize | Sanctum door |
   |---|---|---|---|---|---|
@@ -499,7 +520,7 @@ Nothing pointed players at the Fallen Halls: they sit behind their old doors, an
   - **Left out:** the necromancer effigy. It can't move, it targets any player in the room through walls, and it never deletes its spell timer, so it needs work first. Frogmen spare good-karma players and have their resistances swapped. Napalm slimes cast Earthquake as they die. Bandit snipers fight hand to hand, since they carry axes.
   - **Tried on a fresh world over the maintenance port** (the hall-13 world is in `run/server/savegame-guild-phase4-hall13-2026-10-23`): in all eight halls a player's entry brought out the 13 at their squares and levels, aggressive; clearing the main hall opened the sanctum; the boss's death cleared the hall and gave the player's guild 2 prestige (16 over the eight); the reset emptied it; no new server errors. Morvaine lost the dark angels' fight-through-walls flag.
   - **Not tried:** real fights in the lower seven halls; how the sanctum doors look when they stay open; the messages in the client.
-- **Phase 5a, finding the Fallen Halls: the server (shards-server and this repo, 2026-10-23, not yet committed).** The user started 5a without changing the defaults in 28-33.
+- **Phase 5a, finding the Fallen Halls: the server (shards-server 7845e040 and this repo's 560d9f8, 2026-10-23).** The user started 5a without changing the defaults in 28-33.
   - **The quest system** (31; ADR 0009 has the details):
     - `requires.inGuild` (`QBQ_IN_GUILD` 64);
     - `"start": "guild"` (`QBQ_ON_BOARD` 128), a quest with no giver taken from the guild window. `quest board` sends the board's offers as `UC_QUEST_OFFERS` with NPC 0, `quest board-accept <id>` takes one, and `QuestBook.BoardState` gives a quest's state for the window;
@@ -527,7 +548,7 @@ Nothing pointed players at the Fallen Halls: they sit behind their old doors, an
     - A guild made over the maintenance port has no name, because `quote` strings are temporary. Its announcement went out with an empty name and broke both test clients' connections.
     - `FallenHall` and `SendHalls` now treat a guild with no name as none. To name a test guild, set its message of the day (`SetGuildMOTD`), which stores a real string, then point `vrName` at that string.
   - **Not tried:** reading the new packet in a client, which waits for 5c's reader.
-- **Phase 5b, the Guild Masters and the guild story (shards-server and this repo, 2026-10-23, not yet committed).**
+- **Phase 5b, the Guild Masters and the guild story (shards-server 5fe3ae57 and this repo's 8de36af, 2026-10-23).**
   - **`GuildMaster is Human`** (`monster/human/guildmaster.kod`), the project's first new NPCs:
     - an NPC that never fights (`AI_NPC | AI_NOMOVE | AI_NOFIGHT`, `MOB_NOFIGHT`), built from player body parts;
     - each subclass fixes its looks with `viLooks_*`/`vrLooks_*` classvars (gender, hair, eyes, nose, mouth, beard, hair colour, skin, shirt and trousers), where `Human` picks at random;
@@ -558,7 +579,7 @@ Nothing pointed players at the Fallen Halls: they sit behind their old doors, an
   - **Seen in the browser client:** Master Aldric Vane beside the Duke, in his purple shirt, with the quest marker over his head.
   - **Test trap:** setting a player's `piBase_Max_Health` by hand doesn't last, because the next XP gain sets it back from their XP. Send them `ResetXPToLevel` afterwards.
   - **Not tried:** the Princess's and Jonas's Guild Masters in the game (they need a fresh world, or a hand placement), and the quest windows' look.
-- **Phase 5c, the guild window's tabs (this repo, 2026-10-23, not yet committed).**
+- **Phase 5c, the guild window's tabs (this repo's 5dccfc1, 2026-10-23).**
   - **The reader:** `packages/world/src/fallenHalls.ts`. It reads `UC_FALLEN_HALLS` (`UC.FALLEN_HALLS` 121) into each hall's rank, minimum health, name, door, state, who cleared it and our daily's state, and builds the commands (`halls`, `quest board`, `quest board-accept <id>`). The session raises it as `fallenHalls`, and `UC_QUEST_OFFERS` with no NPC as a `board` quest event, so the board never opens an NPC's offer window.
   - **The store:** `apps/client/src/game/fallenHalls.ts` (`FallenHallsStore`, kept from logon). It counts the reset and each done daily down from when the packet came, as the War window's store does.
   - **The guild window** (`GuildDialogs.tsx`) gains two tabs for every member:
@@ -583,3 +604,34 @@ Nothing pointed players at the Fallen Halls: they sit behind their old doors, an
   - **The Modern chat's Server tab couldn't be clicked:** the chat's right-edge resize strip ran the full height and covered the tab on a narrow chat. It now starts below the tab row (`styles.css`).
   - **Tried in the browser client** as Shardpal: the guildless and the low-health lines from Master Aldric Vane; a story quest's hand-in with "Your guild gains 3 prestige."; the Muskgate Post story quest's offer window with its full title; and the Server tab with nothing over it.
   - **Setup trap:** a new string shows in the browser client only after `npm run assets` copies the server's `rsc0000.rsb`, and that reloads the game page.
+- **Phase 6, the trophies and the Inner Sanctum capstone (shards-server 0eee2fa5 and this repo, 2026-10-23).**
+  - **Trophies:** 17 to 19 as built above: `viTrophy` on 20 boss classes, `Monster.GetTrophyId` and the hook in `Killed`, `Guild.plTrophies`, `util/guildtrophies.kod`, the case in the ten guild halls, and the count on the recruiting notice.
+  - **The Ascended Queen:** `monster/lich/ascqueen.kod` (`AscendedQueen is Lich`, trophy 41, 8,000-12,000 shillings).
+    - She is made at level 230 (above Lieutenant Morvaine's 215), with 600% health (1,656) and 90% damage (`SetGarrisonStrength`). She carries a prize from the item revamp at seed 10, as a hall's boss does at its own.
+    - Her `HitPointThresholdDamage` fires each time her health crosses a fifth. At 60% she calls an Order mage and a dark angel; at 40% an Order soldier, a mage and a dark angel. The guards are level 200 and placed around the room.
+  - **The Inner Sanctum** (`monsroom/innersanc.kod`): `piCapstone` is sealed (0), open (1) or cleared (2).
+    - **"open"** (`SomeoneSaid` â†’ `CapstoneWord`), said by a player, not emoted:
+      - beside the seal (rows 17-18, cols 12-16), from a guild holding the eight, breaks it. Sector 1 lifts, the Queen rises at (24,14) and the room is told.
+      - Once the seal is broken, the same word beside it takes anyone in, to (22,14), and inside it takes them back out to (18,14).
+      - Anyone else beside the sealed door hears that only a guild that has driven the Order from all eight Fallen Halls may break the seal.
+    - **Her fall:** the room hears it, and every player online hears "[Halls] The Hallrunners has cast down Queen Venya'cyr in her Inner Sanctum!" (the guild that took the trophy, else a player who struck her).
+    - **The reset:** `FallenHalls.NewGameDay` tells the Sanctum too. With anyone inside it waits for the last to leave (`LastUserLeft`), then takes away the Queen and her guards, lowers the door and seals it. Someone who logs back in inside a sealed lever room is put out in the hall.
+    - **The ordinary Queen:** `SpawnQueen` now checks the class exactly, so the Ascended Queen doesn't stop the plain one from returning.
+  - **The guild window** (`GuildDialogs.tsx`):
+    - `UC_FALLEN_HALLS` now ends with the capstone's state and every trophy (`FallenHalls.AppendTrophies`; `docs/research/protocol.md`). The halls are pushed again when a trophy is earned and when the capstone opens, falls or resets.
+    - **A Trophies tab:** "Your guild holds 9 of 21 trophies.", each listed with â˜… if held and â€“ if not. The one picked says where it falls and who took it how long ago. The capstone's line says how many of the eight the guild holds, or that it may break the seal, and how the Sanctum stands.
+    - **Fallen Halls:** each hall whose boss's trophy the guild holds has a â˜….
+    - The eight tabs a Commander sees are tighter again, so they fit.
+  - **Tests:** the reader with and without trophies, and the age and capstone words (`fallenHalls.test.ts`). The full suite passes (520), as do lint and the type check.
+  - **Tried over the maintenance port** with Shardbot:
+    - A weakened Marshal Corvane killed in a real fight gave the Hallrunners trophy 7 with Shardbot's name, and 25 prestige.
+    - Given the other seven Fallen trophies, "open" beside the seal broke it. The Queen rose at level 230 with 1,656 health. Both of her calls came at 60% and 40%, with two guards and then three.
+    - Her death set the Sanctum to cleared and gave the capstone trophy and 50 prestige. `NewGameDay` waited while Shardbot was inside, then resealed the door once they left.
+    - Shardbot died to her twice in the tests (once with five guards up, once arriving at low health), so she hits as hard as meant.
+  - **Tried in the browser client** as Shardbot, with hall 1 leased to the Hallrunners: the case beside the globe, its list, the Trophies tab and the stars on the Fallen Halls tab.
+  - **Traps:**
+    - In a description, `%s` takes a resource and `%q` an inline string. The case's built text needs `%q`.
+    - Kod treats names case-insensitively, so a resource named like a constant (`trophy_capstone` against `TROPHY_CAPSTONE`) clashes. Parameter names can't be class names either (`boss`, `queen`, `guild`), or built-ins (`first`, `last`).
+    - A failed build compiles some files without staging them in `loadkod`. The next build skips them, as they're up to date, so copy them by hand.
+    - Leaving the underworld applies the death penalties. Teleport a dead test character out through another room, then restore their health.
+  - **Not yet played:** the whole climb by a real guild, the capstone fight unweakened with a full party, and the announcement as seen in the client.

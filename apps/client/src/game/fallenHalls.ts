@@ -5,7 +5,7 @@
 // as the Faction War's is (factionWar.ts); the countdowns run from when each came.
 
 import { useEffect, useState } from "react";
-import type { FallenHall, FallenHallsStatus, QuestOffer } from "@shards/world";
+import type { FallenHall, FallenHallsStatus, QuestOffer, Trophy } from "@shards/world";
 
 export class FallenHallsStore {
   status: FallenHallsStatus | null = null;
@@ -49,6 +49,11 @@ export class FallenHallsStore {
   /** Seconds until a done daily is offered again, now */
   dailySeconds(h: FallenHall, now = Date.now()): number {
     return Math.max(0, h.dailySeconds - this.since(now));
+  }
+
+  /** How long ago our guild earned a trophy, now */
+  trophyAge(t: Trophy, now = Date.now()): number {
+    return t.ageSeconds + this.since(now);
   }
 
   /** Every hall's daily quest id: the Guild Quests tab lists the board's others */
