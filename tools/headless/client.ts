@@ -5,14 +5,16 @@
 //
 //   node tools/headless/client.ts --user shardbot --pass secret [--char Shardbot]
 //        [--url ws://localhost:8059] [--key <SecretKey>] [--rsb <path to rsc0000.rsb>]
-//        [--walk "row,col row,col ..."] [--go] [--loop] [--stay 300] [--say "hello"] [--verbose]
+//        [--walk "row,col row,col ..."] [--go] [--loop] [--wander] [--stay 300] [--say "hello"] [--say-every 3] [--origin <url>] [--ping-log] [--verbose]
 //
 // --walk takes 1-based grid squares (Kod coordinates / 64): "8,7" is the centre of
 // square (8,7), "9.1,7.5" an exact spot. Moves are sent like the original client: at
 // most every 250 ms, a short step each time. If the server snaps us back (the spot
 // is outside the room), that waypoint is skipped. --go sends BP_REQ_GO (use a door /
 // exit on the current square) after the walk. --loop walks the path back and forth
-// until --stay runs out (soak test).
+// until --stay runs out (soak test). --wander instead walks back and forth between
+// wherever we are and a square next to it, again after every room change (teleports),
+// trying the next direction when the server snaps us back.
 
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
@@ -35,8 +37,12 @@ const { values: opt } = parseArgs({
     walk: { type: "string" },
     go: { type: "boolean", default: false },
     loop: { type: "boolean", default: false },
+    wander: { type: "boolean", default: false },
     stay: { type: "string", default: "10" },
     say: { type: "string" },
+    "say-every": { type: "string", default: "3" },
+    origin: { type: "string" },
+    "ping-log": { type: "boolean", default: false },
     verbose: { type: "boolean", default: false },
   },
 });
@@ -77,13 +83,30 @@ let walkTimer: ReturnType<typeof setInterval> | undefined;
 let walking = false;
 let sayTimer: ReturnType<typeof setInterval> | undefined;
 let finished = false;
+/** --wander: the direction (row, col squares) we try next */
+const WANDER_DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+let wanderDir = 0;
+
+/** --wander: walk between here and the square next to us in the current direction. */
+function wanderHere(): void {
+  if (!me) return;
+  const [dr, dc] = WANDER_DIRS[wanderDir];
+  fullPath.splice(0, fullPath.length, { row: me.row + dr * KOD_FINENESS, col: me.col + dc * KOD_FINENESS }, { ...me });
+  path = [...fullPath];
+}
 
 // ------------------------------------------------------------------ connection
 
-const ws = new WebSocket(opt.url!, ["binary"]);
+// --origin sets the Origin header, for gateways with GATEWAY_ORIGINS set (Node's WebSocket takes headers)
+const ws = opt.origin
+  ? new WebSocket(opt.url!, { protocols: ["binary"], headers: { Origin: opt.origin } } as unknown as string[])
+  : new WebSocket(opt.url!, ["binary"]);
 ws.binaryType = "arraybuffer";
 const conn = new Connection((b) => ws.send(b as Uint8Array<ArrayBuffer>), {
   state: (s) => log(`state -> ${s}`),
+  latency: (ms) => {
+    if (opt["ping-log"]) log(`ping ${ms} ms`);
+  },
   error: (e) => {
     log("protocol error:", e.message);
     exit(1);
@@ -230,7 +253,10 @@ function onGame(type: number, r: ByteReader): void {
       if (player && m.id === player.id) {
         me = { row: m.kodRow, col: m.kodCol };
         log(`server moved me to ${fmt(me)}`);
-        if (walking && path.length) {
+        if (walking && opt.wander) {
+          wanderDir = (wanderDir + 1) % WANDER_DIRS.length;
+          wanderHere();
+        } else if (walking && path.length) {
           log(`  blocked: skipping waypoint ${fmt(path[0])}`);
           path.shift();
         }
@@ -262,11 +288,12 @@ function onGame(type: number, r: ByteReader): void {
 
 let started = false;
 function afterRoomLoaded(): void {
+  if (opt.wander) wanderHere(); // every room, including after a teleport
   if (started) return;
   started = true;
   if (opt.say) {
     conn.sendGame(buildSay(opt.say));
-    sayTimer = setInterval(() => conn.sendGame(buildSay(opt.say!)), 3000);
+    sayTimer = setInterval(() => conn.sendGame(buildSay(opt.say!)), Number(opt["say-every"]) * 1000);
   }
   if (path.length) startWalking();
   const stayMs = Number(opt.stay) * 1000;
@@ -280,7 +307,7 @@ function startWalking(): void {
   walking = true;
   walkTimer = setInterval(() => {
     if (!me || !player) return;
-    if (path.length === 0 && opt.loop) {
+    if (path.length === 0 && (opt.loop || opt.wander)) {
       // walk the path back and forth for soak tests
       fullPath.reverse();
       path = [...fullPath];
