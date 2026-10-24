@@ -574,3 +574,12 @@ Nothing pointed players at the Fallen Halls: they sit behind their old doors, an
     - a daily abandoned over the maintenance port showed "daily ready" again when the server pushed the halls.
     - The first "Take the daily" left the row as it was until the tab was opened again; it didn't happen again in two more tries.
   - The temporary `tools/agent/_listen.tmp.ts` is deleted. `_bossfight.tmp.ts` stays until the ladder's tuning is settled.
+- **Fixes from the phases 3-5 playtest (2026-10-23).** The playtest found no major bugs and filed four small reports (`playtest/reports/2026-10-23-1936-*`, now marked fixed):
+  - **A Guild Master said only "They have no work for you right now."** to a player who couldn't start the story. A new `Monster.SayNoQuests` hook lets an NPC with no quests for a player say its own line (`QuestBook.SendOffers`).
+    - `GuildMaster.SayNoQuests` tells a guildless player that the Order took eight of the old guild halls, and to found a guild with Frular in Barloque or join one.
+    - It tells a guild member under 80 base health to come back at 80.
+  - **Story quest prestige wasn't mentioned:** `QRW_PRESTIGE` now says "Your guild gains %i prestige." (`quest_reward_prestige`).
+  - **Long quest titles were cut off** in the quest window. The story quests are now "Fallen Halls I: Den of Shadows" to "Fallen Halls VIII: Wetland Fortress", and the dailies "Rank I: Den of Shadows" to "Rank VIII: Wetland Fortress". The longest, "Fallen Halls VII: Slaughtered Command", measures 346 of the title's 380 pixels.
+  - **The Modern chat's Server tab couldn't be clicked:** the chat's right-edge resize strip ran the full height and covered the tab on a narrow chat. It now starts below the tab row (`styles.css`).
+  - **Tried in the browser client** as Shardpal: the guildless and the low-health lines from Master Aldric Vane; a story quest's hand-in with "Your guild gains 3 prestige."; the Muskgate Post story quest's offer window with its full title; and the Server tab with nothing over it.
+  - **Setup trap:** a new string shows in the browser client only after `npm run assets` copies the server's `rsc0000.rsb`, and that reloads the game page.

@@ -3961,7 +3961,9 @@ canvas.server-wait {
 .game.modern-ui .chat-resize {
   left: auto;
   right: -5px;
-  top: 0;
+  /* below the tab row: on a narrow chat the tabs reach the right edge, and the strip covered the
+     Server tab (a playtest report, 2026-10-23) */
+  top: 30px;
   bottom: 0;
   width: 10px;
   height: auto;
