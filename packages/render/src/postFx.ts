@@ -19,6 +19,9 @@ export interface PostFxOptions {
   vignette: number;
   /** Colour grading (a mood's); none leaves the colours as they are */
   grade?: ColourGrade | null;
+  /** Ours (the spell revamp, V4): Heat's shimmer, 0 for none, and the time it waves by (s) */
+  shimmer?: number;
+  timeS?: number;
 }
 
 export interface ColourGrade {
@@ -31,7 +34,7 @@ export interface ColourGrade {
 }
 
 /** Whether these options need the render target at all. */
-export const postFxActive = (o: PostFxOptions): boolean => o.bloom > 0 || o.vignette > 0 || !!o.grade;
+export const postFxActive = (o: PostFxOptions): boolean => o.bloom > 0 || o.vignette > 0 || !!o.grade || (o.shimmer ?? 0) > 0;
 
 /** Blur levels: each a quarter of the one before, from the glow pass's half size */
 const LEVELS = 5;
@@ -89,11 +92,16 @@ uniform float uGrade;
 uniform vec3 uGrading; // exposure, saturation, contrast
 uniform vec3 uShadowGain;
 uniform vec3 uHighlightGain;
+uniform float uShimmer;
+uniform float uTime;
 // Contrast turns about this grey
 const float PIVOT = 0.3;
 void main() {
-  vec3 c = texture(uScene, vUv).rgb;
-  if (uBloomStrength > 0.0) c += texture(uBloom, vUv).rgb * uBloomStrength;
+  vec2 uv = vUv;
+  // Heat's shimmer: the picture wavers a little, most near the ground
+  if (uShimmer > 0.0) uv += uShimmer * 0.0022 * (1.0 - 0.7 * vUv.y) * vec2(sin(vUv.y * 90.0 + uTime * 7.0), 0.5 * sin(vUv.x * 70.0 + uTime * 5.0));
+  vec3 c = texture(uScene, uv).rgb;
+  if (uBloomStrength > 0.0) c += texture(uBloom, uv).rgb * uBloomStrength;
   if (uGrade > 0.5) {
     c *= uGrading.x;
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
@@ -139,6 +147,8 @@ export class PostFx {
     uGrading: { value: new THREE.Vector3(1, 1, 1) },
     uShadowGain: { value: new THREE.Vector3(1, 1, 1) },
     uHighlightGain: { value: new THREE.Vector3(1, 1, 1) },
+    uShimmer: { value: 0 },
+    uTime: { value: 0 },
   });
 
   constructor() {
@@ -177,12 +187,17 @@ export class PostFx {
 
   /**
    * Draws `scene` to the screen through the effects. `hideForGlow`: what the glow pass
-   * leaves out (the sky, weather, shadows: drawn with materials of their own).
+   * leaves out (the sky, weather, shadows: drawn with materials of their own). `afterScene`
+   * (ours, V6): drawn into the view's picture right after it (invisible figures, which copy it).
    */
-  render(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, options: PostFxOptions, hideForGlow: (THREE.Object3D | null | undefined)[]): void {
+  render(
+    renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, options: PostFxOptions, hideForGlow: (THREE.Object3D | null | undefined)[],
+    afterScene?: () => void,
+  ): void {
     this.ensure(renderer);
     renderer.setRenderTarget(this.scene);
     renderer.render(scene, camera);
+    afterScene?.();
 
     const u = this.compositeMaterial.uniforms;
     u.uBloomStrength.value = 0;
@@ -222,6 +237,8 @@ export class PostFx {
       u.uShadowGain.value.set(...g.shadowGain);
       u.uHighlightGain.value.set(...g.highlightGain);
     }
+    u.uShimmer.value = options.shimmer ?? 0;
+    u.uTime.value = options.timeS ?? 0;
     u.uAspect.value = this.width / Math.max(1, this.height);
     this.pass(renderer, this.compositeMaterial, null);
   }

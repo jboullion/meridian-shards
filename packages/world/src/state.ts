@@ -8,6 +8,8 @@ import {
   type PlayerInfo, type RoomObject, type Spell, type Statistic,
 } from "@shards/protocol";
 import { animStateFrom, type AnimState } from "./animation.ts";
+import type { SpellFx } from "./spellFx.ts";
+import { SpellRanges } from "./spellRange.ts";
 
 export interface OverlayState extends Overlay {
   anim: AnimState;
@@ -118,7 +120,9 @@ export type WorldEvent =
   /** BP_SET_VIEW / BP_RESET_VIEW: seeing through another object's eyes (game.c SetPlayerRemoteView) */
   | { type: "remoteView" }
   /** BP_WAIT / BP_UNWAIT: the server is saving (game.c GameWait / GameUnwait) */
-  | { type: "wait"; waiting: boolean };
+  | { type: "wait"; waiting: boolean }
+  /** Ours (the spell revamp, phase 9): a spell effect to draw (UC_SPELL_FX, spellFx.ts) */
+  | { type: "spellFx"; fx: SpellFx };
 
 /** The sun or the moon on the sky (boverlay.c), with its animation. */
 export interface BgOverlayState {
@@ -269,6 +273,14 @@ export class WorldState {
     for (const fn of this.listeners) fn(e);
   }
 
+  /** Ours (the spell revamp, V5): our range rings (UC_SPELL_RANGE), read by the scene each frame */
+  readonly spellRanges = new SpellRanges();
+
+  /** Ours (the spell revamp, phase 9): UC_SPELL_FX, passed on to the scene to draw */
+  spellFx(fx: SpellFx): void {
+    this.emit({ type: "spellFx", fx });
+  }
+
   /** Our own room object, if we've seen it. */
   get self(): WorldObject | undefined {
     return this.player ? this.objects.get(this.player.id) : undefined;
@@ -347,6 +359,7 @@ export class WorldState {
   emitIdsStale(): void {
     this.magicNames.clear();
     this.magicNamesAsked.clear();
+    this.spellRanges.clear();
     this.emit({ type: "idsStale" });
   }
 
@@ -397,6 +410,7 @@ export class WorldState {
     this.playerOverlays[0] = this.playerOverlays[1] = null;
     this.magicNames.clear();
     this.magicNamesAsked.clear();
+    this.spellRanges.clear();
     this.emit({ type: "idsStale" });
     this.emit({ type: "inventory" });
     this.emit({ type: "inUse" });

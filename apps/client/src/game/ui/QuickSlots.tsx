@@ -154,7 +154,15 @@ export function Hotbar({
               hold.current = h;
             }}
             onPointerUp={endHold}
-            onPointerLeave={endHold}
+            // Ours (the spell revamp, V5): a spell's range ring shows about us while the mouse is on its slot
+            onPointerEnter={(e) => {
+              const id = v?.slot.kind === "spell" && v.available ? (v.object as { id?: number }).id : undefined;
+              if (e.pointerType === "mouse" && typeof id === "number") session.pointAtSpell(id);
+            }}
+            onPointerLeave={() => {
+              endHold();
+              session.pointAtSpell(null);
+            }}
             onPointerCancel={endHold}
             onDragStart={(e) => e.dataTransfer.setData(DRAG_SLOT, String(i))}
             onDragOver={(e) => accepts(e) && e.preventDefault()}

@@ -82,7 +82,7 @@ interface Emitter {
 
 const newParticle = (): Particle => ({ energy: 0, shown: false, pos: { x: 0, y: 0, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, r: 0, g: 0, b: 0, a: 0 });
 
-type Kind = "sand" | "rain" | "snow" | "fireworks";
+type Kind = "sand" | "wind" | "rain" | "snow" | "fireworks";
 
 /** d3dparticle.c D3DParticleEmitterInit */
 function emitter(
@@ -101,11 +101,13 @@ function emitter(
 }
 
 const SAND: [number, number, number, number] = [226, 153, 6, 255];
+/** Ours (the spell revamp, V4): Winds blow pale streaks, as Sandstorm blows sand */
+const WIND: [number, number, number, number] = [215, 222, 230, 110];
 const RAIN: [number, number, number, number] = [175, 228, 249, 100];
 const SNOW: [number, number, number, number] = [255, 255, 255, 220];
 
-/** d3dparticle.c SandstormInit: 12 emitters around the player blowing inwards, twice */
-function sandEmitters(density: number): Emitter[] {
+/** d3dparticle.c SandstormInit: 12 emitters around the player blowing inwards, twice (ours: Winds' too, paler) */
+function sandEmitters(density: number, colour = SAND): Emitter[] {
   const R = 12;
   const rot: [number, number, number] = [0, -Math.PI / 500, -Math.PI / 500];
   const flags = PS.RANDOM_XY | PS.RANDOM_Z;
@@ -117,7 +119,7 @@ function sandEmitters(density: number): Emitter[] {
   const out: Emitter[] = [];
   for (let twice = 0; twice < 2; twice++)
     for (const [x, y, vx, vy] of set) {
-      const e = emitter([x, y, 0], [vx, vy, 0], SAND, 40, rand() % 240, rot, 1024, 2, MAX_PARTICLES, flags, density);
+      const e = emitter([x, y, 0], [vx, vy, 0], colour, 40, rand() % 240, rot, 1024, 2, MAX_PARTICLES, flags, density);
       if (e) out.push(e);
     }
   return out;
@@ -280,6 +282,8 @@ function randomizeEmitterPosition(e: Emitter): void {
 
 export interface WeatherFlags {
   sand: boolean;
+  /** Ours: the Winds room enchantment */
+  wind?: boolean;
   rain: boolean;
   snow: boolean;
   fireworks: boolean;
@@ -289,7 +293,7 @@ export class WeatherParticles {
   readonly group = new THREE.Group();
   /** Called when a firework bursts near the start of its flight (firework.ogg at x, y) */
   onFireworkSound?: (x: number, y: number) => void;
-  private readonly emitters: Record<Kind, Emitter[]> = { sand: [], rain: [], snow: [], fireworks: [] };
+  private readonly emitters: Record<Kind, Emitter[]> = { sand: [], wind: [], rain: [], snow: [], fireworks: [] };
   private readonly lines: THREE.LineSegments;
   private readonly snow: THREE.Points;
   private density = 100;
@@ -342,6 +346,8 @@ export class WeatherParticles {
     this.emitters.rain = rainEmitters(this.density);
     this.emitters.snow = snowEmitters(this.density);
     this.emitters.fireworks = fireworksEmitters(this.density);
+    // (last, to leave the original's random sequence as it was)
+    this.emitters.wind = sandEmitters(this.density, WIND);
     this.old = { x: 0, y: 0, z: 0 };
   }
 
@@ -360,6 +366,7 @@ export class WeatherParticles {
       }
     for (let i = 0; i < steps; i++) {
       if (flags.sand) this.stepFluid(this.emitters.sand, room);
+      if (flags.wind) this.stepFluid(this.emitters.wind, room);
       if (flags.rain) this.stepFluid(this.emitters.rain, room);
       if (flags.snow) this.stepFluid(this.emitters.snow, room);
       if (flags.fireworks) this.stepBurst(this.emitters.fireworks, room);
@@ -429,7 +436,7 @@ export class WeatherParticles {
 
   /** D3DParticleAddToRenderer: lines from each particle back along its velocity, fading; snow as squares */
   private draw(flags: WeatherFlags): void {
-    const lineKinds = (["sand", "rain", "snow", "fireworks"] as const).filter((k) => flags[k] && (k !== "snow" || this.snowAsLines));
+    const lineKinds = (["sand", "wind", "rain", "snow", "fireworks"] as const).filter((k) => flags[k] && (k !== "snow" || this.snowAsLines));
     let n = 0;
     for (const k of lineKinds) for (const e of this.emitters[k]) for (const p of e.particles) if (p.shown && p.energy > 0) n++;
     const pos = this.attribute(this.lines.geometry, "position", n * 2, 3);

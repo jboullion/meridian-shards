@@ -737,6 +737,11 @@ export function StatList({
         key={`${s.num}:${i}`}
         className={`stat-list-row${header ? " header" : ""}${selected === i ? " selected" : ""}`}
         onClick={() => setSelected(i)}
+        // Ours (the spell revamp, V5): a spell's range ring shows about us while the mouse is on it
+        onPointerEnter={(e) => {
+          if (spells && l.id && e.pointerType === "mouse") session.pointAtSpell(l.id);
+        }}
+        onPointerLeave={() => spells && session.pointAtSpell(null)}
         // Ours: a spell dragged onto a quick slot fills it (QuickSlots.tsx Hotbar)
         draggable={group === STAT_GROUP.SPELLS && !!l.id}
         onDragStart={(e) => {

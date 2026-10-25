@@ -821,6 +821,9 @@ export const UC = {
   /** Ours (the guild revamp, phase 5): the Fallen Halls for the guild window (shards-server util/fallenhalls.kod SendHalls; docs/adr/0022) */
   FALLEN_HALLS: 121,
   GUILD_HALL: 122,
+  /** Ours (the spell revamp, phase 9): a spell effect to draw (shards-server room.kod SendSpellFx; @shards/world spellFx.ts) */
+  SPELL_FX: 123,
+  SPELL_RANGE: 124,
 } as const;
 
 /**

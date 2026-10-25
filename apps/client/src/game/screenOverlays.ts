@@ -36,6 +36,9 @@ function flashColor(xlat: number): [number, number, number, number] {
   return [0, 0, 0, 255];
 }
 
+/** How long a cast's glow about our hands lasts, ms */
+const CAST_GLOW_MS = 800;
+
 interface Cached {
   key: string;
   canvas: HTMLCanvasElement | null;
@@ -89,9 +92,10 @@ export class ScreenOverlays {
 
   /**
    * Redraw. `light` is the player's brightness (0..1, D3DObjectLightingCalc);
-   * `alpha` the player's translucency (draw effects).
+   * `alpha` the player's translucency (draw effects). `jitter` (ours, V6): how far the hands
+   * are pulled about this frame, in the overlays' own pixels (an invisible player's shimmer).
    */
-  draw(overlays: (PlayerOverlayState | null)[], fx: Effects, light: [number, number, number], alpha: number): void {
+  draw(overlays: (PlayerOverlayState | null)[], fx: Effects, light: [number, number, number], alpha: number, jitter = 0): void {
     const w = this.canvas.clientWidth,
       h = this.canvas.clientHeight;
     const dpr = window.devicePixelRatio || 1;
@@ -122,8 +126,8 @@ export class ScreenOverlays {
       const hs = ov.hotspot;
       let x = hs === HOTSPOT.NW || hs === HOTSPOT.W || hs === HOTSPOT.SW ? 0 : hs === HOTSPOT.NE || hs === HOTSPOT.E || hs === HOTSPOT.SE ? w - bw : (w - bw) / 2;
       let y = hs === HOTSPOT.NW || hs === HOTSPOT.N || hs === HOTSPOT.NE ? 0 : hs === HOTSPOT.SW || hs === HOTSPOT.S || hs === HOTSPOT.SE ? h - bh : (h - bh) / 2;
-      x += c.xOffset * sx;
-      y += c.yOffset * sy;
+      x += (c.xOffset + jitter) * sx;
+      y += (c.yOffset - jitter) * sy;
       ctx.globalAlpha = alpha;
       // the picture can be finer than the base bitmap (Composite.resolution)
       const r = c.resolution;
@@ -131,6 +135,22 @@ export class ScreenOverlays {
         dy = y - (c.originY / r) * sy,
         dw = (c.canvas.width / r) * sx,
         dh = (c.canvas.height / r) * sy;
+      // Ours (the spell revamp, phase 9): a cast's glow of its school's colour about the hands,
+      // under a magic weapon's ring. Shadows only (the picture is drawn far off, its shadow pulled
+      // back), twice over to be seen.
+      const glow = this.castGlowNow();
+      if (glow) {
+        const off = 10000;
+        ctx.shadowColor = glow.color;
+        ctx.shadowOffsetX = off * dpr;
+        for (const blur of [6, 16]) {
+          ctx.shadowBlur = blur * glow.k * sx * dpr;
+          ctx.drawImage(c.canvas, dx - off, dy, dw, dh);
+        }
+        ctx.shadowOffsetX = 0;
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = "transparent";
+      }
       if (c.ring) {
         ctx.shadowColor = c.glow;
         ctx.shadowBlur = c.blur * sx * dpr;
@@ -165,6 +185,27 @@ export class ScreenOverlays {
       ctx.fillRect(0, 0, w, h);
     }
     this.canvas.style.filter = fx.invert > 0 ? "invert(1)" : "";
+  }
+
+  /**
+   * Ours (the spell revamp, phase 9): our hands glow with a spell's school colour for a moment
+   * (r, g, b 0..1), on UC_SPELL_FX's cast for us, with Enhanced Visuals
+   */
+  castGlow(r: number, g: number, b: number): void {
+    this.glow = { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255), start: performance.now() };
+  }
+
+  private glow: { r: number; g: number; b: number; start: number } | null = null;
+
+  /** The cast glow now: its colour, fading, and how strong (1 to 0 over CAST_GLOW_MS), or null */
+  private castGlowNow(): { color: string; k: number } | null {
+    if (!this.glow) return null;
+    const k = 1 - (performance.now() - this.glow.start) / CAST_GLOW_MS;
+    if (k <= 0) {
+      this.glow = null;
+      return null;
+    }
+    return { color: `rgba(${this.glow.r},${this.glow.g},${this.glow.b},${k.toFixed(3)})`, k };
   }
 
   /** The overlay's picture with its own overlays and xlats, lit; cached until it changes. */

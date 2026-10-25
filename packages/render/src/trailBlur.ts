@@ -77,3 +77,67 @@ export class TrailBlur {
     this.quad.material.dispose();
   }
 }
+
+/**
+ * Ours (the spell revamp, V6): wavering vision (EFFECT_WAVER, Vertigo) as the original's
+ * software renderer drew it (rops.c WaverDib): each row of the view pushed sideways along a
+ * wave (_shiftbits, up to 2 of its 480-odd pixels and 26 rows long) that rolls down the view a
+ * row a frame. The D3D client blurred it as it did EFFECT_BLUR, and so did we.
+ */
+export class Waver {
+  private frameTexture: THREE.FramebufferTexture | null = null;
+  private readonly scene = new THREE.Scene();
+  private readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  private readonly material = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
+    vertexShader: /* glsl */ `
+out vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+}`,
+    fragmentShader: /* glsl */ `
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uView;
+uniform float uPhase;
+void main() {
+  // 2 pixels of the original's 480-wide view, one wave every 26 of its 276 rows
+  float shift = (2.0 / 480.0) * sin(6.2831853 * (vUv.y * (276.0 / 26.0) + uPhase));
+  fragColor = vec4(texture(uView, vec2(clamp(vUv.x + shift, 0.0, 1.0), vUv.y)).rgb, 1.0);
+}`,
+    uniforms: { uView: { value: null }, uPhase: { value: 0 } },
+    depthTest: false,
+    depthWrite: false,
+  });
+  private readonly quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material);
+
+  constructor() {
+    this.quad.frustumCulled = false;
+    this.scene.add(this.quad);
+  }
+
+  /** Call right after the view has been drawn to the screen; `nowMs` rolls the wave (a row every 30 ms, as at the original's speed). */
+  apply(renderer: THREE.WebGLRenderer, nowMs: number): void {
+    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+    if (!this.frameTexture || this.frameTexture.image.width !== size.x || this.frameTexture.image.height !== size.y) {
+      this.frameTexture?.dispose();
+      this.frameTexture = new THREE.FramebufferTexture(size.x, size.y);
+      this.frameTexture.minFilter = this.frameTexture.magFilter = THREE.LinearFilter;
+    }
+    renderer.copyFramebufferToTexture(this.frameTexture);
+    this.material.uniforms.uView.value = this.frameTexture;
+    this.material.uniforms.uPhase.value = (nowMs / 30 / 26) % 1;
+    const autoClear = renderer.autoClear;
+    renderer.autoClear = false;
+    renderer.render(this.scene, this.camera);
+    renderer.autoClear = autoClear;
+  }
+
+  dispose(): void {
+    this.frameTexture?.dispose();
+    this.quad.geometry.dispose();
+    this.material.dispose();
+  }
+}

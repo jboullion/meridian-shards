@@ -436,11 +436,12 @@ export interface Settings {
   hudScale: number;
 
   /**
-   * Ours, Enhanced Lighting (the Bind Editor's Options, the phone's Configuration; on by
-   * default): soft highlights (lighting.ts softHighlight),
+   * Ours, Enhanced Visuals (it was Enhanced Lighting; the Bind Editor's Options, the phone's
+   * Configuration; on by default): soft highlights (lighting.ts softHighlight),
    * flickering flames (objectLighting.ts flicker), light that stops at walls
    * (lightOcclusion.ts), glowing flames and a vignette (postFx.ts), shaded corners
-   * (roomAo.ts) and shadows under figures (ObjectsView). Off, the original's look.
+   * (roomAo.ts) and shadows under figures (ObjectsView), the moods (mood.ts) and spell effects
+   * (spellEffects.ts, the spell revamp's phase 9). Off, the original's look.
    */
   enhanced: boolean;
 

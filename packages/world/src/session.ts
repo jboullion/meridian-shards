@@ -25,6 +25,8 @@ import { readArena, type ArenaStatus } from "./arenaBouts.ts";
 import { readFactionWar, type FactionWarEvent } from "./factionWar.ts";
 import { readFallenHalls, type FallenHallsStatus } from "./fallenHalls.ts";
 import { readGuildHall, type GuildHallStatus } from "./guildHall.ts";
+import { readSpellFx } from "./spellFx.ts";
+import { readSpellRange } from "./spellRange.ts";
 import { readCosmetics, type CosmeticsEvent } from "./cosmetics.ts";
 import { readItemService } from "./itemservice.ts";
 import { MAGIC_SHOW, magicShow, readMagicName } from "./magic.ts";
@@ -682,6 +684,15 @@ export class GameSession {
     this.send(buildShardsCommand(line));
   }
 
+  /**
+   * Ours (the spell revamp, V5): we point at a spell (a quick slot, the spell list), or at
+   * nothing: its range ring shows about us while we do, asked of the server (UC_SHARDS_OBJECT
+   * "range", answered with UC_SPELL_RANGE) as our spellpower decides it
+   */
+  pointAtSpell(spell: number | null): void {
+    if (this.world.spellRanges.point(spell, performance.now()) && spell !== null) this.shardsObject(spell, "range");
+  }
+
   /** UC_SHARDS_OBJECT (ours): a command line about one object, such as "vault" on an item (user.kod ShardsObjectCommand) */
   shardsObject(id: number, line: string): void {
     this.send(buildShardsObjectCommand(id, line));
@@ -1181,6 +1192,12 @@ export class GameSession {
           } else if (uc === UC.GUILD_HALL) {
             // Ours (guild.kod SendHallInfo)
             this.events.guildHall?.(readGuildHall(r));
+          } else if (uc === UC.SPELL_FX) {
+            // Ours (room.kod SendSpellFx): for the scene to draw
+            this.world.spellFx(readSpellFx(r));
+          } else if (uc === UC.SPELL_RANGE) {
+            // Ours (spell.kod SendSpellRange): our range rings
+            this.world.spellRanges.handle(readSpellRange(r));
           } else if (uc === UC.COMPANION) {
             // Ours (companionbook.kod SendStatus, HealthChanged)
             const e = readCompanion(r, (id) => this.resource(id));

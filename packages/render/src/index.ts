@@ -25,3 +25,6 @@ export * from "./sunShadow.ts";
 export * from "./surfaceEffects.ts";
 export * from "./windowMask.ts";
 export * from "./magicOutline.ts";
+export * from "./spellEffects.ts";
+export * from "./roomEnchantLooks.ts";
+export * from "./rangeRings.ts";

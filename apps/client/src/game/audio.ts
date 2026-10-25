@@ -146,6 +146,11 @@ interface Voice {
   pan: StereoPannerNode;
 }
 
+/** Silence's muffle (setMuffle): the low-pass from wide open down to this, and this much quieter */
+const MUFFLE_OPEN_HZ = 20000;
+const MUFFLE_SHUT_HZ = 700;
+const MUFFLE_QUIETER = 0.35;
+
 export class GameAudio {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -154,6 +159,10 @@ export class GameAudio {
   /** Ours: the ambient sounds, on their own bus */
   private ambientVoices: AmbientVoice[] = [];
   private ambientBus: GainNode | null = null;
+  /** Ours (the spell revamp, V4): the room's sounds (not the music), through Silence's muffle */
+  private roomBus: GainNode | null = null;
+  private muffleFilter: BiquadFilterNode | null = null;
+  private muffled = 0;
   private music: { file: string; source: AudioBufferSourceNode | null; gain: GainNode } | null = null;
   /** The room's track, kept while music is off so switching it on restarts it (MusicRestart). */
   private wantedMusic: string | null = null;
@@ -198,9 +207,15 @@ export class GameAudio {
       this.ctx = new AudioContext();
       this.master = this.ctx.createGain();
       this.master.connect(this.ctx.destination);
+      this.muffleFilter = this.ctx.createBiquadFilter();
+      this.muffleFilter.type = "lowpass";
+      this.muffleFilter.frequency.value = MUFFLE_OPEN_HZ;
+      this.muffleFilter.connect(this.master);
+      this.roomBus = this.ctx.createGain();
+      this.roomBus.connect(this.muffleFilter);
       this.ambientBus = this.ctx.createGain();
       this.ambientBus.gain.value = this.ambientLevel();
-      this.ambientBus.connect(this.master);
+      this.ambientBus.connect(this.roomBus);
     }
     return this.ctx;
   }
@@ -402,7 +417,7 @@ export class GameAudio {
     source.loop = loop;
     const gain = ctx.createGain();
     const pan = ctx.createStereoPanner();
-    source.connect(gain).connect(pan).connect(this.master!);
+    source.connect(gain).connect(pan).connect(this.roomBus!);
     const v: Voice = { file: name, flags, pos, volume, source, gain, pan };
     this.voices.push(v);
     this.place(v);
@@ -482,6 +497,19 @@ export class GameAudio {
     if (!s.randomSounds) this.stopWhere((v) => (v.flags & SF.RANDOM_PLACE) !== 0);
     if (s.soundVolume !== prev.soundVolume) for (const v of this.voices) this.place(v);
     if (this.ambientBus) this.ambientBus.gain.setTargetAtTime(this.ambientLevel(), this.ambientBus.context.currentTime, 0.05);
+  }
+
+  /**
+   * Ours (the spell revamp, V4): how muffled the room's sounds are, 0 (clear) to 1 (Silence on
+   * the room, Enhanced Visuals): quieter and dull, the music left alone
+   */
+  setMuffle(k: number): void {
+    const m = Math.max(0, Math.min(1, k));
+    if (Math.abs(m - this.muffled) < 0.01 || !this.ctx || !this.roomBus || !this.muffleFilter) return;
+    this.muffled = m;
+    const t = this.ctx.currentTime;
+    this.muffleFilter.frequency.setTargetAtTime(MUFFLE_OPEN_HZ * (MUFFLE_SHUT_HZ / MUFFLE_OPEN_HZ) ** m, t, 0.15);
+    this.roomBus.gain.setTargetAtTime(1 - MUFFLE_QUIETER * m, t, 0.15);
   }
 
   private note(line: string): void {

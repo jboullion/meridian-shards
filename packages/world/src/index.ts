@@ -30,6 +30,8 @@ export * from "./arenaBouts.ts";
 export * from "./factionWar.ts";
 export * from "./fallenHalls.ts";
 export * from "./guildHall.ts";
+export * from "./spellFx.ts";
+export * from "./spellRange.ts";
 export * from "./cosmetics.ts";
 export * from "./itemservice.ts";
 export * from "./magic.ts";

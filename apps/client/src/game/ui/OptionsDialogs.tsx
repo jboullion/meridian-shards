@@ -483,9 +483,9 @@ export function TrainDialog({
 
 // ---------------------------------------------------------------------------- Configuration
 
-/** What Enhanced Lighting (ours, settings.enhanced) does, for its tooltip */
+/** What Enhanced Visuals (ours, settings.enhanced) does, for its tooltip */
 const ENHANCED_TITLE =
-  "Soft highlights, flickering and glowing flames, light that stops at walls, shaded corners, shadows and a vignette; off, the original's look";
+  "Soft highlights, flickering and glowing flames, light that stops at walls, shaded corners, shadows, a vignette, the light's moods and spell effects (sparks, trails, glows and rings); off, the original's look";
 
 const AMBIENT_TITLE = "Townsfolk walking the streets and patrons in the inns, seen by you alone";
 const PETS_TITLE = "Other players' pets following them (your own always shows: choose No pet in the Pets tab to hide it)";
@@ -640,8 +640,8 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
                   <Check label="Ground Detail" title={GROUND_TITLE} checked={d.groundDetail} onChange={(v) => set({ groundDetail: v })} />
                   <Check label="Seasons" title={SEASONS_TITLE} checked={d.seasons} onChange={(v) => set({ seasons: v })} />
                   <Check label="Enhanced Water" title={WATER_TITLE} checked={d.enhancedWater} onChange={(v) => set({ enhancedWater: v })} />
-                  {/* Ours: Enhanced Lighting, or the original's look */}
-                  <Check label="Enhanced Lighting" title={ENHANCED_TITLE} checked={d.enhanced} onChange={(v) => set({ enhanced: v })} />
+                  {/* Ours: Enhanced Visuals, or the original's look */}
+                  <Check label="Enhanced Visuals" title={ENHANCED_TITLE} checked={d.enhanced} onChange={(v) => set({ enhanced: v })} />
                   <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
                   <Check label="Limit to 60 FPS" title={FRAME_LIMIT_TITLE} checked={d.frameLimit} onChange={(v) => set({ frameLimit: v })} />
                   <AmbientLifeSelect value={d.ambientLife} onChange={(v) => set({ ambientLife: v })} />
@@ -1102,7 +1102,7 @@ export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Se
           <span className="bind-scale-value">{d.touchLookScale}</span>
         </label>
         <Check label="Dynamic Lighting" checked={d.dynamicLighting} onChange={(v) => set({ dynamicLighting: v })} />
-        <Check label="Enhanced Lighting" title={ENHANCED_TITLE} checked={d.enhanced} onChange={(v) => set({ enhanced: v })} />
+        <Check label="Enhanced Visuals" title={ENHANCED_TITLE} checked={d.enhanced} onChange={(v) => set({ enhanced: v })} />
         <Check label="Ground Detail" title={GROUND_TITLE} checked={d.groundDetail} onChange={(v) => set({ groundDetail: v })} />
         <Check label="Seasons" title={SEASONS_TITLE} checked={d.seasons} onChange={(v) => set({ seasons: v })} />
         <Check label="Enhanced Water" title={WATER_TITLE} checked={d.enhancedWater} onChange={(v) => set({ enhancedWater: v })} />

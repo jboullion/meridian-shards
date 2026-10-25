@@ -25,6 +25,23 @@ export const DRAWFX = {
   DITHERINVIS: 7, DITHERTRANS: 8, DOUBLETRANS: 9, SECONDTRANS: 10, DITHERGREY: 11,
 } as const;
 const SECOND_TRANSLATION = 0x31; // XLAT_FILTERWHITE90 (server.c ExtractObject default)
+
+/**
+ * Ours (the spell revamp, V6): invisible figures (DRAWFX_INVISIBLE) as the original drew them
+ * (d3drender.c, "INVISIBLE OBJECTS"): after the rest of the view, in its own pass, each shows
+ * the view behind it through its shape, a little blurred (the original copied the frame into a
+ * 256 x 256 texture). The original stretched it by 0 to 3 of those texels, different every frame,
+ * which flickered at 15 a second and was hard to look at (2026-10-25 play test): ours ripples it
+ * instead, a slow wave like air over a fire. They're on a layer of their own, which the main pass
+ * and the glow pass leave out (drawInvisible).
+ */
+export const INVISIBLE_LAYER = 3;
+const refractUniforms = {
+  uBackdrop: { value: null as THREE.Texture | null },
+  uViewport: { value: new THREE.Vector2(1, 1) },
+  /** Seconds, for the ripple */
+  uTime: { value: 0 },
+};
 /** draw3d.c sector_depths: water depth by the sector's SF_DEPTH bits */
 const SECTOR_DEPTHS = [0, FINENESS / 5, (2 * FINENESS) / 5, (3 * FINENESS) / 5];
 const ROOM_OVERRIDE = [0, 0x1, 0x2, 0x4];
@@ -149,8 +166,13 @@ uniform sampler2D uFaceColorMap;
 uniform float uOutlineOn;
 uniform sampler2D uOutlineMap;
 uniform vec3 uOutlineColors[${MAGIC_COLOURS.length}];
+// Ours (the spell revamp, V6): an invisible figure shows the view behind it (refractUniforms)
+uniform float uRefract;
+uniform sampler2D uBackdrop;
+uniform vec2 uViewport;
+uniform float uTime;
 void main() {
-  if (uOutlineOn > 0.5) {
+  if (uOutlineOn > 0.5 && uRefract < 0.5) {
     int code = int(floor(texture(uOutlineMap, vUv).r * 255.0 + 0.5));
     if (code > 0) {
       vec3 ring = uOutlineColors[code & 15];
@@ -179,6 +201,18 @@ void main() {
     float index = floor((face ? fine : body) * 255.0 + 0.5);
     if (index == 254.0) discard;
     rgb = texelFetch(uPalette, ivec2(int(index), 0), 0).rgb;
+  }
+  if (uRefract > 0.5) {
+    if (uGlowPass > 0.5) discard;
+    // a slow ripple across the shape (2.5 of the original's 256 texels at most), drifting up
+    vec2 sp = gl_FragCoord.xy / uViewport;
+    vec2 at = sp + (2.5 / 256.0) * vec2(sin(sp.y * 38.0 - uTime * 1.7), 0.5 * sin(sp.x * 27.0 + uTime * 1.3));
+    // (soft as the original's 256 x 256 copy was, drawn back over the whole view)
+    vec2 h = vec2(1.0 / 256.0);
+    vec3 behind = texture(uBackdrop, at).rgb * 2.0 + texture(uBackdrop, at + h).rgb + texture(uBackdrop, at - h).rgb
+      + texture(uBackdrop, at + vec2(h.x, -h.y)).rgb + texture(uBackdrop, at - vec2(h.x, -h.y)).rgb;
+    fragColor = vec4(behind / 6.0, 1.0);
+    return;
   }
   float fog = uFog > 0.5 ? clamp((uFogEnd - vDepth) / uFogEnd, 0.0, 1.0) : 1.0;
   if (uGlowPass > 0.5) {
@@ -433,8 +467,11 @@ export class ObjectsView {
     this.smoothUntil = performance.now() + SMOOTH_BUDGET_MS;
     const seen = new Set<number>();
     const labels: NameLabel[] = [];
+    this.invisibleShown = 0;
     for (const o of objects) {
-      if (o.id === selfId || o.info.drawingType === DRAWFX.INVISIBLE) continue;
+      if (o.id === selfId) continue;
+      // Ours (V6): invisible figures shimmer, in a pass of their own (drawInvisible)
+      const invisible = o.info.drawingType === DRAWFX.INVISIBLE;
       const base = this.getBgf(o.info.iconRes);
       if (!base) continue;
       seen.add(o.id);
@@ -493,6 +530,8 @@ export class ObjectsView {
             uOutlineOn: { value: 0 },
             uOutlineMap: { value: null },
             uOutlineColors: { value: OUTLINE_COLORS },
+            uRefract: { value: 0 },
+            ...refractUniforms,
           },
           side: THREE.DoubleSide,
         });
@@ -524,7 +563,8 @@ export class ObjectsView {
               base: { bgf: base, group: look.anim.group, translation: look.translation, hotspot: 0 },
               overlays,
               viewAngle,
-              secondTranslation: dt === DRAWFX.DOUBLETRANS || dt === DRAWFX.SECONDTRANS ? SECOND_TRANSLATION : 0,
+              // (and a spectator's grey: d3drender.c builds DITHERGREY's texture through XLAT_FILTERWHITE90)
+              secondTranslation: dt === DRAWFX.DOUBLETRANS || dt === DRAWFX.SECONDTRANS || dt === DRAWFX.DITHERGREY ? SECOND_TRANSLATION : 0,
               secondOnly: dt === DRAWFX.SECONDTRANS,
               faceApart: true,
             },
@@ -585,16 +625,20 @@ export class ObjectsView {
       u.uAlpha.value = alpha;
       e.mesh.material.transparent = alpha < 1;
       e.mesh.material.depthWrite = alpha >= 1;
+      u.uRefract.value = invisible ? 1 : 0;
+      e.mesh.layers.set(invisible ? INVISIBLE_LAYER : 0);
+      if (invisible) this.invisibleShown++;
       // Ours, the glow pass: flames and spells shine (not signs' highlight lights, nor players carrying a light)
       const l = o.info.light;
       u.uEmissive.value = o.fullBright || (l.color && l.intensity && !isHighlightLight(l.flags) && !(o.info.flags & OF.PLAYER)) ? 1 : 0;
-      this.updateHalo(e, o.id === this.target, r);
-      this.updateShadow(e, o, ctx, alpha);
+      // (no halo, shadow or name for an invisible figure: d3drender.c leaves them out)
+      this.updateHalo(e, o.id === this.target && !invisible, r);
+      this.updateShadow(e, o, ctx, invisible ? 0 : alpha);
 
       // Name labels (d3drender.c D3DRenderNamesDraw3D)
       const f = o.info.flags;
       const hidden = (!this.names.players && f & OF.PLAYER) || (!this.names.npcs && f & OF.NPC) || (!this.names.signs && f & OF.SIGN);
-      if (f & OF.DISPLAY_NAME && !hidden) {
+      if (f & OF.DISPLAY_NAME && !hidden && !invisible) {
         const dist = Math.hypot(dx, dy);
         if (o.info.flags & OF.SIGN || dist < MAX_NAME_DISTANCE) {
           const c = o.info.nameColor;
@@ -628,6 +672,42 @@ export class ObjectsView {
       if (performance.now() >= this.smoothUntil) return;
       this.setColorTexture(e, true);
     }
+  }
+
+  /** Ours (V6): how many invisible figures this frame draws */
+  private invisibleShown = 0;
+  private backdrop: THREE.FramebufferTexture | null = null;
+
+  /**
+   * Ours (V6): the invisible figures' pass, right after the view is drawn and before anything
+   * goes over it, into whatever's being drawn to (the screen, or PostFx's picture of the view):
+   * that picture is copied, and the figures drawn from it where their shapes are.
+   */
+  drawInvisible(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera): void {
+    if (!this.invisibleShown) return;
+    const target = renderer.getRenderTarget();
+    const w = target ? target.width : renderer.getDrawingBufferSize(new THREE.Vector2()).x;
+    const h = target ? target.height : renderer.getDrawingBufferSize(new THREE.Vector2()).y;
+    if (!this.backdrop || this.backdrop.image.width !== w || this.backdrop.image.height !== h) {
+      this.backdrop?.dispose();
+      this.backdrop = new THREE.FramebufferTexture(w, h);
+      this.backdrop.minFilter = this.backdrop.magFilter = THREE.LinearFilter;
+    }
+    renderer.copyFramebufferToTexture(this.backdrop);
+    refractUniforms.uBackdrop.value = this.backdrop;
+    refractUniforms.uViewport.value.set(w, h);
+    refractUniforms.uTime.value = (performance.now() / 1000) % 3600;
+    const mask = camera.layers.mask;
+    const autoClear = renderer.autoClear;
+    // (a colour background clears the picture whatever autoClear says)
+    const background = scene.background;
+    camera.layers.set(INVISIBLE_LAYER);
+    renderer.autoClear = false;
+    scene.background = null;
+    renderer.render(scene, camera);
+    scene.background = background;
+    renderer.autoClear = autoClear;
+    camera.layers.mask = mask;
   }
 
   /** Where an object's name label would go (the top of its sprite), or null when it isn't drawn. */
@@ -895,5 +975,6 @@ export class ObjectsView {
     this.unsmoothed.clear();
     this.shadowGeometry.dispose();
     this.shadowMaterial.dispose();
+    this.backdrop?.dispose();
   }
 }

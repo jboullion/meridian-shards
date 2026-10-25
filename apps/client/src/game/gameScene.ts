@@ -13,7 +13,7 @@ import * as THREE from "three";
 import { SAY } from "@shards/protocol";
 import { FINENESS, SF, ceilingHeightAt, floorHeightAt, gridTextureName, leafAt, skyboxForBackground, type Bgf, type Room } from "@shards/formats";
 import {
-  DRAWFX, Flyers, GroundCover, Lightning, Nature, OF, ObjectsView, Puddles, type PuddleRoom, type GroundKind, type GroundRoom, type NatureRoom, type RockArt, PARTICLE_STEPS_PER_SECOND, PostFx, RoomView, SkyOverlaysView, TrailBlur, WeatherParticles, XlatTable, type ParticleRoom, disposeSkybox, fogEnd, objectBrightness, paletteTexture, postFxActive, type LightSource,
+  DRAWFX, Flyers, GroundCover, Lightning, Nature, OF, ObjectsView, Puddles, RangeRings, RoomEnchantLooks, SpellEffects, type RangeRing, fxColor, type RoomEnchantKind, type FinePoint, type PuddleRoom,type GroundKind, type GroundRoom, type NatureRoom, type RockArt, PARTICLE_STEPS_PER_SECOND, PostFx, RoomView, SkyOverlaysView, TrailBlur, Waver, WeatherParticles, XlatTable, type ParticleRoom, disposeSkybox, fogEnd, objectBrightness, paletteTexture, postFxActive, type LightSource,
   type PostFxOptions,
   type NameLabel, type ViewObject, type SpriteMood, moodUniforms, renderTune, sunAt, effectUniforms, roomSurfaceTextures,
 } from "@shards/render";
@@ -22,7 +22,7 @@ import {
   Critters, batsOf, critterArt, decodeNavGrid, habitatOf, hourFromSun, isImpressiveBody, type AmbientExits, type DamageDealt, type NavGrid, type NavPoint, type RemoteView, type GameSession, type WorldObject,
   FollowPlanner, navGridBuilder, AmbientStepper, type AmbientFrame, type AmbientSeed, Pets, petArt, type PetChoice, type PetOwner,
   ARENA_SEND_EVERY, ARENA_TICK_MS, ARENA_ROOM_DEFS, ArenaSim, ArenaView, arenaArt, arenaFloorArea, arenaHourAt, arenaOpenAt, buildNavGrid, hashText, makeRoster, readArenaConfigs, seasonAt,
-  type AmbientPersonInfo, type ArenaEvent, type ArenaMessage,
+  type AmbientPersonInfo, type ArenaEvent, type ArenaMessage, SPELL_FX, type SpellFx,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
 import { gameSocketUrl } from "../host.ts";
@@ -107,6 +107,12 @@ const GLOW_STRENGTH = 1.4;
 const VIGNETTE = 0.28;
 /** Ours, the moods: a lightning strike brightens the view this much more at its flash (PostFx's exposure) */
 const LIGHTNING_EXPOSURE = 0.25;
+/** Ours (the spell revamp, V4): no room enchantment looks (Enhanced Visuals off) */
+const NO_LOOKS: ReadonlySet<RoomEnchantKind> = new Set();
+/** How long after entering a room its light snaps rather than fades (it arrives just after us), ms */
+const ROOM_SETTLE_MS = 1000;
+/** The room's light fades to a change with this time constant, ms */
+const AMBIENT_FADE_MS = 450;
 /** The most a mood's haze hides (moods.json fog_max_opacity) */
 const HAZE_MAX = 0.85;
 /** How much of the sun the ground and the hands take (a figure's is objectsView.ts SPRITE_SUN) */
@@ -314,6 +320,14 @@ export class GameScene {
   private puddleRoom = "";
   /** Ours: lightning far off in the rain, and the view's flash with it */
   private lightning: Lightning | null = null;
+  /** Ours (the spell revamp, phase 9): spells' sparks, rings and passing lights, with Enhanced Visuals */
+  private spellFx: SpellEffects | null = null;
+  /** Ours (the spell revamp, V5): our range rings, with Enhanced Visuals */
+  private rangeRings: RangeRings | null = null;
+  /** Projectiles last frame, for their trails and where they landed: id -> where, light colour */
+  private fxProjectiles = new Map<number, { at: FinePoint; color: number }>();
+  /** The drawing buffer's size, reused each frame */
+  private readonly fxBuffer = new THREE.Vector2();
   private flashEl: HTMLDivElement | null = null;
   /** 0..1: how overcast the sky is (darkening in the rain) */
   private overcast = 0;
@@ -339,7 +353,9 @@ export class GameScene {
   private weather: WeatherParticles | null = null;
   /** Particle steps owed (they run at the original's 70 frames a second) */
   private particleTime = 0;
-  /** Blurred and wavering vision (EFFECT_BLUR, EFFECT_WAVER), made when first needed */
+  /** Ours (V6): wavering vision (EFFECT_WAVER), made when first needed */
+  private waver: Waver | null = null;
+  /** Blurred vision (EFFECT_BLUR), made when first needed */
   private blur: TrailBlur | null = null;
   /** Ours: Anti Aliasing, glowing flames and the vignette (postFx.ts), made when first needed */
   private postFx: PostFx | null = null;
@@ -350,6 +366,14 @@ export class GameScene {
   /** Ours, Enhanced: the lighting's moods (mood.ts), and this frame's (null with Enhanced off) */
   private readonly moods = new MoodDirector();
   private moodFrame: MoodFrame | null = null;
+  /** Ours (the spell revamp, V4), Enhanced: the room enchantments' looks, and what's on the room */
+  private readonly roomLooks = new RoomEnchantLooks();
+  private lookKinds: ReadonlySet<RoomEnchantKind> = new Set();
+  /** The room we last drew, and when we came into it (the light snaps on a new room) */
+  private drawnRoomId = -1;
+  private enteredAt = 0;
+  /** The room's ambient light as drawn: with Enhanced, Darkness and Illuminate fade it rather than snap */
+  private ambientShown = 0;
   /** Grid textures a change asked for that are loading */
   private textureLoads = new Set<number>();
   /** This room and the ones next to it, loaded ahead */
@@ -585,6 +609,9 @@ export class GameScene {
         case "roomContents":
           this.contentsResolve?.();
           this.contentsResolve = null;
+          // Ours (phase 9): a new room's projectiles didn't land here
+          this.spellFx?.clear();
+          this.fxProjectiles.clear();
           if (self) {
             this.mover.place(self.x, self.y, performance.now());
             this.mover.setAngle(self.angle);
@@ -604,6 +631,10 @@ export class GameScene {
         case "wait":
           // cursor.c GameWindowSetCursor: the wait cursor in GAME_WAIT
           this.canvas.classList.toggle("server-wait", e.waiting);
+          break;
+        case "spellFx":
+          // Ours (the spell revamp, phase 9): UC_SPELL_FX, drawn with Enhanced Visuals only
+          if (this.settings.enhanced) this.showSpellFx(e.fx);
           break;
         case "idsStale":
           // server.c HandleWait / HandleInvalidateData: SetUserTargetID(INVALID_ID)
@@ -696,6 +727,12 @@ export class GameScene {
     this.scene.add(this.puddles.group);
     this.lightning = new Lightning();
     this.scene.add(this.lightning.group);
+    this.spellFx = new SpellEffects();
+    // Phones get half the sparks (spellEffects.ts budget)
+    this.spellFx.budget = touchUi(this.settings) ? 0.5 : 1;
+    this.scene.add(this.spellFx.group);
+    this.rangeRings = new RangeRings();
+    this.scene.add(this.rangeRings.group);
     this.flashEl = document.createElement("div");
     this.flashEl.className = "lightning-flash";
     this.labelsEl.parentElement?.insertBefore(this.flashEl, this.labelsEl);
@@ -1122,11 +1159,12 @@ export class GameScene {
     // Its moods: the sun, the light's tint, haze and grading (mood.ts)
     const mood = enhanced ? this.applyMood(room, now, dt) : this.noMood();
     this.applySurfaceEffects(now, dt, mood);
+    this.updateRoomLooks(now, dt, enhanced);
     const ctx = {
       room,
       roomFlags: world.player?.roomFlags ?? 0,
       overrideDepths: this.mover.overrideDepths,
-      ambient: lighting.ambient,
+      ambient: this.ambientShown,
       viewerLight: remote && rv & REMOTE_VIEW.VALID_LIGHT ? remote.view.light : lighting.playerLight,
       viewer,
       yaw: viewYaw,
@@ -1137,10 +1175,18 @@ export class GameScene {
       mood: mood ? this.spriteMood(mood) : undefined,
     };
     // The arena's spell walls animate themselves (ArenaView.update)
-    const drawn = [...world.objects.values(), ...ambient, ...(this.arena?.fields() ?? []), ...this.projectileViews()];
+    const shots = this.projectileViews();
+    const drawn = [...world.objects.values(), ...ambient, ...(this.arena?.fields() ?? []), ...shots];
     // Dynamic Lighting off: no light maps from torches and lamps, nor the targeting light
     this.lights = this.settings.dynamicLighting ? this.objects.lights(drawn, ctx) : [];
     const targeted = this.target !== null && this.target !== self.id ? world.objects.get(this.target) : undefined;
+    // Ours (the spell revamp, phase 9): spells' passing lights, ahead of the room's own
+    if (this.spellFx) this.spellFx.group.visible = enhanced;
+    if (enhanced && this.spellFx) {
+      this.updateSpellFx(dt, shots);
+      if (this.settings.dynamicLighting) this.spellFx.addLights(this.lights);
+    }
+    this.updateRangeRings(dt, room, enhanced);
     // The targeting light first, so it's never past the 32 the shader takes
     if (targeted && this.settings.dynamicLighting && this.settings.targetLight && targeted.info.drawingType !== DRAWFX.INVISIBLE)
       this.lights.unshift(this.objects.targetLight(targeted, ctx));
@@ -1150,7 +1196,7 @@ export class GameScene {
     this.roomView.setLights(this.lights);
     this.roomView.setLighting({
       viewerLight: lighting.playerLight,
-      ambient: lighting.ambient,
+      ambient: this.ambientShown,
       sunAngle: lighting.sunAngle,
       shade: lighting.shadeIntensity,
       fog: this.fog,
@@ -1181,14 +1227,37 @@ export class GameScene {
     this.updateStorm(dt, room);
     this.updateAmbientSounds(dt);
     // Enhanced's glow and vignette draw through PostFx; without them, straight to the screen
-    const flash = this.lightning?.flash ?? 0;
-    const post: PostFxOptions = mood
-      ? { bloom: mood.mood.bloom, vignette: mood.mood.vignette, grade: { ...mood.grade, exposure: mood.grade.exposure * (1 + LIGHTNING_EXPOSURE * flash) } }
-      : { bloom: enhanced ? GLOW_STRENGTH : 0, vignette: enhanced ? VIGNETTE : 0 };
+    const flash = Math.max(this.lightning?.flash ?? 0, 0.8 * (this.spellFx?.roomFlash ?? 0));
+    // (the room enchantments' looks over the mood's grade, Heat's shimmer)
+    const grade = mood ? this.roomLooks.grade(mood.grade) : null;
+    const post: PostFxOptions =
+      mood && grade
+        ? {
+            bloom: mood.mood.bloom,
+            vignette: mood.mood.vignette,
+            grade: { ...grade, exposure: grade.exposure * (1 + LIGHTNING_EXPOSURE * flash) },
+            shimmer: this.roomLooks.weight("heat"),
+            timeS: (now / 1000) % 3600,
+          }
+        : { bloom: enhanced ? GLOW_STRENGTH : 0, vignette: enhanced ? VIGNETTE : 0 };
+    // (ours, V6: invisible figures shimmer, drawn from the view behind them just after it)
+    const invisible = () => this.objects?.drawInvisible(this.renderer, this.scene, this.camera);
     if (postFxActive(post))
-      (this.postFx ??= new PostFx()).render(this.renderer, this.scene, this.camera, post, [this.sky, this.skyOverlays?.group, this.weather?.group, this.flyers?.group, this.objects.shadows, this.puddles?.group]);
-    else this.renderer.render(this.scene, this.camera);
-    if (world.effects.blur > 0 || world.effects.waver > 0) (this.blur ??= new TrailBlur()).apply(this.renderer);
+      (this.postFx ??= new PostFx()).render(
+        this.renderer, this.scene, this.camera, post,
+        [this.sky, this.skyOverlays?.group, this.weather?.group, this.flyers?.group, this.objects.shadows, this.puddles?.group],
+        invisible,
+      );
+    else {
+      this.renderer.render(this.scene, this.camera);
+      invisible();
+    }
+    // Blurred vision trails as the D3D client's; wavering vision (ours, V6) waves as the software renderer's did
+    if (world.effects.blur > 0) (this.blur ??= new TrailBlur()).apply(this.renderer);
+    if (world.effects.waver > 0) (this.waver ??= new Waver()).apply(this.renderer, now);
+    // Ours (V6): Invert turns the view's colours too, not just the hands (draw3d.c PALETTE_INVERT)
+    const invert = world.effects.invert > 0 ? "invert(1)" : "";
+    if (this.renderer.domElement.style.filter !== invert) this.renderer.domElement.style.filter = invert;
     this.drawLabels(labels);
     this.drawMarkers();
     this.drawSpeech();
@@ -1674,7 +1743,7 @@ export class GameScene {
       u.uWaterGlint.value = [mood.sunColor[0] * 1.6, mood.sunColor[1] * 1.6, mood.sunColor[2] * 1.6];
       u.uWaterSunDir.value = mood.sunDir;
     } else {
-      const k = world.lighting.ambient / 255;
+      const k = this.ambientShown / 255;
       u.uWaterSky.value = [0.5 * k, 0.56 * k, 0.62 * k];
       u.uWaterGlint.value = [0, 0, 0];
     }
@@ -1992,7 +2061,7 @@ export class GameScene {
         const leaf = leafAt(room, x, y);
         const sectorLight = leaf?.sector ? room.sectors[leaf.sector - 1].light : 0;
         const lighting = this.session.world.lighting;
-        const [r, g, b] = objectBrightness({ x, y, z }, sectorLight, lighting.playerLight, lighting.ambient, []);
+        const [r, g, b] = objectBrightness({ x, y, z }, sectorLight, lighting.playerLight, this.ambientShown, []);
         // The ground faces up: it takes the sun by its height (the moods)
         return this.moodLit([r, g, b], room, x, y, Math.max(0, this.moodFrame?.sunDir[2] ?? 0));
       },
@@ -2000,7 +2069,7 @@ export class GameScene {
       fogEnd: (x, y) => {
         const leaf = leafAt(room, x, y);
         const lighting = this.session.world.lighting;
-        return fogEnd(leaf?.sector ? room.sectors[leaf.sector - 1].light : 0, lighting.playerLight, lighting.ambient);
+        return fogEnd(leaf?.sector ? room.sectors[leaf.sector - 1].light : 0, lighting.playerLight, this.ambientShown);
       },
     };
   }
@@ -2027,7 +2096,7 @@ export class GameScene {
     const lighting = this.session.world.lighting;
     const leaf = leafAt(room, this.mover.x, this.mover.y);
     const sectorLight = leaf?.sector ? room.sectors[leaf.sector - 1].light : 0;
-    const lit = objectBrightness({ x: this.mover.x, y: this.mover.y, z: this.mover.z }, sectorLight, lighting.playerLight, lighting.ambient, this.lights);
+    const lit = objectBrightness({ x: this.mover.x, y: this.mover.y, z: this.mover.z }, sectorLight, lighting.playerLight, this.ambientShown, this.lights);
     const [r, g, b] = this.moodLit(lit, room, this.mover.x, this.mover.y, HANDS_SUN);
     return Math.min(1, Math.max(r, g, b));
   }
@@ -2066,7 +2135,8 @@ export class GameScene {
     const weatherOn = this.settings.weather;
     weather.update(
       { x: this.mover.x, y: this.mover.y, z: this.mover.z + EYE_HEIGHT },
-      { sand: fx.sand, rain: fx.raining && weatherOn, snow: fx.snowing && weatherOn, fireworks: fx.fireworks },
+      // (ours, V4: Freezing's flakes and Winds' streaks, with Enhanced Visuals)
+      { sand: fx.sand, wind: this.lookKinds.has("winds"), rain: fx.raining && weatherOn, snow: (fx.snowing && weatherOn) || this.lookKinds.has("freezing"), fireworks: fx.fireworks },
       steps,
       at,
     );
@@ -2130,13 +2200,16 @@ export class GameScene {
     const light: [number, number, number] =
       dt === DRAWFX.BLACK
         ? [0, 0, 0]
-        : this.moodLit(objectBrightness({ x: this.mover.x, y: this.mover.y, z: this.mover.z }, sectorLight, lighting.playerLight, lighting.ambient, this.lights), room, this.mover.x, this.mover.y, HANDS_SUN);
+        : this.moodLit(objectBrightness({ x: this.mover.x, y: this.mover.y, z: this.mover.z }, sectorLight, lighting.playerLight, this.ambientShown, this.lights), room, this.mover.x, this.mover.y, HANDS_SUN);
     const alpha = dt === DRAWFX.TRANSLUCENT25 ? 0.25 : dt === DRAWFX.TRANSLUCENT75 ? 0.75 : dt === DRAWFX.TRANSLUCENT50 || dt === DRAWFX.DITHERTRANS || dt === DRAWFX.DITHERINVIS || dt === DRAWFX.DITHERGREY ? 0.5 : dt === DRAWFX.INVISIBLE ? 0.2 : 1;
     // Show your pain (config.pain) off: no red flash when hurt
     const effects = this.settings.pain ? world.effects : { ...world.effects, pain: 0 };
     // The outside views show our sprite holding them, not the first-person hands
     const hands = this.viewMode === "first" || this.remoteView() ? world.playerOverlays : [null, null];
-    this.overlays.draw(hands, effects, light, alpha);
+    // Ours (V6): an invisible player's own hands sway a little as their figure ripples (the
+    // original drew them in its invisible pass), slowly: a per-frame jitter was hard to look at
+    const jitter = dt === DRAWFX.INVISIBLE ? 1.5 * Math.sin(performance.now() / 600) : 0;
+    this.overlays.draw(hands, effects, light, alpha, jitter);
   }
 
   /** BP_SET_VIEW's object, when it's in the room (game.c SetPlayerRemoteView falls back to our eyes) */
@@ -2165,6 +2238,149 @@ export class GameScene {
   }
 
   /** Projectiles as sprites for ObjectsView: fully lit, no name. */
+  /**
+   * Ours (the spell revamp, phase 9): where to draw an object's effect, in fine units: its middle
+   * (a hit) or its feet (a ring), or null when it isn't here. We aren't drawn in the first person,
+   * so our own place comes from the mover.
+   */
+  private fxPoint(id: number, part: "middle" | "feet"): FinePoint | null {
+    if (!id) return null;
+    const world = this.session.world;
+    const o = world.objects.get(id);
+    if (!o) return null;
+    const extent = this.objects?.extentOf(id) ?? null;
+    const z = extent?.z ?? (id === world.self?.id ? this.mover.z : null);
+    if (z === null || z === undefined) return null;
+    const height = extent?.height ?? EYE_HEIGHT;
+    return { x: o.x, y: o.y, z: part === "feet" ? z : z + height * 0.55 };
+  }
+
+  /** UC_SPELL_FX: what our server asks us to draw (@shards/world spellFx.ts) */
+  private showSpellFx(fx: SpellFx): void {
+    const sfx = this.spellFx;
+    if (!sfx) return;
+    // Hits far from us light nothing (spellEffects.ts FLASH_RANGE)
+    const eye = { x: this.mover.x, y: this.mover.y, z: this.mover.z };
+    switch (fx.kind) {
+      case SPELL_FX.IMPACT: {
+        const at = this.fxPoint(fx.target, "middle");
+        if (at) sfx.impact(at, fx.color, fx.size, eye);
+        break;
+      }
+      case SPELL_FX.DRAIN: {
+        const from = this.fxPoint(fx.target, "middle");
+        const to = this.fxPoint(fx.source, "middle");
+        if (from && to) sfx.drain(from, to, fx.color, eye);
+        else if (from) sfx.impact(from, fx.color, fx.size, eye);
+        break;
+      }
+      case SPELL_FX.CAST: {
+        // Our own cast: the hands glow (we aren't drawn in the first person); anyone else's, about them
+        if (fx.source === this.session.world.self?.id && this.viewMode === "first") {
+          const c = fxColor(fx.color);
+          this.overlays?.castGlow(c.r, c.g, c.b);
+          break;
+        }
+        const at = this.fxPoint(fx.source, "middle");
+        if (at) sfx.cast(at, fx.color, eye);
+        break;
+      }
+      case SPELL_FX.BUFF:
+      case SPELL_FX.CURSE:
+      case SPELL_FX.HEAL: {
+        const feet = this.fxPoint(fx.target || fx.source, "feet");
+        if (feet) sfx.pulse(feet, fx.color, fx.kind === SPELL_FX.BUFF ? "buff" : fx.kind === SPELL_FX.CURSE ? "curse" : "heal");
+        break;
+      }
+      case SPELL_FX.ROOM_FLASH:
+        sfx.flashRoom();
+        break;
+      case SPELL_FX.QUAKE: {
+        const feet = this.fxPoint(fx.source, "feet");
+        if (feet) sfx.quake(feet, fx.color);
+        break;
+      }
+    }
+  }
+
+  /**
+   * Each frame with Enhanced Visuals: projectiles leave trails in their light's colour and burst
+   * where they land (they vanish on arriving: project.c), and the effects move on.
+   */
+  /**
+   * Ours (the spell revamp, V4; Enhanced Visuals): the room enchantments' looks fade toward
+   * what's on the room, Silence muffles its sounds, and the room's light fades to a change
+   * (Darkness, Illuminate, the hour) instead of snapping; a new room's light snaps.
+   */
+  private updateRoomLooks(now: number, dt: number, enhanced: boolean): void {
+    const world = this.session.world;
+    const roomId = world.player?.roomId ?? -1;
+    if (roomId !== this.drawnRoomId) {
+      this.drawnRoomId = roomId;
+      this.enteredAt = now;
+    }
+    this.lookKinds = enhanced ? RoomEnchantLooks.kinds([...world.enchantments.room.values()].map((o) => this.session.resource(o.iconRes))) : NO_LOOKS;
+    this.roomLooks.update(this.lookKinds, dt, !enhanced);
+    this.audio.setMuffle(this.roomLooks.weight("silence"));
+    // (the room's light comes just after we enter it)
+    const target = world.lighting.ambient;
+    if (!enhanced || now - this.enteredAt < ROOM_SETTLE_MS || Math.abs(target - this.ambientShown) < 0.5) this.ambientShown = target;
+    else this.ambientShown += (target - this.ambientShown) * (1 - Math.exp(-dt / AMBIENT_FADE_MS));
+  }
+
+  /**
+   * Ours (the spell revamp, V5; Enhanced Visuals): our range rings, from what the server has
+   * told us (world.spellRanges): the spell we point at, about us, and each song we sing, about
+   * whoever it's centred on, while they're in this room. Anyone else's rings never reach us.
+   */
+  private updateRangeRings(dt: number, room: Room, enhanced: boolean): void {
+    const rings = this.rangeRings;
+    if (!rings) return;
+    const world = this.session.world;
+    const self = world.player?.id;
+    const wanted = new Map<string, RangeRing>();
+    if (enhanced && self !== undefined) {
+      const at = (id: number) => (id === self ? { x: this.mover.x, y: this.mover.y } : world.objects.get(id));
+      const ranges = world.spellRanges;
+      const p = ranges.preview;
+      if (p) wanted.set("preview", { x: this.mover.x, y: this.mover.y, radius: p.radius, inner: p.inner, color: p.color });
+      for (const song of ranges.songs.values()) {
+        const o = at(song.source);
+        if (o) wanted.set(`song:${song.spell}`, { x: o.x, y: o.y, radius: song.radius, inner: song.inner, color: song.color });
+      }
+    }
+    if (!wanted.size && !rings.count) return;
+    rings.update(wanted, dt, (x, y) => {
+      const leaf = leafAt(room, x, y);
+      return leaf?.sector ? floorHeightAt(room.sectors[leaf.sector - 1], x, y) : null;
+    });
+  }
+
+  private updateSpellFx(dt: number, shots: ViewObject[]): void {
+    const sfx = this.spellFx;
+    if (!sfx) return;
+    this.renderer.getDrawingBufferSize(this.fxBuffer);
+    sfx.setView(this.fxBuffer.y, this.camera.fov, this.renderer.getPixelRatio());
+    // Nothing in flight and nothing to land: just move the effects on
+    if (shots.length === 0 && this.fxProjectiles.size === 0) {
+      if (sfx.active) sfx.update(dt);
+      return;
+    }
+    const eye = { x: this.mover.x, y: this.mover.y, z: this.mover.z };
+    const now = new Map<number, { at: FinePoint; color: number }>();
+    for (const v of shots) {
+      const light = v.info.light;
+      if (!light || !light.flags) continue;
+      // about a third of a square up: the middle of a bolt's sprite
+      const at = { x: v.x, y: v.y, z: (v.z ?? 0) + FINENESS / 3 };
+      now.set(v.id, { at, color: light.color });
+      sfx.trail(at, light.color, dt);
+    }
+    for (const [id, p] of this.fxProjectiles) if (!now.has(id)) sfx.arrival(p.at, p.color, eye);
+    this.fxProjectiles = now;
+    sfx.update(dt);
+  }
+
   private projectileViews(): ViewObject[] {
     const room = this.room;
     // client3d.c GetPointFloor: the floor's height there, or -1 off the map
@@ -3397,6 +3613,7 @@ export class GameScene {
     this.rooms?.dispose();
     this.ownView?.dispose();
     this.blur?.dispose();
+    this.waver?.dispose();
     this.postFx?.dispose();
     this.weather?.dispose();
     this.flyers?.dispose();
@@ -3406,6 +3623,8 @@ export class GameScene {
     this.ambientSounds?.stop(0);
     this.social?.watchArena(null, null);
     this.lightning?.dispose();
+    this.spellFx?.dispose();
+    this.rangeRings?.dispose();
     this.flashEl?.remove();
     if (this.sky) disposeSkybox(this.sky);
     this.renderer.dispose();
