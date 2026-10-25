@@ -1,6 +1,6 @@
 # ADR 0004: Our own domain, a Bluehost VPS and Cloudflare in front
 
-- **Status:** accepted, 2026-10-10; the domain and the VPS aren't bought yet
+- **Status:** accepted, 2026-10-10; the domain is live at https://m59-shards.com behind Cloudflare. The desktop and Android apps still list the sslip.io address (step 4 below)
 
 ## Context
 

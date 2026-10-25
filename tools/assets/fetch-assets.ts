@@ -2,7 +2,7 @@
 // a machine without our server build can still package the desktop app with the files that
 // server uses. CI does this before building the installers (.github/workflows/desktop.yml).
 //
-//   node tools/assets/fetch-assets.ts --from https://35-206-75-121.sslip.io [--out dist/assets]
+//   node tools/assets/fetch-assets.ts --from https://m59-shards.com [--out dist/assets]
 //
 // Files already there with the right content hash are kept; the rest are downloaded and
 // checked against the manifest's hash. manifest.json is written last.

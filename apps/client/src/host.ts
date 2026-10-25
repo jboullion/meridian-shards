@@ -13,7 +13,7 @@ declare const __APP_VERSION__: string;
 
 export interface DesktopServer {
   name: string;
-  /** e.g. https://35-206-75-121.sslip.io: the game socket is <origin>/ws, the files <origin>/assets/ */
+  /** e.g. https://m59-shards.com: the game socket is <origin>/ws, the files <origin>/assets/ */
   origin: string;
 }
 
