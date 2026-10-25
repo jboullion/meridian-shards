@@ -101,13 +101,13 @@ function emitter(
 }
 
 const SAND: [number, number, number, number] = [226, 153, 6, 255];
-/** Ours (the spell revamp, V4): Winds blow pale streaks, as Sandstorm blows sand */
-const WIND: [number, number, number, number] = [215, 222, 230, 110];
+/** Ours (the spell revamp, V4): Winds blow pale streaks, as Sandstorm blows sand (a quarter as many, a little brighter) */
+const WIND: [number, number, number, number] = [215, 222, 230, 150];
 const RAIN: [number, number, number, number] = [175, 228, 249, 100];
 const SNOW: [number, number, number, number] = [255, 255, 255, 220];
 
 /** d3dparticle.c SandstormInit: 12 emitters around the player blowing inwards, twice (ours: Winds' too, paler) */
-function sandEmitters(density: number, colour = SAND): Emitter[] {
+function sandEmitters(density: number, colour = SAND, sets = 2, maxParticles = MAX_PARTICLES): Emitter[] {
   const R = 12;
   const rot: [number, number, number] = [0, -Math.PI / 500, -Math.PI / 500];
   const flags = PS.RANDOM_XY | PS.RANDOM_Z;
@@ -117,9 +117,9 @@ function sandEmitters(density: number, colour = SAND): Emitter[] {
     [R * -1024, 0, 500, 0], [R * 1024, 0, -500, 0], [0, R * 1024, 0, -500], [0, R * -1024, 0, 500],
   ];
   const out: Emitter[] = [];
-  for (let twice = 0; twice < 2; twice++)
+  for (let n = 0; n < sets; n++)
     for (const [x, y, vx, vy] of set) {
-      const e = emitter([x, y, 0], [vx, vy, 0], colour, 40, rand() % 240, rot, 1024, 2, MAX_PARTICLES, flags, density);
+      const e = emitter([x, y, 0], [vx, vy, 0], colour, 40, rand() % 240, rot, 1024, 2, maxParticles, flags, density);
       if (e) out.push(e);
     }
   return out;
@@ -253,18 +253,26 @@ function isAlive(e: Emitter, p: Particle, room: ParticleRoom): boolean {
 /** D3DParticleVelocityUpdate: gravity, then the velocity turned by the rotation (row vectors: v Rx Ry Rz) */
 function velocityUpdate(e: Emitter, p: Particle): void {
   if (e.flags & PS.GRAVITY) p.velocity.z -= 0.5;
+  // (plain locals, not array swaps: this runs for every particle 70 times a second)
   let { x, y, z } = p.velocity;
+  let t: number;
   if (p.rotation.x) {
     const c = Math.cos(p.rotation.x), s = Math.sin(p.rotation.x);
-    [y, z] = [y * c - z * s, y * s + z * c];
+    t = y * c - z * s;
+    z = y * s + z * c;
+    y = t;
   }
   if (p.rotation.y) {
     const c = Math.cos(p.rotation.y), s = Math.sin(p.rotation.y);
-    [x, z] = [x * c + z * s, -x * s + z * c];
+    t = x * c + z * s;
+    z = -x * s + z * c;
+    x = t;
   }
   if (p.rotation.z) {
     const c = Math.cos(p.rotation.z), s = Math.sin(p.rotation.z);
-    [x, y] = [x * c - y * s, x * s + y * c];
+    t = x * c - y * s;
+    y = x * s + y * c;
+    x = t;
   }
   p.velocity.x = x;
   p.velocity.y = y;
@@ -347,7 +355,8 @@ export class WeatherParticles {
     this.emitters.snow = snowEmitters(this.density);
     this.emitters.fireworks = fireworksEmitters(this.density);
     // (last, to leave the original's random sequence as it was)
-    this.emitters.wind = sandEmitters(this.density, WIND);
+    // (one ring of half-filled emitters: Winds' streaks cost a quarter of Sandstorm's sand)
+    this.emitters.wind = sandEmitters(this.density, WIND, 1, MAX_PARTICLES / 2);
     this.old = { x: 0, y: 0, z: 0 };
   }
 
@@ -441,15 +450,31 @@ export class WeatherParticles {
     for (const k of lineKinds) for (const e of this.emitters[k]) for (const p of e.particles) if (p.shown && p.energy > 0) n++;
     const pos = this.attribute(this.lines.geometry, "position", n * 2, 3);
     const col = this.attribute(this.lines.geometry, "color", n * 2, 4);
+    // (written straight into the buffers: no arrays made per particle)
+    const pa = pos.array as Float32Array,
+      ca = col.array as Float32Array;
     let i = 0;
     for (const k of lineKinds)
       for (const e of this.emitters[k])
         for (const p of e.particles) {
           if (!p.shown || p.energy <= 0) continue;
           // X = x, Y = z, Z = y, in squares
-          pos.array.set([p.pos.x / FINENESS, p.pos.z / FINENESS, p.pos.y / FINENESS], i * 6);
-          pos.array.set([(p.pos.x - p.velocity.x) / FINENESS, (p.pos.z - p.velocity.z) / FINENESS, (p.pos.y - p.velocity.y) / FINENESS], i * 6 + 3);
-          col.array.set([p.r / 255, p.g / 255, p.b / 255, p.a / 255, p.r / 255, p.g / 255, p.b / 255, 0], i * 8);
+          const o = i * 6;
+          pa[o] = p.pos.x / FINENESS;
+          pa[o + 1] = p.pos.z / FINENESS;
+          pa[o + 2] = p.pos.y / FINENESS;
+          pa[o + 3] = (p.pos.x - p.velocity.x) / FINENESS;
+          pa[o + 4] = (p.pos.z - p.velocity.z) / FINENESS;
+          pa[o + 5] = (p.pos.y - p.velocity.y) / FINENESS;
+          const c = i * 8,
+            r = p.r / 255,
+            g = p.g / 255,
+            b = p.b / 255;
+          ca[c] = ca[c + 4] = r;
+          ca[c + 1] = ca[c + 5] = g;
+          ca[c + 2] = ca[c + 6] = b;
+          ca[c + 3] = p.a / 255;
+          ca[c + 7] = 0;
           i++;
         }
     pos.needsUpdate = col.needsUpdate = true;
@@ -462,7 +487,13 @@ export class WeatherParticles {
     let j = 0;
     if (squares)
       for (const e of this.emitters.snow)
-        for (const p of e.particles) if (p.shown && p.energy > 0) spos.array.set([p.pos.x / FINENESS, p.pos.z / FINENESS, p.pos.y / FINENESS], j++ * 3);
+        for (const p of e.particles)
+          if (p.shown && p.energy > 0) {
+            const o = j++ * 3;
+            spos.array[o] = p.pos.x / FINENESS;
+            spos.array[o + 1] = p.pos.z / FINENESS;
+            spos.array[o + 2] = p.pos.y / FINENESS;
+          }
     spos.needsUpdate = true;
     this.snow.geometry.setDrawRange(0, s);
   }
