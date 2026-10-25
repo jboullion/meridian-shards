@@ -1,0 +1,32 @@
+{
+  "_doc": "Pictures for the website's guide cards (meridian-shards-website /guides, its scripts/optimise-images.mjs), in the format of backgrounds.json: the 3D view alone, no interface. Take them with `npm run shots -- --manifest guides.json --client modern`.",
+  "account": {
+    "user": "shardshots",
+    "password": "shardshots",
+    "character": "Shardshots"
+  },
+  "time": "afternoon",
+  "out": "ReferenceImages/guides",
+  "hud": false,
+  "viewports": {
+    "modern": {
+      "width": 1920,
+      "height": 1112,
+      "deviceScaleFactor": 1
+    }
+  },
+  "shots": [
+    {
+      "id": "guilds",
+      "title": "Frular in the Guildmaster's Hall",
+      "note": "Frular stands behind his counter at 5,7 facing south (barlqrm/gmhall.kod); from 9,7 facing north and looking up, the counter's canopy and pillars round him and the crown banner behind.",
+      "rid": 700,
+      "row": 9,
+      "col": 7,
+      "angle": 3072,
+      "pitch": 12,
+      "clients": ["modern"],
+      "steps": []
+    }
+  ]
+}
