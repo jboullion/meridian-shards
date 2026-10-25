@@ -164,6 +164,7 @@ The breakdown has 18 fixed lines (`SPELL_PP_SLOTS`), because the client stops fo
 - **D29. Teachers:**
     - The Faren priestess teaches Shatter (nobody did), the Qor priestess Silence, and the Kraanan priestess Martyr's Battleground. The Heretic still teaches the last two.
     - Nobody teaches a disabled, internal or curse spell.
+    - **Priestess Themala teaches every Jala song** (decided 2026-10-24; she taught nothing). She keeps the other teachers' gates: Truth, Mirth and Melancholy need the Pupil of Truth quest, and Invigorate needs another Jala song first.
     - **Fixed:**
       - The Raza elder's "level N" reply, which never answered.
       - Stale spell numbers in a teacher's list that could break any teacher's level reply or learn advice.
@@ -223,7 +224,7 @@ A player's first spell at a level needs their three best abilities one level bel
 ## Left to settle
 
 - **The Silence drain:** keep 5-10 mana a second?
-- **The Jala priestess teaches nothing;** Jala comes from the Minstrel and town NPCs. The Duke and the Princess each teach a Jala song, outside their factions' schools (ADR 0021).
+- The Duke and the Princess each teach a Jala song, outside their factions' schools (ADR 0021).
 - **Not yet tried in play:**
   - Group fights for Martyr's Battleground and Forces of Light.
   - Holy Blaze healing a companion.
