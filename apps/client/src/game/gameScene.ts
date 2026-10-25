@@ -13,7 +13,7 @@ import * as THREE from "three";
 import { SAY } from "@shards/protocol";
 import { FINENESS, SF, ceilingHeightAt, floorHeightAt, gridTextureName, leafAt, skyboxForBackground, type Bgf, type Room } from "@shards/formats";
 import {
-  DRAWFX, Flyers, GroundCover, Lightning, Nature, OF, ObjectsView, Puddles, RangeRings, RoomEnchantLooks, SpellEffects, type RangeRing, fxColor, type RoomEnchantKind, type FinePoint, type PuddleRoom,type GroundKind, type GroundRoom, type NatureRoom, type RockArt, PARTICLE_STEPS_PER_SECOND, PostFx, RoomView, SkyOverlaysView, TrailBlur, Waver, WeatherParticles, XlatTable, type ParticleRoom, disposeSkybox, fogEnd, objectBrightness, paletteTexture, postFxActive, type LightSource,
+  DRAWFX, Flyers, GroundCover, Lightning, Nature, OF, ObjectsView, Puddles, RangeRings, RoomEnchantLooks, SpellEffects, shapeForLook, shapeForProjectile, type RangeRing, type SparkShape, fxColor, type RoomEnchantKind, type FinePoint, type PuddleRoom,type GroundKind, type GroundRoom, type NatureRoom, type RockArt, PARTICLE_STEPS_PER_SECOND, PostFx, RoomView, SkyOverlaysView, TrailBlur, Waver, WeatherParticles, XlatTable, type ParticleRoom, disposeSkybox, fogEnd, objectBrightness, paletteTexture, postFxActive, type LightSource,
   type PostFxOptions,
   type NameLabel, type ViewObject, type SpriteMood, moodUniforms, renderTune, sunAt, effectUniforms, roomSurfaceTextures,
 } from "@shards/render";
@@ -325,7 +325,7 @@ export class GameScene {
   /** Ours (the spell revamp, V5): our range rings, with Enhanced Visuals */
   private rangeRings: RangeRings | null = null;
   /** Projectiles last frame, for their trails and where they landed: id -> where, light colour */
-  private fxProjectiles = new Map<number, { at: FinePoint; color: number }>();
+  private fxProjectiles = new Map<number, { at: FinePoint; color: number; shape: SparkShape }>();
   /** The drawing buffer's size, reused each frame */
   private readonly fxBuffer = new THREE.Vector2();
   private flashEl: HTMLDivElement | null = null;
@@ -2261,17 +2261,19 @@ export class GameScene {
     if (!sfx) return;
     // Hits far from us light nothing (spellEffects.ts FLASH_RANGE)
     const eye = { x: this.mover.x, y: this.mover.y, z: this.mover.z };
+    // (ours, 25 October: the sparks' shape, by the spell's look)
+    const shape = shapeForLook(fx.look);
     switch (fx.kind) {
       case SPELL_FX.IMPACT: {
         const at = this.fxPoint(fx.target, "middle");
-        if (at) sfx.impact(at, fx.color, fx.size, eye);
+        if (at) sfx.impact(at, fx.color, fx.size, eye, shape);
         break;
       }
       case SPELL_FX.DRAIN: {
         const from = this.fxPoint(fx.target, "middle");
         const to = this.fxPoint(fx.source, "middle");
-        if (from && to) sfx.drain(from, to, fx.color, eye);
-        else if (from) sfx.impact(from, fx.color, fx.size, eye);
+        if (from && to) sfx.drain(from, to, fx.color, eye, shape);
+        else if (from) sfx.impact(from, fx.color, fx.size, eye, shape);
         break;
       }
       case SPELL_FX.CAST: {
@@ -2282,14 +2284,14 @@ export class GameScene {
           break;
         }
         const at = this.fxPoint(fx.source, "middle");
-        if (at) sfx.cast(at, fx.color, eye);
+        if (at) sfx.cast(at, fx.color, eye, shape);
         break;
       }
       case SPELL_FX.BUFF:
       case SPELL_FX.CURSE:
       case SPELL_FX.HEAL: {
         const feet = this.fxPoint(fx.target || fx.source, "feet");
-        if (feet) sfx.pulse(feet, fx.color, fx.kind === SPELL_FX.BUFF ? "buff" : fx.kind === SPELL_FX.CURSE ? "curse" : "heal");
+        if (feet) sfx.pulse(feet, fx.color, fx.kind === SPELL_FX.BUFF ? "buff" : fx.kind === SPELL_FX.CURSE ? "curse" : "heal", shape);
         break;
       }
       case SPELL_FX.ROOM_FLASH:
@@ -2367,16 +2369,18 @@ export class GameScene {
       return;
     }
     const eye = { x: this.mover.x, y: this.mover.y, z: this.mover.z };
-    const now = new Map<number, { at: FinePoint; color: number }>();
+    const now = new Map<number, { at: FinePoint; color: number; shape: SparkShape }>();
     for (const v of shots) {
       const light = v.info.light;
       if (!light || !light.flags) continue;
       // about a third of a square up: the middle of a bolt's sprite
       const at = { x: v.x, y: v.y, z: (v.z ?? 0) + FINENESS / 3 };
-      now.set(v.id, { at, color: light.color });
-      sfx.trail(at, light.color, dt);
+      // (ours, 25 October: embers behind a fireball, flakes behind ice, sparks behind lightning)
+      const shape = shapeForProjectile(this.session.resource(v.info.iconRes));
+      now.set(v.id, { at, color: light.color, shape });
+      sfx.trail(at, light.color, dt, shape);
     }
-    for (const [id, p] of this.fxProjectiles) if (!now.has(id)) sfx.arrival(p.at, p.color, eye);
+    for (const [id, p] of this.fxProjectiles) if (!now.has(id)) sfx.arrival(p.at, p.color, eye, p.shape);
     this.fxProjectiles = now;
     sfx.update(dt);
   }

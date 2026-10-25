@@ -33,14 +33,32 @@ export interface SpellFx {
   color: number;
   /** 1 small (a song's pulse), 2 normal, 3 large */
   size: number;
+  /** Ours (25 October): the particles' shape (SPELL_FX_LOOK); 0 plain dots (and from older servers) */
+  look: number;
 }
 
-/** UC_SPELL_FX: kind (u8), source (u32), target (u32), colour (u16), size (u8) */
+/** UC_SPELL_FX's look (blakston.khd SPELLFX_LOOK_*): a school, or the damage's element */
+export const SPELL_FX_LOOK = {
+  PLAIN: 0,
+  SHALILLE: 1,
+  QOR: 2,
+  ACID: 3,
+  KRAANAN: 4,
+  FIRE: 5,
+  ICE: 6,
+  LIGHTNING: 7,
+  RIIJA: 8,
+  JALA: 9,
+  EARTH: 10,
+} as const;
+
+/** UC_SPELL_FX: kind (u8), source (u32), target (u32), colour (u16), size (u8), look (u8, when sent) */
 export function readSpellFx(r: ByteReader): SpellFx {
   const kind = r.u8();
   const source = objId(r.u32());
   const target = objId(r.u32());
   const color = r.u16();
   const size = r.u8();
-  return { kind, source, target, color, size };
+  const look = r.remaining > 0 ? r.u8() : 0;
+  return { kind, source, target, color, size, look };
 }

@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import type * as THREE from "three";
-import { SpellEffects } from "../src/spellEffects.ts";
+import { SPARK_SHAPE, SpellEffects, shapeForLook, shapeForProjectile } from "../src/spellEffects.ts";
 import type { LightSource } from "../src/objectLighting.ts";
 
 const at = { x: 10240, y: 10240, z: 600 };
@@ -63,6 +63,27 @@ describe("SpellEffects", () => {
     fx.update(16);
     fx.update(16);
     expect(a.version).toBe(version);
+  });
+
+  it("knows each look's shape, and a projectile's by its art", () => {
+    // blakston.khd SPELLFX_LOOK_*: plain, Shal'ille, Qor, acid, Kraanan, fire, ice, lightning, Riija, Jala, earth
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(shapeForLook)).toEqual([
+      SPARK_SHAPE.DOT, SPARK_SHAPE.STAR, SPARK_SHAPE.SMOKE, SPARK_SHAPE.DROP, SPARK_SHAPE.DIAMOND, SPARK_SHAPE.EMBER,
+      SPARK_SHAPE.FLAKE, SPARK_SHAPE.BOLT, SPARK_SHAPE.SWIRL, SPARK_SHAPE.NOTE, SPARK_SHAPE.DOT,
+    ]);
+    expect(shapeForLook(99)).toBe(SPARK_SHAPE.DOT);
+    expect(shapeForProjectile("FIREBALL.BGF")).toBe(SPARK_SHAPE.EMBER);
+    expect(shapeForProjectile("icebolt.bgf")).toBe(SPARK_SHAPE.FLAKE);
+    expect(shapeForProjectile("lightnin.bgf")).toBe(SPARK_SHAPE.BOLT);
+    expect(shapeForProjectile(undefined)).toBe(SPARK_SHAPE.DOT);
+  });
+
+  it("makes as many sparks with a shape as without (with no canvas, they're dots)", () => {
+    const dots = new SpellEffects();
+    const stars = new SpellEffects();
+    dots.impact(at, FIRE, 2);
+    stars.impact(at, FIRE, 2, undefined, SPARK_SHAPE.STAR);
+    expect(stars.sparkCount).toBe(dots.sparkCount);
   });
 
   it("reuses its rings", () => {
