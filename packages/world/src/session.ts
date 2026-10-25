@@ -16,6 +16,7 @@ import {
 } from "@shards/protocol";
 import { WorldState, fineToKod } from "./state.ts";
 import { formatServerMessage, parseMarkup, type TextSpan } from "./text.ts";
+import { splitChatLinks } from "./chatLinks.ts";
 import { messageChannel, type ChatChannel } from "./chatChannel.ts";
 import { readDamageDealt, type DamageDealt } from "./combatHit.ts";
 import { readSpellRefusal, type SpellRefusal } from "./spellRefusal.ts";
@@ -927,7 +928,7 @@ export class GameSession {
   private chatLine(kind: ChatLine["kind"], text: string, channel: ChatChannel, extra: Pick<ChatLine, "sender" | "sayType"> = {}): void {
     const shown = this.textFilter ? this.textFilter(text) : text;
     const logon = Date.now() < this.logonUntil || undefined;
-    this.events.chat?.({ kind, channel, spans: parseMarkup(shown, DEFAULT_COLORS[kind]), time: Date.now(), logon, ...extra });
+    this.events.chat?.({ kind, channel, spans: splitChatLinks(parseMarkup(shown, DEFAULT_COLORS[kind])), time: Date.now(), logon, ...extra });
   }
 
   private setPhase(p: SessionPhase): void {

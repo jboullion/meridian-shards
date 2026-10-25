@@ -4,8 +4,10 @@ import { CF, SAY, STAT_GROUP, UA, UC, objId, type ObjectInfo } from "@shards/pro
 import {
   PROFANITY_WARNING, isNumberItem, type SpellRefusal, OBSERVER, WHITE, BLACK, decodeBoard, type GuildEvent, type MinigameEvent, type MailNewsEvent, type ChatLine, type ContainerContents, type DamageDealt, type GameSession, type LookResult, type OfferEvent, type SessionPhase,
   type SocialEvent, type TradeList, type TravelEvent, type TravelPlace, petForKarma, petKind, type AmbientPersonInfo, type QuestEvent, type QuestOffer, type CosmeticsEvent, type TrainingCost, type Appraisal, type Sellable,
-  ARENA_ROOMS, BOUT_STATE, arenaCommand, floorTaken,
+  ARENA_ROOMS, BOUT_STATE, arenaCommand, floorTaken, chatLinkLabel, chatLinkToken, localRes,
 } from "@shards/world";
+import { MAX_CHAT_BYTES, expandChatLinks, insertAt, utf8Length } from "./chatInput.ts";
+import { EmojiPicker } from "./ui/EmojiPicker.tsx";
 import type { QuestStore } from "./quests.ts";
 import { useCompanion, type CompanionStore } from "./companion.ts";
 import { useArena, type ArenaStore } from "./arenaBouts.ts";
@@ -28,7 +30,7 @@ import { QuestsPanel } from "./ui/QuestsPanel.tsx";
 import type { AssetStore } from "../assets.ts";
 import type { AudioPreview, GameAudio } from "./audio.ts";
 import { GameScene, type GameSceneStatus, type TouchMove, type ViewMode } from "./gameScene.ts";
-import type { IconRenderer } from "./icons.ts";
+import { bareIcon, type IconRenderer } from "./icons.ts";
 import { ACTION_TABS, actionsFor, bindingLabel, getSettings, onSettings, touchUi, updateSettings, type Action, type ChatTab, type Settings } from "./settings.ts";
 import {
   BAD_COMMAND, defineAlias, filterSayMessage, findSpell, groupAdd, groupDelete, groupNew, interpretLine, resolveTell, type CommandId, type GroupResult,
@@ -50,7 +52,7 @@ import {
   WhoDialog,
   type ActionWindow, type StudySpell,
 } from "./ui/OptionsDialogs.tsx";
-import { EnchantmentRow, STAT_HP, STAT_MP, Sidebar, cancelEnchantment, type Tab } from "./ui/Sidebar.tsx";
+import { EnchantmentRow, ObjIcon, STAT_HP, STAT_MP, Sidebar, cancelEnchantment, type Tab } from "./ui/Sidebar.tsx";
 import { ClassicToolbar } from "./ui/Toolbar.tsx";
 import { ActionBar, MapCluster, TargetFrame, UnitFrame } from "./ui/ModernHud.tsx";
 import { CharacterWindow } from "./ui/CharacterWindow.tsx";
@@ -323,6 +325,8 @@ export function GameView({
   /** dialog.c SetDescParams: the buttons for the next description, set when we ask for it */
   const descParams = useRef<number>(DESC.NONE);
   const [text, setText] = useState("");
+  /** Ours (ADR 0024): item links in the chat input, "[name]" to its token, swapped in on send */
+  const chatLinks = useRef(new Map<string, string>());
   const [tab, setTab] = useState<Tab>("inventory");
   const [modal, setModal] = useState<Modal | null>(null);
   /** askTrader: the trader asked for a withdrawal list, until a list comes back or we ask to buy */
@@ -1466,7 +1470,40 @@ export function GameView({
       setAlert(PROFANITY_WARNING);
       return null;
     }
-    return filterSayMessage(text);
+    const t = filterSayMessage(text);
+    if (t === null) return null;
+    // Ours: the server drops a line over MAX_CHAT_LEN bytes without a word; emoji and item
+    // links take several bytes each (ADR 0024)
+    const bytes = utf8Length(t);
+    if (bytes > MAX_CHAT_BYTES) {
+      session.localMessage(`That's too long to say (${bytes} of ${MAX_CHAT_BYTES} bytes; emoji and item links take more than letters).`);
+      return null;
+    }
+    return t;
+  };
+
+  /** Ours (ADR 0024): put text at the chat input's caret, and bring the chat up */
+  const insertIntoChat = (insert: string) => {
+    const el = inputRef.current;
+    // At the caret while the line has the focus; from the inventory (which takes it), at the end
+    const focused = !!el && document.activeElement === el;
+    const at = insertAt(el?.value ?? text, insert, focused ? el.selectionStart : null, focused ? el.selectionEnd : null);
+    setText(at.text);
+    if (touch) setChatOpen(true);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(at.caret, at.caret);
+    });
+  };
+
+  /** Ours (ADR 0024): an inventory item linked in chat, as "[name]" in the input */
+  const linkItem = (o: ObjectInfo) => {
+    const name = session.itemName(o);
+    const token = chatLinkToken(session.resource(o.iconRes) ?? "", o.translation, o.flags, name);
+    if (!token) return;
+    const label = chatLinkLabel(name);
+    chatLinks.current.set(label, token);
+    insertIntoChat(label);
   };
 
   /** Speech, filtered as say.c FilterSayMessage does */
@@ -1916,8 +1953,9 @@ export function GameView({
   const send = (e: FormEvent) => {
     e.preventDefault();
     if (!text) return;
-    // textin.c TextInputKey: lines that meant something go in the history, once in a row
-    if (runCommand(text)) {
+    // textin.c TextInputKey: lines that meant something go in the history, once in a row (with
+    // item links as their names, which still expand while the session remembers them)
+    if (runCommand(expandChatLinks(text, chatLinks.current))) {
       const h = historyRef.current;
       if (h[0] !== text) historyRef.current = [text, ...h].slice(0, CHAT_HISTORY);
     }
@@ -2446,6 +2484,7 @@ export function GameView({
                 onTab={setTab}
                 onClose={() => setCharacterOpen(false)}
                 onLookItem={lookInventoryItem}
+                onLinkItem={linkItem}
                 onLook={(id) => lookAt(id, DESC.NONE)}
                 onDropItem={drop}
                 onApplyItem={(o) => sceneRef.current?.beginSelect((t) => session.apply(o.id, t))}
@@ -2898,6 +2937,8 @@ export function GameView({
               {l.spans.map((s, j) => (
                 <span
                   key={j}
+                  className={s.item ? "chat-link" : undefined}
+                  title={s.item?.name}
                   style={
                     // Show colored text off (config.colorcodes): plain text, no colour codes
                     settings.coloredText
@@ -2911,6 +2952,14 @@ export function GameView({
                       : undefined
                   }
                 >
+                  {/* Ours (ADR 0024): an item link, its inventory icon (magic ring and all) before "[name]" */}
+                  {s.item && assets.has(`${s.item.file}.bgf`) && (
+                    <ObjIcon
+                      icons={icons}
+                      className="chat-icon"
+                      object={Object.assign(bareIcon(localRes(`${s.item.file}.bgf`)), { translation: s.item.translation, flags: s.item.flags })}
+                    />
+                  )}
                   {s.text}
                 </span>
               ))}
@@ -2951,6 +3000,8 @@ export function GameView({
             placeholder="Enter to chat — say, emote, yell, broadcast"
             maxLength={500}
           />
+          {/* Ours (ADR 0024): emoji to put in the line */}
+          <EmojiPicker onPick={insertIntoChat} />
         </form>
         </div>
       </div>
@@ -2965,6 +3016,7 @@ export function GameView({
           onTab={setTab}
           settings={settings}
           onLookItem={lookInventoryItem}
+          onLinkItem={linkItem}
           onLook={(id) => lookAt(id, DESC.NONE)}
           onDropItem={drop}
           onApplyItem={(o) => sceneRef.current?.beginSelect((target) => session.apply(o.id, target))}

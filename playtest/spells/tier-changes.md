@@ -1,0 +1,26 @@
+# Spell tiers that moved between the first and second dump (2026-10-24, after the level grids commit)
+
+- Faren: icewall 4 -> 5
+- Shal'ille: restore companion 4 -> 3
+- Faren: ice shard 4 -> 3
+- Faren: freezing 3 -> 4
+- Jala: crystalize mana 6 -> 5
+- Faren: shocking fury 3 -> 4
+- Faren: ring of flames 5 -> 6
+- Qor: blood inheritance 5 -> 6
+- Riija: feign death 1 -> 2
+- Kraanan: deflect 4 -> 5
+- Faren: firewall 4 -> 5
+- Kraanan: martyr's battleground 3 -> 6
+- Jala: spellbane 5 -> 6
+- Riija: foresight 2 -> 1
+- Riija: shadow form 1 -> 2
+- Kraanan: mana bomb 4 -> 6
+- Faren: brittle 4 -> 5
+- Shal'ille: mark of dishonor 4 -> 5
+- Faren: heat 3 -> 4
+- Shal'ille: truce 4 -> 5
+- Faren: winds 3 -> 4
+- Faren: fireball 4 -> 3
+- Faren: ice nova 5 -> 6
+- Faren: lightning bolt 5 -> 3

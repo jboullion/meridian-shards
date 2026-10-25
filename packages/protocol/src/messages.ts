@@ -2,7 +2,7 @@
 // Formats follow clientd3d/protocol.c (client tables), blakserv/sprocket.c (how the
 // server parses them) and clientd3d/server.c (how the client reads replies).
 
-import { ByteReader, ByteWriter } from "./bytes.ts";
+import { ByteReader, ByteWriter, utf8ToBytes } from "./bytes.ts";
 import { AP, ANIMATE, BP, CLIENT_MAJOR, CLIENT_MINOR, CLIENT_TAG_NUMBER, objId, objTag } from "./constants.ts";
 
 // ---------------------------------------------------------------- login mode
@@ -102,8 +102,9 @@ export function buildReqTurn(id: number, angle: number): Uint8Array {
 /** Say types (include/proto.h SAY_*). */
 export const SAY = { NORMAL: 1, YELL: 2, EVERYONE: 3, GROUP: 4, RESOURCE: 5, EMOTE: 6, MESSAGE: 7, DM: 9, GUILD: 10 } as const;
 
+/** The text goes as UTF-8 (ADR 0024), so emoji survive. */
 export function buildSay(text: string, info: number = SAY.NORMAL): Uint8Array {
-  return new ByteWriter().u8(BP.SAY_TO).u8(info).string(text).finish();
+  return new ByteWriter().u8(BP.SAY_TO).u8(info).string(utf8ToBytes(text)).finish();
 }
 
 /**
@@ -113,7 +114,7 @@ export function buildSay(text: string, info: number = SAY.NORMAL): Uint8Array {
 export function buildSayGroup(ids: readonly number[], text: string): Uint8Array {
   const w = new ByteWriter().u8(BP.SAY_GROUP).u16(ids.length);
   for (const id of ids) w.u32(objId(id));
-  return w.string(text).finish();
+  return w.string(utf8ToBytes(text)).finish();
 }
 
 export function buildReqLook(id: number): Uint8Array {

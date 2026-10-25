@@ -7,12 +7,13 @@
 //   %s     an integer naming a string resource; that string may contain more format
 //          characters, whose parameters come *after* all of this pass's parameters
 //          (the C code formats in passes)
-//   %q     a literal string parameter (inserted as-is, never re-scanned)
+//   %q     a literal string parameter (inserted as-is, never re-scanned); player text,
+//          so it's decoded as UTF-8 when it is valid UTF-8 (ADR 0024)
 //   %r     a nested message: a resource id followed by its own parameters
 //   %%     a percent sign
 //   %X$N   numbered parameter (reordering); $0 hides the field
 
-import type { ByteReader } from "@shards/protocol";
+import { decodePlayerText, type ByteReader } from "@shards/protocol";
 
 type Seg = { raw: boolean; s: string };
 
@@ -76,7 +77,7 @@ export function formatServerMessage(
           }
           case "q": {
             const v = r.remaining >= 2 ? r.string() : "";
-            if (!hide) lit += v;
+            if (!hide) lit += decodePlayerText(v);
             break;
           }
           case "r": {
@@ -139,6 +140,19 @@ export interface TextSpan {
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
+  /** An item link in chat (chatLinks.ts): the span's text is "[name]" */
+  item?: ChatItemLink;
+}
+
+/** An item a player linked in chat (ADR 0024): enough to draw its inventory icon. */
+export interface ChatItemLink {
+  /** The .bgf file, without ".bgf" */
+  file: string;
+  /** The icon's colour translation */
+  translation: number;
+  /** Only the object flags' magic ring bits (magic.ts) */
+  flags: number;
+  name: string;
 }
 
 /** ~/` codes (srvrstr.c code_table). */

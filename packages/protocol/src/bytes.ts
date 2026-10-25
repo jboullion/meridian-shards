@@ -17,6 +17,36 @@ export function latin1ToBytes(s: string): Uint8Array {
   return out;
 }
 
+// Ours (ADR 0024): what players type goes out as UTF-8, so emoji survive. The server passes
+// those bytes through untouched; everything else on the wire stays Latin-1.
+const utf8Encoder = new TextEncoder();
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+
+export function utf8ToBytes(s: string): Uint8Array {
+  return utf8Encoder.encode(s);
+}
+
+/**
+ * Player text read off the wire as Latin-1 (one char per byte), decoded as UTF-8 when the
+ * bytes are valid UTF-8. Text from the original client (Windows-1252, rarely valid UTF-8) and
+ * plain ASCII come back unchanged.
+ */
+export function decodePlayerText(latin1: string): string {
+  let ascii = true;
+  for (let i = 0; i < latin1.length; i++) {
+    if (latin1.charCodeAt(i) > 0x7f) {
+      ascii = false;
+      break;
+    }
+  }
+  if (ascii) return latin1;
+  try {
+    return utf8Decoder.decode(latin1ToBytes(latin1));
+  } catch {
+    return latin1;
+  }
+}
+
 export class ByteWriter {
   private buf = new Uint8Array(256);
   private view = new DataView(this.buf.buffer);

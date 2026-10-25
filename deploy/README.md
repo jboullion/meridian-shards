@@ -204,8 +204,16 @@ blakserv saves every 30 minutes (`[Auto] SavePeriod`). Run "save game" before st
 
 **A save the new Kod can't load starts a new world.** If any saved object's class is gone from the Kod, blakserv's `LoadGame` fails. It then starts a fresh world with the old accounts but no characters (`blakserv/loadall.c`), and its next save overwrites the old world.
 - **After Kod changes that remove classes,** try the VM's save on a copy first. Copy the latest `accounts`, `dynarscs`, `gameuser` and `striings` files and `lastsave.txt` into the `savegame/` of a copy of the local run folder. Change its ports, start it, and look for `LoadObject can't find class name` in `channel/error.txt`.
-- **After a fresh start,** give each account its character slots again with `create user <account>`, four each.
+- **After a fresh start,** give each account its character slots again: four `create user <account>` each, by account number. `maint` takes many commands in one call, which is much faster than one `exec` per command (for accounts 1 to 118):
+  ```bash
+  set --; for a in $(seq 1 118); do for i in 1 2 3 4; do set -- "$@" "create user $a"; done; done; sudo docker compose -f deploy/docker-compose.yml exec -T blakserv maint "$@" > /tmp/create-users.log
+  ```
+  Then `save game`.
+- **Check that the new world saves.** Half an hour after the deploy, `sudo docker inspect meridian-shards-blakserv-1 --format "{{.RestartCount}}"` should still be 0, and the time in `savegame/lastsave.txt` (inside the container) should have moved. A restart at every autosave means saves are crashing: nothing played since the deploy is being kept.
 - **This happened on 2026-10-16,** when the server cleanup's removed crafting and monster classes met the old save. The old save is backed up on the VM (`~/savegame-before-phase5-1792167724.tgz`) and in `~/.meridian-shards/backups` on the PC that deployed.
+- **And on 2026-10-24 (release 0.13.0),** when the magic item and guild revamps' removed classes met the old save (`RemoveCursePotion`). This time the fresh world crashed at every save: blakserv still sent it `LoadedFromDisk`, which loads every room's data a second time, and the first copies kept blockers for monsters that later died. The server restarted every 30 minutes for two and a half hours, starting a new world each time. The old save sets are in the savegame volume's `old-world-2026-10-24/`.
+  - Fixed in blakserv after 0.13.0 (`loadall.c`, `system.c`, and `garbage.c`, which now drops a blocker for a missing object instead of crashing). A blakserv built before the fix still has the bug.
+  - **With a blakserv built before the fix, don't let it fall back.** Make a truly fresh world that keeps the accounts instead. Stop blakserv. Move every save set and `lastsave.txt` out of the volume into a subfolder, keeping a copy of the latest `accounts` file. Start it (a new game), `save game`, and stop it again. Copy the old `accounts` file over the new set's `accounts.<time>`, then start it and give back the character slots as above.
 
 **Don't send maintenance commands while blakserv is starting** (the first minute after a deploy or restart). On 2026-10-12 a `show status` sent during startup never answered and left the server's main loop hung: the port still accepted connections, but every login waited forever (the gateway logged `down 0 B`). The way out is `sudo docker compose -f deploy/docker-compose.yml restart blakserv`. To see whether it's up, try logging in, or watch for `network worker thread started` in `channel/debug.txt`.
 

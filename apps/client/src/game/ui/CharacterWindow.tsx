@@ -107,7 +107,7 @@ function Figure({ session, icons }: { session: GameSession; icons: IconRenderer 
 }
 
 export function CharacterWindow({
-  session, icons, assets, settings, itemSlots, tab, onTab, onClose, onLookItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, selecting, onSelectObject, onCast,
+  session, icons, assets, settings, itemSlots, tab, onTab, onClose, onLookItem, onLinkItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, selecting, onSelectObject, onCast,
   friendsPanel, petsPanel, questsPanel, companionPanel, onStudy, studying, onTrain,
 }: {
   /** Ours: the Stats tab's Train button (docs/adr/0016-abilities.md) */
@@ -132,6 +132,8 @@ export function CharacterWindow({
   onTab: (t: Tab) => void;
   onClose: () => void;
   onLookItem: (o: ObjectInfo) => void;
+  /** Ours (ADR 0024): Shift+click on a bag item links it in the chat line */
+  onLinkItem?: (o: ObjectInfo) => void;
   onLook: (id: number) => void;
   onDropItem: (o: ObjectInfo) => void;
   onApplyItem: (o: ObjectInfo) => void;
@@ -287,6 +289,7 @@ export function CharacterWindow({
                 icons={icons}
                 assets={assets}
                 onLookItem={onLookItem}
+                onLinkItem={onLinkItem}
                 onDropItem={onDropItem}
                 onApplyItem={onApplyItem}
                 onPut={onPut}

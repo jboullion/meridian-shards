@@ -9,6 +9,8 @@ Our implementation lives in `packages/protocol/src/`.
 - Raw TCP, game port 5959 (`blakserv/config.c:69`). The maintenance (admin) port is 9998, localhost only (`config.c:70-71`).
 - Browsers can't open TCP, so `tools/gateway/gateway.ts` bridges WebSocket to TCP and passes bytes through unchanged (the roBrowser/wsProxy pattern). **Verified.**
 - All integers are little-endian. Strings are a `u16` length plus raw bytes, with no terminator.
+  - We read and write them as Latin-1, one byte per character, so bytes round-trip.
+  - The exception is player speech: `BP_SAY_TO` and `BP_SAY_GROUP` text goes as UTF-8, and a said line's `%q` is decoded as UTF-8 when it is valid UTF-8 ([ADR 0024](../adr/0024-chat-emoji-and-item-links.md)).
 
 ## Framing
 

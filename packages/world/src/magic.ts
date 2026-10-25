@@ -11,6 +11,9 @@ const SHOW_MASK = 0x00700000;
 const COLOUR_MUL = 0x00800000;
 const COLOUR_MASK = 0x07800000;
 
+/** Every flag bit the magic ring reads (show and colour) */
+export const MAGIC_FLAGS_MASK = SHOW_MASK | COLOUR_MASK;
+
 /** blakston.khd MAGIC_SHOW_*: nothing, hidden magic, revealed magic with no tier, or a weapon's tier */
 export const MAGIC_SHOW = { NONE: 0, UNREVEALED: 1, REVEALED: 2, SLIGHT: 3, MODERATE: 4, POTENT: 5, ENORMOUS: 6 } as const;
 

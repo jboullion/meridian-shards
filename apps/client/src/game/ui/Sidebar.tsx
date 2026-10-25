@@ -284,7 +284,7 @@ export function HudEnchantments({
 }
 
 export function Sidebar({
-  session, icons, assets, getRoom, tab, onTab, settings, onLookItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, target, selecting, onSelectObject, onCast,
+  session, icons, assets, getRoom, tab, onTab, settings, onLookItem, onLinkItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, target, selecting, onSelectObject, onCast,
   annotations, onAnnotate, friendsPanel, petsPanel, questsPanel, companionPanel, getWay, onStudy, studying, onEmotes, onTrain,
 }: {
   /** Ours: a click on our face, when not picking a target, shows the Quick Emotes (Q) */
@@ -317,6 +317,8 @@ export function Sidebar({
   settings: Settings;
   /** Right click on an inventory item (inventry.c A_LOOKINVENTORY): its description with Drop and Use */
   onLookItem: (o: ObjectInfo) => void;
+  /** Ours (ADR 0024): Shift+click on an inventory item links it in the chat line */
+  onLinkItem?: (o: ObjectInfo) => void;
   /** Right click on our face, a spell or a skill: its description, nothing more (SetDescParams DESC_NONE) */
   onLook: (id: number) => void;
   onDropItem: (o: ObjectInfo) => void;
@@ -429,6 +431,7 @@ export function Sidebar({
             icons={icons}
             assets={assets}
             onLookItem={onLookItem}
+            onLinkItem={onLinkItem}
             onDropItem={onDropItem}
             onApplyItem={onApplyItem}
             onPut={onPut}
@@ -534,7 +537,7 @@ export function PortraitIcon({ icons, object }: { icons: IconRenderer; object: O
 
 /** inventry.c: a grid of 40x40 boxes; in-use items sit on the yellow sun (inuse.bmp). */
 export function Inventory({
-  session, icons, assets, onLookItem, onDropItem, onApplyItem, onPut, onTabOut, selecting, onSelectObject, showAmounts, tooltips,
+  session, icons, assets, onLookItem, onLinkItem, onDropItem, onApplyItem, onPut, onTabOut, selecting, onSelectObject, showAmounts, tooltips,
   hidden, minCells = 0, onDropOnGrid,
 }: {
   /** Ours (the Modern interface's bag): items not shown here (those on the paper doll) */
@@ -551,6 +554,8 @@ export function Inventory({
   icons: IconRenderer;
   assets: AssetStore;
   onLookItem: (o: ObjectInfo) => void;
+  /** Ours (ADR 0024): Shift+click links the item in the chat line */
+  onLinkItem?: (o: ObjectInfo) => void;
   onDropItem: (o: ObjectInfo) => void;
   onApplyItem: (o: ObjectInfo) => void;
   onPut: () => void;
@@ -610,8 +615,9 @@ export function Inventory({
             e.dataTransfer.setData("application/x-shards-item", String(o.id));
             e.dataTransfer.effectAllowed = "move";
           }}
-          // inventry.c: in GAME_SELECT a click picks the item as a spell target
-          onClick={() => (selecting ? onSelectObject(o.id) : setSelected(o.id))}
+          // inventry.c: in GAME_SELECT a click picks the item as a spell target. Ours: Shift+click
+          // links it in chat (ADR 0024)
+          onClick={(e) => (selecting ? onSelectObject(o.id) : e.shiftKey && onLinkItem ? onLinkItem(o) : setSelected(o.id))}
           onDoubleClick={() => !selecting && toggleUse(o)}
           // inventry.c InventoryMoveCurrentItem: dropped on another item, it takes that place
           onDragOver={(e) => e.dataTransfer.types.includes("application/x-shards-item") && e.preventDefault()}
