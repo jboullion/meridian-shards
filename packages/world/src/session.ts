@@ -25,6 +25,7 @@ import { readArena, type ArenaStatus } from "./arenaBouts.ts";
 import { readFactionWar, type FactionWarEvent } from "./factionWar.ts";
 import { readFallenHalls, type FallenHallsStatus } from "./fallenHalls.ts";
 import { readGuildHall, type GuildHallStatus } from "./guildHall.ts";
+import { readAchievements, type AchievementsEvent } from "./achievements.ts";
 import { readSpellFx } from "./spellFx.ts";
 import { readSpellRange } from "./spellRange.ts";
 import { readCosmetics, type CosmeticsEvent } from "./cosmetics.ts";
@@ -304,6 +305,7 @@ export interface SessionEvents {
   fallenHalls?: (s: FallenHallsStatus) => void;
   /** Ours: our guild's hall, prestige and rent, for the guild window's Hall tab (docs/adr/0022-guilds.md) */
   guildHall?: (s: GuildHallStatus) => void;
+  achievements?: (e: AchievementsEvent) => void;
   /** Ours: a tailor's or barber's menu (docs/adr/0012-cosmetics.md) */
   cosmetics?: (e: CosmeticsEvent) => void;
   /** Ours: the abilities we can train, and what 1% of each costs (docs/adr/0016-abilities.md) */
@@ -1192,6 +1194,10 @@ export class GameSession {
           } else if (uc === UC.GUILD_HALL) {
             // Ours (guild.kod SendHallInfo)
             this.events.guildHall?.(readGuildHall(r));
+          } else if (uc === UC.ACHIEVEMENTS) {
+            // Ours (achievements.kod SendAll, SendUnlock)
+            const e = readAchievements(r);
+            if (e) this.events.achievements?.(e);
           } else if (uc === UC.SPELL_FX) {
             // Ours (room.kod SendSpellFx): for the scene to draw
             this.world.spellFx(readSpellFx(r));

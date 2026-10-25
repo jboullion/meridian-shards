@@ -16,7 +16,7 @@ export type CommandId =
   | "guild" | "password" | "withdraw" | "deposit" | "balance" | "group" | "appeal" | "tellguild"
   | "groupingOn" | "groupingOff" | "autolootOn"
   | "autolootOff" | "autocombineOn" | "autocombineOff" | "reagentbagOn" | "reagentbagOff" | "spellpowerOn"
-  | "spellpowerOff" | "time" | "mail" | "study" | "companion" | "train" | "arena" | "war";
+  | "spellpowerOff" | "time" | "mail" | "study" | "companion" | "train" | "arena" | "war" | "achievements";
 
 /** merintr.c `commands`, in its order (ties go to the first), with the German names. */
 export const COMMAND_TABLE: readonly (readonly [string, CommandId])[] = [
@@ -57,6 +57,8 @@ export const COMMAND_TABLE: readonly (readonly [string, CommandId])[] = [
   ["arena", "arena"],
   // Ours: the War window (docs/adr/0021-factions-and-the-faction-war.md)
   ["war", "war"], ["krieg", "war"],
+  // Ours: the Achievements window (docs/adr/0025-achievements.md)
+  ["achievements", "achievements"], ["erfolge", "achievements"],
 ];
 
 /** Ours, on top: shorthands players are used to. */

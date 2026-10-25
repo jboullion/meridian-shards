@@ -511,6 +511,11 @@ function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }
             holds them, a map of the realm's flagpoles, the last battles, and your liege's war ledger. While the lieges' armies march or fight, a banner at the top of the view
             says where; click it to open the window.
           </dd>
+          <dt>Achievements (U)</dt>
+          <dd>
+            U (or typed achievements) opens the Achievements window: what your character has earned, and when, and what is left. Bosses slain, factions joined and their quest
+            chains finished, guilds, hit points, schools of magic and quests each have their own. A few add a title to your look. A toast tells you as one is earned.
+          </dd>
           <dt>Containers</dt>
           <dd>Double click a box to see inside and take things out; put stores things in one.</dd>
           <dt>The full map</dt>

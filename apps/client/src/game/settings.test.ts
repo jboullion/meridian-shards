@@ -17,7 +17,7 @@ describe("settings", () => {
 
   it("migrates version 2 settings: one mouse speed, right click looks", () => {
     const s = migrate({ version: 2, preset: "modern", mouseSpeed: 2, rightClickLooks: true, musicVolume: 40 } as never);
-    expect(s.version).toBe(16);
+    expect(s.version).toBe(17);
     expect(s.mouseXScale).toBe(30);
     expect(s.mouseYScale).toBe(30);
     expect(s.keys.examine).toEqual([{ code: "Mouse1" }]);

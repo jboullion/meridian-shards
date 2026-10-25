@@ -824,6 +824,8 @@ export const UC = {
   /** Ours (the spell revamp, phase 9): a spell effect to draw (shards-server room.kod SendSpellFx; @shards/world spellFx.ts) */
   SPELL_FX: 123,
   SPELL_RANGE: 124,
+  /** Ours (achievements): the achievements earned, and one just earned (shards-server util/achievements.kod; @shards/world achievements.ts; docs/adr/0025) */
+  ACHIEVEMENTS: 125,
 } as const;
 
 /**

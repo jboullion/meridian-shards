@@ -14,6 +14,9 @@ import { useArena, type ArenaStore } from "./arenaBouts.ts";
 import { ArenaDialog } from "./ui/ArenaDialog.tsx";
 import type { FactionWarStore } from "./factionWar.ts";
 import type { FallenHallsStore } from "./fallenHalls.ts";
+import type { AchievementsStore } from "./achievements.ts";
+import { AchievementsDialog } from "./ui/AchievementsDialog.tsx";
+import { AchievementToast } from "./ui/AchievementToast.tsx";
 import { WarDialog } from "./ui/WarDialog.tsx";
 import { BattleBanner } from "./ui/BattleBanner.tsx";
 import { CompanionPanel } from "./ui/CompanionPanel.tsx";
@@ -201,6 +204,8 @@ type Modal =
   | { type: "arena" }
   // Ours (docs/adr/0021-factions-and-the-faction-war.md): the War window
   | { type: "war" }
+  // Ours (docs/adr/0025-achievements.md): the Achievements window
+  | { type: "achievements" }
   | { type: "amount"; object: ObjectInfo }
   | { type: "suicide" }
   | { type: "quickSlot"; index: number }
@@ -230,7 +235,7 @@ type Modal =
     };
 
 export function GameView({
-  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, cosmetics, training, appraisal, sellable, companion, arena, factionWar, fallenHalls, offers, serverPrefs, latency,
+  session, assets, audio, icons, phase, chat, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin, languages, onLogout, trades, travel, socialEvents, quests, questOffers, cosmetics, training, appraisal, sellable, companion, arena, factionWar, fallenHalls, achievements, offers, serverPrefs, latency,
 }: {
   /** Ours: the arenas' mock bouts (docs/adr/0019-arena-bouts.md) */
   arena: ArenaStore;
@@ -238,6 +243,8 @@ export function GameView({
   factionWar: FactionWarStore;
   /** Ours: the Fallen Halls and the guild window's quests (docs/adr/0022) */
   fallenHalls: FallenHallsStore;
+  /** Ours: the achievements earned, for the Achievements window and its toast (docs/adr/0025) */
+  achievements: AchievementsStore;
   /** The last ping's round trip in ms (lagbox.c), null before the first echo */
   latency: number | null;
   /** The game options the server keeps for us (CF_* flags), null until it has said */
@@ -837,6 +844,12 @@ export function GameView({
     session.shardsCommand("war");
   }, [session]);
   const openWar = () => setModal({ type: "war" });
+  // Ours (docs/adr/0025): the server sends our achievements at logon; ask again in case that came
+  // before we were listening
+  useEffect(() => {
+    session.shardsCommand("achievements");
+  }, [session]);
+  const openAchievements = () => setModal({ type: "achievements" });
   const comp = companion.status;
   const compObject = comp?.id ? (session.world.objects.get(comp.id)?.info ?? null) : null;
   const companionPanel = (
@@ -1350,7 +1363,7 @@ export function GameView({
       if (i >= QUICK_SLOTS && !(modern && settings.secondHotbar)) return;
       return activateSlot(i);
     }
-    const toggle = (type: "preferences" | "configuration" | "actions" | "war") => setModal((m) => (m?.type === type ? null : { type }));
+    const toggle = (type: "preferences" | "configuration" | "actions" | "war" | "achievements") => setModal((m) => (m?.type === type ? null : { type }));
     switch (a) {
       case "hideInterface":
         if (!modern) return;
@@ -1370,6 +1383,9 @@ export function GameView({
       case "war":
         // Ours: the War window (docs/adr/0021)
         return toggle("war");
+      case "achievements":
+        // Ours: the Achievements window (docs/adr/0025)
+        return toggle("achievements");
       case "quickEmotes":
         return setEmoteMenu((v) => !v);
       case "friends":
@@ -1859,6 +1875,9 @@ export function GameView({
       case "war":
         // Ours: the War window (docs/adr/0021-factions-and-the-faction-war.md)
         return openWar();
+      case "achievements":
+        // Ours: the Achievements window (docs/adr/0025-achievements.md)
+        return openAchievements();
       case "map":
         return setFullMap((v) => !v);
       case "get":
@@ -2534,6 +2553,7 @@ export function GameView({
         )}
         <FriendsNotices link={social} onOpen={() => openTab("friends")} />
         <BattleBanner store={factionWar} onOpen={openWar} />
+        <AchievementToast store={achievements} icons={icons} onOpen={openAchievements} />
         {studying && (
           <div className="study-banner" role="status">
             <span>{studying}</span>
@@ -2606,6 +2626,7 @@ export function GameView({
         )}
         {modal?.type === "arena" && <ArenaDialog status={arena.status} session={session} onClose={() => setModal(null)} />}
         {modal?.type === "war" && <WarDialog store={factionWar} session={session} onClose={() => setModal(null)} />}
+        {modal?.type === "achievements" && <AchievementsDialog store={achievements} session={session} icons={icons} onClose={() => setModal(null)} />}
         {modal?.type === "travel" && (
           <TravelDialog here={modal.here} places={modal.places} pvpUntil={pvpUntil} session={session} onClose={() => setModal(null)} />
         )}

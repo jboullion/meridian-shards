@@ -5764,3 +5764,159 @@ canvas.server-wait {
 .tailor-swatches button.selected {
   outline: 2px solid var(--gold);
 }
+
+/* The Achievements window and toast (AchievementsDialog.tsx, AchievementToast.tsx) */
+.mk-window.game-dialog.achievements-window {
+  width: min(660px, calc(100% - 16px));
+}
+
+.achievements-page {
+  padding: 8px 2px;
+}
+
+.achievements-count {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.achievements-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.achievement {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+}
+
+.achievement.locked {
+  opacity: 0.55;
+}
+
+/* A sprite or the logo, in a square: locked ones are dark and grey */
+.achievement-art {
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.achievement-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.achievement-art > img {
+  image-rendering: auto;
+}
+
+.achievement-art .obj-icon {
+  width: 100%;
+  height: 100%;
+}
+
+.achievement-icon {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+}
+
+.achievement.locked .achievement-art {
+  filter: grayscale(1) brightness(0.45);
+}
+
+.achievement-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.achievement-name {
+  font-weight: bold;
+}
+
+.achievement-desc {
+  font-size: 12px;
+}
+
+.achievement-title {
+  font-size: 11px;
+  color: rgb(240, 208, 25);
+}
+
+.achievement-when {
+  flex: 0 0 auto;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.view .achievement-toast {
+  position: absolute;
+  right: 12px;
+  bottom: 120px;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 24px);
+  padding: 8px 14px;
+  border: 1px solid rgb(240, 208, 25);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.78);
+  box-shadow: 0 0 10px rgba(240, 208, 25, 0.45);
+  color: #e8dcc2;
+  font: 13px Georgia, "Times New Roman", serif;
+  text-align: left;
+  cursor: pointer;
+  animation: achievement-toast 5s ease-in-out forwards;
+}
+
+.achievement-toast-icon {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+}
+
+.achievement-toast-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.achievement-toast-head {
+  font-size: 11px;
+  color: rgb(240, 208, 25);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.achievement-toast-name {
+  font-weight: bold;
+  font-size: 15px;
+}
+
+.achievement-toast-title {
+  font-size: 11px;
+}
+
+@keyframes achievement-toast {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  8%,
+  88% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+  }
+}

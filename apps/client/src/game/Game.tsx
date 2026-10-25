@@ -22,6 +22,7 @@ import { CompanionStore } from "./companion.ts";
 import { ArenaStore } from "./arenaBouts.ts";
 import { FactionWarStore } from "./factionWar.ts";
 import { FallenHallsStore } from "./fallenHalls.ts";
+import { AchievementsStore } from "./achievements.ts";
 import { ConnectingScreen, LoginScreen, rememberName } from "./LoginScreen.tsx";
 
 /** A tiny event relay: session events that arrive before (or without) a listener are dropped. */
@@ -68,6 +69,8 @@ interface Live {
   factionWar: FactionWarStore;
   /** Ours (docs/adr/0022): the Fallen Halls and the guild window's quests, kept from logon */
   fallenHalls: FallenHallsStore;
+  /** Ours (docs/adr/0025): the achievements earned, kept from logon */
+  achievements: AchievementsStore;
   offers: Relay<OfferEvent>;
   looks: Relay<LookResult>;
   contents: Relay<ContainerContents>;
@@ -225,6 +228,7 @@ export function Game({
     const arena = new ArenaStore();
     const factionWar = new FactionWarStore();
     const fallenHalls = new FallenHallsStore();
+    const achievements = new AchievementsStore();
     const offers = new Relay<OfferEvent>();
     const looks = new Relay<LookResult>();
     const contents = new Relay<ContainerContents>();
@@ -301,6 +305,7 @@ export function Game({
         factionWar: (e) => factionWar.handle(e),
         fallenHalls: (s) => fallenHalls.handle(s),
         guildHall: (s) => fallenHalls.handleHall(s),
+        achievements: (e) => achievements.handle(e),
         offer: offers.emit,
         sound: (e) => audio.handle(e),
         damageDealt: damage.emit,
@@ -312,7 +317,7 @@ export function Game({
     s.setLanguage(getSettings().language);
     void loadProfanity(assets);
     setPhase("connecting");
-    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, quests, questOffers, cosmetics, training, appraisal, sellable, companion, arena, factionWar, fallenHalls, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
+    setLive({ session: s, audio, icons: new IconRenderer(assets, (id) => localResName(id) ?? s.resource(id)), trades, travel, social, quests, questOffers, cosmetics, training, appraisal, sellable, companion, arena, factionWar, fallenHalls, achievements, offers, looks, contents, damage, mailNews, statChange, guild, minigame, modules, admin });
   };
 
   const logout = () => {
@@ -428,6 +433,7 @@ export function Game({
       arena={live.arena}
       factionWar={live.factionWar}
       fallenHalls={live.fallenHalls}
+      achievements={live.achievements}
       offers={live.offers.on}
       phase={phase}
       chat={chat}

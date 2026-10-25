@@ -24,7 +24,7 @@ export const ACTION_TABS = {
   Map: ["map", "mapZoomIn", "mapZoomOut"],
   // Ours: keys for our own panels and menus, and the quick slots (quickSlots.ts)
   Interface: [
-    "inventory", "settings", "configuration", "actions", "quickEmotes", "friends", "pets", "companion", "war", "cameraView", "hideInterface",
+    "inventory", "settings", "configuration", "actions", "quickEmotes", "friends", "pets", "companion", "war", "achievements", "cameraView", "hideInterface",
     "quickSlot1", "quickSlot2", "quickSlot3", "quickSlot4", "quickSlot5", "quickSlot6", "quickSlot7", "quickSlot8", "quickSlot9",
     "quickSlot10",
     // The Modern interface's second row
@@ -87,6 +87,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   pets: "Pets",
   companion: "Companion",
   war: "The Faction War",
+  achievements: "Achievements",
   quickSlot1: "Quick Slot 1",
   quickSlot2: "Quick Slot 2",
   quickSlot3: "Quick Slot 3",
@@ -180,6 +181,8 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     companion: k("KeyC"),
     // Ours: the War window (docs/adr/0021-factions-and-the-faction-war.md)
     war: k("KeyJ"),
+    // Ours: the Achievements window (docs/adr/0025-achievements.md)
+    achievements: k("KeyU"),
     // Ours: first person, chase, behind, front (the Modern interface only; gameScene.ts ViewMode)
     cameraView: k("KeyV"),
     // Ours: the Modern interface's HUD away and back, for screenshots (GameView hudHidden)
@@ -255,6 +258,7 @@ export const PRESETS: Record<PresetName, KeyMap> = {
     pets: [],
     companion: [],
     war: [],
+    achievements: [],
     cameraView: [],
     hideInterface: [],
     // Typing starts a chat line in the original preset, digits too: no keys unless the player adds them
@@ -499,7 +503,7 @@ export function touchUi(s: Settings): boolean {
   return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 }
 
-const SETTINGS_VERSION = 16;
+const SETTINGS_VERSION = 17;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
@@ -672,6 +676,11 @@ export function migrate(s: SavedSettings): Settings {
   if (version < 16) {
     const taken = Object.entries(keys).some(([a, list]) => a !== "war" && list.some((b) => b.code === "KeyJ" && !b.alt && !b.ctrl));
     if (taken) keys.war = keys.war.filter((b) => b.code !== "KeyJ" || b.alt || b.ctrl);
+  }
+  // Version 17 (the Achievements window on U): not if the player had put U to another use
+  if (version < 17) {
+    const taken = Object.entries(keys).some(([a, list]) => a !== "achievements" && list.some((b) => b.code === "KeyU" && !b.alt && !b.ctrl));
+    if (taken) keys.achievements = keys.achievements.filter((b) => b.code !== "KeyU" || b.alt || b.ctrl);
   }
   delete (out as SavedSettings).mouseSpeed;
   delete (out as SavedSettings).rightClickLooks;
