@@ -3,8 +3,9 @@
 //     Sidebar.tsx HudBars) and our enchantments under them. The phone has it too (TouchControls.tsx).
 //   - TargetFrame, top centre: what's targeted, and a button to clear it
 //   - MapCluster, top right: the minimap in a round frame (a click opens the full map), the
-//     toolbar's Rest/Stand and mailbox at its top corners and its zoom buttons at the bottom, the
-//     room's name under it and the room's enchantments to its left. The character window and the
+//     toolbar's Rest/Stand and mailbox at its top corners, its zoom buttons at the bottom, the War
+//     button at its right (WarButton.tsx), the room's name under it and the room's enchantments to
+//     its left. The character window and the
 //     rest have keys.
 //   - The quest box (QuestBox.tsx), on the right under the map, moved and sized like the chat.
 //   - ActionBar, bottom centre: the quick slots (Hotbar) alone, as on the phone.
@@ -27,6 +28,8 @@ import { MiniMap } from "./MiniMap.tsx";
 import { Hotbar } from "./QuickSlots.tsx";
 import { ENCHANTMENT_EVENTS, HudBars, HudEnchantments, ObjIcon, PortraitIcon, cancelEnchantment, shownEnchantments } from "./Sidebar.tsx";
 import { ToolbarButtonView, type ToolbarButton } from "./Toolbar.tsx";
+import { WarButton } from "./WarButton.tsx";
+import type { FactionWarStore } from "../factionWar.ts";
 
 /** include/proto.h OF_ATTACKABLE */
 const OF_ATTACKABLE = 0x8;
@@ -155,8 +158,11 @@ function MapButton({ label, className, onClick, children }: {
 }
 
 export function MapCluster({
-  session, icons, assets, settings, buttons, getRoom, roomName, annotations, onAnnotate, onLook, onZoom, onMap, getWay, onArena, arenaActive,
+  session, icons, assets, settings, buttons, getRoom, roomName, annotations, onAnnotate, onLook, onZoom, onMap, getWay, onArena, arenaActive, war, onWar,
 }: {
+  /** Ours: the War button at the map's right (WarButton.tsx), lit while a battle is on */
+  war: FactionWarStore;
+  onWar: () => void;
   /** Ours (docs/adr/0019-arena-bouts.md): in an arena, the crossed swords at the map's left that open the Arena window; lit while we're in its line or bout */
   onArena?: () => void;
   arenaActive?: boolean;
@@ -211,6 +217,7 @@ export function MapCluster({
             ⚔
           </MapButton>
         )}
+        <WarButton store={war} onOpen={onWar} className="map-button war-button" tooltips={settings.tooltips} />
         {buttons?.map((b, i) => (
           <ToolbarButtonView key={b.bitmap} assets={assets} button={b} tooltips={settings.tooltips} className={`map-tool ${i ? "top-right" : "top-left"}`} />
         ))}

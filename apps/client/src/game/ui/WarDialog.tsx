@@ -1,5 +1,5 @@
 // Ours (docs/adr/0021-factions-and-the-faction-war.md, phase 5): the War window, from typing
-// "war", its key (J), or the battle banner. Where we stand with our liege (renown, rank, our war
+// "war", its key (J), or the War button (WarButton.tsx). Where we stand with our liege (renown, rank, our war
 // record), the battle called or being fought and the next one, the towns and who holds them, a
 // map of the realm's flagpoles, the last battles, and our liege's war ledger. All of it comes
 // from our server (factionwar.kod SendWar), asked for as the window opens and again as a battle
@@ -81,7 +81,7 @@ function Liege({ faction, short }: { faction: number; short?: boolean }) {
   return <span className={`war-liege ${LIEGE_CLASS[faction] ?? ""}`}>{(short ? LIEGE_SHORT : LIEGE_NAMES)[faction] ?? "No liege"}</span>;
 }
 
-/** What the battle is, in a sentence (the banner says it shorter) */
+/** What the battle is, in a sentence */
 export function battleText(b: WarBattle, seconds: number): string {
   const att = LIEGE_SHORT[b.attacker] ?? "Someone";
   const def = LIEGE_SHORT[b.defender] ?? "someone";

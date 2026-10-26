@@ -1,6 +1,6 @@
 // Ours (docs/adr/0021-factions-and-the-faction-war.md, phase 5): the Faction War as our server
 // tells us (UC_FACTION_WAR, shards-server util/factionwar.kod SendWar and SendBattle), for the
-// War window and the battle banner, and the command that asks for it (UC_SHARDS "war").
+// War window and the War button, and the command that asks for it (UC_SHARDS "war").
 
 import type { ByteReader } from "@shards/protocol";
 
@@ -13,7 +13,7 @@ export const LIEGE_NAMES: Readonly<Record<number, string>> = {
   [FACTION.REBEL]: "Jonas D'Accor",
 };
 
-/** Short, for the banner and the map */
+/** Short, for the map */
 export const LIEGE_SHORT: Readonly<Record<number, string>> = {
   [FACTION.NEUTRAL]: "No liege",
   [FACTION.DUKE]: "the Duke",

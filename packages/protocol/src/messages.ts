@@ -816,7 +816,7 @@ export const UC = {
   ITEM_SERVICE: 118,
   /** Ours (the magic item revamp, phase 2): a revealed magic item's full name (shards-server util/itemservicebook.kod SendMagicName) */
   MAGIC_NAME: 119,
-  /** Ours (the faction revamp, phase 5): the Faction War for the War window and the battle banner (shards-server util/factionwar.kod; docs/adr/0021) */
+  /** Ours (the faction revamp, phase 5): the Faction War for the War window and the War button (shards-server util/factionwar.kod; docs/adr/0021) */
   FACTION_WAR: 120,
   /** Ours (the guild revamp, phase 5): the Fallen Halls for the guild window (shards-server util/fallenhalls.kod SendHalls; docs/adr/0022) */
   FALLEN_HALLS: 121,

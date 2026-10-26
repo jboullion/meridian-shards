@@ -18,13 +18,13 @@ import type { AchievementsStore } from "./achievements.ts";
 import { AchievementsDialog } from "./ui/AchievementsDialog.tsx";
 import { AchievementToast } from "./ui/AchievementToast.tsx";
 import { WarDialog } from "./ui/WarDialog.tsx";
-import { BattleBanner } from "./ui/BattleBanner.tsx";
 import { CompanionPanel } from "./ui/CompanionPanel.tsx";
 import { CompanionLooksDialog } from "./ui/CompanionLooksDialog.tsx";
 import { TailorDialog } from "./ui/TailorDialog.tsx";
 import { BarberDialog } from "./ui/BarberDialog.tsx";
 import { ItemServiceDialog } from "./ui/ItemServiceDialog.tsx";
 import { NameChangeDialog } from "./ui/NameChangeDialog.tsx";
+import { WarButton } from "./ui/WarButton.tsx";
 import { QuestWays } from "./questWays.ts";
 import { MM_OURS, MM_QUEST_NPC, MM_TALK_NPC } from "./markers.ts";
 import { QuestDialog, QuestInfoDialog } from "./ui/QuestDialog.tsx";
@@ -241,7 +241,7 @@ export function GameView({
 }: {
   /** Ours: the arenas' mock bouts (docs/adr/0019-arena-bouts.md) */
   arena: ArenaStore;
-  /** Ours: the Faction War, for the War window and the battle banner (docs/adr/0021) */
+  /** Ours: the Faction War, for the War window and the War button (docs/adr/0021) */
   factionWar: FactionWarStore;
   /** Ours: the Fallen Halls and the guild window's quests (docs/adr/0022) */
   fallenHalls: FallenHallsStore;
@@ -840,7 +840,7 @@ export function GameView({
     scene.arenaFloorBusy = floorTaken(s);
   }, [arena, arenaVersion, inArena, status]);
   const openArena = () => setModal({ type: "arena" });
-  // Ours (docs/adr/0021): where we stand in the Faction War, once at logon (the battle banner
+  // Ours (docs/adr/0021): where we stand in the Faction War, once at logon (the War button
   // needs our liege); the server sends the battle to everyone as it changes
   useEffect(() => {
     session.shardsCommand("war");
@@ -2363,6 +2363,7 @@ export function GameView({
                 ⚔
               </button>
             )}
+            <WarButton store={factionWar} onOpen={openWar} className="toolbar-button war-classic" tooltips={settings.tooltips} />
             <EnchantmentRow session={session} icons={icons} kind="room" tooltips={settings.tooltips} onLook={(id) => lookAt(id, DESC.NONE)} />
           </ClassicToolbar>
         </>
@@ -2439,6 +2440,8 @@ export function GameView({
             onEmotes={toggleEmotes}
             onArena={inArena ? openArena : undefined}
             arenaActive={arenaActive}
+            war={factionWar}
+            onWar={openWar}
           />
         )}
         {!touch && !modern && (
@@ -2481,6 +2484,8 @@ export function GameView({
               getWay={getWay}
               onArena={inArena ? openArena : undefined}
               arenaActive={arenaActive}
+              war={factionWar}
+              onWar={openWar}
             />
             <QuestBox store={quests} settings={settings} onOpen={openQuestInfo} />
             <ActionBar
@@ -2554,7 +2559,6 @@ export function GameView({
           </div>
         )}
         <FriendsNotices link={social} onOpen={() => openTab("friends")} />
-        <BattleBanner store={factionWar} onOpen={openWar} />
         <AchievementToast store={achievements} icons={icons} onOpen={openAchievements} />
         {studying && (
           <div className="study-banner" role="status">

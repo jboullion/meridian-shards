@@ -1,5 +1,5 @@
 // Ours (docs/adr/0021-factions-and-the-faction-war.md, phase 5): what our client knows of the
-// Faction War, from UC_FACTION_WAR (shards-server util/factionwar.kod): the battle for the banner
+// Faction War, from UC_FACTION_WAR (shards-server util/factionwar.kod): the battle for the War button
 // (sent to everyone as it's called, opens, ends, and every few seconds of a fight), and all of it
 // for the War window (asked for with "war"). Kept from logon, as the arena's is (arenaBouts.ts).
 

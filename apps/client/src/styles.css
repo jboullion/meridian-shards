@@ -3566,6 +3566,63 @@ canvas.server-wait {
   text-shadow: 1px 1px 0 #000;
 }
 
+/* Ours (WarButton.tsx): the War button's flag, at the Modern map's right (the arena's swords
+   mirrored), in the Classic toolbar and on the phone's top row. Lit while a battle is called or
+   fought; pulsing when our liege fights in it */
+.map-ring .war-button {
+  top: 50%;
+  bottom: auto;
+  right: -14px;
+  width: 30px;
+  height: 30px;
+  transform: translateY(-50%);
+  font-size: 17px;
+}
+
+/* The phone's, at the end of its top row: round, as wide as it's tall */
+.touch-button.war-touch {
+  width: 36px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 16px;
+}
+
+.toolbar-button.war-classic {
+  margin-right: 6px;
+  color: var(--ui-text);
+  font: bold 14px / 1 Arial, sans-serif;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.map-ring .war-button.active,
+.toolbar-button.war-classic.active,
+.touch-button.war-touch.active {
+  border-color: rgb(240, 208, 25);
+  color: rgb(240, 208, 25);
+  box-shadow: 0 0 8px rgba(240, 208, 25, 0.6);
+}
+
+.map-ring .war-button.ours,
+.toolbar-button.war-classic.ours,
+.touch-button.war-touch.ours {
+  animation: war-button-ours 1s ease-in-out infinite alternate;
+}
+
+@keyframes war-button-ours {
+  to {
+    box-shadow: 0 0 16px 3px rgba(240, 208, 25, 0.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-ring .war-button.ours,
+  .toolbar-button.war-classic.ours,
+  .touch-button.war-touch.ours {
+    animation: none;
+    box-shadow: 0 0 14px 3px rgba(240, 208, 25, 0.9);
+  }
+}
+
 .mk-window.game-dialog.arena-window {
   width: min(480px, calc(100% - 16px));
 }
@@ -3684,58 +3741,6 @@ canvas.server-wait {
   color: var(--liege);
   font-weight: bold;
   text-shadow: 1px 1px 0 #000;
-}
-
-/* The battle banner at the top of the view (BattleBanner.tsx); below the study banner if both */
-.view .battle-banner {
-  position: absolute;
-  left: 50%;
-  top: 8px;
-  z-index: 6;
-  transform: translateX(-50%);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: center;
-  gap: 2px 10px;
-  max-width: calc(100% - 32px);
-  padding: 4px 12px;
-  border: 1px solid rgba(214, 180, 90, 0.55);
-  border-radius: 3px;
-  background: rgba(0, 0, 0, 0.62);
-  font: bold 13px Georgia, "Times New Roman", serif;
-  color: #e8dcc2;
-  cursor: pointer;
-}
-
-.view .battle-banner:has(~ .study-banner) {
-  top: 44px;
-}
-
-/* The Modern interface: between the portrait's bars and the map, or under them where narrow */
-.modern-ui .view .battle-banner {
-  max-width: min(420px, calc(100% - 480px));
-}
-
-@media (max-width: 1000px) {
-  .modern-ui .view .battle-banner {
-    top: 96px;
-    max-width: calc(100% - 32px);
-  }
-}
-
-.view .battle-banner.ours {
-  border-color: rgb(240, 208, 25);
-  box-shadow: 0 0 8px rgba(240, 208, 25, 0.5);
-}
-
-.battle-banner-title {
-  color: rgb(240, 208, 25);
-}
-
-.battle-banner-vs,
-.battle-banner-time {
-  font-weight: normal;
 }
 
 /* The War window (WarDialog.tsx) */

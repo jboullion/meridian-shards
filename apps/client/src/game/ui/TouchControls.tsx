@@ -24,6 +24,8 @@ import { Hotbar } from "./QuickSlots.tsx";
 import type { QuickSlot, QuickSlots } from "../quickSlots.ts";
 import type { Cooldown } from "../cooldowns.ts";
 import { wieldedWeapon } from "../equipment.ts";
+import type { FactionWarStore } from "../factionWar.ts";
+import { WarButton } from "./WarButton.tsx";
 
 /** The joystick's knob travel, px; past DEAD of it the move starts, past RUN it runs */
 const RADIUS = 37;
@@ -196,11 +198,14 @@ export function tickerColor(color: string | undefined): string | undefined {
 
 export function TouchControls({
   session, icons, settings, chatUnread, onMove, onPress, onChat, onDrawer, onMap, mapOpen, onLook, resting, onRest,
-  quickSlots, onUseSlot, onEditSlot, onSetSlot, onSwapSlots, selecting, onSelectSelf, onCancelSelect, cooldown, onEmotes, onArena, arenaActive,
+  quickSlots, onUseSlot, onEditSlot, onSetSlot, onSwapSlots, selecting, onSelectSelf, onCancelSelect, cooldown, onEmotes, onArena, arenaActive, war, onWar,
 }: {
   /** Ours (docs/adr/0019-arena-bouts.md): in an arena, the Arena window; and whether we're in its line or bout */
   onArena?: () => void;
   arenaActive?: boolean;
+  /** Ours: the War button (WarButton.tsx), lit while a battle is on */
+  war: FactionWarStore;
+  onWar: () => void;
   onSetSlot: (i: number, slot: QuickSlot) => void;
   onSwapSlots: (a: number, b: number) => void;
   /** The spell cooldown (cooldowns.ts), on the hotbar's spell slots */
@@ -261,6 +266,7 @@ export function TouchControls({
             ⚔
           </button>
         )}
+        <WarButton store={war} onOpen={onWar} className="touch-button small war-touch" />
       </div>
       <Joystick onMove={onMove} />
       <div className="touch-actions">
