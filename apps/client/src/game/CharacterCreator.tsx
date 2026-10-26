@@ -209,7 +209,7 @@ export function CharacterCreator({
           <Check
             at={[2, 186, 104, 10]}
             label="Skip the tutorial, start in"
-            title="Begin at 30 health with leather armor, a small round shield and 1,000 shillings, as a citizen of the city you choose, instead of starting out in Raza"
+            title="Begin at 40 health with 1,000 training points, leather armor, a small round shield and 1,000 shillings, as a citizen of the city you choose and on the main quest with Word to Cor Noth, instead of starting out in Raza"
             checked={skipTutorial}
             onChange={setSkipTutorial}
           />
