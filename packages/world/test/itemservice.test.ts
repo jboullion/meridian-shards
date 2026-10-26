@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ByteReader } from "@shards/protocol";
-import { readItemService, repairCommand, revealCommand } from "../src/itemservice.ts";
+import { readItemService, renameCommand, repairCommand, revealCommand } from "../src/itemservice.ts";
 
 /** Little-endian bytes from [size, value] pairs */
 function bytes(parts: [1 | 4, number][]): ByteReader {
@@ -26,6 +26,10 @@ describe("UC_ITEM_SERVICE", () => {
     expect(e).toEqual({ type: "repair", npc: 6494, items: [{ slot: 1, id: 6470, price: 125, hits: 0, maxHits: 300 }] });
   });
 
+  it("reads Caramo's name change: her and the fee", () => {
+    expect(readItemService(bytes([[1, 3], [4, 1409], [4, 50000]]))).toEqual({ type: "rename", npc: 1409, fee: 50000 });
+  });
+
   it("ignores a kind it doesn't know", () => {
     expect(readItemService(bytes([[1, 9]]))).toBeNull();
   });
@@ -33,5 +37,6 @@ describe("UC_ITEM_SERVICE", () => {
   it("makes the commands", () => {
     expect(revealCommand(2)).toBe("reveal 2");
     expect(repairCommand(1)).toBe("repair 1");
+    expect(renameCommand("  Palworth   the Bold ")).toBe("rename Palworth the Bold");
   });
 });

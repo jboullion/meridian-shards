@@ -4,7 +4,7 @@
 // A smith's window has a Shop button for their wares, as a tailor's does.
 
 import { useState } from "react";
-import { revealCommand, repairCommand, type GameSession, type ItemServiceEvent } from "@shards/world";
+import { revealCommand, repairCommand, type GameSession, type ItemMenuEvent } from "@shards/world";
 import type { IconRenderer } from "../icons.ts";
 import { Button, Window } from "./kit.tsx";
 import { ObjIcon } from "./Sidebar.tsx";
@@ -14,7 +14,7 @@ export function ItemServiceDialog({
 }: {
   /** The elder's or smith's name */
   name: string;
-  menu: ItemServiceEvent;
+  menu: ItemMenuEvent;
   session: GameSession;
   icons: IconRenderer;
   onCommand: (line: string) => void;

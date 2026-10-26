@@ -24,6 +24,7 @@ import { CompanionLooksDialog } from "./ui/CompanionLooksDialog.tsx";
 import { TailorDialog } from "./ui/TailorDialog.tsx";
 import { BarberDialog } from "./ui/BarberDialog.tsx";
 import { ItemServiceDialog } from "./ui/ItemServiceDialog.tsx";
+import { NameChangeDialog } from "./ui/NameChangeDialog.tsx";
 import { QuestWays } from "./questWays.ts";
 import { MM_OURS, MM_QUEST_NPC, MM_TALK_NPC } from "./markers.ts";
 import { QuestDialog, QuestInfoDialog } from "./ui/QuestDialog.tsx";
@@ -187,6 +188,7 @@ const SERVICE_LABELS: Record<CosmeticsEvent["type"], string> = {
   barber: "Barber…",
   reveal: "Reveal…",
   repair: "Repair…",
+  rename: "Change name…",
 };
 
 type Modal =
@@ -2689,6 +2691,15 @@ export function GameView({
                   }
                 : undefined
             }
+            onClose={() => setModal(null)}
+          />
+        )}
+        {modal?.type === "cosmetics" && modal.menu.type === "rename" && (
+          <NameChangeDialog
+            name={session.resource(session.world.objects.get(modal.menu.npc)?.info.nameRes ?? 0) ?? "The clerk"}
+            current={session.resource(session.world.self?.info.nameRes ?? 0) ?? ""}
+            fee={modal.menu.fee}
+            onCommand={(line) => session.shardsCommand(line)}
             onClose={() => setModal(null)}
           />
         )}
