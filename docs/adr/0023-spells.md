@@ -126,6 +126,11 @@ The breakdown has 18 fixed lines (`SPELL_PP_SLOTS`), because the client stops fo
     - Final Rites does 12-20 plus up to 16 to each undead.
     - Holy Blaze's heal scales with spellpower.
     - Defile takes any corpse; a creature's gives half the mana of a player's.
+- **D41. Qor's Blade replaces Blood Inheritance** (decided 2026-10-26), as Qor's answer to Spiritual Sword. Blood Inheritance needed a prism on the ground and several casters, which a mostly single-player game can't gather. Spell 146 keeps its class, `BloodInheritance`, for saved worlds.
+    - Cast alone and at once, for 15 mana, 20 shaman blood and 30 orc teeth, it summons Qor's blade (`QorsBlade`): the Spiritual Sword's stats and art, its blade turned blood red (`PT_GRAY_TO_RED`), with a crimson ring.
+    - The blade deals unholy damage. One blow in seven drinks 6-12 blood and heals the wielder by as much, though not from the undead. It adds 15 to Qor spells.
+    - Only someone who knows a Qor spell of level 6 and no Shal'ille spell can wield it.
+    - Both blades are bound to their summoner: they can't be dropped, given, sold or stored, and stay through death. Casting again replaces the old one.
 
 ### Kraanan and Riija (phase 6)
 
