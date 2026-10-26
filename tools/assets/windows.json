@@ -674,7 +674,7 @@
   },
   "9625": {
    "name": "raz-bldg-g frntwl w/out dr (Inn)",
-   "gain": 2.2,
+   "gain": 1.1,
    "openings": [
     {
      "shape": "rect",
