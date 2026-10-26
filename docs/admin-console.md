@@ -12,6 +12,8 @@ On the local development server there's also the **admin dashboard**, at http://
 - **World:** the server's time, and your client's weather, terrain and crowd.
 - **Sprites:** a pixel editor for the game's sprites. Hair and facial hair are shown on a head in every hair colour. It can import a PNG and offer a new style in the character creator. Saves go to shards-server's `resource/graphics/shards` and show in game tabs straight away.
 - **Tuning:** ambient life's numbers, live.
+- **Quests:** make and edit quests (below).
+- **Companions:** manage your character’s companions (below).
 - **Server:** build and reload the Kod, and any maintenance command.
 
 It needs a game tab logged in as an admin for the things it does as you. It's for development only: no build has it (AGENTS.md has the details).

@@ -76,12 +76,14 @@ sudo fallocate -l 1G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapf
 mkdir -p ~/meridian-shards/deploy && nano ~/meridian-shards/deploy/.env
 ```
 
-Put this in `.env`, using **your** static IP with dashes (34.123.45.67 becomes `34-123-45-67.sslip.io`):
+Put this in `.env`. The live server uses its own domain, `m59-shards.com` (behind Cloudflare, [ADR 0004](../docs/adr/0004-own-domain.md)); quote `SITE_ADDRESS` when it lists more than one name, with a space after the comma:
 
 ```
-SITE_ADDRESS=34-123-45-67.sslip.io
-GATEWAY_ORIGINS=https://34-123-45-67.sslip.io,app://shards,https://localhost,app://unreal-meridian
+SITE_ADDRESS=m59-shards.com
+GATEWAY_ORIGINS=https://m59-shards.com,app://shards,https://localhost,app://unreal-meridian
 ```
+
+Without a domain, use **your** static IP with dashes instead (34.123.45.67 becomes `34-123-45-67.sslip.io`), which gets a certificate with no DNS setup. The desktop and Android apps still list the old sslip.io address of the live server too (ADR 0004), so while that is so, `SITE_ADDRESS` and `GATEWAY_ORIGINS` carry both names.
 
 The first entry is the site itself, for the browser client; without it the gateway turns browser players away. `app://shards` is the desktop app's page origin; without it the gateway turns the desktop app away. `app://unreal-meridian` is the Unreal remaster (`meridian-unreal`, its ADR 0010), which plays on this server too. After changing `.env`, restart the gateway: `docker compose up -d gateway`.
 

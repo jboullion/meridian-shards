@@ -4,6 +4,8 @@ What the original client (`clientd3d` and its modules `merintr`, `mailnews`, `st
 
 Remove an entry when it lands, and add one whenever we skip something. Options for many of these are in the Preferences and Configuration windows already (shown in *italics* there), and saved with the other settings, so they'll work as soon as the feature does.
 
+The systems our server adds (quests, factions and the war, guilds, spells, achievements and the rest) are tracked in their [ADRs](adr/) and roadmap milestone 18, not here.
+
 Our own additions (the modern key preset, chat tabs, damage numbers, pixel-accurate picking, the latency meter in the title bar) stay; parity means the original's features are available beside them.
 
 ## World (phase 1)
@@ -120,6 +122,7 @@ Companions ([ADR 0010](adr/0010-followers.md)) have no counterpart in the origin
 
 | What | Why |
 |---|---|
+| Random PvP, curses, crafting | Removed from our server on purpose: players fight each other only in the Faction War, guild wars, arenas and Frenzies ([ADR 0021](adr/0021-factions-and-the-faction-war.md)); the crafting school and curses are gone. |
 | Critters and nature shared between friends | Won't do (decided 2026-10-12): only the townsfolk and the arena's fights are shared ([ADR 0005](adr/0005-friends.md) 6). Critters, butterflies, fireflies, leaves and fish keep each client's own random seed, and a squished critter is seen by its squisher alone. |
 | Objects under the cursor | The original takes everything whose on-screen rectangle holds the cursor; we take the objects with an opaque pixel there, so a list comes up only when sprites really overlap. Rectangles would ask too often. |
 | Ignore list by name resource | The original keys ignores by name resource; we use the name, which survives across sessions. |

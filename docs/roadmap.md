@@ -335,6 +335,22 @@ An AI agent plays a character and writes up what's broken ([ADR 0020](adr/0020-a
 - [x] **Phase 2, eyes** (2026-10-20): `connect` with body `browser` plays in the real dev client (Playwright), the agent's logic running in the page on its own session. `screenshot` shows what a player sees, and bug reports attach one.
 - [ ] **Phase 3, players' own AI characters:** any player may run one AI agent at a time, marked "AI" by the server. It ships and installs with the game, explains itself to any MCP client (Claude Code, Codex...), and might be started from a Launch AI Bot button in the game. To be designed and tried ([ADR 0020](adr/0020-ai-playtester.md), "Later phases").
 
+### 18. Our server's game systems (ours, 2026-10-15 to 2026-10-25)
+
+Since 2026-10-15 the server is our own fork, [shards-server](https://github.com/jboullion/shards-server), and the game is being reworked on both sides of the wire. Each system has an ADR with its phases and what is still unplayed; this is the list.
+
+- [x] **Quests you can find** ([ADR 0009](adr/0009-quests.md)): data-driven quests (`quests/*.json` generated into Kod by `tools/quests`), quest log and giver dialogs, the admin dashboard's Quests tab.
+- [x] **Companions, pets, friends** ([ADR 0010](adr/0010-followers.md), [0006](adr/0006-pets.md), [0005](adr/0005-friends.md), [0015](adr/0015-social-on-our-server.md)): moved from the relay into Kod behind one `UC_SHARDS` command channel.
+- [x] **Cosmetics, abilities, lighting moods, seasons and water** ([ADR 0012](adr/0012-cosmetics.md), [0016](adr/0016-abilities.md), [0017](adr/0017-lighting-moods.md), [0018](adr/0018-seasons-water-windows.md)); **arena bouts** ([0019](adr/0019-arena-bouts.md)).
+- [x] **Magic items**: four tiers, no curses, an elder reveal window, smith repair, random jewellery magic, glowing rings.
+- [x] **Factions and the Faction War** ([ADR 0021](adr/0021-factions-and-the-faction-war.md), 2026-10-22): renown, no random PvP, Champion's Gifts, Roq's contracts, the lieges' battles and campaigns, the client's War window and battle banner.
+- [x] **Guilds** ([ADR 0022](adr/0022-guilds.md), phases 0 to 8, 2026-10-24): public halls, ranked chests, prestige, recruiting boards, eight Fallen Halls, guild quests, trophies and the Inner Sanctum, cloaks, the Hall tab.
+- [x] **The spell revamp** ([ADR 0023](adr/0023-spells.md), phases 0 to 9, 2026-10-24): level grids per school, the Jala songs, monster-targetable spells, spell effects and sounds.
+- [x] **Chat emoji and item links** ([ADR 0024](adr/0024-chat-emoji-and-item-links.md)) and **achievements** ([ADR 0025](adr/0025-achievements.md)), 2026-10-24 and 25.
+- [x] **The Office of the Justicar** ([ADR 0026](adr/0026-the-office-of-the-justicar.md), 2026-10-25): the Barloque Assizes, Caramo's daily bounties and name changes.
+- [x] **Release 0.13.0** (2026-10-24) and the one-button `npm run ship` / `release:patch` scripts; the public site is m59-shards.com ([ADR 0004](adr/0004-own-domain.md)).
+- [ ] **Still proposed:** player homes ([0008](adr/0008-player-homes.md)), fast travel ([0011](adr/0011-fast-travel.md)), races ([0013](adr/0013-races.md)), inn games ([0014](adr/0014-inn-games.md)), and the AI playtester's phase 3.
+
 ## What the slice must prove
 
 - [x] An unmodified Server 104 `blakserv` (plus config changes only) serves browser players through the gateway (the protocol side; proven with the headless client). Since 2026-10-15 the server is our own fork, changed as our features need (ADR 0001 decision 4).
@@ -394,3 +410,7 @@ An AI agent plays a character and writes up what's broken ([ADR 0020](adr/0020-a
   - Interface after play testing: the minimap's arrow a filled arrowhead, the bars' numbers a pixel lower, our face at one scale both ways, a search over Study's spells.
   - Login after play testing: the login dialog open at once over the splash picture (one screen, not two), the login names used before in a list under the name field, Switch character in the ☰ menu (back to Select character, still logged in), and the Trickster preset left out of the creator.
   - Help (F1, ☰ → Help…): the keyboard and mouse as bound now, a labelled picture of the player's own screen, and every menu and window explained.
+- **2026-10-13 to 2026-10-25** (kept in the ADRs and commit history rather than day by day here; see milestone 18):
+  - The server fork became ours (2026-10-15): crafting, curses and the Necromancer/Hunter scenario removed, a fresh world.
+  - Quests, companions, pets, friends, cosmetics, abilities, lighting moods, seasons and water, arena bouts, the AI playtester, the magic item revamp, factions and the Faction War, guilds, the spell revamp, emoji and item links, achievements and the Justicar's office were built (ADRs 0005 to 0026).
+  - The hosted server moved to https://m59-shards.com (Cloudflare), with a load test of 100 clients; release 0.13.0 shipped on 2026-10-24.
