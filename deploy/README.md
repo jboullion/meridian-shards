@@ -130,7 +130,7 @@ node tools/deploy/push.ts --host shards@<EXTERNAL_IP> --key $HOME/.ssh/meridian_
 
 The first push uploads about 450 MB (mostly the game assets). For code-only updates add `--skip-assets`. To update only the browser client, the website and Caddy's config, add `--web-only`: it rebuilds the client and the website, recreates only the `web` container and leaves blakserv and the gateway running, so nobody is disconnected. The first start takes a minute: Docker builds blakserv, and Caddy fetches the certificate. Then open `https://<dashed-ip>.sslip.io`, which should show the website, and `/play/`, which should show the browser client's log on screen.
 
-`stage.ts` builds the website from `../meridian-shards-website` (or the folder in `SHARDS_SITE`; run `npm install` there once). Set `SITE_URL` to the site's `https://` origin when it's on its final address: that turns on canonical URLs, the sitemap and indexing. `--skip-site` leaves it out.
+`stage.ts` builds the website from `../meridian-shards-website` (or the folder in `SHARDS_SITE`; run `npm install` there once). `SITE_URL`, the site's `https://` origin (`https://m59-shards.com`), turns on canonical URLs, the sitemap and indexing; it comes from the environment, or from `.env` beside `SHARDS_DEPLOY_HOST`. `--skip-site` leaves it out.
 
 The move to our own domain, with Cloudflare in front, is planned in [ADR 0004](../docs/adr/0004-own-domain.md). Caddy is ready for it: it takes player addresses from Cloudflare's `CF-Connecting-IP` header, but only from Cloudflare's published ranges.
 

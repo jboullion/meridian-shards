@@ -17,8 +17,8 @@
 //
 // --client-only builds and stages the browser client and nothing else. --web-only stages the
 // client and the website (push.ts --web-only). The website's repository is found at
-// ../meridian-shards-website, or SHARDS_SITE; SITE_URL (the domain's https:// origin) is passed
-// to its build for canonical URLs and the sitemap. Without the repository, the site is skipped
+// ../meridian-shards-website, or SHARDS_SITE; SITE_URL (the domain's https:// origin, from the
+// environment or .env) is passed to its build for canonical URLs, the sitemap and indexing. Without the repository, the site is skipped
 // and Caddy sends every other path to /play/ as before.
 // Run `npm run assets` (and server\build.cmd) first. Then `docker compose -f deploy/docker-compose.yml build`.
 
@@ -73,8 +73,11 @@ function stageSite(): void {
     return;
   }
   need(join(site, "node_modules"), `install the website's dependencies first: npm install in ${site}`);
-  console.log(`building the website in ${site} (npm run build)...`);
-  execSync("npm run build", { cwd: site, stdio: "inherit" });
+  // SITE_URL from the environment, else from .env beside SHARDS_DEPLOY_HOST (where ship.ts runs us)
+  const dotenv = existsSync(join(ROOT, ".env")) ? readFileSync(join(ROOT, ".env"), "utf8") : "";
+  const siteUrl = process.env.SITE_URL ?? /^\s*SITE_URL\s*=\s*["']?([^"'\s]*)/m.exec(dotenv)?.[1];
+  console.log(`building the website in ${site} (npm run build${siteUrl ? `, for ${siteUrl}` : ", no SITE_URL"})...`);
+  execSync("npm run build", { cwd: site, stdio: "inherit", env: { ...process.env, ...(siteUrl ? { SITE_URL: siteUrl } : {}) } });
   const out = join(STAGE, "site");
   rmSync(out, { recursive: true, force: true });
   copy(join(site, "build", "client"), out);
