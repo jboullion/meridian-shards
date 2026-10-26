@@ -25,12 +25,14 @@ export type FloorAt = (x: number, y: number) => number | null;
 
 /**
  * The band, in squares: the line (wider for a wider ring, as it's seen from farther off and
- * edge on), and a glow fading inward from it; and how far above the floor it lies
+ * edge on; a buff's ring about us, seen close, stays fine), and a glow fading inward from it
+ * (a share of the ring's radius, up to GLOW); and how far above the floor it lies
  */
-const LINE_MIN = 0.16;
+const LINE_MIN = 0.06;
 const LINE_MAX = 0.45;
 const LINE_PER_SQUARE = 0.025;
 const GLOW = 0.9;
+const GLOW_PER_SQUARE = 0.15;
 const GLOW_ALPHA = 0.35;
 const LIFT = 0.06;
 /** Where the floor jumps more than this between two points of a ring (squares), the ring breaks */
@@ -139,7 +141,7 @@ export class RangeRings {
         pts.push({ x, y, z: floor(x, y) ?? centreZ });
       }
       const half = (Math.min(LINE_MAX, Math.max(LINE_MIN, squares * LINE_PER_SQUARE)) / 2) * FINENESS;
-      const glow = Math.min(GLOW * FINENESS, radius * 0.5);
+      const glow = Math.min(GLOW, squares * GLOW_PER_SQUARE) * FINENESS;
       for (let i = 0; i < n; i++) {
         const p = pts[i],
           q = pts[i + 1];
