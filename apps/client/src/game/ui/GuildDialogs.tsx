@@ -146,13 +146,13 @@ function FallenHallsPage({ session, store }: { session: GameSession; store: Fall
   const [selected, setSelected] = useState<number | null>(null);
   useEffect(() => session.shardsCommand(hallsCommand()), [session]);
   const status = store.status;
-  if (!status) return <Text at={[4, 4, 272, 8]}>Asking the Guild Masters...</Text>;
+  if (!status) return <Text at={[4, 4, 272, 8]}>Asking Frular...</Text>;
   const hall = status.halls.find((h) => h.rid === selected) ?? status.halls[0] ?? null;
   const daily = (h: FallenHall): string => {
     if (h.dailyState === DAILY_STATE.OFFERED) return "Its daily quest is yours to take.";
     if (h.dailyState === DAILY_STATE.TAKEN) return "You've taken its daily quest: bring down its boss.";
     if (h.dailyState === DAILY_STATE.DONE) return `You've done its daily quest. It's offered again in ${formatCountdown(store.dailySeconds(h))}.`;
-    return `Its daily quest opens at ${h.minHealth} base health, once you've done its story quest with a Guild Master.`;
+    return `Its daily quest opens at ${h.minHealth} base health, once you've done its story quest with Frular in Barloque.`;
   };
   return (
     <>
@@ -192,7 +192,7 @@ function TrophiesPage({ session, store }: { session: GameSession; store: FallenH
   const [selected, setSelected] = useState<number | null>(null);
   useEffect(() => session.shardsCommand(hallsCommand()), [session]);
   const status = store.status;
-  if (!status) return <Text at={[4, 4, 272, 8]}>Asking the Guild Masters...</Text>;
+  if (!status) return <Text at={[4, 4, 272, 8]}>Asking Frular...</Text>;
   if (!status.trophies.length) return <Text at={[4, 4, 272, 8]}>No word of trophies yet.</Text>;
   const held = status.trophies.filter((t) => t.held).length;
   const fallen = status.trophies.filter((t) => t.id >= TROPHY.FALLEN_FIRST && t.id <= TROPHY.FALLEN_LAST);
@@ -225,20 +225,20 @@ function TrophiesPage({ session, store }: { session: GameSession; store: FallenH
 /**
  * Ours (docs/adr/0022 decision 32): the guild window's other quests, the repeatable ones taken
  * here rather than from an NPC (the board, "quest board"). The halls' dailies are on the Fallen
- * Halls tab, and the guild's story is with the Guild Masters.
+ * Halls tab, and the guild's story is with Frular in Barloque.
  */
 function GuildQuestsPage({ session, store, quests }: { session: GameSession; store: FallenHallsStore; quests: QuestStore }) {
   useFallenHalls(store);
   const [selected, setSelected] = useState<number | null>(null);
   useEffect(() => session.shardsCommand(boardCommand()), [session]);
   const board = store.board;
-  if (!board) return <Text at={[4, 4, 272, 8]}>Asking the Guild Masters...</Text>;
+  if (!board) return <Text at={[4, 4, 272, 8]}>Asking Frular...</Text>;
   const dailies = store.dailyIds();
   const offers = board.filter((o) => !dailies.has(o.id));
   if (!offers.length)
     return (
       <Text at={[4, 4, 272, 40]} wrap>
-        No other guild quests for now. Your daily hall quests are on the Fallen Halls tab, and the Guild Masters beside the lieges tell your guild's story.
+        No other guild quests for now. Your daily hall quests are on the Fallen Halls tab, and Frular, the guild creator in Barloque, tells your guild's story.
       </Text>
     );
   const offer = offers.find((o) => o.id === selected) ?? offers[0]!;

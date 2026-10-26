@@ -243,7 +243,7 @@ There are few players, so the hall-raiding design only ever hurt the guilds it w
 
 Nothing pointed players at the Fallen Halls: they sit behind their old doors, and Frular no longer lists them. Players already don't need a guild hall to fight them. What was missing was a way to find them and a reason to come back. The user chose four parts: a Guild Master beside each faction leader for the guild story, daily hall quests in the guild window, announcements when a hall falls, and the guild window as the place for repeatable guild quests.
 
-28. **Three Guild Masters, the project's first new NPCs.** One stands beside each liege, so players who come to talk to their faction find their faction's Guild Master too:
+28. **Changed 2026-10-26: Frular gives the guild story, and the Guild Masters are gone** (see "The guild story moves to Frular" at the end). As first decided: **Three Guild Masters, the project's first new NPCs.** One stands beside each liege, so players who come to talk to their faction find their faction's Guild Master too:
 
     | Guild Master | Beside | Room | Square to try |
     |---|---|---|---|
@@ -699,3 +699,10 @@ Nothing pointed players at the Fallen Halls: they sit behind their old doors, an
   - **Halls are safe in Frenzies** (decision 6): `Player.AllowBattlerAttack` refuses a player attack in a `GuildHall` before the arena and Frenzy checks let it through, and `GuildHall.SendRoomIcons` passes the room's flags plus `ROOM_NO_COMBAT`, so a Frenzy still shows Safe Room there.
   - **Tried** on the dev server: the box ticked, the server's flag set, and Shardpal saw Shardbot's cape from both sides in the browser client; during a Frenzy Shardpal was refused an attack on Shardbot in hall 1 and allowed one in Tos, and refused in Tos after it.
   - **Not yet tried:** unticking, relogging with it on, leaving the guild with it on, a guild without colours, and the classic client.
+- **The guild story moves to Frular (2026-10-26, shards-server and this repo, not yet committed).** The user wanted every guild quest from Frular in Barloque, who already leases the halls and takes the rent.
+  - **Safe for every faction:** nothing keeps a Duke or rebel member out of Barloque. The travel network checks only the PvP lockout and council tokens; no room asks a faction; Frular and the townsfolk only shift their mood. The one hazard is North Barloque's flag, where the portal sets you down: its troops attack a rival wearing a soldier's shield (`FactionTroop.SpecialHatredBehavior`; `pbTroopsAttackNonShielded` is off), and so may a rival soldier.
+  - **Frular** (`GuildCreator`, `gcreator.kod`) is the giver of 330-338 (`"giver": {"class": "GuildCreator"}`), and the hand-ins come back to him. His `SayNoQuests` takes the Guild Masters' lines in his own voice (no guild: buy a charter or join one; under 80 health: come back later), and his `TryActivate` warns a player wearing a soldier's shield to take it off in Barloque. Quest 330's offer says so too.
+  - **Deleted:** `GuildMaster` and its three subclasses (`human/guildmaster.kod`; `guildmaster/dukegm`, `princessgm`, `rebelgm`) and their placing in `duke3.kod`, `castle2c.kod` and `jastavrn.kod`. The dev world's three were deleted and the world saved before the classes went.
+  - **The guild window** names Frular where it named the Guild Masters (the Fallen Halls and Quests tabs).
+  - **Tried** over the maintenance port: Frular offers 330 to Shardpal (in a guild, 150 health), and the world loads without the classes.
+  - **Not tried:** the shield warning and the no-guild line in the client, and the story's hand-ins to Frular.
