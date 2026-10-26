@@ -238,7 +238,7 @@ export interface QuestFile {
 }
 
 export interface QuestStepFile {
-  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune" | "arena" | "train" | "node" | "claim" | "battle" | "siege" | "fallen";
+  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune" | "arena" | "train" | "node" | "claim" | "battle" | "siege" | "fallen" | "shrine";
   auto?: boolean;
   rewards?: QuestRewardsFile;
   spell?: string;
@@ -259,6 +259,8 @@ export interface QuestStepFile {
   against?: "duke" | "princess" | "rebel";
   /** fallen: the Fallen Hall, as its RID_ name or number (ADR 0022) */
   hall?: string | number;
+  /** shrine: the offering's school; left out, any (docs/adr/0027) */
+  school?: "shalille" | "qor" | "kraanan" | "faren" | "riija" | "jala";
   objective?: string;
   brief?: string;
   target?: string;

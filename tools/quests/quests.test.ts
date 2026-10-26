@@ -342,6 +342,20 @@ describe("the quest generator", () => {
     expect(errorsOf({ ...daily, rewards: { xp: 300, prestige: 50 } })).toEqual(["cellar-rats.json: rewards.prestige: 1 to 20"]);
   });
 
+  it("writes the shrine kind: an offering at a shrine, of a school or any (ADR 0027)", () => {
+    const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "shrine", school: "faren", rooms: [60] }] }, { ...RATS, id: 2, key: "other", steps: [{ kind: "shrine" }] }]), WORLD);
+    expect(g.errors).toEqual([]);
+    // QK_SHRINE 25, done by itself, the school (SS_FAREN 4) as its amount
+    expect(g.kod).toContain("[ 25, $, 1, 0, &TosInnKeeper, 0, qd_1_s1, $, $, qd_1_t1,\r\n               1, $, $, $, 4 ]");
+    expect(g.kod).toContain("[ 25, $, 1, 0, &TosInnKeeper, 0, qd_2_s1, $, $, qd_2_t1,\r\n               1, $, $, $, 0 ]");
+    expect(g.catalog.quests[0]!.steps[0]!.objective).toBe("Make an offering to Faren at a shrine");
+    expect(g.catalog.quests[0]!.steps[0]!.rooms.map((r) => r.rid)).toEqual([60]);
+    expect(g.catalog.quests[1]!.steps[0]!.objective).toBe("Make an offering at a shrine");
+    expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "shrine", school: "elves" }] }]), WORLD).errors).toEqual([
+      "cellar-rats.json: step 1: school: one of shalille, qor, kraanan, faren, riija, jala",
+    ]);
+  });
+
   it("writes the claim kind (claiming a flagpole, Flagpole.ClaimAttempt)", () => {
     const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "claim" }] }]), WORLD);
     expect(g.errors).toEqual([]);

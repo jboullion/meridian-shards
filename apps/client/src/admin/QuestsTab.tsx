@@ -11,10 +11,10 @@ import {
 
 type Act = (what: string, fn: () => Promise<string | void>) => () => void;
 
-const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen"];
+const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine"];
 
 /** The kinds that happen once by doing something: done by themselves unless Auto is unticked */
-const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen"];
+const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine"];
 
 const TIER_LABEL = { main: "Main (gold)", story: "Story (silver)", errand: "Errand (bronze)" } as const;
 
@@ -489,6 +489,20 @@ function QuestForm({
               </select>
             </label>
           )}
+          {s.kind === "shrine" && (
+            <label>
+              Offering to{" "}
+              <select value={s.school ?? ""} onChange={(e) => setStep(i, { school: (e.target.value || undefined) as QuestStepFile["school"] })}>
+                <option value="">any god</option>
+                <option value="shalille">Shal'ille</option>
+                <option value="qor">Qor</option>
+                <option value="kraanan">Kraanan</option>
+                <option value="faren">Faren</option>
+                <option value="riija">Riija</option>
+                <option value="jala">Jala</option>
+              </select>
+            </label>
+          )}
           {(s.kind === "health" || s.kind === "nodes") && (
             <label>
               {s.kind === "health" ? "Base health to reach" : "Mana nodes"}{" "}
@@ -733,11 +747,12 @@ function clean(q: QuestFile): QuestFile {
       if (s.kind === "battle" && s.win) out.win = true;
       if (s.kind === "siege") out.against = s.against ?? "duke";
       if (s.kind === "fallen") out.hall = s.hall;
+      if (s.kind === "shrine" && s.school) out.school = s.school;
       if (s.kind === "deposit" || s.kind === "health" || (s.kind === "nodes" && s.amount !== undefined && s.amount !== 12)) out.amount = s.amount ?? (s.kind === "health" ? 50 : 1);
       if (s.auto !== undefined && s.auto !== ACTION_KINDS.includes(s.kind) && s.kind !== "talk" && s.kind !== "deliver") out.auto = s.auto;
       const sr = cleanRewards(s.rewards ?? {});
       if (Object.keys(sr).length) out.rewards = sr;
-      if (s.kind === "visit" || ((s.kind === "kill" || s.kind === "collect") && s.rooms?.length)) out.rooms = s.rooms;
+      if (s.kind === "visit" || ((s.kind === "kill" || s.kind === "collect" || s.kind === "shrine") && s.rooms?.length)) out.rooms = s.rooms;
       if (s.kind === "kill" && !s.rooms?.length && s.exclude?.length) out.exclude = s.exclude;
       if (s.turnin) out.turnin = s.turnin;
       if (s.objective) out.objective = s.objective;

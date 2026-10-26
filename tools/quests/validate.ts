@@ -8,7 +8,12 @@ import { classOf, iconOf, isItem, isMonster, isNpc, isNumberItem, isSkill, isSpe
 
 /** QuestBook's step kinds (questbook.kod QK_*) */
 export const KIND_NUM: Record<StepKind, number> = {
-  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17, arena: 18, train: 19, node: 20, claim: 21, battle: 22, siege: 23, fallen: 24,
+  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17, arena: 18, train: 19, node: 20, claim: 21, battle: 22, siege: 23, fallen: 24, shrine: 25,
+};
+
+/** A school's god, for a shrine step's objective */
+const GOD_NAME: Record<keyof typeof SCHOOLS, string> = {
+  shalille: "Shal'ille", qor: "Qor", kraanan: "Kraanan", faren: "Faren", riija: "Riija", jala: "Jala",
 };
 
 /** The faction a quest needs, as QuestBook reads it: the FACTION_ number, -1 any but neutral, $ none */
@@ -314,7 +319,9 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
                 ? (nodeBit ?? 0)
                 : s.kind === "fallen"
                   ? (hallRid ?? 0)
-                  : (s.amount ?? (s.kind === "nodes" ? 12 : s.kind === "deposit" ? 1 : 0));
+                  : s.kind === "shrine"
+                    ? (s.school ? SCHOOLS[s.school] : 0)
+                    : (s.amount ?? (s.kind === "nodes" ? 12 : s.kind === "deposit" ? 1 : 0));
       const ridsOf = (list: (string | number)[] | undefined) =>
         (list ?? []).map((r) => {
           const n = typeof r === "number" ? r : w.rids.get(r);
@@ -376,6 +383,8 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
                                                   ? `Win the siege of ${{ duke: "Tos", princess: "Barloque", rebel: "Jasper" }[s.against!]}`
                                                 : s.kind === "fallen"
                                                   ? `Drive the Order from ${(hallRid !== undefined && w.rooms.get(hallRid)) || s.hall}`
+                                                : s.kind === "shrine"
+                                                  ? `Make an offering${s.school ? ` to ${GOD_NAME[s.school]}` : ""} at a shrine`
                                         : arena
                                           ? `${s.win ? "Win" : "Fight"} a mock bout in ${arena.name}`
                                         : "Bond with every mana node");
