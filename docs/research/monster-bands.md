@@ -36,7 +36,7 @@ One point at 20 costs 441; at 50, 2,601; at 100, 10,201.
 |---|---|---|
 | Mausoleum (306) | 1 | Mummy 30, MummyNoTreasure 30 |
 | Outskirts of Raza (330) | 1 | GiantRat 30, SpiderBaby 25 |
-| Western Edge of the Forest of Farol (331) | 2 | GiantRat 30, SpiderBaby 25, Centipede 30 |
+| Western Edge of the Forest of Farol (331) | 2 | GiantRat 30, Centipede 30 |
 | Druid Hills (526) | 3 | Scorpion 65 |
 | The Dreaded Caves of Ice (750) | 4 | SnowRat 60, IceElemental 130 |
 
@@ -45,23 +45,23 @@ One point at 20 costs 441; at 50, 2,601; at 100, 10,201.
 | Room | Hops | Monsters (level) |
 |---|---|---|
 | Green Acres Plantation (206) | 1 | Cow 50 |
+| Deep Woods of Ileria (534) | 1 | SpiderBaby 25, Ent 60 |
 | West Merchant Way through Ilerian Woods (535) | 1 | SpiderBaby 25, GiantRat 30 |
 | The crypt in Marion (2600) | 1 | SpectralMummy 40 |
 | The Hills (516) | 2 | RedAnt 65, Troll 90 |
 | Forest of Farol (536) | 2 | Spider 50, Ent 60 |
+| Valley of Ileria (544) | 2 | FungusBeast 50 |
 | West Merchant Way (545) | 2 | SpiderBaby 25, Centipede 30 |
 | Resting place of Marion's ancestors (2601) | 2 | Skeleton 75, BatteredSkeleton 60 |
 | Seafarer's Peak (515) | 3 | RedAnt 65, Troll 90 |
 | Faronath, home of the TreeFolk (537) | 3 | Spider 50, Ent 60 |
-| Valley of Ileria (544) | 3 | FungusBeast 50 |
 | Deep in the Forest of Farol (546) | 3 | Ent 60, MolluskMonster 150 |
 | Deep in the Forest of Farol (550) | 3 | MolluskMonster 150 |
+| The Great Ocean (552) | 3 | FungusBeast 50, Slime 35 |
 | East Merchant Way through Ilerian Woods (554) | 3 | SpiderBaby 25, Centipede 30 |
 | Deep Forest of Farol (556) | 3 | Spider 50, Centipede 30, Ent 60 |
 | Affirmation of the Forsaken (2602) | 3 | Thrasher 150 |
-| Deep Woods of Ileria (534) | 4 | SpiderBaby 25, Ent 60 |
 | Underground Lake - Home of the Mollusk (551) | 4 | MolluskMonster 150 |
-| The Great Ocean (552) | 4 | FungusBeast 50, Slime 35 |
 | The Laboratory of the Mad Brothers (2603) | 4 | Thrasher 150 |
 
 ### Cor Noth (early)
@@ -95,6 +95,8 @@ One point at 20 costs 441; at 50, 2,601; at 100, 10,201.
 | Dark Caves (858) | 3 | GiantRatSoldier 60 |
 | Chupacabra Territory (2901) | 3 | Chupacabra 100, Wendigo 120 |
 | The Duke's Way (2951) | 3 | Spider 50, Slime 35 |
+| The Forests of Meridian (26) | 4 | Ant 40, Spider 50 |
+| The Spider Nest (35) | 4 | SpiderBaby 25, Spider 50 |
 | The Cragged Mountains (598) | 4 | Troll 90, DeathSpider 75, RedAnt 65 |
 | Abandoned Outpost (859) | 4 | GiantRatSoldier 60 |
 | Ugol's Warren Entrance (2500) | 4 | Orc 50, CaveOrc 80 |
@@ -105,7 +107,9 @@ One point at 20 costs 441; at 50, 2,601; at 100, 10,201.
 | Ukgoth, Holy Land of Trolls (599) | 5 | Troll 90, RedAnt 65 |
 | An Enigmatic Chamber (2501) | 5 | Orc 50, OrcWizard 80, CaveOrc 80 |
 | The desolate Mire (2954) | 5 | Ranuculus 110, EvilEnt 60, GiantEye 120 |
+| The Deep Dark Woods of Tos (4) | 6 | Ant 40, Spider 50 |
 | The Berdonne Canyons (32) | 6 | RedAnt 65, Orc 50 |
+| The Deep Dark Woods of Marion (6) | 7 | Ant 40, Spider 50 |
 | Castle Victoria (38) | 7 | Skeleton 75 |
 | Martyr's Battleground (47) | 7 | StoneTroll 140, GroundWormQueen 130 |
 | Far'Nohl's Chambers (37) | 8 | KnightA 125, HalfKnight 100, CaptainKnight 125 |
@@ -219,10 +223,6 @@ One point at 20 costs 441; at 50, 2,601; at 100, 10,201.
 
 | Room | Hops | Monsters (level) |
 |---|---|---|
-| The Deep Dark Woods of Tos (4) | - | Ant 40, Spider 50 |
-| The Deep Dark Woods of Marion (6) | - | Ant 40, Spider 50 |
-| The Forests of Meridian (26) | - | Ant 40, Spider 50 |
-| The Spider Nest (35) | - | SpiderBaby 25, Spider 50 |
 | Inner Sanctum of Queen Venya'cyr (749) | - | DarkAngel 150 |
 
 ### The desert
@@ -331,20 +331,20 @@ One point at 20 costs 441; at 50, 2,601; at 100, 10,201.
 | Monster | Class | Level | Difficulty | Worth fighting at health | Where |
 |---|---|---|---|---|---|
 | small rat | SmallRat | 10 | 5 | 20-9 | Tos (1) |
-| baby spider | SpiderBaby | 25 | 4 | 20-24 | Not linked to a hub (1), Raza (2), Marion (4), Jasper (1), Cor Noth (2), Barloque (2) |
+| baby spider | SpiderBaby | 25 | 4 | 20-24 | Tos (1), Raza (1), Marion (4), Jasper (1), Cor Noth (2), Barloque (2) |
 | centipede | Centipede | 30 | 5 | 20-29 | Raza (1), Marion (3), Jasper (3), Cor Noth (3), Tos (2), Barloque (1) |
 | giant rat | GiantRat | 30 | 1 | 20-29 | Barloque (3), Raza (2), Jasper (2), Marion (1), Cor Noth (1), Tos (1) |
 | mummy | Mummy | 30 | 1 | 20-29 | Raza (1) |
 | mummy | MummyNoTreasure | 30 | 1 | 20-29 | Raza (1) |
 | groundworm larva | GroundWormLarva | 35 | 3 | 20-34 | Jasper (2), Cor Noth (1), Tos (1) |
 | slime | Slime | 35 | 4 | 20-34 | Marion (1), Barloque (2), Tos (3) |
-| ant | Ant | 40 | 4 | 20-39 | Not linked to a hub (3), Tos (2), Cor Noth (2) |
+| ant | Ant | 40 | 4 | 20-39 | Tos (5), Cor Noth (2) |
 | spectral mummy | SpectralMummy | 40 | 5 | 20-39 | Marion (1) |
 | cow | Cow | 50 | 5 | 20-49 | Marion (1) |
 | fungus beast | FungusBeast | 50 | 3 | 20-49 | Marion (2), Barloque (1), Cor Noth (1) |
 | giant beetle | Beetle | 50 | 5 | 20-49 | Bergholt (4), Barloque (1) |
 | orc | Orc | 50 | 6 | 20-49 | Tos (4), Jasper (2) |
-| spider | Spider | 50 | 4 | 20-49 | Not linked to a hub (4), Tos (6), Marion (3), Cor Noth (2), Bergholt (2) |
+| spider | Spider | 50 | 4 | 20-49 | Tos (10), Marion (3), Cor Noth (2), Bergholt (2) |
 | wolf | Wolf | 55 | 8 | 25-54 | Bergholt (3) |
 | battered skeleton | BatteredSkeleton | 60 | 4 | 30-59 | Tos (2), Marion (1) |
 | diseased tree | EvilEnt | 60 | 4 | 30-59 | Tos (2) |
