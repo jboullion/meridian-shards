@@ -1,6 +1,6 @@
 // Ours (docs/adr/0022-guilds.md, phase 8): our guild's hall, prestige and rent as our server tells
 // the guild window's Hall tab (UC_GUILD_HALL, shards-server passive/guild.kod SendHallInfo), and the
-// commands that ask for it and open or close the hall to visitors.
+// commands that ask for it, open or close the hall to visitors and put the guild's cloak on or off.
 
 import type { ByteReader } from "@shards/protocol";
 
@@ -38,6 +38,8 @@ export interface GuildHallStatus {
   trophyTotal: number;
   /** Whether the guild has chosen its colours, which its cloaks need */
   hasColours: boolean;
+  /** Whether we wear the guild's cloak (the Hall tab's box, "guildhall cloak on|off") */
+  wearingCloak: boolean;
 }
 
 /** UC_GUILD_HALL's body (after the UC byte) */
@@ -62,6 +64,8 @@ export function readGuildHall(r: ByteReader): GuildHallStatus {
     trophies: r.u8(),
     trophyTotal: r.u8(),
     hasColours: r.u8() !== 0,
+    // since the cloak became a box on the Hall tab; read only when sent
+    wearingCloak: r.remaining > 0 && r.u8() !== 0,
   };
 }
 
@@ -82,3 +86,4 @@ export function prestigeText(s: GuildHallStatus): string {
 
 export const guildHallCommand = (): string => "guildhall";
 export const guildHallPublicCommand = (open: boolean): string => `guildhall ${open ? "public" : "private"}`;
+export const guildCloakCommand = (wear: boolean): string => `guildhall cloak ${wear ? "on" : "off"}`;

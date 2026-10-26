@@ -559,3 +559,23 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
 - **`rewards.renown`** (1 to 100) is a special reward, `[ 4, amount ]` (`QRW_RENOWN`). `AwardSpecial` posts it, so a quest that also joins a faction gives renown with the new one. Nothing for a neutral.
 - **`requires.renown`** (1 to 100) is a quest's 24th field (`QB_RENOWN_MIN`): offered only from that much renown, never to a neutral. It can't go with `requires.faction: "neutral"`.
 - The faction quests give it: the soldier quests 10, the zone chains 3 each, the faction ground dailies 3, the favours 2, the priestess pointers 2.
+
+## The sword of Riija and the fey (2026-10-25)
+
+- **The sword of Riija couldn't be made.** Shard B came only from the mad scientist's quest, dropped with the QuestEngine (it needed a live dragonfly queen led to him), and quest rewards were made with no `quester`, so shards never bound (`SwordShard.CheckForAllPieces` wants all four made for the same player). The temple bridge and the Monk of Riija no longer ask for the sword (both checks were commented out upstream), and that stays: the sword is the prize.
+- **Reward items are made for their earner:** `QuestBook.MakeItem` passes `#quester=who` to every item; classes without a `quester` ignore it.
+- **The Sword of Riija** (352, `duke-sword-of-riija`, story): Duke Akardius offers it in Blackstone Keep to anyone from 70 HP, no faction asked. Each keeper gives their shard as the step's reward:
+  1. ask Quetzal in Ko'catan (the brief gives the way through the Orc Caves);
+  2. twenty-five meat pies for Wulfgang zax'Ak (shard C);
+  3. a chunk of nerudite ore for Hanla zax'Ta, which Tepal the tailor sells when asked about precious stones (shard D);
+  4. ten cave orcs anywhere, to break up the war band gathering in Konima's Ascension for a raid on the avars, told to the bone priestess (shard A);
+  5. ten dragonfly eyes, which Ko'catan's apothecary sells, for Bahal zax'Ot past the dragonfly queens (shard B): the shards bind;
+  6. wield the sword (an equip step);
+  7. carry it to the Monk of Riija.
+  - The reward is 1.5 times the band's XP and 2,000 shillings. The steps run from town errands at 70 HP to the avar lands and the queens' nest at about 90-100.
+  - **Retired:** the bone priestess's pit boss head (36), the trading post's meat pies (109) and the bowmaker's feather (111), so the chain is the one way to the shards. The bowmaker's avar feather trade went with 111.
+- **The Vale of Sorrows' fey** (`fairy.kod`, `evfairy.kod` `SpecialHatredBehavior`): player karma is always 0, so their karma aggression never fired. The dirhai now attack every player who knows no Qor spell, and the elhai only those who do (`KnowsSpellSchool`, `SS_QOR`); either fights back when attacked. A Shal'ille lock makes a room safe for all but Qor's casters, a Qor lock for them alone.
+- **The other karma-aggressive monsters** (wolves, zombies, ents and evil ents, giant rats, centipedes, beetles, groundworm larvae, baby spiders, frogmen, spinebeasts) attack on sight now (`AI_FIGHT_AGGRESSIVE`), as most monsters do. Monsters already in a world keep their behaviour until they respawn.
+- **Minor Heal and Qor:** `Spell.KarmaCheck` lets a free spell (`IsFreeToLearn`) through and skips free spells when it looks for the opposed school, so Minor Heal no longer keeps anyone from Qor, nor a Qor caster from Minor Heal.
+- **Tried** over the maintenance port: 352 is offered to Shardbot (122 HP) and Shardpal (150); four shards made for Shardpal bound into a sword of Riija made for them; the fey hatred was right both ways for a player with Qor and one without.
+- **Not yet tried:** the chain played through, and the fey and the newly aggressive monsters in play.

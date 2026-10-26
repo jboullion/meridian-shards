@@ -1,0 +1,28 @@
+{
+  "about": "Typed commands (module/merintr/merintr.c `commands`, mailnews.c, and ours): each name and the command it runs, in merintr.c's order with the German names, because a typed start of a name goes to the first command it fits. Ours come last, so they take no start of a name from the original's: study (Study mode), companion (docs/adr/0010), train (docs/adr/0016), arena (docs/adr/0019), war (docs/adr/0021) and achievements (docs/adr/0025). There's no safety or tempsafe: no random PvP to be safe from, nor guardian angels. shorthands are ours too, words players are used to. takesWords: the commands whose words after the name mean something; the others only count typed alone (our default typing), so \"drop it!\" is still said. The client's commands.ts says what each command does.",
+  "commands": [
+    ["say","say"], ["sagen","say"], ["broadcast","broadcast"], ["mitteilen","broadcast"], ["emote","emote"], ["ego","emote"],
+    ["who","who"], ["wer","who"], ["quit","quit"], ["beenden","quit"], ["tell","tell"], ["telepathie","tell"],
+    ["hel","hel"], ["hilf","hel"], ["help","help"], ["hilfe","help"], ["use","use"], ["benutzen","use"],
+    ["get","get"], ["addgroup","addgroup"], ["gruppehinzu","addgroup"], ["agroup","addgroup"], ["gruppeneu","addgroup"], ["put","put"],
+    ["ablegen","put"], ["delgroup","delgroup"], ["gruppelöschen","delgroup"], ["dgroup","delgroup"], ["newgroup","newgroup"], ["neuegruppe","newgroup"],
+    ["ngroup","newgroup"], ["buy","buy"], ["kaufen","buy"], ["drop","drop"], ["wegwerfen","drop"], ["nehmen","get"],
+    ["look","look"], ["schauen","look"], ["offer","offer"], ["anbieten","offer"], ["cast","cast"], ["zaubern","cast"],
+    ["map","map"], ["karte","map"], ["wave","wave"], ["winken","wave"], ["point","point"], ["deuten","point"],
+    ["dance","dance"], ["tanzen","dance"], ["alias","alias"], ["befehle","alias"], ["cmdalias","cmdalias"], ["kurzbefehle","cmdalias"],
+    ["rest","rest"], ["rasten","rest"], ["yell","yell"], ["rufen","yell"], ["stand","stand"], ["aufstehen","stand"],
+    ["suicid","suicid"], ["haraki","suicid"], ["suicide","suicide"], ["harakiri","suicide"], ["neutral","neutral"], ["happy","happy"],
+    ["glücklich","happy"], ["sad","sad"], ["traurig","sad"], ["wry","wry"], ["grimmig","wry"], ["guild","guild"],
+    ["gilde","guild"], ["password","password"], ["passwort","password"], ["withdraw","withdraw"], ["abheben","withdraw"], ["deposit","deposit"],
+    ["einzahlen","deposit"], ["balance","balance"], ["kontostand","balance"], ["group","group"], ["gruppen","group"], ["appeal","appeal"],
+    ["aufrufen","appeal"], ["tellguild","tellguild"], ["telgilde","tellguild"], ["tguild","tellguild"], ["tgilde","tellguild"], ["grouping on","groupingOn"],
+    ["gruppenbildung an","groupingOn"], ["grouping off","groupingOff"], ["gruppenbildung aus","groupingOff"], ["autoloot on","autolootOn"], ["autoloot an","autolootOn"], ["autoloot off","autolootOff"],
+    ["autoloot aus","autolootOff"], ["autocombine on","autocombineOn"], ["autocombine an","autocombineOn"], ["autocombine off","autocombineOff"], ["autocombine aus","autocombineOff"], ["reagentbag on","reagentbagOn"],
+    ["reagentbag an","reagentbagOn"], ["reagentbag off","reagentbagOff"], ["reagentbag aus","reagentbagOff"], ["spellpower on","spellpowerOn"], ["spellpower an","spellpowerOn"], ["spellpower off","spellpowerOff"],
+    ["spellpower aus","spellpowerOff"], ["time","time"], ["Zeit","time"], ["mail","mail"], ["study","study"], ["studieren","study"],
+    ["companion","companion"], ["begleiter","companion"], ["train","train"], ["trainieren","train"], ["arena","arena"], ["war","war"],
+    ["krieg","war"], ["achievements","achievements"], ["erfolge","achievements"]
+  ],
+  "shorthands": {"em":"emote","bc":"broadcast","t":"tell","pickup":"get"},
+  "takesWords": ["say","broadcast","emote","yell","tell","tellguild","appeal","cast","addgroup","delgroup","newgroup","alias","cmdalias","deposit","withdraw","study","companion","train","arena"]
+}

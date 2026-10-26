@@ -12,7 +12,7 @@ import {
   buildSetRank, buildUserCommand, type GuildInfo,
 } from "@shards/protocol";
 import {
-  DAILY_STATE, QUEST_OFFER, TROPHY, boardAcceptCommand, boardCommand, capstoneText, guildHallCommand, guildHallPublicCommand, hallStateText, hallsCommand,
+  DAILY_STATE, QUEST_OFFER, TROPHY, boardAcceptCommand, boardCommand, capstoneText, guildCloakCommand, guildHallCommand, guildHallPublicCommand, hallStateText, hallsCommand,
   prestigeText, rankNumeral, rentText, trophyAgeText,
   type FallenHall, type FallenHallsStatus, type GameSession, type GuildEvent,
 } from "@shards/world";
@@ -537,15 +537,21 @@ function HallPage({ session, state, ask, onClose, store }: PageProps & { store: 
               {chestLine(c, s.chestLimit)}
             </Text>
           ))}
-          <Text at={[10, 51, 262, 18]} wrap>
-            {`Say "recall stone" in the hall for a recall stone. ${s.hasColours ? "Take a cloak from the rack beside the news globe." : "Your cloaks wait on the guild's colours, chosen on the Shield tab."}`}
-          </Text>
+          <Text at={[10, 51, 262, 8]}>Say "recall stone" in the hall for a recall stone.</Text>
         </>
       ) : (
         <Text at={[10, 13, 262, 20]} wrap>
           Your guild has no hall. Frular in Barloque leases them to a guild of two or more members.
         </Text>
       )}
+      <Check
+        at={[10, 60, 180, 10]}
+        label="Wear the guild's cloak"
+        checked={s.wearingCloak}
+        disabled={!s.hasColours}
+        title={s.hasColours ? "A cloak in the guild's colours, over whatever you wear" : "Your cloaks wait on the guild's colours, chosen on the Shield tab."}
+        onChange={(wear) => session.shardsCommand(guildCloakCommand(wear))}
+      />
       <Text at={[4, 75, 272, 8]}>
         {prestigeText(s)}
       </Text>

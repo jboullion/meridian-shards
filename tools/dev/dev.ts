@@ -8,7 +8,8 @@
 //   5. with --editor: the room editor's web build (../meridian-editor, http://127.0.0.1:5174).
 //
 // Before starting, it says what's out of date: Kod or rooms edited since the last server build,
-// or a server build newer than dist/assets. With --rebuild it builds them instead
+// or a server build or the client's tables (apps/client/tables) newer than dist/assets. With
+// --rebuild it builds them instead
 // (serveruild.cmd Bresource Bkod, then npm run assets).
 //
 //   npm run dev [-- --no-server] [-- --desktop] [-- --editor] [-- --rebuild]
@@ -81,7 +82,7 @@ function staleness(): { server: string[]; assets: boolean } {
   // kodbase.txt is rewritten by every Kod build; the run folder's rooms are copied by Bresource
   if (newest(join(SRC, "kod"), /\.(kod|khd|lkod)$/i) > mtime(join(RUN, "kodbase.txt"))) server.push("Kod");
   if (newest(join(SRC, "resource", "rooms"), /\.roo$/i) > newest(join(RUN, "rooms"), /\.roo$/i)) server.push("rooms");
-  const built = Math.max(newest(join(RUN, "rooms"), /\.roo$/i), mtime(join(RUN, "rsc", "rsc0000.rsb")));
+  const built = Math.max(newest(join(RUN, "rooms"), /\.roo$/i), mtime(join(RUN, "rsc", "rsc0000.rsb")), newest(join(ROOT, "apps", "client", "tables"), /\.json$/i));
   return { server, assets: !existsSync(MANIFEST) || built > mtime(MANIFEST) };
 }
 
@@ -126,7 +127,7 @@ if (stale.server.length) {
   } else console.log(`[dev] ${stale.server.join(" and ")} changed since the last server build: npm run dev -- --rebuild, or server\\build.cmd`);
 }
 if (!existsSync(MANIFEST) || (rebuild && staleness().assets)) buildAssets();
-else if (stale.assets) console.log("[dev] the server build is newer than dist/assets: npm run dev -- --rebuild, or npm run assets");
+else if (stale.assets) console.log("[dev] the server build or the client's tables are newer than dist/assets: npm run dev -- --rebuild, or npm run assets");
 if (!noServer) await ensureServer();
 if (await isListening(8059)) console.log("[dev] a gateway is already running on 8059; not starting another");
 else run("gateway", process.execPath, [join(ROOT, "tools", "gateway", "gateway.ts")]);

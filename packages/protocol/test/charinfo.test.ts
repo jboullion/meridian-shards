@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { ByteReader, ByteWriter, buildNewCharInfo, readCharInfo } from "../src/index.ts";
+import { fixture, serverMessage } from "./fixture.ts";
+
+const MESSAGES = "packages/protocol/src/messages.ts";
 
 /** A BP_CHARINFO body (system.kod SendCharInfo), with our trailing facial hair lists when given. */
 function charInfoBody(beards?: [number[], number[]]): Uint8Array {
@@ -31,7 +34,7 @@ function charInfoBody(beards?: [number[], number[]]): Uint8Array {
 }
 
 test("the creator's options read our facial hair lists after the skills", () => {
-  const info = readCharInfo(new ByteReader(charInfoBody([[300, 301, 302], []])));
+  const info = fixture(serverMessage("CHARINFO", MESSAGES), readCharInfo, new ByteReader(charInfoBody([[300, 301, 302], []])));
   assert.deepEqual(info.hairTranslations, [0, 10, 45]);
   assert.deepEqual(info.parts[0].beards, [300, 301, 302]);
   assert.deepEqual(info.parts[1].beards, []);
@@ -39,7 +42,7 @@ test("the creator's options read our facial hair lists after the skills", () => 
 });
 
 test("a server that sends no facial hair lists offers none", () => {
-  const info = readCharInfo(new ByteReader(charInfoBody()));
+  const info = fixture(serverMessage("CHARINFO", MESSAGES), readCharInfo, new ByteReader(charInfoBody()));
   assert.deepEqual(info.parts[0].beards, []);
   assert.deepEqual(info.parts[1].beards, []);
   assert.equal(info.parts[1].mouths[0], 230);

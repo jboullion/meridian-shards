@@ -6,6 +6,9 @@ import {
   BP, ByteReader, ByteWriter, STATS, STAT_TAG, UC, buildReqBuyItems, buildReqCast, buildReqCounteroffer, buildReqLook, readRoomChange, buildReqOffer,
   buildSayGroup, buildUserCommand, CF, buildChangeDescription, buildChangeUrl, buildReqApply, buildReqGetFromContainer, buildReqObjectContents, buildReqPut, readBgOverlay, readObject, ANIMATE, readBuyList, readPlayWave, readSpells, readStat, readStatGroup,
 } from "../src/index.ts";
+import { fixture, serverMessage, userCommand } from "./fixture.ts";
+
+const MESSAGES = "packages/protocol/src/messages.ts";
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 const NUMBER = 0x10000000; // CLIENT_TAG_NUMBER in the top bits
@@ -20,7 +23,7 @@ function object(w: ByteWriter, id: number, nameRes: number, amount?: number): By
 describe("stats (merintr.c ExtractStatistic)", () => {
   test("a numeric stat with limits", () => {
     const r = new ByteReader(new ByteWriter().u8(1).u8(3).u32(555).u8(STATS.NUMERIC).u8(STAT_TAG.INT).i32(100).i32(0).i32(200).i32(80).finish());
-    expect(readStat(r)).toEqual({
+    expect(fixture(serverMessage("STAT", MESSAGES), readStat, r)).toEqual({
       group: 1,
       stat: { num: 3, nameRes: 555, type: STATS.NUMERIC, numeric: { tag: STAT_TAG.INT, value: 100, min: 0, max: 200, currentMax: 80 } },
     });
@@ -32,7 +35,7 @@ describe("stats (merintr.c ExtractStatistic)", () => {
     w.u8(1).u32(10).u8(STATS.NUMERIC).u8(STAT_TAG.RES).i32(77);
     w.u8(2).u32(11).u8(STATS.LIST).u32(9319).i32(-1).u32(32343);
     const r = new ByteReader(w.finish());
-    const g = readStatGroup(r);
+    const g = fixture(serverMessage("STAT_GROUP", MESSAGES), readStatGroup, r);
     expect(g.group).toBe(5);
     expect(g.stats[0].numeric).toEqual({ tag: STAT_TAG.RES, value: 77, min: 0, max: 0, currentMax: 0 });
     expect(g.stats[1].list).toEqual({ id: 9319, value: -1, icon: 32343 });
@@ -42,7 +45,7 @@ describe("stats (merintr.c ExtractStatistic)", () => {
   test("spells carry targets and a 1-based school", () => {
     const w = new ByteWriter().u16(1);
     object(w, 5569, 30558).u8(1).u8(3);
-    const [sp] = readSpells(new ByteReader(w.finish()));
+    const [sp] = fixture(serverMessage("SPELLS", MESSAGES), readSpells, new ByteReader(w.finish()));
     expect(sp.object.id).toBe(5569);
     expect(sp.numTargets).toBe(1);
     expect(sp.school).toBe(2);
@@ -55,7 +58,7 @@ describe("trade", () => {
     w.u16(2);
     object(w, 9001, 2).u32(36);
     object(w, NUMBER | 9002, 3, 50).u32(5);
-    const { seller, items } = readBuyList(new ByteReader(w.finish()));
+    const { seller, items } = fixture(serverMessage("BUY_LIST", MESSAGES), readBuyList, new ByteReader(w.finish()));
     expect(seller.id).toBe(2650);
     expect(items.map((i) => [i.object.id >>> 0, i.object.amount, i.cost])).toEqual([
       [9001, 0, 36],
@@ -87,7 +90,7 @@ describe("trade", () => {
 
 test("BP_PLAY_WAVE: resource, object, flags, row, col, radius, volume", () => {
   const r = new ByteReader(new ByteWriter().u32(21447).u32(0).u8(1).i32(1).i32(1).i32(300).i32(100).finish());
-  expect(readPlayWave(r)).toEqual({ resource: 21447, object: 0, flags: 1, row: 1, col: 1, radius: 300, maxVolume: 100 });
+  expect(fixture(serverMessage("PLAY_WAVE", MESSAGES), readPlayWave, r)).toEqual({ resource: 21447, object: 0, flags: 1, row: 1, col: 1, radius: 300, maxVolume: 100 });
 });
 
 describe("say group", () => {
@@ -125,7 +128,7 @@ describe("containers (protocol.c PARAM_OBJECT, PARAM_ID)", () => {
 describe("background overlays (server.c ExtractNewBackgroundOverlay)", () => {
   test("id, icon, name, animation, then the angle and height as WORDs", () => {
     const w = new ByteWriter().u32(5809).u32(100).u32(200).u8(ANIMATE.NONE).u16(1).u16(1690).u16(65508);
-    expect(readBgOverlay(new ByteReader(w.finish()))).toEqual({
+    expect(fixture(serverMessage("ADD_BG_OVERLAY", MESSAGES), readBgOverlay, new ByteReader(w.finish()))).toEqual({
       id: 5809, iconRes: 100, nameRes: 200, translation: 0, effect: 0, animation: { type: ANIMATE.NONE, group: 1 }, angle: 1690, height: 65508,
     });
   });
@@ -133,7 +136,7 @@ describe("background overlays (server.c ExtractNewBackgroundOverlay)", () => {
 
 describe("room changes (server.c HandleSectorMove and the rest)", () => {
   test("byte layouts", () => {
-    const rc = (type: number, w: ByteWriter) => readRoomChange(type, new ByteReader(w.finish()));
+    const rc = (type: number, w: ByteWriter) => fixture(serverMessage(type, MESSAGES), readRoomChange, type, new ByteReader(w.finish()));
     // type, sector WORD, height WORD, speed BYTE
     expect(rc(BP.SECTOR_MOVE, new ByteWriter().u8(5).u16(3).u16(172).u8(16))).toEqual({ type: "sectorMove", animation: 5, sector: 3, height: 172, speed: 16 });
     // wall WORD, ExtractAnimation, action BYTE
@@ -150,9 +153,9 @@ describe("room changes (server.c HandleSectorMove and the rest)", () => {
 describe("mail and news (module/mailnews)", () => {
   test("byte layouts", async () => {
     const m = await import("../src/index.ts");
-    const idx = m.readArticles(new ByteReader(new ByteWriter().u16(3).u8(1).u8(2).u16(1).u32(5).u32(1000).string("Bob").string("Hi").finish()));
+    const idx = fixture(serverMessage("ARTICLES", MESSAGES), m.readArticles, new ByteReader(new ByteWriter().u16(3).u8(1).u8(2).u16(1).u32(5).u32(1000).string("Bob").string("Hi").finish()));
     expect(idx).toEqual({ newsgroup: 3, part: 1, maxPart: 2, articles: [{ num: 5, time: 1000, poster: "Bob", title: "Hi" }] });
-    expect(m.readMailHeader(new ByteReader(new ByteWriter().u32(9).string("Angel").u32(77).u16(1).string("Shardbot").finish()))).toEqual({
+    expect(fixture(serverMessage("MAIL", MESSAGES), m.readMailHeader, new ByteReader(new ByteWriter().u32(9).string("Angel").u32(77).u16(1).string("Shardbot").finish()))).toEqual({
       index: 9, sender: "Angel", time: 77, recipients: ["Shardbot"],
     });
     expect(hex(m.buildSendMail([12, 13], "Subject: a\nb"))).toBe(hex(new ByteWriter().u8(BP.SEND_MAIL).u16(2).u32(12).u32(13).string("Subject: a\nb").finish()));
@@ -168,7 +171,7 @@ describe("guilds (merintr.c guild messages)", () => {
     const w = new ByteWriter().string("Slashers").u8(1).string("pw").u32(m.GC.INVITE | m.GC.DISBAND).u32(4000);
     for (const [a, b] of [["I", "i"], ["M", "m"], ["L", "l"], ["H", "h"], ["G", "g"]]) w.string(a).string(b);
     w.u32(6981).u16(1).u32(6981).string("Shardbot").u8(5).u8(m.GUILD_GENDER.MALE);
-    expect(m.readGuildInfo(new ByteReader(w.finish()))).toEqual({
+    expect(fixture(userCommand(UC.GUILDINFO, MESSAGES), m.readGuildInfo, new ByteReader(w.finish()))).toEqual({
       name: "Slashers", password: "pw", flags: m.GC.INVITE | m.GC.DISBAND, guildId: 4000,
       maleRanks: ["I", "M", "L", "H", "G"], femaleRanks: ["i", "m", "l", "h", "g"], currentVote: 6981,
       members: [{ id: 6981, name: "Shardbot", rank: 5, gender: m.GUILD_GENDER.MALE }],
@@ -176,15 +179,15 @@ describe("guilds (merintr.c guild messages)", () => {
     // No hall: no password string follows the flag
     const noHall = new ByteWriter().string("X").u8(0).u32(0).u32(1);
     for (let i = 0; i < 10; i++) noHall.string("");
-    expect(m.readGuildInfo(new ByteReader(noHall.u32(0).u16(0).finish())).password).toBeNull();
+    expect(fixture(userCommand(UC.GUILDINFO, MESSAGES), m.readGuildInfo, new ByteReader(noHall.u32(0).u16(0).finish())).password).toBeNull();
     const list = new ByteWriter().u16(2).u32(1).string("A").u32(2).string("B").u16(1).u32(1).u16(0).u16(0).u16(1).u32(2);
-    expect(m.readGuildList(new ByteReader(list.finish()))).toEqual({
+    expect(fixture(userCommand(UC.GUILD_LIST, MESSAGES), m.readGuildList, new ByteReader(list.finish()))).toEqual({
       guilds: [{ id: 1, name: "A" }, { id: 2, name: "B" }], allies: [1], enemies: [], otherAllies: [], otherEnemies: [2],
     });
-    expect(m.readGuildShield(new ByteReader(new ByteWriter().u32(4000).string("Slashers").u8(3).u8(7).u8(2).finish()))).toEqual({
+    expect(fixture(userCommand(UC.GUILD_SHIELD, MESSAGES), m.readGuildShield, new ByteReader(new ByteWriter().u32(4000).string("Slashers").u8(3).u8(7).u8(2).finish()))).toEqual({
       id: 4000, name: "Slashers", color1: 3, color2: 7, pattern: 2,
     });
-    expect(m.readGuildHalls(new ByteReader(new ByteWriter().u16(1).u32(10).u32(20).i32(5000).i32(-1).finish()))).toEqual([{ id: 10, nameRes: 20, cost: 5000, rent: -1 }]);
+    expect(fixture(userCommand(UC.GUILD_HALLS, MESSAGES), m.readGuildHalls, new ByteReader(new ByteWriter().u16(1).u32(10).u32(20).i32(5000).i32(-1).finish()))).toEqual([{ id: 10, nameRes: 20, cost: 5000, rent: -1 }]);
   });
 
   test("builders", async () => {
@@ -218,7 +221,7 @@ describe("magic weapon overlays (ours, the magic item revamp phase 4)", () => {
     w.u32(300).u8(5).u8(ANIMATE.MAGIC).u8((5 | (4 << 3)) & 0xff).u8(ANIMATE.TRANSLATION).u8(0x14).u8(ANIMATE.NONE).u16(1);
     w.u32(301).u8(6).u8(ANIMATE.NONE).u16(1);
     const r = new ByteReader(w.finish());
-    const o = readObject(r);
+    const o = fixture(serverMessage("LOOK", MESSAGES), readObject, r);
     expect(o.overlays[0]).toMatchObject({ iconRes: 300, translation: 0x14, magic: (5 << 20) | (4 << 23) });
     expect(o.overlays[1].magic).toBeUndefined();
     expect(r.remaining).toBe(0);

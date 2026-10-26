@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { ByteReader, ByteWriter } from "@shards/protocol";
+import { ByteReader, ByteWriter, UC } from "@shards/protocol";
 import { buildLookCommand, companionStateLabel, readCompanion } from "../src/companion.ts";
 
 const names: Record<number, string> = { 11: "Aldric", 12: "Duke soldier", 13: "The Tos Inn" };
+import { fixture, userCommand } from "../../protocol/test/fixture.ts";
+
+const UC_COMPANION = userCommand(UC.COMPANION, "packages/world/src/companion.ts");
 const resource = (id: number) => names[id] ?? null;
 
 describe("UC_COMPANION", () => {
@@ -30,7 +33,7 @@ describe("UC_COMPANION", () => {
       .u16(1800);
     for (const n of [1, 4, 2, 1, 0, 3, 7, 2, 0, 1]) w.u8(n);
     w.u8(3).u8(7).u8(6).u8(12);
-    const e = readCompanion(new ByteReader(w.finish()), resource);
+    const e = fixture(UC_COMPANION, readCompanion, new ByteReader(w.finish()), resource);
     expect(e?.type).toBe("status");
     if (e?.type !== "status") return;
     const s = e.status;
@@ -42,7 +45,7 @@ describe("UC_COMPANION", () => {
   });
 
   it("reads no companion, and health changes", () => {
-    expect(readCompanion(new ByteReader(new ByteWriter().u8(1).u8(0).finish()), resource)).toEqual({ type: "none" });
-    expect(readCompanion(new ByteReader(new ByteWriter().u8(2).u16(10).u16(35).finish()), resource)).toEqual({ type: "health", hp: 10, maxHp: 35 });
+    expect(fixture(UC_COMPANION, readCompanion, new ByteReader(new ByteWriter().u8(1).u8(0).finish()), resource)).toEqual({ type: "none" });
+    expect(fixture(UC_COMPANION, readCompanion, new ByteReader(new ByteWriter().u8(2).u16(10).u16(35).finish()), resource)).toEqual({ type: "health", hp: 10, maxHp: 35 });
   });
 });

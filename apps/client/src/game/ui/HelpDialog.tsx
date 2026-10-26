@@ -5,16 +5,17 @@
 //   HUD        a picture of the player's own screen (gameSnapshot.ts) with each part numbered
 //              and said what it does; it follows the interface in use (Modern, Classic, phone)
 //   Interface  every menu and window, and what it's for
+// Its words are help.json (apps/client/tables, served with the game's files: clientTables.ts).
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { mouseCode, type Settings } from "../settings.ts";
 import { Button, Tabs, Window } from "./kit.tsx";
 import { MAIN_ROWS, NAV_ROWS, NUMPAD_ROWS, keyUses, numpadNeeded, type KeyCap, type KeyRow, type KeyUse } from "./keyboardLayout.ts";
 import { loadBackgrounds, placeOf, snapshotGame, type SnapRect } from "./gameSnapshot.ts";
+import { helpTable, type HelpItem, type HelpLayout } from "../clientTables.ts";
 
 const HELP_TABS = ["Controls", "HUD", "Interface"] as const;
 type HelpTab = (typeof HELP_TABS)[number];
-export type HelpLayout = "modern" | "classic" | "touch";
 
 /** The colour of each Bind Editor tab's keys, and the hotkey aliases' */
 const GROUPS: { key: KeyUse["group"]; label: string; color: string }[] = [
@@ -236,59 +237,26 @@ function TouchGestures() {
   return (
     <section className="help-section">
       <h3>Touch</h3>
-      <dl className="help-defs">
-        <dt>Joystick (bottom left)</dt>
-        <dd>Walk; push it far to run. With the map open, it moves the way the map faces.</dd>
-        <dt>Drag the view</dt>
-        <dd>Look about.</dd>
-        <dt>Tap</dt>
-        <dd>Target a player or monster, or pick up what's at your feet.</dd>
-        <dt>Double tap</dt>
-        <dd>Use it: open a door, talk to a shopkeeper, use an item.</dd>
-        <dt>Long press</dt>
-        <dd>Look at it (the right click). On a hotbar slot, change what's in it.</dd>
-        <dt>Buttons (bottom right)</dt>
-        <dd>Attack with what you wield (hold to keep attacking), Open a door, Get what's close by, and Target the next one.</dd>
-        <dt>Top right</dt>
-        <dd>Rest or stand, the map, the chat, and your inventory, spells and the rest.</dd>
-      </dl>
+      <HelpDefs items={helpTable().touch} />
     </section>
   );
 }
 
-// ---------------------------------------------------------------------------- HUD
-
-interface HudPart {
-  /** CSS selectors, the first that shows wins */
-  sel: string[];
-  title: string;
-  text: string;
+/** Terms and what they mean */
+function HelpDefs({ items }: { items: HelpItem[] }) {
+  return (
+    <dl className="help-defs">
+      {items.map((i) => (
+        <Fragment key={i.term}>
+          <dt>{i.term}</dt>
+          <dd>{i.text}</dd>
+        </Fragment>
+      ))}
+    </dl>
+  );
 }
 
-/** The parts of the screen, as GameView, ModernHud, Sidebar, Toolbar and TouchControls draw them */
-const HUD_PARTS: HudPart[] = [
-  { sel: [".game-title .menu-button"], title: "The ☰ menu", text: "Preferences, Configuration (keys), Actions, Help and logging off." },
-  { sel: [".game-title .title-text"], title: "Where you are", text: "The room's name." },
-  { sel: [".game-title .latency", ".classic-toolbar .latency"], title: "Connection", text: "Green is quick, yellow slow, red very slow. The FPS beside it is frames a second." },
-  { sel: [".unit-portrait", ".user-area .portrait"], title: "You", text: "Your face. Click it for the emotes, or to cast a spell on yourself; right click to look at yourself." },
-  { sel: [".unit-side .hud-bars", ".user-area .main-stats"], title: "Health, mana, vigor and experience", text: "Vigor runs down as you run and fight; rest to get it back. The last bar is your experience." },
-  { sel: [".modern-enchantments.player", ".touch-hud .hud-enchantments.player", ".user-area .enchantments.player"], title: "Your enchantments", text: "Spells on you. Right click (long press) one to read about it." },
-  { sel: [".target-frame"], title: "Your target", text: "Who you've targeted: red if you can attack them. E attacks; Esc lets go." },
-  { sel: [".map-ring .minimap", ".map-frame .minimap", ".touch-controls ~ .minimap"], title: "The map", text: "You're the arrow; dots are players (blue), monsters (red) and the like. Click it for the full map; + and - zoom; right click to write a note." },
-  { sel: [".map-tool.top-left", ".classic-toolbar .toolbar-buttons"], title: "Toolbar", text: "Rest or stand (resting brings back health, mana and vigor faster), and your mail. Classic also has Help, Drop and Get." },
-  { sel: [".map-room-name"], title: "Room name", text: "Where you are." },
-  { sel: [".modern-enchantments.room", ".classic-room-enchantments", ".hud-enchantments.room"], title: "Room enchantments", text: "Spells on the room you're in." },
-  { sel: [".quest-box"], title: "Quests", text: "The quests you're on, tracked ones first, with what to do next. Double-click one for its details; drag its title to move it, its left or bottom edge to resize it, and double-click the title to put it back." },
-  { sel: [".action-bar", ".touch-hotbar", ".view .hotbar"], title: "Hotbar", text: "Quick slots: 1 to 0 use them. Drag spells or items onto them; right click (long press) one to change it." },
-  { sel: [".chat-tabs"], title: "Chat tabs", text: "All, Chat (what people say), Combat and Server. A mark shows on a tab with new lines." },
-  { sel: [".chat-log"], title: "Chat", text: "What's said and what happens. In Modern it fades until you point at it; drag its tab strip to move it, its right or bottom edge to resize it, and double-click the strip to put it back." },
-  { sel: [".chat-input"], title: "Chat line", text: "Enter starts it; type to talk, or a command (tell, yell, emote, who, help…)." },
-  { sel: [".sidebar .stat-tabs"], title: "Tabs", text: "Inventory, Statistics, Spells, Skills, Quests, Friends and Pets." },
-  { sel: [".sidebar .stat-frame"], title: "Inventory and lists", text: "What the tab shows. Double click to use, right click to look, drag to the view to drop." },
-  { sel: [".touch-stick"], title: "Joystick", text: "Walk; push it far to run." },
-  { sel: [".touch-actions"], title: "Buttons", text: "Attack (hold to keep at it), Open, Get and Target." },
-  { sel: [".touch-top-buttons"], title: "Top buttons", text: "Rest or stand, the map, the chat, and the drawer with your inventory, spells and the rest." },
-];
+// ---------------------------------------------------------------------------- HUD
 
 interface Placed {
   n: number;
@@ -345,14 +313,15 @@ function HudPage({
     const canvas = snapshotGame(root, view, (el) => el.classList.contains("help-modal"), backgrounds);
     const parts: Placed[] = [];
     // The hands are in the picture but not numbered: players know them
-    for (const p of HUD_PARTS) {
+    const { view: viewPart, parts: hudParts } = helpTable().hud;
+    for (const p of hudParts) {
       let rect: SnapRect | null = null;
       for (const s of p.sel) if ((rect = placeOf(root, root.querySelector(s)))) break;
       if (rect) parts.push({ n: 0, title: p.title, text: p.text, rects: [rect] });
     }
     // The view itself, under everything
     const view3d = placeOf(root, root.querySelector("canvas.viewport"));
-    if (view3d) parts.unshift({ n: 0, title: "The view", text: "The world. Left click targets, right click looks, double click uses; hold the right button and drag to turn.", rects: [{ ...view3d, x: view3d.x + view3d.w * 0.42, y: view3d.y + view3d.h * 0.3, w: view3d.w * 0.16, h: view3d.h * 0.12 }] });
+    if (view3d) parts.unshift({ n: 0, title: viewPart.title, text: viewPart.text, rects: [{ ...view3d, x: view3d.x + view3d.w * 0.42, y: view3d.y + view3d.h * 0.3, w: view3d.w * 0.16, h: view3d.h * 0.12 }] });
     chat?.classList.remove("help-shown");
     parts.forEach((p, i) => (p.n = i + 1));
     // As wide as the page shows it
@@ -415,125 +384,16 @@ function HudPage({
 // ---------------------------------------------------------------------------- Interface
 
 function InterfacePage({ layout, admin }: { layout: HelpLayout; admin: boolean }) {
-  const tabsHow =
-    layout === "modern"
-      ? "I opens the character window (your paper doll beside them); its title drags it."
-      : layout === "classic"
-        ? "They're the column at the right of the screen."
-        : "The top right button opens the drawer with them.";
+  const shows = (i: HelpItem) => (!i.admin || admin) && (!i.layouts || i.layouts.includes(layout));
   return (
     <div className="help-interface">
-      <section className="help-section">
-        <h3>The ☰ menu</h3>
-        <dl className="help-defs">
-          <dt>Preferences… (O, F10)</dt>
-          <dd>The game's options: sound and music, the halo round your target, tooltips, the profanity filter, the server's game options (grouping, autoloot, autocombine, bags, spellpower), and more.</dd>
-          <dt>Configuration…</dt>
-          <dd>The Bind Editor: your keys and mouse buttons, and options of ours (the interface, lighting, ambient life, pets, HUD size).</dd>
-          {admin && (
-            <>
-              <dt>Admin console… (Shift+4)</dt>
-              <dd>For admins: travel, players, and commands on the live world. Take care.</dd>
-            </>
-          )}
-          <dt>Actions</dt>
-          <dd>Who is logged on (and ignoring players), groups to talk to, hotkey aliases (what F1 to F12 type), command aliases and your guild.</dd>
-          <dt>Language</dt>
-          <dd>The language of the game's text, where the server has it.</dd>
-          <dt>Change password…</dt>
-          <dd>Your account's password.</dd>
-          {layout !== "touch" && (
-            <>
-              <dt>Logout timer…</dt>
-              <dd>Log off by yourself after some minutes away.</dd>
-            </>
-          )}
-          <dt>Help… (F1)</dt>
-          <dd>This window.</dd>
-          <dt>About Meridian…</dt>
-          <dd>Who made it.</dd>
-          <dt>Switch character</dt>
-          <dd>Back to your characters, still logged in.</dd>
-          <dt>Log off</dt>
-          <dd>Leave the game.</dd>
-        </dl>
-      </section>
-      <section className="help-section">
-        <h3>Your character</h3>
-        <p className="help-note">{tabsHow}</p>
-        <dl className="help-defs">
-          <dt>Inventory (I)</dt>
-          <dd>
-            What you carry. Double click to use or wear, right click to look, drag to the view to drop, Sort to tidy. A valuable item's look (magical, or
-            worth 5,000 shillings) has a pair of scales: appraise it, then offer it to Veydran Goldleaf in Barloque to sell it on the citizen's market for 30 days.
-          </dd>
-          <dt>Statistics</dt>
-          <dd>Your training points, with Train to spend them on a spell or skill you know (or type train), your stats, your offense, defense and resistances.</dd>
-          <dt>Spells and Skills</dt>
-          <dd>What you know and how well. Double click a spell to cast it; drag it to the hotbar. Search spells by name; Study practises one while you're away (it rests when your mana's low, and can log off when done).</dd>
-          <dt>Quests</dt>
-          <dd>The quests you're on. Double click one for its details. In Modern they're also in the quest box on the right.</dd>
-          <dt>Friends (P)</dt>
-          <dd>Find players of Meridian Shards and ask them to be friends; see where they are, mark them on the map, follow them.</dd>
-          <dt>Pets (N)</dt>
-          <dd>A pet that follows you, seen by other Meridian Shards players. More open up as your maximum health grows.</dd>
-          <dt>Companion (C)</dt>
-          <dd>
-            A companion who fights at your side and carries a pack for you, sworn to you from 50 health by your faction's leader: the Duke's battle-mage (an axe and
-            Qor's acids; shadow, an unholy blade and reflections for you), the Princess's spellsword (a hammer and Faren's fire or ice; heals, a holy blade and Shal'ille's
-            umbrella) or the rebels' war-priest (a scimitar; Kraanan's blessings, and Jala's songs between fights). Its spells grow with you. Its stance, its pack, its looks, dismissing it and fetching it. Double-click it to give it things.
-          </dd>
-          <dt>Tailors and barbers</dt>
-          <dd>
-            Double-click a tailor (Madelia in Barloque, Hester in Cor Noth, Tepal in Ko'catan, the Rainbow Forge in Jixa) to dye your clothes, armour, helmets,
-            shields and weapons in 39 colours; their Shop button still sells their wares. Pellam, in Madelia's shop, cuts and colours hair and beards. Dye bottles still work too.
-          </dd>
-        </dl>
-      </section>
-      <section className="help-section">
-        <h3>Other windows</h3>
-        <dl className="help-defs">
-          <dt>Descriptions</dt>
-          <dd>Right click anything (R for your target): what it is, with buttons to get, use, buy or add a friend.</dd>
-          <dt>Shops, banks and vaults</dt>
-          <dd>Double click a shopkeeper to buy; a banker to deposit; a vault keeper to withdraw. Typed: buy, offer, deposit, withdraw.</dd>
-          <dt>Trading</dt>
-          <dd>Offer items to another player; they answer with their own; then both accept.</dd>
-          <dt>The arenas (⚔)</dt>
-          <dd>
-            In the Arena of Kraanan or the Arena of Death in Tos, the crossed swords by the map (or typed arena) open the Arena window. Mock bouts: a melee against three fighters
-            in the Arena of Kraanan, a duel against an elite in the Arena of Death, matched to your health. Losing one is never a death: you wake in the stands. Player battles:
-            the watcher's matches of players (in the Arena of Death, a real death). Record: your mock wins and losses, and your title.
-          </dd>
-          <dt>The Faction War (J)</dt>
-          <dd>
-            J (or typed war) opens the War window: your rank and renown with your liege, your war record, the battle called or being fought and when the next is, the towns and who
-            holds them, a map of the realm's flagpoles, the last battles, and your liege's war ledger. While the lieges' armies march or fight, a banner at the top of the view
-            says where; click it to open the window.
-          </dd>
-          <dt>Achievements (U)</dt>
-          <dd>
-            U (or typed achievements) opens the Achievements window: what your character has earned, and when, and what is left. Bosses slain, factions joined and their quest
-            chains finished, guilds, hit points, schools of magic and quests each have their own. A few add a title to your look. A toast tells you as one is earned.
-          </dd>
-          <dt>Containers</dt>
-          <dd>Double click a box to see inside and take things out; put stores things in one.</dd>
-          <dt>The full map</dt>
-          <dd>Click the map. Notes you write on it stay. While it's open, you move by its directions: forward goes north, back south, left west and right east.</dd>
-          <dt>Quick Emotes (Q, or click your face)</dt>
-          <dd>Wave, point, dance and your mood in one click.</dd>
-          <dt>Hotbar slots</dt>
-          <dd>Right click (long press) a slot to choose a spell or item for it.</dd>
-          <dt>The chat</dt>
-          <dd>Enter starts a line; T tells, Y yells, B broadcasts, ; emotes. Tabs keep chat, fights and the server's messages apart. In Modern, drag the strip beside the tabs to move it and its right or bottom edge or corner to size it; a double-click on the strip puts it back.</dd>
-          {layout === "modern" && (
-            <>
-              <dt>Camera View (V) and Hide Interface (H)</dt>
-              <dd>See yourself from behind, in front or a chase camera; and put the interface away for a screenshot.</dd>
-            </>
-          )}
-        </dl>
-      </section>
+      {helpTable().interface.map((section) => (
+        <section className="help-section" key={section.title}>
+          <h3>{section.title}</h3>
+          {section.note && <p className="help-note">{section.note[layout]}</p>}
+          <HelpDefs items={section.items.filter(shows)} />
+        </section>
+      ))}
     </div>
   );
 }

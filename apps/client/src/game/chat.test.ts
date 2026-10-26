@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import "./testTables.ts";
 import type { ObjectInfo } from "@shards/protocol";
 import type { ChatLine } from "@shards/world";
 import { reduceOffer } from "./ui/Dialogs.tsx";

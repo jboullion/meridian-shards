@@ -6,6 +6,7 @@ import { LoginScreen } from "./game/LoginScreen.tsx";
 import { Framed } from "./game/TitleBar.tsx";
 import { devPagesEnabled, serverName, unreachableMessage } from "./host.ts";
 import { installUiTheme } from "./game/ui/kit.tsx";
+import { loadClientTables } from "./game/clientTables.ts";
 
 /** The room viewer (a developer page): loaded only in development, so production builds don't carry it */
 const RoomViewer = import.meta.env.DEV ? lazy(() => import("./viewer/RoomViewer.tsx").then((m) => ({ default: m.RoomViewer }))) : null;
@@ -36,9 +37,11 @@ export function App() {
     const store = new AssetStore();
     store
       .init()
-      .then(() => {
+      .then(async () => {
         installUiTheme(store);
-        return store.rsb();
+        // Ours: the achievements, emoji, typed commands and Help words, before anything uses them
+        const [rsb] = await Promise.all([store.rsb(), loadClientTables(store)]);
+        return rsb;
       })
       .then((rsb) => {
         setFailure(null);

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ByteReader } from "@shards/protocol";
+import { ByteReader, UC } from "@shards/protocol";
 import { MAGIC_SHOW, magicColour, magicShow, magicTier, readMagicName } from "../src/magic.ts";
+import { fixture, userCommand } from "../../protocol/test/fixture.ts";
+
+const UC_MAGIC_NAME = userCommand(UC.MAGIC_NAME, "packages/world/src/magic.ts");
 
 /** Little-endian bytes from [size, value] pairs */
 function bytes(parts: [1 | 4, number][]): ByteReader {
@@ -35,7 +38,7 @@ describe("magic item flags", () => {
 describe("UC_MAGIC_NAME", () => {
   it("fills in the chain of name parts", () => {
     const strings: Record<number, string> = { 1: "%s", 2: "potent %s", 3: "durable %s", 4: "%s of siphoning", 5: "longsword" };
-    const m = readMagicName(bytes([[4, 6461], [4, 0x500010], [4, 1], [4, 2], [4, 3], [4, 4], [4, 5]]), (id) => strings[id]);
+    const m = fixture(UC_MAGIC_NAME, readMagicName, bytes([[4, 6461], [4, 0x500010], [4, 1], [4, 2], [4, 3], [4, 4], [4, 5]]), (id) => strings[id]);
     expect(m).toEqual({ id: 6461, flags: 0x500010, name: "potent durable longsword of siphoning" });
   });
 });

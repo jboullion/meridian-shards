@@ -11,6 +11,10 @@
 //   abandon <id>        quest abandon <id>
 //   log                 quest log
 //   offers              quest offers (the NPC we last talked to)
+//   shop <name>         ask the shopkeeper in our room whose name starts with <name> for their wares
+//   buy <n> [amount]    buy item n of the wares last listed
+//   hunt <name> [s]     fight what's named <name> in the room for s seconds (60), leaving off below 35% health
+//   say <text>          say it aloud
 //   cmd <line>          any UC_SHARDS line
 //   maint <command>     a maintenance command, $me standing for our object ("maint send object $me TeleportTo rid int 52")
 //   wait <seconds>
@@ -19,7 +23,8 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { parseRsb } from "../../packages/formats/src/rsb.ts";
-import { GameSession } from "../../packages/world/src/index.ts";
+import { STAT_GROUP } from "../../packages/protocol/src/index.ts";
+import { GameSession, type TradeList } from "../../packages/world/src/index.ts";
 import { maint } from "../maint/maintClient.ts";
 
 const { values: opt } = parseArgs({
@@ -28,6 +33,7 @@ const { values: opt } = parseArgs({
     pass: { type: "string", default: "shardbot" },
     gateway: { type: "string", default: "ws://localhost:8059" },
     rsb: { type: "string", default: "server/src/run/server/rsc/rsc0000.rsb" },
+    char: { type: "string" },
     do: { type: "string", default: "log" },
     stay: { type: "string", default: "3" },
   },
@@ -44,7 +50,7 @@ const session = new GameSession(
   {
     phase: (p) => {
       if (p === "characters") {
-        const c = session.characters.find((x) => x.flags !== 1);
+        const c = session.characters.find((x) => x.flags !== 1 && (!opt.char || x.name.toLowerCase() === opt.char.toLowerCase()));
         if (c) session.useCharacter(c.id);
         else log("no character to play");
       }
@@ -54,10 +60,15 @@ const session = new GameSession(
     chat: (l) => log("chat:", l.spans.map((s) => s.text).join("")),
     error: (e) => log("error:", e),
     quest: (e) => log("quest:", JSON.stringify(e)),
+    trade: (t) => {
+      lastWares = t;
+      log(`wares of ${nameOf(t.seller.nameRes)}:`, t.items.map((b, i) => `${i + 1}. ${nameOf(b.object.nameRes)} ${b.cost}`).join(", "));
+    },
   },
 );
 
 const nameOf = (res: number) => session.resource(res) ?? "";
+let lastWares: TradeList | null = null;
 
 async function walk(row: number, col: number): Promise<void> {
   const tx = (col - 0.5) * 1024,
@@ -76,6 +87,58 @@ async function walk(row: number, col: number): Promise<void> {
     await sleep(250);
   }
   log(`at ${row},${col}`);
+}
+
+/** Fights the nearest attackable thing whose name starts with `what`, one after another, for `seconds` (retreating below 35% health) */
+async function hunt(what: string, seconds: number, weak = false): Promise<void> {
+  const deadline = Date.now() + seconds * 1000;
+  let kills = 0,
+    lastSwing = 0,
+    target = 0;
+  while (Date.now() < deadline) {
+    const self = session.world.self;
+    if (!self) return;
+    const hp = session.world.stats.get(STAT_GROUP.MAIN)?.find((s) => s.num === 1)?.numeric;
+    if (hp && hp.value < hp.currentMax * 0.35) {
+      if (!weak) {
+        log(`hunt: stopping, health ${hp.value}/${hp.currentMax}`);
+        break;
+      }
+      await maint(`set object ${self.id} piHealth int ${hp.currentMax * 100}`); // test helper: keeps us on our feet
+    }
+    let foe = session.world.objects.get(target);
+    if (!foe) {
+      if (target) kills++;
+      const near = [...session.world.objects.values()]
+        .filter((o) => o.info.flags & 0x8 && nameOf(o.info.nameRes).toLowerCase().startsWith(what.toLowerCase()))
+        .sort((a, b) => Math.hypot(a.x - self.x, a.y - self.y) - Math.hypot(b.x - self.x, b.y - self.y));
+      foe = near[0];
+      target = foe?.id ?? 0;
+      if (foe && weak) await maint(`send object ${foe.id} SetHealth amount int 1`); // test helper: a one-hit foe
+      if (!foe) {
+        await sleep(500);
+        continue;
+      }
+    }
+    const dx = foe.x - self.x,
+      dy = foe.y - self.y;
+    const d = Math.hypot(dx, dy);
+    if (d > 1300) {
+      const step = Math.min(d - 1000, 256);
+      self.x += (dx / d) * step;
+      self.y += (dy / d) * step;
+      session.requestMove(self.x, self.y, 25);
+      await sleep(250);
+      continue;
+    }
+    if (Date.now() - lastSwing >= 1000) {
+      session.requestTurn((Math.round((Math.atan2(dy, dx) * 4096) / (2 * Math.PI)) + 4096) % 4096);
+      session.attack(foe.id);
+      lastSwing = Date.now();
+    }
+    await sleep(200);
+  }
+  log(`hunt: ${kills} ${what} down`);
 }
 
 async function run(): Promise<void> {
@@ -97,6 +160,26 @@ async function run(): Promise<void> {
         session.activate(npc.id);
       }
     } else if (["accept", "turnin", "abandon", "log", "offers"].includes(verb)) session.shardsCommand(`quest ${verb}${arg ? ` ${arg}` : ""}`);
+    else if (verb === "shop") {
+      const npc = [...session.world.objects.values()].find((o) => nameOf(o.info.nameRes).toLowerCase().startsWith(arg.toLowerCase()));
+      if (!npc) log(`no ${arg} here`);
+      else session.requestBuy(npc.id);
+    } else if (verb === "buy") {
+      // buy <item number in the last wares> <amount>
+      const [n, amount] = arg.split(/\s+/).map(Number);
+      const b = lastWares?.items[n! - 1];
+      if (!lastWares || !b) log("shop first, with an item that's in the list");
+      else session.buyItems(lastWares.seller.id, [{ id: b.object.id, amount: amount ?? 1 }]);
+    } else if (verb === "kill") {
+      // kill <name> [n]: test helper, `Killed` with us as the killer on up to n things named <name> in the room
+      const [what = "", n = "1"] = arg.split(/\s+/);
+      const foes = [...session.world.objects.values()].filter((o) => o.info.flags & 0x8 && nameOf(o.info.nameRes).toLowerCase().startsWith(what.toLowerCase()));
+      for (const foe of foes.slice(0, Number(n))) log("killed:", foe.id, ((await maint(`send object ${foe.id} Killed what object ${session.world.self!.id}`))[0] ?? "").trim().slice(0, 60));
+    } else if (verb === "hunt") {
+      const [what = "", secs = "60", weak = ""] = arg.split(/\s+/);
+      await hunt(what, Number(secs), weak === "weak");
+    } else if (verb === "use") session.use(Number(arg));
+    else if (verb === "say") session.say(arg);
     else if (verb === "cmd") session.shardsCommand(arg);
     else if (verb === "maint") log("maint:", ((await maint(arg.replace(/\$me/g, String(session.world.self!.id))))[0] ?? "").trim());
     else if (verb === "wait") await sleep(Number(arg) * 1000);

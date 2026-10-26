@@ -5,6 +5,9 @@ import {
   passwordDigest, readMove,
   BEACON, CLIENT_ACK, SERVER_HELLO,
 } from "../src/index.ts";
+import { fixture, serverMessage } from "./fixture.ts";
+
+const MESSAGES = "packages/protocol/src/messages.ts";
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 
@@ -93,7 +96,7 @@ test("move message layout: row first, Kod fine units", () => {
 
 test("BP_MOVE parse splits the turn-to-face bit", () => {
   const body = Uint8Array.of(1, 2, 0, 0, 100, 0, 200, 0, 0x80 | 25);
-  const m = readMove(new ByteReader(body));
+  const m = fixture(serverMessage("MOVE", MESSAGES), readMove, new ByteReader(body));
   assert.deepEqual(m, { id: 513, kodRow: 100, kodCol: 200, speed: 25, turnToFace: true });
 });
 

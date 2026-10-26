@@ -1,0 +1,81 @@
+{
+  "about": "Ours: the Help window's words (the client's HelpDialog.tsx draws them). touch: the phone's gestures, on the Controls page. hud: the parts of the screen the HUD page numbers on a picture of it, each found by the first of its CSS selectors that shows (as the browser client draws them), and the 3D view under them. interface: the Interface page's sections; an item with layouts shows only in those interfaces (modern, classic, touch), one with admin only to admins; a section's note says, by interface, where its windows are.",
+  "touch": [
+    {"term":"Joystick (bottom left)","text":"Walk; push it far to run. With the map open, it moves the way the map faces."},
+    {"term":"Drag the view","text":"Look about."},
+    {"term":"Tap","text":"Target a player or monster, or pick up what's at your feet."},
+    {"term":"Double tap","text":"Use it: open a door, talk to a shopkeeper, use an item."},
+    {"term":"Long press","text":"Look at it (the right click). On a hotbar slot, change what's in it."},
+    {"term":"Buttons (bottom right)","text":"Attack with what you wield (hold to keep attacking), Open a door, Get what's close by, and Target the next one."},
+    {"term":"Top right","text":"Rest or stand, the map, the chat, and your inventory, spells and the rest."}
+  ],
+  "hud": {
+    "view": {"title":"The view","text":"The world. Left click targets, right click looks, double click uses; hold the right button and drag to turn."},
+    "parts": [
+      {"sel":[".game-title .menu-button"],"title":"The ☰ menu","text":"Preferences, Configuration (keys), Actions, Help and logging off."},
+      {"sel":[".game-title .title-text"],"title":"Where you are","text":"The room's name."},
+      {"sel":[".game-title .latency",".classic-toolbar .latency"],"title":"Connection","text":"Green is quick, yellow slow, red very slow. The FPS beside it is frames a second."},
+      {"sel":[".unit-portrait",".user-area .portrait"],"title":"You","text":"Your face. Click it for the emotes, or to cast a spell on yourself; right click to look at yourself."},
+      {"sel":[".unit-side .hud-bars",".user-area .main-stats"],"title":"Health, mana, vigor and experience","text":"Vigor runs down as you run and fight; rest to get it back. The last bar is your experience."},
+      {"sel":[".modern-enchantments.player",".touch-hud .hud-enchantments.player",".user-area .enchantments.player"],"title":"Your enchantments","text":"Spells on you. Right click (long press) one to read about it."},
+      {"sel":[".target-frame"],"title":"Your target","text":"Who you've targeted: red if you can attack them. E attacks; Esc lets go."},
+      {"sel":[".map-ring .minimap",".map-frame .minimap",".touch-controls ~ .minimap"],"title":"The map","text":"You're the arrow; dots are players (blue), monsters (red) and the like. Click it for the full map; + and - zoom; right click to write a note."},
+      {"sel":[".map-tool.top-left",".classic-toolbar .toolbar-buttons"],"title":"Toolbar","text":"Rest or stand (resting brings back health, mana and vigor faster), and your mail. Classic also has Help, Drop and Get."},
+      {"sel":[".map-room-name"],"title":"Room name","text":"Where you are."},
+      {"sel":[".modern-enchantments.room",".classic-room-enchantments",".hud-enchantments.room"],"title":"Room enchantments","text":"Spells on the room you're in."},
+      {"sel":[".quest-box"],"title":"Quests","text":"The quests you're on, tracked ones first, with what to do next. Double-click one for its details; drag its title to move it, its left or bottom edge to resize it, and double-click the title to put it back."},
+      {"sel":[".action-bar",".touch-hotbar",".view .hotbar"],"title":"Hotbar","text":"Quick slots: 1 to 0 use them. Drag spells or items onto them; right click (long press) one to change it."},
+      {"sel":[".chat-tabs"],"title":"Chat tabs","text":"All, Chat (what people say), Combat and Server. A mark shows on a tab with new lines."},
+      {"sel":[".chat-log"],"title":"Chat","text":"What's said and what happens. In Modern it fades until you point at it; drag its tab strip to move it, its right or bottom edge to resize it, and double-click the strip to put it back."},
+      {"sel":[".chat-input"],"title":"Chat line","text":"Enter starts it; type to talk, or a command (tell, yell, emote, who, help…)."},
+      {"sel":[".sidebar .stat-tabs"],"title":"Tabs","text":"Inventory, Statistics, Spells, Skills, Quests, Friends and Pets."},
+      {"sel":[".sidebar .stat-frame"],"title":"Inventory and lists","text":"What the tab shows. Double click to use, right click to look, drag to the view to drop."},
+      {"sel":[".touch-stick"],"title":"Joystick","text":"Walk; push it far to run."},
+      {"sel":[".touch-actions"],"title":"Buttons","text":"Attack (hold to keep at it), Open, Get and Target."},
+      {"sel":[".touch-top-buttons"],"title":"Top buttons","text":"Rest or stand, the map, the chat, and the drawer with your inventory, spells and the rest."}
+    ]
+  },
+  "interface": [
+    {"title": "The ☰ menu",
+     "items": [
+       {"term":"Preferences… (O, F10)","text":"The game's options: sound and music, the halo round your target, tooltips, the profanity filter, the server's game options (grouping, autoloot, autocombine, bags, spellpower), and more."},
+       {"term":"Configuration…","text":"The Bind Editor: your keys and mouse buttons, and options of ours (the interface, lighting, ambient life, pets, HUD size)."},
+       {"term":"Admin console… (Shift+4)","text":"For admins: travel, players, and commands on the live world. Take care.","admin":true},
+       {"term":"Actions","text":"Who is logged on (and ignoring players), groups to talk to, hotkey aliases (what F1 to F12 type), command aliases and your guild."},
+       {"term":"Language","text":"The language of the game's text, where the server has it."},
+       {"term":"Change password…","text":"Your account's password."},
+       {"term":"Logout timer…","text":"Log off by yourself after some minutes away.","layouts":["modern","classic"]},
+       {"term":"Help… (F1)","text":"This window."},
+       {"term":"About Meridian…","text":"Who made it."},
+       {"term":"Switch character","text":"Back to your characters, still logged in."},
+       {"term":"Log off","text":"Leave the game."}
+     ]},
+    {"title": "Your character",
+     "note": {"modern":"I opens the character window (your paper doll beside them); its title drags it.","classic":"They're the column at the right of the screen.","touch":"The top right button opens the drawer with them."},
+     "items": [
+       {"term":"Inventory (I)","text":"What you carry. Double click to use or wear, right click to look, drag to the view to drop, Sort to tidy. A valuable item's look (magical, or worth 5,000 shillings) has a pair of scales: appraise it, then offer it to Veydran Goldleaf in Barloque to sell it on the citizen's market for 30 days."},
+       {"term":"Statistics","text":"Your training points, with Train to spend them on a spell or skill you know (or type train), your stats, your offense, defense and resistances."},
+       {"term":"Spells and Skills","text":"What you know and how well. Double click a spell to cast it; drag it to the hotbar. Search spells by name; Study practises one while you're away (it rests when your mana's low, and can log off when done)."},
+       {"term":"Quests","text":"The quests you're on. Double click one for its details. In Modern they're also in the quest box on the right."},
+       {"term":"Friends (P)","text":"Find players of Meridian Shards and ask them to be friends; see where they are, mark them on the map, follow them."},
+       {"term":"Pets (N)","text":"A pet that follows you, seen by other Meridian Shards players. More open up as your maximum health grows."},
+       {"term":"Companion (C)","text":"A companion who fights at your side and carries a pack for you, sworn to you from 50 health by your faction's leader: the Duke's battle-mage (an axe and Qor's acids; shadow, an unholy blade and reflections for you), the Princess's spellsword (a hammer and Faren's fire or ice; heals, a holy blade and Shal'ille's umbrella) or the rebels' war-priest (a scimitar; Kraanan's blessings, and Jala's songs between fights). Its spells grow with you. Its stance, its pack, its looks, dismissing it and fetching it. Double-click it to give it things."},
+       {"term":"Tailors and barbers","text":"Double-click a tailor (Madelia in Barloque, Hester in Cor Noth, Tepal in Ko'catan, the Rainbow Forge in Jixa) to dye your clothes, armour, helmets, shields and weapons in 39 colours; their Shop button still sells their wares. Pellam, in Madelia's shop, cuts and colours hair and beards. Dye bottles still work too."}
+     ]},
+    {"title": "Other windows",
+     "items": [
+       {"term":"Descriptions","text":"Right click anything (R for your target): what it is, with buttons to get, use, buy or add a friend."},
+       {"term":"Shops, banks and vaults","text":"Double click a shopkeeper to buy; a banker to deposit; a vault keeper to withdraw. Typed: buy, offer, deposit, withdraw."},
+       {"term":"Trading","text":"Offer items to another player; they answer with their own; then both accept."},
+       {"term":"The arenas (⚔)","text":"In the Arena of Kraanan or the Arena of Death in Tos, the crossed swords by the map (or typed arena) open the Arena window. Mock bouts: a melee against three fighters in the Arena of Kraanan, a duel against an elite in the Arena of Death, matched to your health. Losing one is never a death: you wake in the stands. Player battles: the watcher's matches of players (in the Arena of Death, a real death). Record: your mock wins and losses, and your title."},
+       {"term":"The Faction War (J)","text":"J (or typed war) opens the War window: your rank and renown with your liege, your war record, the battle called or being fought and when the next is, the towns and who holds them, a map of the realm's flagpoles, the last battles, and your liege's war ledger. While the lieges' armies march or fight, a banner at the top of the view says where; click it to open the window."},
+       {"term":"Achievements (U)","text":"U (or typed achievements) opens the Achievements window: what your character has earned, and when, and what is left. Bosses slain, factions joined and their quest chains finished, guilds, hit points, schools of magic and quests each have their own. A few add a title to your look. A toast tells you as one is earned."},
+       {"term":"Containers","text":"Double click a box to see inside and take things out; put stores things in one."},
+       {"term":"The full map","text":"Click the map. Notes you write on it stay. While it's open, you move by its directions: forward goes north, back south, left west and right east."},
+       {"term":"Quick Emotes (Q, or click your face)","text":"Wave, point, dance and your mood in one click."},
+       {"term":"Hotbar slots","text":"Right click (long press) a slot to choose a spell or item for it."},
+       {"term":"The chat","text":"Enter starts a line; T tells, Y yells, B broadcasts, ; emotes. Tabs keep chat, fights and the server's messages apart. In Modern, drag the strip beside the tabs to move it and its right or bottom edge or corner to size it; a double-click on the strip puts it back."},
+       {"term":"Camera View (V) and Hide Interface (H)","text":"See yourself from behind, in front or a chase camera; and put the interface away for a screenshot.","layouts":["modern"]}
+     ]}
+  ]
+}

@@ -6,20 +6,17 @@ import { achievementsCommand, type GameSession } from "@shards/world";
 import { Button, Tabs, Window } from "./kit.tsx";
 import type { IconRenderer } from "../icons.ts";
 import { AchievementIcon } from "./AchievementIcon.tsx";
-import { ACHIEVEMENTS, ACHIEVEMENT_CATEGORIES, useAchievements, type AchievementCategory, type AchievementsStore } from "../achievements.ts";
-
-const TABS = ["All", ...ACHIEVEMENT_CATEGORIES] as const;
-type Tab = (typeof TABS)[number];
+import { achievementCategories, achievementList, useAchievements, type AchievementsStore } from "../achievements.ts";
 
 const dateText = (ms: number): string => new Date(ms).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 
 export function AchievementsDialog({ store, session, icons, onClose }: { store: AchievementsStore; session: GameSession; icons: IconRenderer; onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>("All");
+  const [tab, setTab] = useState("All");
   useAchievements(store);
   useEffect(() => {
     session.shardsCommand(achievementsCommand());
   }, [session]);
-  const shown = ACHIEVEMENTS.filter((a) => tab === "All" || a.category === (tab as AchievementCategory));
+  const shown = achievementList().filter((a) => tab === "All" || a.category === tab);
   // Earned first (newest first), then what is left
   const rows = [...shown].sort((a, b) => {
     const ea = store.earned.get(a.id);
@@ -32,7 +29,7 @@ export function AchievementsDialog({ store, session, icons, onClose }: { store: 
   const got = shown.filter((a) => store.earned.has(a.id)).length;
   return (
     <Window title="Achievements" onClose={onClose} className="game-dialog achievements-window">
-      <Tabs tabs={TABS} active={tab} onChange={setTab} />
+      <Tabs tabs={["All", ...achievementCategories()]} active={tab} onChange={setTab} />
       <div className="achievements-page">
         <p className="achievements-count">{store.loaded ? `${got} of ${shown.length} earned` : "Asking the chroniclers..."}</p>
         <ul className="achievements-list">

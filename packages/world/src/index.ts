@@ -46,3 +46,4 @@ export * from "./arena/arenaRoster.ts";
 export * from "./arena/arenaWire.ts";
 export * from "./arena/arenaSim.ts";
 export * from "./arena/arenaView.ts";
+export * from "./userCommands.ts";

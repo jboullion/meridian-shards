@@ -53,7 +53,7 @@ The game is becoming mostly single-player. So the factions are to drive the worl
    - in a mutual guild war (`Guild.IsMutualEnemy`);
    - when the attacker is in a faction and the victim carries a council token and belongs to another faction or none.
 
-   Everything else is refused with `player_no_random_pvp`. Minions and spells go through the same check.
+   Everything else is refused with `player_no_random_pvp`. Minions and spells go through the same check. (2026-10-25: the room flag `ROOM_GUILD_PK_ONLY` is gone, so the rule is the same in town streets as in the wild; see "Room PvP flags" at the end.)
 
 7. **No death drops anything,** except in an arena that drops loot (the Arena of Death). A death to a monster or in a guild war breaks the worn gear as a war death does, and costs no skill, spell or XP. Newbie and Frenzy deaths cost nothing, as before.
 
@@ -278,3 +278,8 @@ The game is becoming mostly single-player. So the factions are to drive the worl
   - mourning and the merchants' discounts;
   - a fight between two players' soldiers;
   - the War window's service, ledger and half-staff for a player with a liege.
+- **Room PvP flags (2026-10-25, shards-server, not yet committed).** With no random PvP, the room flags were checked and trimmed:
+  - **Kept, each still doing work:** `ROOM_NO_COMBAT` (safe rooms: inns, shops, banks, temples, the town squares), `ROOM_SAFE_DEATH` (the arenas: death without consequences), `ROOM_NO_PK` (non-PvP survival instances, the DM's "turn off pk") and `ROOM_KILL_ZONE` (set by a Frenzy).
+  - **Deleted: `ROOM_GUILD_PK_ONLY`** (0x0008 left unused), from the 21 town-street rooms that had it, with `Room.AllowGuildAttack` and `SetGuildPKOnly` and every check that used them. `MayAttackPlayer` already covered its PvP rule; what was left only hurt PvE: in town streets a player with no guild or soldier shield couldn't cast Truce or a harmful room or radius spell. (Helping a player who attacked someone recently is still refused everywhere, as before: `Spell` `spell_cant_help`.) One difference remains, and is meant: a factioned attacker with no guild or shield may now attack a council token's bearer in a town street, as in the wild.
+  - **The room icons** (`System.GetRoomIcons`): Safe Room where there's no combat; "Frenzy: anyone may attack anyone here" (`RmCombat`, reworded) where a Frenzy makes a kill zone of a room that isn't safe; nothing elsewhere. The "PvP Combat Allowed" icon every wilderness room showed and the "Guild and Faction Combat Only" one (`RmGCombat`, deleted) are gone. A running world needs `send object 0 RecreateRoomIcons` before `RmGCombat` goes.
+  - **Tried** over the maintenance port: the icons for each set of flags; during a Frenzy an attack between two players outside a war was allowed in Tos and refused in a guild hall, and refused in Tos after it.

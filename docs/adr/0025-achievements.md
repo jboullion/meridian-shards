@@ -9,7 +9,7 @@ The game had no player achievements. Guild trophies are the nearest thing, but t
 
 ## Decisions
 
-1. **The server keeps who earned what; the client keeps the words.** A character's list is `User.plAchieved`, newest first, `[ id, when ]`. Names, descriptions and icons are in `apps/client/src/game/achievements.ts`, so wording and icons change without a server build. Old saves load with the empty default.
+1. **The server keeps who earned what; the client keeps the words.** A character's list is `User.plAchieved`, newest first, `[ id, when ]`. Names, descriptions and icons are in `apps/client/tables/achievements.json` (until 2026-10-25 in `achievements.ts`; now served with the game's files, so every client reads the same), so wording and icons change without a server build. Old saves load with the empty default.
 2. **One id per deed** (`ACH_*` in `blakston.khd`). A boss's id is its guild trophy's (1-8 the Fallen Halls, 21-32 the world, 41 the capstone), so a boss added later needs one trophy id and one catalogue line.
 3. **The catalogue, 48 in all.**
    - Bosses: every trophy boss (8 Fallen Hall, 12 world, the capstone), Delver of the Fallen Halls (all 8) and Slayer of the World's Beasts (all 12).

@@ -30,6 +30,8 @@
 // floortextures.json, which floors are grass, earth or rock, for Ground Detail (floorTextures.ts),
 // and rooms.json, every room by number and name, for the admin console's Travel list.
 // And foliage.json and windows.json (ours: the seasons' walls, the windows' glass), copied from here.
+// And the client's tables (ours: achievements.json, emoji.json, commands.json, help.json), copied from
+// apps/client/tables, so every client reads them from the server (the browser's clientTables.ts).
 // And our ambient sounds that aren't the game's (dist/sounds/amb_*.ogg, from fetch-sounds.ts),
 // and the login screen's backgrounds (login/*.webp and login/backgrounds.json, from the
 // screenshot tour's ReferenceImages/login-backgrounds).
@@ -294,6 +296,19 @@ for (const name of ["foliage.json", "windows.json"]) {
   files[name] = { size: json.length, hash: createHash("sha1").update(json).digest("hex").slice(0, 16), mtime: 0 };
 }
 console.log("foliage.json, windows.json: copied");
+
+// Ours: the client's tables (the achievements, the chat's emoji, the typed commands, the Help
+// window's words): data the clients read with the game's files rather than carry themselves
+{
+  const tables = join(ROOT, "apps", "client", "tables");
+  const names = readdirSync(tables).filter((f) => f.endsWith(".json"));
+  for (const name of names) {
+    const json = readFileSync(join(tables, name));
+    writeFileSync(join(OUT, name), json);
+    files[name] = { size: json.length, hash: createHash("sha1").update(json).digest("hex").slice(0, 16), mtime: 0 };
+  }
+  console.log(`${names.join(", ")}: copied`);
+}
 
 // Where townsfolk can walk in the rooms that have them (ours: navGrid.ts), built once here for
 // every player instead of in each client on entering

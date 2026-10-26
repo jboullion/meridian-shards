@@ -30,8 +30,9 @@ const overFigure = (b: BgfBitmap) => b.hotspots.some((h) => h.number === HS_OVER
 
 /**
  * Ours (docs/adr/0022-guilds.md decision 22, the guild cloak): a part whose frame carries one of
- * these is drawn behind the whole figure (a cape seen from the front or the side) or over the
- * body and what hangs over it (seen from the back, where the legs hang over the body), under a
+ * these is drawn behind the whole figure (a cape seen from the front) or over the body and what
+ * hangs over it (seen from the back, where the legs hang over the body, or the side, where it
+ * covers the near arm), under a
  * beard and a face's parts, wherever it hangs. The classic client ignores them,
  * so there a cape hangs under the body in every view. shards-server tools/iconforge cloak.ts
  * writes them into each frame.

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import "./testTables.ts";
 import {
   defineAlias, filterSayMessage, findSpell, groupAdd, groupDelete, groupNew, interpretLine, matchAlias, parseCommand, resolveTell, splitNames,
 } from "./commands.ts";

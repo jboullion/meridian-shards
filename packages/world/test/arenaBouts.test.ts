@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ByteReader, ByteWriter } from "@shards/protocol";
+import { ByteReader, ByteWriter, UC } from "@shards/protocol";
 import { arenaCommand, BOUT_STATE, floorTaken, readArena } from "../src/arenaBouts.ts";
+import { fixture, userCommand } from "../../protocol/test/fixture.ts";
+
+const UC_ARENA = userCommand(UC.ARENA, "packages/world/src/arenaBouts.ts");
 
 const names: Record<number, string> = { 21: "Draven", 22: "a battle mage of Qor", 23: "Kessa", 24: "a brawler", 30: "Blooded" };
 const resource = (id: number) => names[id] ?? null;
@@ -23,7 +26,7 @@ describe("UC_ARENA", () => {
     for (const n of [3, 1, 2, 2]) w.u16(n);
     for (const n of [0, 2, 0, 1]) w.u16(n);
     w.u32(30).u8(1).u8(0);
-    const s = readArena(new ByteReader(w.finish()), resource);
+    const s = fixture(UC_ARENA, readArena, new ByteReader(w.finish()), resource);
     expect(s).toMatchObject({ arena: 2, state: BOUT_STATE.FIGHTING, queueLength: 1, floor: 3, secondsLeft: 145, flags: 1, boutPlayer: 0x77, title: "Blooded", rank: 1, ended: 0 });
     expect(s!.opponents).toEqual([
       { id: 0x101, name: "Draven", kindName: "a battle mage of Qor", kind: 2, hp: 80, maxHp: 120 },
@@ -40,7 +43,7 @@ describe("UC_ARENA", () => {
     const w = new ByteWriter().u8(1).u8(1).u8(1).u8(2).u8(2).u8(0).u16(0).u8(0).u32(0).u8(0);
     for (let i = 0; i < 8; i++) w.u16(0);
     w.u32(0).u8(0).u8(0);
-    const s = readArena(new ByteReader(w.finish()), resource);
+    const s = fixture(UC_ARENA, readArena, new ByteReader(w.finish()), resource);
     expect(s).toMatchObject({ arena: 1, state: BOUT_STATE.QUEUED, place: 2, floor: 0, opponents: [], title: "" });
     expect(floorTaken(s)).toBe(false);
     expect(arenaCommand("join")).toBe("arena join");

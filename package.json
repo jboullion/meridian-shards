@@ -30,6 +30,7 @@
     "assets": "node tools/assets/build-assets.ts",
     "quests": "node tools/quests/generate.ts",
     "quests:bands": "node tools/quests/bands.ts",
+    "fixtures": "node tools/fixtures/readers.ts",
     "sounds": "node tools/assets/fetch-sounds.ts",
     "gateway": "node tools/gateway/gateway.ts",
     "headless": "node tools/headless/client.ts",

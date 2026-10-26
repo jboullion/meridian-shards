@@ -93,6 +93,7 @@ Other commands:
 
 ```bash
 npm run check             # typecheck, lint and tests
+npm run fixtures          # rewrite the readers' fixtures (packages/protocol/fixtures/readers.json)
 npm run desktop           # the dev stack plus the desktop app
 npm run desktop:dist      # desktop installers for this OS
 npm run android:run       # build the Android app and run it on a phone or the emulator

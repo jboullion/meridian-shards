@@ -3,7 +3,7 @@
 // Its buttons never take the focus, so the chat line keeps its caret.
 
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { CHAT_EMOJI } from "../emoji.ts";
+import { chatEmoji } from "../emoji.ts";
 
 const keepFocus = (e: ReactMouseEvent) => e.preventDefault();
 
@@ -42,7 +42,7 @@ export function EmojiPicker({ onPick }: { onPick: (emoji: string) => void }) {
       </button>
       {open && (
         <div className="emoji-grid">
-          {CHAT_EMOJI.map((e) => (
+          {chatEmoji().map((e) => (
             <button type="button" key={e} title={e} onMouseDown={keepFocus} onClick={() => onPick(e)}>
               {e}
             </button>

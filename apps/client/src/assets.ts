@@ -89,6 +89,13 @@ export class AssetStore {
     return !!this.manifest?.files[name.toLowerCase()];
   }
 
+  /** Ours: one of the asset build's JSON files, parsed; null when the build has none */
+  async json<T>(name: string): Promise<T | null> {
+    const key = name.toLowerCase();
+    if (!this.has(key)) return null;
+    return JSON.parse(new TextDecoder().decode(await this.download(key))) as T;
+  }
+
   /** URL of an asset for the page to load directly (interface bitmaps: "ui/bkgnd.bmp"). */
   url(name: string): string {
     const key = name.toLowerCase();

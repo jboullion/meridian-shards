@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ByteReader } from "@shards/protocol";
+import { ByteReader, UC } from "@shards/protocol";
 import { readItemService, renameCommand, repairCommand, revealCommand } from "../src/itemservice.ts";
+import { fixture, userCommand } from "../../protocol/test/fixture.ts";
+
+const UC_ITEM_SERVICE = userCommand(UC.ITEM_SERVICE, "packages/world/src/itemservice.ts");
 
 /** Little-endian bytes from [size, value] pairs */
 function bytes(parts: [1 | 4, number][]): ByteReader {
@@ -11,7 +14,7 @@ function bytes(parts: [1 | 4, number][]): ByteReader {
 
 describe("UC_ITEM_SERVICE", () => {
   it("reads an elder's reveal menu, numbering the items from 1", () => {
-    const e = readItemService(bytes([[1, 1], [4, 6463], [1, 2], [4, 6461], [4, 1000], [4, 40], [4, 50], [4, 6462], [4, 1000], [4, 0], [4, 0]]));
+    const e = fixture(UC_ITEM_SERVICE, readItemService, bytes([[1, 1], [4, 6463], [1, 2], [4, 6461], [4, 1000], [4, 40], [4, 50], [4, 6462], [4, 1000], [4, 0], [4, 0]]));
     expect(e).toEqual({
       type: "reveal", npc: 6463,
       items: [
@@ -22,16 +25,16 @@ describe("UC_ITEM_SERVICE", () => {
   });
 
   it("reads a smith's repair menu", () => {
-    const e = readItemService(bytes([[1, 2], [4, 6494], [1, 1], [4, 6470], [4, 125], [4, 0], [4, 300]]));
+    const e = fixture(UC_ITEM_SERVICE, readItemService, bytes([[1, 2], [4, 6494], [1, 1], [4, 6470], [4, 125], [4, 0], [4, 300]]));
     expect(e).toEqual({ type: "repair", npc: 6494, items: [{ slot: 1, id: 6470, price: 125, hits: 0, maxHits: 300 }] });
   });
 
   it("reads Caramo's name change: her and the fee", () => {
-    expect(readItemService(bytes([[1, 3], [4, 1409], [4, 50000]]))).toEqual({ type: "rename", npc: 1409, fee: 50000 });
+    expect(fixture(UC_ITEM_SERVICE, readItemService, bytes([[1, 3], [4, 1409], [4, 50000]]))).toEqual({ type: "rename", npc: 1409, fee: 50000 });
   });
 
   it("ignores a kind it doesn't know", () => {
-    expect(readItemService(bytes([[1, 9]]))).toBeNull();
+    expect(fixture(UC_ITEM_SERVICE, readItemService, bytes([[1, 9]]))).toBeNull();
   });
 
   it("makes the commands", () => {

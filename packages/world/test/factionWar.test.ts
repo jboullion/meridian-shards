@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ByteReader, ByteWriter } from "@shards/protocol";
+import { ByteReader, ByteWriter, UC } from "@shards/protocol";
 import { BATTLE_FLAG, FACTION, gridCell, gridName, readFactionWar, WAR_STATE } from "../src/factionWar.ts";
+import { fixture, userCommand } from "../../protocol/test/fixture.ts";
+
+const UC_FACTION_WAR = userCommand(UC.FACTION_WAR, "packages/world/src/factionWar.ts");
 
 /** factionwar.kod AddBattlePacket */
 function battle(w: ByteWriter, state: number): ByteWriter {
@@ -21,7 +24,7 @@ function battle(w: ByteWriter, state: number): ByteWriter {
 
 describe("UC_FACTION_WAR", () => {
   it("reads the battle alone (SendBattle)", () => {
-    const e = readFactionWar(new ByteReader(battle(new ByteWriter().u8(2), WAR_STATE.FIGHT).finish()));
+    const e = fixture(UC_FACTION_WAR, readFactionWar, new ByteReader(battle(new ByteWriter().u8(2), WAR_STATE.FIGHT).finish()));
     expect(e).toEqual({
       type: "battle",
       battle: {
@@ -39,7 +42,7 @@ describe("UC_FACTION_WAR", () => {
     w.u8(1).u32(50).string("Tos").u8(1).u8(1);
     w.u8(1).u32(593).string("Outskirts of Barloque").u8(1).u8(2).u8(2).u8(3).u32(600);
     w.u8(1).string("Scout").string("Captain").u16(3).u16(2).u16(4);
-    const e = readFactionWar(new ByteReader(w.finish()));
+    const e = fixture(UC_FACTION_WAR, readFactionWar, new ByteReader(w.finish()));
     expect(e?.type).toBe("all");
     if (e?.type !== "all") return;
     expect(e.status).toMatchObject({ faction: 1, renown: 72, rank: "Captain", kills: 3, deaths: 1, fought: 4, won: 2, flags: 1, effort: [2, 0, 1] });

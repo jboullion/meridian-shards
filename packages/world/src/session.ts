@@ -32,6 +32,7 @@ import { readCosmetics, type CosmeticsEvent } from "./cosmetics.ts";
 import { readItemService } from "./itemservice.ts";
 import { MAGIC_SHOW, magicShow, readMagicName } from "./magic.ts";
 import { readAppraisal, readSellable, readTraining, type Appraisal, type Sellable, type TrainingCost } from "./training.ts";
+import { readPvpUntil, readQuestLog, readQuestOffers, readQuestProgress, readSeason, readSignets, readSocial, readTravelList } from "./userCommands.ts";
 
 /** A line for the chat window, with the original client's default colour for its kind. */
 /**
@@ -700,72 +701,6 @@ export class GameSession {
     this.send(buildShardsObjectCommand(id, line));
   }
 
-  /** Ours: UC_FRIENDS, UC_PETS or UC_AMBIENT (shards-server util/shardssocial.kod), as an event */
-  private readSocial(uc: number, r: ByteReader): SocialEvent | null {
-    const room = (rsc: number) => (this.resource(rsc) ?? "").toLowerCase();
-    const names = () => {
-      const out: string[] = [];
-      for (let n = r.u16(); n > 0; n--) out.push(r.string());
-      return out;
-    };
-    if (uc === UC.AMBIENT) {
-      const seed = r.u32();
-      const elapsed = r.i32();
-      const hour = r.u8();
-      return { type: "ambient", seed, elapsed, hour: hour < 24 ? hour : null };
-    }
-    if (uc === UC.PETS) {
-      const pets: { id: number; pet: ServerPet | null }[] = [];
-      for (let n = r.u16(); n > 0; n--) {
-        const id = r.u32();
-        if (!r.u8()) {
-          pets.push({ id, pet: null });
-          continue;
-        }
-        const kind = r.string();
-        const colour = r.u8();
-        pets.push({ id, pet: { kind, colour, name: r.string() } });
-      }
-      return { type: "pets", pets };
-    }
-    switch (r.u8()) {
-      // FR_LIST
-      case 1: {
-        const flags = r.u8();
-        const friends: ServerFriend[] = [];
-        for (let n = r.u16(); n > 0; n--) friends.push({ name: r.string(), online: r.u8() !== 0, lastSeen: r.u32() });
-        const incoming = names();
-        const outgoing = names();
-        const following = r.u8() ? r.string() : null;
-        return { type: "friends", flags, friends, incoming, outgoing, following, followers: names() };
-      }
-      // FR_LOC
-      case 2: {
-        const name = r.string();
-        const shown = r.u8() !== 0;
-        const rid = r.u32();
-        const file = room(r.u32());
-        const row = r.u16();
-        return { type: "location", name, shown, rid, room: file, at: [row, r.u16()] };
-      }
-      // FR_HP
-      case 3:
-        return { type: "health", name: r.string(), pct: r.u8() };
-      // FR_EXIT
-      case 4: {
-        const name = r.string();
-        const from = room(r.u32());
-        const to = room(r.u32());
-        const row = r.u16();
-        return { type: "exit", name, from, to, at: [row, r.u16()] };
-      }
-      // FR_SEARCH
-      case 5:
-        return { type: "search", names: names() };
-    }
-    return null;
-  }
-
   /** BP_REQ_ADMIN: an admin command (the server answers with BP_ADMIN; only admin accounts may) */
   adminCommand(command: string): void {
     this.send(buildReqAdmin(command));
@@ -1135,51 +1070,26 @@ export class GameSession {
             // HandleGamePlayer: player number BYTE, name string
             this.events.minigame?.({ type: "player", player: r.u8(), name: r.string() });
           } else if (uc === UC.TRAVEL_LIST) {
-            // Ours (user.kod SendTravelList): this point, the lockout's seconds, then id and name each
-            const here = r.u32();
-            const pvpSeconds = r.i32();
-            const n = r.u8();
-            const places: TravelPlace[] = [];
-            for (let i = 0; i < n; i++) {
-              const id = r.u32();
-              places.push({ id, name: this.resource(r.u32()) ?? `#${id}` });
-            }
-            this.events.travel?.({ type: "list", here, pvpSeconds, places: places.reverse() });
+            // Ours (user.kod SendTravelList)
+            this.events.travel?.(readTravelList(r, (id) => this.resource(id)));
           } else if (uc === UC.PVP_UNTIL) {
             // Ours (user.kod SendPvPUntil)
-            this.events.travel?.({ type: "pvp", seconds: r.i32() });
+            this.events.travel?.(readPvpUntil(r));
           } else if (uc === UC.QUEST_OFFERS) {
-            // Ours (questbook.kod SendOffers): the NPC, then id, state and step each
-            const npc = objId(r.u32());
-            const offers: QuestOffer[] = [];
-            for (let i = r.u8(); i > 0; i--) offers.push({ id: r.u32(), state: r.u8(), step: r.u8() });
-            // No NPC: the guild window's board (questbook.kod SendBoard)
-            if (npc === 0) this.events.quest?.({ type: "board", offers });
-            else this.events.quest?.({ type: "offers", npc, offers });
+            // Ours (questbook.kod SendOffers, SendBoard)
+            this.events.quest?.(readQuestOffers(r));
           } else if (uc === UC.QUEST_LOG) {
-            // Ours (questbook.kod SendLog): the catalogue's hash, the active quests, the quests done
-            const hash = r.u32();
-            const active: QuestLogEntry[] = [];
-            for (let i = r.u8(); i > 0; i--) active.push({ id: r.u32(), step: r.u8(), count: r.u16(), secondsLeft: r.i32() });
-            const done: { id: number; times: number }[] = [];
-            for (let i = r.u16(); i > 0; i--) done.push({ id: r.u32(), times: r.u16() });
-            this.events.quest?.({ type: "log", hash, active, done });
+            // Ours (questbook.kod SendLog)
+            this.events.quest?.(readQuestLog(r));
           } else if (uc === UC.QUEST_PROGRESS) {
             // Ours (questbook.kod SendProgress)
-            this.events.quest?.({ type: "progress", id: r.u32(), step: r.u8(), count: r.u16() });
+            this.events.quest?.(readQuestProgress(r));
           } else if (uc === UC.SIGNETS) {
-            // Ours (questbook.kod SendSignets): each ring, its owner's name, their room's name and number
-            const rings: SignetRing[] = [];
-            for (let n = r.u8(); n > 0; n--) {
-              const id = objId(r.u32());
-              const owner = this.resource(r.u32()) ?? "";
-              const room = this.resource(r.u32()) ?? "";
-              rings.push({ id, owner, room, rid: r.u32() });
-            }
-            this.events.quest?.({ type: "signets", rings });
+            // Ours (questbook.kod SendSignets)
+            this.events.quest?.(readSignets(r, (id) => this.resource(id)));
           } else if (uc === UC.SEASON) {
-            // Ours (system.kod SendSeason): the season, the year, the day of the year
-            this.world.season = { season: r.u8(), year: r.u16(), day: r.u16() };
+            // Ours (system.kod SendSeason)
+            this.world.season = readSeason(r);
           } else if (uc === UC.ARENA) {
             // Ours (arenabouts.kod SendStatus)
             const s = readArena(r, (id) => this.resource(id));
@@ -1231,7 +1141,7 @@ export class GameSession {
             this.events.sellable?.(readSellable(r));
           } else if (uc === UC.FRIENDS || uc === UC.PETS || uc === UC.AMBIENT) {
             // Ours (shards-server util/shardssocial.kod)
-            const e = this.readSocial(uc, r);
+            const e = readSocial(uc, r, (id) => this.resource(id));
             if (e) this.events.social?.(e);
           } else if (uc === UC.SEND_QUIT) {
             // merintr.c HandleSendQuit: the server wants us out (after a suicide, a rescue)

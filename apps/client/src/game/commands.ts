@@ -8,67 +8,45 @@
 // exactly a command, and commands that take no words only count when typed alone, so
 // "drop it!" is still said.
 
-/** The original's command handlers (command.c Command*). */
-export type CommandId =
-  | "say" | "broadcast" | "emote" | "who" | "quit" | "tell" | "hel" | "help" | "use" | "get" | "addgroup" | "put"
-  | "delgroup" | "newgroup" | "buy" | "drop" | "look" | "offer" | "cast" | "map" | "wave" | "point" | "dance"
-  | "alias" | "cmdalias" | "rest" | "yell" | "stand" | "suicid" | "suicide" | "neutral" | "happy" | "sad" | "wry"
-  | "guild" | "password" | "withdraw" | "deposit" | "balance" | "group" | "appeal" | "tellguild"
-  | "groupingOn" | "groupingOff" | "autolootOn"
-  | "autolootOff" | "autocombineOn" | "autocombineOff" | "reagentbagOn" | "reagentbagOff" | "spellpowerOn"
-  | "spellpowerOff" | "time" | "mail" | "study" | "companion" | "train" | "arena" | "war" | "achievements";
+/** The original's command handlers (command.c Command*), and ours. */
+export const COMMAND_IDS = [
+  "say", "broadcast", "emote", "who", "quit", "tell", "hel", "help", "use", "get", "addgroup", "put",
+  "delgroup", "newgroup", "buy", "drop", "look", "offer", "cast", "map", "wave", "point", "dance",
+  "alias", "cmdalias", "rest", "yell", "stand", "suicid", "suicide", "neutral", "happy", "sad", "wry",
+  "guild", "password", "withdraw", "deposit", "balance", "group", "appeal", "tellguild",
+  "groupingOn", "groupingOff", "autolootOn",
+  "autolootOff", "autocombineOn", "autocombineOff", "reagentbagOn", "reagentbagOff", "spellpowerOn",
+  "spellpowerOff", "time", "mail", "study", "companion", "train", "arena", "war", "achievements",
+] as const;
 
-/** merintr.c `commands`, in its order (ties go to the first), with the German names. */
-export const COMMAND_TABLE: readonly (readonly [string, CommandId])[] = [
-  ["say", "say"], ["sagen", "say"], ["broadcast", "broadcast"], ["mitteilen", "broadcast"], ["emote", "emote"], ["ego", "emote"],
-  ["who", "who"], ["wer", "who"], ["quit", "quit"], ["beenden", "quit"], ["tell", "tell"], ["telepathie", "tell"],
-  ["hel", "hel"], ["hilf", "hel"], ["help", "help"], ["hilfe", "help"], ["use", "use"], ["benutzen", "use"], ["get", "get"],
-  ["addgroup", "addgroup"], ["gruppehinzu", "addgroup"], ["agroup", "addgroup"], ["gruppeneu", "addgroup"], ["put", "put"],
-  ["ablegen", "put"], ["delgroup", "delgroup"], ["gruppelöschen", "delgroup"], ["dgroup", "delgroup"], ["newgroup", "newgroup"],
-  ["neuegruppe", "newgroup"], ["ngroup", "newgroup"], ["buy", "buy"], ["kaufen", "buy"], ["drop", "drop"], ["wegwerfen", "drop"],
-  ["nehmen", "get"], ["look", "look"], ["schauen", "look"], ["offer", "offer"], ["anbieten", "offer"], ["cast", "cast"],
-  ["zaubern", "cast"], ["map", "map"], ["karte", "map"], ["wave", "wave"], ["winken", "wave"], ["point", "point"],
-  ["deuten", "point"], ["dance", "dance"], ["tanzen", "dance"], ["alias", "alias"], ["befehle", "alias"], ["cmdalias", "cmdalias"],
-  ["kurzbefehle", "cmdalias"], ["rest", "rest"], ["rasten", "rest"], ["yell", "yell"], ["rufen", "yell"], ["stand", "stand"],
-  ["aufstehen", "stand"], ["suicid", "suicid"], ["haraki", "suicid"], ["suicide", "suicide"], ["harakiri", "suicide"],
-  ["neutral", "neutral"], ["happy", "happy"], ["glücklich", "happy"], ["sad", "sad"], ["traurig", "sad"], ["wry", "wry"],
-  ["grimmig", "wry"], ["guild", "guild"], ["gilde", "guild"], ["password", "password"], ["passwort", "password"],
-  ["withdraw", "withdraw"], ["abheben", "withdraw"], ["deposit", "deposit"], ["einzahlen", "deposit"], ["balance", "balance"],
-  ["kontostand", "balance"], ["group", "group"], ["gruppen", "group"], ["appeal", "appeal"], ["aufrufen", "appeal"],
-  ["tellguild", "tellguild"], ["telgilde", "tellguild"], ["tguild", "tellguild"], ["tgilde", "tellguild"],
-  // (Ours: no "safety" or "tempsafe": there's no random PvP to be safe from, nor guardian angels)
-  ["grouping on", "groupingOn"], ["gruppenbildung an", "groupingOn"],
-  ["grouping off", "groupingOff"], ["gruppenbildung aus", "groupingOff"], ["autoloot on", "autolootOn"],
-  ["autoloot an", "autolootOn"], ["autoloot off", "autolootOff"], ["autoloot aus", "autolootOff"],
-  ["autocombine on", "autocombineOn"], ["autocombine an", "autocombineOn"], ["autocombine off", "autocombineOff"],
-  ["autocombine aus", "autocombineOff"], ["reagentbag on", "reagentbagOn"], ["reagentbag an", "reagentbagOn"],
-  ["reagentbag off", "reagentbagOff"], ["reagentbag aus", "reagentbagOff"], ["spellpower on", "spellpowerOn"],
-  ["spellpower an", "spellpowerOn"], ["spellpower off", "spellpowerOff"], ["spellpower aus", "spellpowerOff"],
-  ["time", "time"], ["Zeit", "time"],
-  // module/mailnews adds its own command (mailnews.c)
-  ["mail", "mail"],
-  // Ours: Study mode (study.ts), last so it takes no start of a name from the original's
-  ["study", "study"], ["studieren", "study"],
-  // Ours: our companion (docs/adr/0010-followers.md): "companion stay", "companion ask"...
-  ["companion", "companion"], ["begleiter", "companion"],
-  // Ours: the Train window (docs/adr/0016-abilities.md): "train", or "train fireball" to search
-  ["train", "train"], ["trainieren", "train"],
-  // Ours: the Arena window (docs/adr/0019-arena-bouts.md): "arena", or "arena join", "arena leave"
-  ["arena", "arena"],
-  // Ours: the War window (docs/adr/0021-factions-and-the-faction-war.md)
-  ["war", "war"], ["krieg", "war"],
-  // Ours: the Achievements window (docs/adr/0025-achievements.md)
-  ["achievements", "achievements"], ["erfolge", "achievements"],
-];
+export type CommandId = (typeof COMMAND_IDS)[number];
 
-/** Ours, on top: shorthands players are used to. */
-const EXTRA_WORDS: Record<string, CommandId> = { em: "emote", bc: "broadcast", t: "tell", pickup: "get" };
+/**
+ * commands.json (apps/client/tables, served with the game's files; clientTables.ts loads it): the
+ * command names in merintr.c's `commands` order (ties go to the first) with the German names and
+ * ours; our shorthands players are used to; and the commands whose words after the name mean
+ * something (the others only count typed alone, our default).
+ */
+export interface CommandsTable {
+  commands: [string, CommandId][];
+  shorthands: Record<string, CommandId>;
+  takesWords: CommandId[];
+}
 
-/** Commands whose words after the name mean something; the others only count typed alone (our default). */
-const TAKES_WORDS = new Set<CommandId>([
-  "say", "broadcast", "emote", "yell", "tell", "tellguild", "appeal", "cast", "addgroup", "delgroup", "newgroup", "alias",
-  "cmdalias", "deposit", "withdraw", "study", "companion", "train", "arena",
-]);
+let commandTable: readonly (readonly [string, CommandId])[] = [];
+let shorthands: Record<string, CommandId> = {};
+let takesWords = new Set<CommandId>();
+
+/** The typed commands, from the game's files (clientTables.ts). A command this client doesn't have is an error. */
+export function setCommandsTable(t: CommandsTable): void {
+  const known = new Set<string>(COMMAND_IDS);
+  const ids = [...t.commands.map(([, id]) => id), ...Object.values(t.shorthands), ...t.takesWords];
+  const unknown = ids.filter((id) => !known.has(id));
+  if (unknown.length) throw new Error(`commands.json: no such command: ${[...new Set(unknown)].join(", ")}`);
+  commandTable = t.commands;
+  shorthands = t.shorthands;
+  takesWords = new Set(t.takesWords);
+}
 
 export interface ParsedCommand {
   id: CommandId;
@@ -82,7 +60,7 @@ export interface ParsedCommand {
  * in the table). A word longer than a name doesn't match it. The arguments start after
  * the line's first word, even for two-word names ("autoloot on").
  */
-export function parseCommand(line: string, table: readonly (readonly [string, CommandId])[] = COMMAND_TABLE): ParsedCommand | null {
+export function parseCommand(line: string, table: readonly (readonly [string, CommandId])[] = commandTable): ParsedCommand | null {
   const str = line.replace(/^ +/, "");
   let best = -1;
   let maxMatch = 0;
@@ -177,7 +155,7 @@ export function interpretLine(line: string, aliases: Record<string, string>, ori
   if (!body) return null;
   const first = /^\S+/.exec(body)![0];
   const rest = body.slice(first.length).replace(/^ +/, "");
-  const extra = EXTRA_WORDS[first.toLowerCase()];
+  const extra = shorthands[first.toLowerCase()];
   if (original || slash) {
     if (extra) return { kind: "command", id: extra, args: rest };
     const c = parseCommand(body);
@@ -187,11 +165,11 @@ export function interpretLine(line: string, aliases: Record<string, string>, ori
   // Our default: the first word (or two) exactly a command's name
   const words = body.split(/\s+/);
   const two = words.length >= 2 ? `${words[0]} ${words[1]}`.toLowerCase() : "";
-  const byName = (name: string) => COMMAND_TABLE.find(([n]) => n.toLowerCase() === name)?.[1];
+  const byName = (name: string) => commandTable.find(([n]) => n.toLowerCase() === name)?.[1];
   const twoId = two ? byName(two) : undefined;
   if (twoId && words.length === 2) return { kind: "command", id: twoId, args: words[1] };
   const id = byName(first.toLowerCase()) ?? extra;
-  if (id && (TAKES_WORDS.has(id) || !rest)) return { kind: "command", id, args: rest };
+  if (id && (takesWords.has(id) || !rest)) return { kind: "command", id, args: rest };
   return matchAlias(aliases, body, false) ?? { kind: "say", text: t };
 }
 

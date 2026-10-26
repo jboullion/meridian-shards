@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { ByteReader } from "@shards/protocol";
+import { ByteReader, UC } from "@shards/protocol";
 import { readAppraisal, readSellable, readTraining, trainableAmount, trainCommand } from "../src/training.ts";
+import { fixture, userCommand } from "../../protocol/test/fixture.ts";
+
+const UC_TRAINING = userCommand(UC.TRAINING, "packages/world/src/training.ts");
+const UC_APPRAISAL = userCommand(UC.APPRAISAL, "packages/world/src/training.ts");
+const UC_SELLABLE = userCommand(UC.SELLABLE, "packages/world/src/training.ts");
 
 /** Little-endian bytes from [size, value] pairs */
 function bytes(parts: [1 | 2 | 4, number][]): ByteReader {
@@ -11,11 +16,11 @@ function bytes(parts: [1 | 2 | 4, number][]): ByteReader {
 
 describe("UC_TRAINING", () => {
   it("reads each ability and its cost a percent", () => {
-    expect(readTraining(bytes([[2, 2], [4, 6461], [4, 30], [4, 6470], [4, 10]]))).toEqual([
+    expect(fixture(UC_TRAINING, readTraining, bytes([[2, 2], [4, 6461], [4, 30], [4, 6470], [4, 10]]))).toEqual([
       { id: 6461, cost: 30 },
       { id: 6470, cost: 10 },
     ]);
-    expect(readTraining(bytes([[2, 0]]))).toEqual([]);
+    expect(fixture(UC_TRAINING, readTraining, bytes([[2, 0]]))).toEqual([]);
   });
 
   it("trains no further than 99% or the points allow", () => {
@@ -34,17 +39,17 @@ describe("UC_TRAINING", () => {
 
 describe("UC_APPRAISAL", () => {
   it("reads the item, whether it can be appraised and its price", () => {
-    expect(readAppraisal(bytes([[4, 0x10000000 | 6461], [1, 1], [4, 500]]))).toEqual({ id: 6461, appraisable: true, price: 500 });
-    expect(readAppraisal(bytes([[4, 6470], [1, 0], [4, 0]]))).toEqual({ id: 6470, appraisable: false, price: 0 });
+    expect(fixture(UC_APPRAISAL, readAppraisal, bytes([[4, 0x10000000 | 6461], [1, 1], [4, 500]]))).toEqual({ id: 6461, appraisable: true, price: 500 });
+    expect(fixture(UC_APPRAISAL, readAppraisal, bytes([[4, 6470], [1, 0], [4, 0]]))).toEqual({ id: 6470, appraisable: false, price: 0 });
   });
 });
 
 describe("UC_SELLABLE", () => {
   it("reads the buyer and each item with its price", () => {
-    expect(readSellable(bytes([[4, 2198], [2, 2], [4, 6717], [4, 605], [4, 0x10000000 | 6720], [4, 12]]))).toEqual({
+    expect(fixture(UC_SELLABLE, readSellable, bytes([[4, 2198], [2, 2], [4, 6717], [4, 605], [4, 0x10000000 | 6720], [4, 12]]))).toEqual({
       npc: 2198,
       items: [{ id: 6717, price: 605 }, { id: 6720, price: 12 }],
     });
-    expect(readSellable(bytes([[4, 2198], [2, 0]]))).toEqual({ npc: 2198, items: [] });
+    expect(fixture(UC_SELLABLE, readSellable, bytes([[4, 2198], [2, 0]]))).toEqual({ npc: 2198, items: [] });
   });
 });

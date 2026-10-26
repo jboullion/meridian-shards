@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import "./testTables.ts";
 import { SAY } from "@shards/protocol";
 import type { ChatLine } from "@shards/world";
 import { ignoredLine } from "./Game.tsx";
