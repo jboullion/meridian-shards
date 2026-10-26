@@ -369,3 +369,13 @@ Each wears a herald shield (`GuildShield`) in its faction's colours with its fac
 - **Mana:** 60 + two thirds of the owner's base health.
 
 **Not yet tried:** all of it, in game. Watch the songs and dome (a companion as a radius source is new) and how reflections of a companion pick their targets.
+
+### Out of the world when not following; faction bound (2026-10-26)
+
+**Decided with the user, after play testing:** dismissed and recovering companions stood beside their faction leader, which read as stray NPCs (two sworn to a test character crowded the Duke). A companion that isn't with its owner is now never in the world: waiting and recovering are spent in limbo, keeping the bond and the pack, and `companion come` (and `pay`) work from anywhere. The recovery hour and fee stay. A companion whose owner leaves its faction, or changes it, leaves them for good, its pack given back.
+
+**Kod:** `CompanionBook.ToHall` and `CompanionKinds.GetHallRoom` / `GetLeaderClass` are gone (limbo instead); `Come` and `Pay` no longer ask the owner to stand near it. `CompanionBook.CheckFaction` releases a companion of another faction: posted by `Player.ResetFaction` and `PlayerIsIntriguing`, and run at logon, which also clears companions that predate the rule. The admin dashboard's "give me one" still skips the faction rule, but a companion of another faction is released at the owner's next logon.
+
+**Our client:** the Companion tab says "Call back" for a waiting or recovering companion, with no mention of a hall.
+
+**Tried on our server:** dismiss (the companion leaves the world) and come (back beside its owner); the release of three companions whose owners no longer served their faction. **Not yet tried:** in the browser.

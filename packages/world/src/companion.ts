@@ -39,7 +39,7 @@ export interface CompanionLook {
 export interface CompanionStatus {
   state: CompanionState;
   flags: number;
-  /** Its object while it's in the world with us or at its hall, else 0 */
+  /** Its object while it's in the world with us, else 0 */
   id: number;
   name: string;
   kindName: string;

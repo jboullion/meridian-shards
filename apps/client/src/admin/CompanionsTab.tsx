@@ -11,7 +11,7 @@ type Act = (what: string, fn: () => Promise<string | void>) => () => void;
 /** blakston.khd COMPANION_* */
 const KINDS = ["The Duke's battle-mage", "The Princess's spellsword", "A rebel war-priest"];
 /** blakston.khd COMP_* */
-const STATES = ["none", "with its owner", "waiting at its hall", "fallen", "recovering at its hall"];
+const STATES = ["none", "with its owner", "waiting", "fallen", "recovering"];
 /** companionkinds.kod TierFloor */
 const TIERS = [0, 300, 1000, 2500, 5000];
 
@@ -87,7 +87,7 @@ export function CompanionsTab({ act, me }: { act: Act; me: GameReport | null }) 
             <button disabled={!has} onClick={action("Revive it beside me", "revive")}>
               Revive
             </button>
-            <button disabled={!has} onClick={action("Recovered now (fetch it at its hall)", "recoverNow")}>
+            <button disabled={!has} onClick={action("Recovered now (call it back)", "recoverNow")}>
               Recover now
             </button>
             <button
@@ -103,7 +103,7 @@ export function CompanionsTab({ act, me }: { act: Act; me: GameReport | null }) 
             <button onClick={action("My companion", "state")}>Refresh</button>
           </div>
           <p className="dim">
-            Give me one skips the rules (health, faction). Its spells come with your health (more at 70 and 90): the Duke's Splash of Acid, Blind, Shadow Form, Unholy Weapon, Reflection; the Princess's Fireball/Ice Shard, Lightning Bolt, Minor Heal, Holy Weapon, Umbrella; Jonas's Bless, Magic Shield, Armor of Gort and the Jala songs (out of combat). Kill it leaves a corpse for Restore Companion (Shal'ille) for 10 minutes, then it recovers at its leader's hall for an hour; Recover now ends the hour.
+            Give me one skips the rules (health, faction). Its spells come with your health (more at 70 and 90): the Duke's Splash of Acid, Blind, Shadow Form, Unholy Weapon, Reflection; the Princess's Fireball/Ice Shard, Lightning Bolt, Minor Heal, Holy Weapon, Umbrella; Jonas's Bless, Magic Shield, Armor of Gort and the Jala songs (out of combat). Kill it leaves a corpse for Restore Companion (Shal'ille) for 10 minutes, then it recovers for an hour; Recover now ends the hour.
           </p>
         </>
       )}

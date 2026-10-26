@@ -1,7 +1,7 @@
 // Ours (docs/adr/0010-followers.md 9.2): the Companion tab of the character window and the
 // interface column. Our companion's picture, name and kind, its health and bond, where it is,
 // its stance, and what we can do with it: give it things and take them back (the vault windows),
-// change its looks, dismiss it for a while or for good, fetch it from its leader's hall.
+// change its looks, dismiss it for a while or for good, call it back.
 
 import { useState } from "react";
 import { COMPANION_FLAG, COMPANION_STANCES, COMPANION_STATE, companionStateLabel, type CompanionStatus } from "@shards/world";
@@ -45,7 +45,7 @@ export function CompanionPanel({
   const s = status;
   const active = s.state === COMPANION_STATE.ACTIVE;
   const here = active && !(s.flags & COMPANION_FLAG.LEFT_BEHIND);
-  const atHall = s.state === COMPANION_STATE.WAITING || s.state === COMPANION_STATE.RECOVERING;
+  const away = s.state === COMPANION_STATE.WAITING || s.state === COMPANION_STATE.RECOVERING;
   const hpPct = s.maxHp > 0 ? Math.round((100 * s.hp) / s.maxHp) : 0;
   const bondPct = s.nextTier > s.tierFloor ? Math.round((100 * (s.bond - s.tierFloor)) / (s.nextTier - s.tierFloor)) : 100;
   const armed = !!(s.flags & COMPANION_FLAG.FOREVER_ARMED);
@@ -78,11 +78,11 @@ export function CompanionPanel({
         </div>
         {s.flags & COMPANION_FLAG.LEFT_BEHIND ? <p className="panel-note">It couldn't follow you here, and will rejoin you when it can.</p> : null}
         {s.state === COMPANION_STATE.FALLEN && (
-          <p className="panel-note">It has fallen. Restore Companion (Shal'ille) on its body brings it back; otherwise it recovers at its leader's hall.</p>
+          <p className="panel-note">It has fallen. Restore Companion (Shal'ille) on its body brings it back; otherwise it recovers in an hour.</p>
         )}
         {s.state === COMPANION_STATE.RECOVERING && s.secondsLeft > 0 && (
           <p className="panel-note">
-            Recovering at its leader's hall: ready in {Math.ceil(s.secondsLeft / 60)} minutes, or {s.fee} shillings to fetch it now.
+            Recovering: ready in {Math.ceil(s.secondsLeft / 60)} minutes, or {s.fee} shillings to fetch it now.
           </p>
         )}
       </PanelSection>
@@ -117,7 +117,7 @@ export function CompanionPanel({
       <PanelSection title="Service">
         <div className="panel-row wrap">
           {active && <Button onClick={() => onCommand("companion dismiss")}>Dismiss for now</Button>}
-          {(atHall || (active && !here)) && <Button onClick={() => onCommand("companion come")}>{atHall ? "Fetch" : "Call back"}</Button>}
+          {(away || (active && !here)) && <Button onClick={() => onCommand("companion come")}>Call back</Button>}
           {s.state === COMPANION_STATE.RECOVERING && s.secondsLeft > 0 && <Button onClick={() => onCommand("companion pay")}>Pay {s.fee}</Button>}
           {!confirm && !armed && s.state !== COMPANION_STATE.FALLEN && (
             <Button
@@ -130,7 +130,6 @@ export function CompanionPanel({
             </Button>
           )}
         </div>
-        {atHall && <p className="panel-note">Fetch it standing near it, at its leader's hall.</p>}
         {(confirm || armed) && (
           <div className="companion-confirm">
             <p className="panel-note">Dismiss {s.name} for good? The bond is lost, and its pack must be empty.</p>
