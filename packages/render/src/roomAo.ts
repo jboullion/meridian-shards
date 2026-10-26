@@ -56,6 +56,8 @@ export function* bakeAoSteps(room: Room): Generator<void, AoMap> {
   const width = Math.ceil((maxX - minX) / texel) + 1;
   const height = Math.ceil((maxY - minY) / texel) + 1;
   const data = new Uint8Array(width * height * 2);
+  // Texels whose middle is in no sector (inside walls and pillars): filled in at the end
+  const solid = new Uint8Array(width * height);
 
   // Walls by cell of AO_RADIUS, each in every cell within AO_RADIUS of it
   const cells = new Map<number, number[]>();
@@ -78,7 +80,10 @@ export function* bakeAoSteps(room: Room): Generator<void, AoMap> {
       const nearby = cells.get(cellOf(py, minY) * cellCols + cellOf(px, minX));
       if (!nearby) continue;
       const leaf = leafAt(room, px, py);
-      if (!leaf?.sector) continue;
+      if (!leaf?.sector) {
+        solid[ty * width + tx] = 1;
+        continue;
+      }
       const here = leaf.sector;
       const s = room.sectors[here - 1];
       const floor = floorHeightAt(s, px, py),
@@ -117,7 +122,33 @@ export function* bakeAoSteps(room: Room): Generator<void, AoMap> {
     }
     yield;
   }
+  fillSolid(data, solid, width, height);
   return { data, width, height, x0: minX, y0: minY, texel };
+}
+
+/**
+ * Texels inside walls take the darkest of the floor texels beside them. Left unshaded, the
+ * linear filter would blend them into the floor by the wall, and the shade would stop short of
+ * its foot by half a texel.
+ */
+function fillSolid(data: Uint8Array, solid: Uint8Array, width: number, height: number): void {
+  const src = data.slice();
+  for (let ty = 0; ty < height; ty++)
+    for (let tx = 0; tx < width; tx++) {
+      if (!solid[ty * width + tx]) continue;
+      let floor = 0,
+        ceiling = 0;
+      for (let y = Math.max(0, ty - 1); y <= Math.min(height - 1, ty + 1); y++)
+        for (let x = Math.max(0, tx - 1); x <= Math.min(width - 1, tx + 1); x++) {
+          const i = y * width + x;
+          if (solid[i]) continue;
+          floor = Math.max(floor, src[i * 2]);
+          ceiling = Math.max(ceiling, src[i * 2 + 1]);
+        }
+      const o = (ty * width + tx) * 2;
+      data[o] = floor;
+      data[o + 1] = ceiling;
+    }
 }
 
 /**

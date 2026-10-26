@@ -114,6 +114,26 @@ describe.skipIf(!haveMuseum)("shaded corners (roomAo.ts, the Museum)", () => {
     expect(dark).toBeGreaterThan(0);
     expect(open).toBeGreaterThan(dark);
   });
+  test("texels inside a wall are as dark as the floor at its foot, so the shade reaches it", () => {
+    const ao = bakeAo(room);
+    let checked = 0;
+    for (let ty = 1; ty < ao.height - 1; ty++)
+      for (let tx = 1; tx < ao.width - 1; tx++) {
+        const px = ao.x0 + (tx + 0.5) * ao.texel,
+          py = ao.y0 + (ty + 0.5) * ao.texel;
+        if (leafAt(room, px, py)?.sector) continue;
+        // The darkest floor texel beside it
+        let most = 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+          if (!leafAt(room, px + dx * ao.texel, py + dy * ao.texel)?.sector) continue;
+          most = Math.max(most, ao.data[((ty + dy) * ao.width + tx + dx) * 2]);
+        }
+        if (!most) continue;
+        expect(ao.data[(ty * ao.width + tx) * 2]).toBe(most);
+        checked++;
+      }
+    expect(checked).toBeGreaterThan(0);
+  });
   test("a wall knows the floor and ceiling in front of it", () => {
     // Somewhere inside: straight down is floor, straight up ceiling
     const w = room.walls.find((w) => w.posSector && !w.negSector)!;

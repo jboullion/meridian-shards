@@ -205,20 +205,22 @@ export class RoomView {
     if (ao) u.uAoRect.value = ao.rect;
   }
 
-  /** The corner map the materials use now: none while it's off or being baked */
+  /** The corner map the materials use now: none while it's off or first being baked */
   private cornersNow(): ReturnType<RoomView["cornerMap"]> {
     return this.enhanced.shadedCorners ? this.cornerMap() : null;
   }
 
   /**
-   * Shaded corners' map (roomAo.ts), baked again only when the room's heights changed; null
-   * while it's being baked (update() bakes it, then turns the corners on).
+   * Shaded corners' map (roomAo.ts), baked again only when the room's heights changed. While
+   * it's baked again (a door or lift moving rebuilds the room every step) the last one stays,
+   * or the corners would flicker off; null only while the first is baked (update() bakes it,
+   * then turns the corners on).
    */
   private cornerMap(): { texture: THREE.DataTexture; rect: [number, number, number, number] } | null {
     const key = this.heightsKey();
     if (this.ao?.key === key) return this.ao;
     if (this.aoJob?.key !== key) this.aoJob = { key, steps: bakeAoSteps(this.room) };
-    return null;
+    return this.ao;
   }
 
   /** Every sector's heights: what the corner and sun maps are baked for */
