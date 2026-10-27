@@ -8,6 +8,8 @@
 //     hurt (GetOuchSound), each spell's own sound, webs, brambles and fire frying whoever they
 //     catch, the fog's cough; and the stands' cheers and applause;
 //   - inns: dice and drinks now and then;
+//   - the Office of the Justicar's court (docs/adr/0026): its gallery's quiet murmur, whoever is
+//     about, and a cough now and then (the judge's gavel is the server's);
 //   - thunder after each lightning strike, later and duller the further off;
 //   - critters squeaking now and then, fish splashing;
 //   - splashing steps through puddles.
@@ -67,6 +69,31 @@ const BEDS: Partial<Record<AmbientKind, { file: string; indoorFile?: string; vol
   arena: { file: "amb_hall_talk.ogg", volume: 0.29, full: 10 },
 };
 
+/**
+ * Rooms with a bed of their own, whatever ambient people are about: the court's gallery is the
+ * server's NPCs (courtassizes.kod), so nobody of ours counts toward its crowd. Quiet, under the
+ * trial's lines.
+ */
+const ROOM_BEDS: Readonly<Record<string, { file: string; volume: number }>> = {
+  "barcourt.roo": { file: "amb_court_talk.ogg", volume: 0.12 },
+};
+
+/**
+ * The court's gallery coughs now and then, one cough at a time: each recording holds several,
+ * and each entry is one of them (`offset` and `seconds`, found from the recordings' loudness,
+ * with a little lead-in and tail). Every 20-40 s.
+ */
+const COURT_COUGHS: readonly { file: string; offset: number; seconds: number }[] = [
+  { file: "amb_cough_m.ogg", offset: 0.35, seconds: 0.9 },
+  { file: "amb_cough_m.ogg", offset: 2.6, seconds: 0.9 },
+  { file: "amb_cough_m.ogg", offset: 4.7, seconds: 0.55 },
+  { file: "amb_cough_m.ogg", offset: 6.25, seconds: 0.55 },
+  { file: "amb_cough_f.ogg", offset: 0.55, seconds: 1.1 },
+  { file: "amb_cough_f.ogg", offset: 2.5, seconds: 0.95 },
+  { file: "amb_cough_f.ogg", offset: 4.45, seconds: 1.1 },
+];
+const COURT_COUGH_EVERY: [number, number] = [20000, 40000];
+
 const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length) % list.length];
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -96,6 +123,7 @@ export class AmbientSounds {
   private petMs = 30000;
   private cheerMs = 0;
   private stepMs = 0;
+  private coughMs = 0;
 
   constructor(audio: GameAudio) {
     this.audio = audio;
@@ -120,11 +148,12 @@ export class AmbientSounds {
     this.updateCritters(f);
     this.updatePets(f);
     this.updateSteps(f);
+    this.updateCourt(f);
   }
 
   /**
    * Dev tools: hear one cue by itself, about us (window.shards.gameScene.ambientSoundBoard.audition("thunder")).
-   * Cues: town, inn, hall (5 s of each chatter), swing, miss, hit, cast-fire, cast-lightning, zap,
+   * Cues: town, inn, hall, court (5 s of each chatter), court-cough, swing, miss, hit, cast-fire, cast-lightning, zap,
    * blind, dazzle, frying, cough, cheer, applause, thunder, critter, splash, step, dice, drink,
    * ouch, death
    */
@@ -139,6 +168,8 @@ export class AmbientSounds {
       case "town": taste(BEDS.town!.file, BEDS.town!.volume); break;
       case "inn": taste(BEDS.inn!.file, BEDS.inn!.volume); break;
       case "hall": taste(BEDS.arena!.file, BEDS.arena!.volume); break;
+      case "court": taste(ROOM_BEDS["barcourt.roo"]!.file, ROOM_BEDS["barcourt.roo"]!.volume); break;
+      case "court-cough": this.courtCough(); break;
       case "swing": once(pick(SWISH), 0.45); break;
       case "miss": once(MISS, 0.4); break;
       case "hit": once(pick(HITS.metal), 0.55); break;
@@ -161,7 +192,7 @@ export class AmbientSounds {
       case "death": once("pdeath.ogg", 0.5); break;
     }
     return [
-      "town", "inn", "hall", "swing", "miss", "hit", "cast-fire", "cast-lightning", "zap", "blind", "dazzle", "frying", "cough", "cheer", "applause",
+      "town", "inn", "hall", "court", "court-cough", "swing", "miss", "hit", "cast-fire", "cast-lightning", "zap", "blind", "dazzle", "frying", "cough", "cheer", "applause",
       "thunder", "critter", "splash", "step", "dice", "drink", "ouch", "death",
     ];
   }
@@ -179,8 +210,9 @@ export class AmbientSounds {
     // The towns' streets fall quiet at night (20 to 5): no talk under the few still out
     const night = f.hour !== null && (f.hour >= 20 || f.hour < 5);
     const spec = f.kind && !(night && f.kind === "town") ? (BEDS[f.kind] ?? null) : null;
-    const file = spec ? (f.indoors && spec.indoorFile) || spec.file : null;
-    let volume = spec && f.people > 0 ? spec.volume * Math.min(1, 0.25 + (0.75 * f.people) / spec.full) : 0;
+    const own = ROOM_BEDS[f.room.toLowerCase()];
+    const file = own ? own.file : spec ? (f.indoors && spec.indoorFile) || spec.file : null;
+    let volume = own ? own.volume : spec && f.people > 0 ? spec.volume * Math.min(1, 0.25 + (0.75 * f.people) / spec.full) : 0;
     // The rain drowns out the street, and muffles it
     const wet = f.raining && !f.indoors;
     if (wet) volume *= 0.6;
@@ -198,6 +230,23 @@ export class AmbientSounds {
       this.bed.sound.setVolume(volume, 1500);
     }
     this.bed.sound.setLowpass(wet ? 1600 : 20000, 2000);
+  }
+
+  /** The court's gallery: a cough now and then, from somewhere about us */
+  private updateCourt(f: AmbientSoundFrame): void {
+    if (!ROOM_BEDS[f.room.toLowerCase()]) {
+      this.coughMs = rnd(...COURT_COUGH_EVERY);
+      return;
+    }
+    this.coughMs -= f.dt;
+    if (this.coughMs > 0) return;
+    this.coughMs = rnd(...COURT_COUGH_EVERY);
+    this.courtCough();
+  }
+
+  private courtCough(): void {
+    const c = pick(COURT_COUGHS);
+    this.audio.playAmbient(c.file, { volume: rnd(0.12, 0.2), offset: c.offset, duration: c.seconds, pan: rnd(-0.7, 0.7), lowpass: 6000, rate: rnd(0.95, 1.05) });
   }
 
   // ---- what the crowd did ----

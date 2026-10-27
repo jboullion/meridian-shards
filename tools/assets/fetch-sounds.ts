@@ -24,6 +24,14 @@ export const EXTRA_SOUNDS: { name: string; id: string; what: string }[] = [
   { name: "amb_thunder2.ogg", id: "3114", what: "Thunder #3: a thunderclap" },
   { name: "amb_thunder3.ogg", id: "3179", what: "Thunder #6: a thunderclap" },
   { name: "amb_thunder4.ogg", id: "3180", what: "Thunder #7: a thunderclap" },
+  // The Office of the Justicar's court (docs/adr/0026): its gallery's murmur and coughs; the
+  //  judge's gavel is the server's (courtfolk.kod)
+  { name: "amb_court_talk.ogg", id: "0681", what: "Evening with Friends (Sofia Coppola): quiet talk indoors" },
+  { name: "amb_cough_m.ogg", id: "0488", what: "Man cough #1" },
+  { name: "amb_cough_f.ogg", id: "0654", what: "Woman cough" },
+  { name: "amb_gavel1.ogg", id: "1588", what: "Gavel, 1 blow" },
+  { name: "amb_gavel2.ogg", id: "1589", what: "Gavel, 2 blows" },
+  { name: "amb_gavel3.ogg", id: "1590", what: "Gavel, 3 blows" },
 ];
 
 if (process.argv[1]?.endsWith("fetch-sounds.ts")) {

@@ -55,6 +55,8 @@ export interface AmbientSoundOptions {
   offset?: number | "random";
   /** ms to wait before it plays (thunder after the flash) */
   delay?: number;
+  /** Seconds of it to play, from `offset`, then a quick fade (one cough of a recording of several) */
+  duration?: number;
 }
 
 /** Ours: an ambient sound playing (or about to) */
@@ -325,6 +327,13 @@ export class GameAudio {
         v.gain.gain.linearRampToValueAtTime(target, start + o.fadeIn / 1000);
       }
       src.start(start, offset);
+      if (o.duration !== undefined && !o.loop) {
+        // Fade out over the last 80 ms, so it doesn't click off
+        const end = start + Math.max(0.1, Math.min(o.duration, buf.duration - offset));
+        v.gain.gain.setValueAtTime(v.gain.gain.value, end - 0.08);
+        v.gain.gain.linearRampToValueAtTime(0, end);
+        src.stop(end + 0.01);
+      }
       if (!o.loop)
         src.onended = () => {
           v.done = true;
