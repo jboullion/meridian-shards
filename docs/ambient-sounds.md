@@ -12,7 +12,7 @@ To hear one cue by itself in dev: `window.shards.gameScene.ambientSoundBoard.aud
 |---|---|---|---|---|
 | Town chatter (`town`) | Townsfolk within 14 squares (towns, castle courtyards); none in towns from 20 to 5 | `amb_town_talk.ogg` | 0.18 (0.15 in castles), less with fewer people | Loops from a random point; muffled and quieter in the rain outdoors |
 | Inn chatter (`inn`) | Patrons about | `amb_inn_talk.ogg` | 0.45 | |
-| Court murmur (`court`) | Always, in the Office of the Justicar (`barcourt.roo`, ADR 0026): its gallery is the server's NPCs, so it doesn't wait for ambient people | `amb_court_talk.ogg` | 0.12 | Quiet under the trial's lines |
+| Court murmur (`court`) | Always, in the Office of the Justicar (`barcourt.roo`, ADR 0026): its gallery is the server's NPCs, so it doesn't wait for ambient people | `amb_court_talk.ogg` | 0.3 | Quiet under the trial's lines: the recording is about as loud as the inn's (played at 0.45), and 0.12 (2026-10-27) was lost under the music |
 | Court cough (`court-cough`) | The court's gallery, every 20-40 s | `amb_cough_m.ogg`, `amb_cough_f.ogg` | 0.12-0.2 | One cough at a time: each recording holds several, and `COURT_COUGHS` lists each by its offset and length (found from the loudness). Panned at random, a little muffled |
 | Hall and arena crowd (`hall`) | Courtiers under a roof; the arena | `amb_hall_talk.ogg` | 0.15 castles, 0.29 arena | |
 | Weapon swing (`swing`) | An arena fighter's swing ([ADR 0007](adr/0007-arena.md)) | `swswish1`-`3.ogg` (stroke.kod's) | 0.45 | |

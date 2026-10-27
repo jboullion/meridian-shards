@@ -75,7 +75,7 @@ const BEDS: Partial<Record<AmbientKind, { file: string; indoorFile?: string; vol
  * trial's lines.
  */
 const ROOM_BEDS: Readonly<Record<string, { file: string; volume: number }>> = {
-  "barcourt.roo": { file: "amb_court_talk.ogg", volume: 0.12 },
+  "barcourt.roo": { file: "amb_court_talk.ogg", volume: 0.3 },
 };
 
 /**
