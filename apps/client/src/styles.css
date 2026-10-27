@@ -2068,12 +2068,28 @@ button.link {
 .desc-main .mk-tabs {
   flex: none;
   margin-top: calc(var(--dy) * 2);
+  /* The page's top edge comes right under them, as the character creator's sheet does */
+  margin-bottom: calc(var(--dy) * -3);
+}
+
+/* Compact, as the character creator's look on a big sheet: the open tab no taller than the rest,
+   but for the two pixels that join it to its page */
+.desc-main .mk-tabs button {
+  height: calc(var(--dy) * 12);
+  padding: 0 calc(var(--dx) * 6);
+  font-size: 105%;
+}
+
+.desc-main .mk-tabs button.active {
+  height: calc(var(--dy) * 12 + 2px);
 }
 
 .desc-tab-page {
   flex: none;
-  padding: calc(var(--dy) * 4) calc(var(--dx) * 2) 0;
-  border-top: 2px groove #6a6a6a;
+  padding: calc(var(--dy) * 4) calc(var(--dx) * 4);
+  border: 2px solid;
+  border-color: #8a8a8a #141414 #141414 #8a8a8a;
+  background: linear-gradient(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.18)), #2c2c2c var(--ui-invbkgnd) repeat;
 }
 
 .desc-stats {
