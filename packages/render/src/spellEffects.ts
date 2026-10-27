@@ -34,8 +34,9 @@ const FLASH_MERGE = FINENESS;
 const FLASH_RANGE = 14 * FINENESS;
 /** At most this many rings at once */
 const MAX_RINGS = 8;
-/** A spark is never drawn wider than this on screen, so one close to the eye can't fill it */
-const MAX_POINT_PX = 48;
+/** A spark is never drawn wider than this on screen, so one close to the eye can't fill it (48
+ *  until 26 October, when the sparks came down by about 30%) */
+const MAX_POINT_PX = 34;
 
 /** A spark's shape: the atlas cell after the plain dot */
 export const SPARK_SHAPE = { DOT: 0, STAR: 1, SMOKE: 2, DROP: 3, DIAMOND: 4, EMBER: 5, FLAKE: 6, BOLT: 7, SWIRL: 8, NOTE: 9 } as const;
@@ -56,8 +57,9 @@ export function shapeForProjectile(art: string | undefined): SparkShape {
   return SPARK_SHAPE.DOT;
 }
 
-/** Shaped sparks are drawn this much bigger than dots, so the shape reads */
-const SHAPE_SCALE = 3.6;
+/** Shaped sparks are drawn this much bigger than dots, so the shape reads (3.6 until 26 October:
+ *  Shal'ille's stars were as big as a head) */
+const SHAPE_SCALE = 2.5;
 /** How each shape turns (radians a second) and falls (null: as the effect says; less than 0 rises) */
 const SHAPE_SPIN = [0, 1.4, 0.7, 0, 1.8, 0, 1.1, 0, 3.5, 0];
 const SHAPE_GRAVITY: (number | null)[] = [null, null, -0.35, null, null, -0.6, 0.6, null, null, -0.5];
