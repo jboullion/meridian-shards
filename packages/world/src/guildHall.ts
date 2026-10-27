@@ -1,6 +1,7 @@
 // Ours (docs/adr/0022-guilds.md, phase 8): our guild's hall, prestige and rent as our server tells
 // the guild window's Hall tab (UC_GUILD_HALL, shards-server passive/guild.kod SendHallInfo), and the
 // commands that ask for it, open or close the hall to visitors and put the guild's cloak on or off.
+// (Decision 34, 26 October: the guild's prism on the hall's pedestal, and attuning to it.)
 
 import type { ByteReader } from "@shards/protocol";
 
@@ -19,6 +20,27 @@ export interface GuildHallInfo {
   mayToggle: boolean;
   chests: GuildChest[];
 }
+
+/** Decision 34: the prism on the hall's pedestal (shards-server item/passitem/prism.kod) */
+export interface GuildPrism {
+  /** 1, 3, 5 or 7: how many members may attune */
+  sides: number;
+  /** PRISM_COLOUR_*: 1 emerald .. 6 pearl */
+  colour: number;
+  attuned: number;
+  /** Whether we are attuned */
+  mine: boolean;
+}
+
+/** blakston.khd PRISM_COLOUR_*: each colour's name and gift */
+export const PRISM_COLOURS: Record<number, { name: string; gift: string }> = {
+  1: { name: "Emerald", gift: "5% more experience" },
+  2: { name: "Ruby", gift: "5 more health" },
+  3: { name: "Sapphire", gift: "5 more mana" },
+  4: { name: "Amber", gift: "3% more weapon damage" },
+  5: { name: "Amethyst", gift: "3 more spellpower" },
+  6: { name: "Pearl", gift: "15% faster recovery" },
+};
 
 export interface GuildHallStatus {
   /** null: the guild has no hall */
@@ -40,6 +62,8 @@ export interface GuildHallStatus {
   hasColours: boolean;
   /** Whether we wear the guild's cloak (the Hall tab's box, "guildhall cloak on|off") */
   wearingCloak: boolean;
+  /** null: no prism on the pedestal (or a server from before decision 34) */
+  prism: GuildPrism | null;
 }
 
 /** UC_GUILD_HALL's body (after the UC byte) */
@@ -66,7 +90,27 @@ export function readGuildHall(r: ByteReader): GuildHallStatus {
     hasColours: r.u8() !== 0,
     // since the cloak became a box on the Hall tab; read only when sent
     wearingCloak: r.remaining > 0 && r.u8() !== 0,
+    prism: readPrism(r),
   };
+}
+
+/** Decision 34's tail, read only when sent: whether there's a prism, its sides, colour, attuned, ours */
+function readPrism(r: ByteReader): GuildPrism | null {
+  if (r.remaining < 5) return null;
+  const has = r.u8() !== 0;
+  const sides = r.u8();
+  const colour = r.u8();
+  const attuned = r.u8();
+  const mine = r.u8() !== 0;
+  return has ? { sides, colour, attuned, mine } : null;
+}
+
+/** The prism, in a sentence */
+export function prismText(s: GuildHallStatus): string {
+  const p = s.prism;
+  if (!p) return "The prism pedestal stands empty. A Lord may say \"prism place\" in the hall to set one on it.";
+  const c = PRISM_COLOURS[p.colour] ?? { name: "A", gift: "a gift" };
+  return `${c.name} prism, ${p.sides} ${p.sides === 1 ? "side" : "sides"} (${c.gift}): ${p.attuned} of ${p.sides} attuned${p.mine ? ", you among them" : ""}.`;
 }
 
 /** The rent, in a sentence */
@@ -87,3 +131,5 @@ export function prestigeText(s: GuildHallStatus): string {
 export const guildHallCommand = (): string => "guildhall";
 export const guildHallPublicCommand = (open: boolean): string => `guildhall ${open ? "public" : "private"}`;
 export const guildCloakCommand = (wear: boolean): string => `guildhall cloak ${wear ? "on" : "off"}`;
+/** Decision 34: attune to the guild's prism, or give it up (near the pedestal, in the hall) */
+export const guildAttuneCommand = (attune: boolean): string => `guildhall ${attune ? "attune" : "unattune"}`;

@@ -12,7 +12,7 @@ import {
   buildSetRank, buildUserCommand, type GuildInfo,
 } from "@shards/protocol";
 import {
-  DAILY_STATE, QUEST_OFFER, TROPHY, boardAcceptCommand, boardCommand, capstoneText, guildCloakCommand, guildHallCommand, guildHallPublicCommand, hallStateText, hallsCommand,
+  DAILY_STATE, QUEST_OFFER, TROPHY, boardAcceptCommand, boardCommand, capstoneText, guildAttuneCommand, guildCloakCommand, guildHallCommand, guildHallPublicCommand, hallStateText, hallsCommand, prismText,
   prestigeText, rankNumeral, rentText, trophyAgeText,
   type FallenHall, type FallenHallsStatus, type GameSession, type GuildEvent,
 } from "@shards/world";
@@ -537,7 +537,18 @@ function HallPage({ session, state, ask, onClose, store }: PageProps & { store: 
               {chestLine(c, s.chestLimit)}
             </Text>
           ))}
-          <Text at={[10, 51, 262, 8]}>Say "recall stone" in the hall for a recall stone.</Text>
+          <Text at={[10, 51, 206, 8]}>
+            {prismText(s)}
+          </Text>
+          {s.prism && (
+            <Button
+              at={[220, 49, 52, 11]}
+              title={s.prism.mine ? "Give up your place on the prism" : "Take a place on the prism: stand near its pedestal in the hall"}
+              onClick={() => session.shardsCommand(guildAttuneCommand(!s.prism!.mine))}
+            >
+              {s.prism.mine ? "Unattune" : "Attune"}
+            </Button>
+          )}
         </>
       ) : (
         <Text at={[10, 13, 262, 20]} wrap>
@@ -545,13 +556,14 @@ function HallPage({ session, state, ask, onClose, store }: PageProps & { store: 
         </Text>
       )}
       <Check
-        at={[10, 60, 180, 10]}
+        at={[10, 60, 120, 10]}
         label="Wear the guild's cloak"
         checked={s.wearingCloak}
         disabled={!s.hasColours}
         title={s.hasColours ? "A cloak in the guild's colours, over whatever you wear" : "Your cloaks wait on the guild's colours, chosen on the Shield tab."}
         onChange={(wear) => session.shardsCommand(guildCloakCommand(wear))}
       />
+      {hall && <Text at={[136, 61, 136, 8]}>Say "recall stone" there for a stone.</Text>}
       <Text at={[4, 75, 272, 8]}>
         {prestigeText(s)}
       </Text>

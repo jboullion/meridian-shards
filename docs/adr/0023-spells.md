@@ -131,6 +131,14 @@ The breakdown has 18 fixed lines (`SPELL_PP_SLOTS`), because the client stops fo
     - The blade deals unholy damage. One blow in seven drinks 6-12 blood and heals the wielder by as much, though not from the undead. It adds 15 to Qor spells.
     - Only someone who knows a Qor spell of level 6 and no Shal'ille spell can wield it.
     - Both blades are bound to their summoner: they can't be dropped, given, sold or stored, and stay through death. Casting again replaces the old one.
+- **D42. Shadow Rift is solo and prepared** (decided 2026-10-26). It needed a prism and several casters. Now, as Death Rift does: cast outside a safe haven (a room with no combat and safe log off) to bind the spot to the caster (`Player.plShadowRift`, apart from Death Rift's bind); cast inside one to open a portal there back to the bound spot.
+    - The bind stays until it's cast outside a safe haven again.
+    - A flat 25-second trance (`spell/teleportspell/shadrift.kod`), broken by a blow, running, changing rooms, attacking, using an item or casting. Refused in PvP (`Player.IsInPvP`, as Rescue).
+    - Opening only from a safe haven means it can never be an escape: it brings a gathered group to a place someone prepared.
+    - The portal (`NecropolisPortal`) lets players only, sets them down within 2 squares of the spot, and closes after a minute at most.
+    - Still Qor 4, 30 mana and four dark angel feathers; class `DeathsDoor` and spell 147 kept.
+- **D43. Hunt is solo** (decided 2026-10-26). It needed a prism. Now one caster (`spell/hunt.kod`): cast, and say the prey's name during the 15-second trance; when it completes the prey is marked for half an hour, and each hunter on them hears where they are as they move (`Player.InformHunters`). A second hunter joins the first's mark. Kraanan 5, four kriipa claws, taught by Tendrath as before.
+- **The prisms' group spells are gone with them** (2026-10-26): the multi-caster base (`MultiCastSpell`) and Summon Bovine (spell 135, kept reserved). Prisms became guild artifacts ([ADR 0022](0022-guilds.md) decision 34). A fresh world when this ships: saved worlds hold the Summon Bovine spell object.
 
 ### Kraanan and Riija (phase 6)
 

@@ -292,6 +292,26 @@ Nothing pointed players at the Fallen Halls: they sit behind their old doors, an
 
 33. **World announcements when a hall falls.** `FallenHalls.Announce` tells every logged-on player, as `FactionWar.Announce` does: "[Halls] The Testers have driven the Order from the Den of Shadows." With no guild present it names the player who struck last. The client's `chatChannel.ts` `ANNOUNCEMENT` pattern gains `[Halls]`, so these lines stay in the Server tab instead of the combat tab. No announcement for the resets (default, to confirm): one every two hours would be noise.
 
+### Guild prisms (decided 2026-10-26)
+
+34. **Prisms are guild artifacts.** The group spells they focused are gone ([ADR 0023](0023-spells.md) D42, D43). Now a prism is something a guild sets in its hall.
+    - **The pedestal:** every hall makes one (`PrismPedestal`) two squares from its trophy case, on a square that can be walked to from it (`GuildHall.PlacePrismPedestal`, `Room.CanWalkLine`). It shows the guild's prism, and looking at it tells its gift and who is attuned. The prism itself is kept by the guild (`Guild.poPrism`), out of the world, so a rebuilt room can't lose it.
+    - **Spoken in the hall** (`GuildHall.HallCommandSaid`, to `Guild.PrismCommand`): a Lord or above says "prism place" to set the prism they carry on the pedestal (one per guild), or "prism remove" to take it back, which ends every attunement. Any member near the pedestal says "attune" to take a place, or "unattune" to give it up. The Hall tab's Attune button does the same.
+    - **Sides are places:** a prism of 1, 3, 5 or 7 sides takes that many attuned members. One per player, since a player is in one guild. The sides are rolled rarest at 7: 45, 30, 18 and 7 in 100.
+    - **Colours are gifts,** rolled evenly, the gem drawn in the colour (a red/blue translation; `prism5.bgf`'s orange gem was redrawn red for it):
+
+      | Colour | Gift |
+      |---|---|
+      | Emerald | 5% more experience from monster kills, beside the guild bonus |
+      | Ruby | 5 more max health |
+      | Sapphire | 5 more max mana |
+      | Amber | 3% more weapon damage |
+      | Amethyst | 3 more spellpower |
+      | Pearl | Health and mana come back 15% faster |
+    - **The attunement** is an enchantment with no end (`PrismAttunement`, spell 208), with an icon. It carries what must be undone (Ruby's health, Sapphire's mana, Amber's attack modifier); the rest reads `Player.piPrismColour` where it's worked out.
+    - **It ends** when the member leaves the guild (`Player.ResetGuildStuff`), gives it up, the prism is taken up, or the guild loses its hall or ends: then the prism goes back to the Leader's pack (`Guild.ReturnPrism`). At logon the attunement is put right against the guild's list (`Guild.CheckPrismAttunement`).
+    - **Where prisms come from** is unchanged: the golem dungeon's and the Marion crypt's chests, the Dragon Valley crates, and quests 62 and 63.
+
 ## Order to build
 
 0. **Cleanup:** 5, 6, 3, 2 and 1 (rank names and the moved powers). Also two bugs: `RID_GUILDH_MAX` is 716, so the foyer check in `user.kod` skips halls 17, 19 and 20; and Berg's globes.

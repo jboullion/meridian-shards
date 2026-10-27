@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ByteReader, ByteWriter, UC } from "@shards/protocol";
-import { guildCloakCommand, guildHallCommand, guildHallPublicCommand, prestigeText, readGuildHall, rentText } from "../src/guildHall.ts";
+import { guildAttuneCommand, guildCloakCommand, guildHallCommand, guildHallPublicCommand, prestigeText, prismText, readGuildHall, rentText } from "../src/guildHall.ts";
 import { fixture, userCommand } from "../../protocol/test/fixture.ts";
 
 const UC_GUILD_HALL = userCommand(UC.GUILD_HALL, "packages/world/src/guildHall.ts");
@@ -33,6 +33,18 @@ describe("UC_GUILD_HALL", () => {
     const s = fixture(UC_GUILD_HALL, readGuildHall, new ByteReader(tail(new ByteWriter().u8(0), 0, 0, false).finish()));
     expect(s.hasColours).toBe(true);
     expect(s.wearingCloak).toBe(false);
+  });
+
+  it("reads the guild's prism, and none (decision 34)", () => {
+    const withPrism = new ByteReader(tail(new ByteWriter().u8(0)).u8(1).u8(5).u8(3).u8(2).u8(1).finish());
+    const s = fixture(UC_GUILD_HALL, readGuildHall, withPrism);
+    expect(s.prism).toEqual({ sides: 5, colour: 3, attuned: 2, mine: true });
+    expect(prismText(s)).toBe("Sapphire prism, 5 sides (5 more mana): 2 of 5 attuned, you among them.");
+    const empty = readGuildHall(new ByteReader(tail(new ByteWriter().u8(0)).u8(0).u8(0).u8(0).u8(0).u8(0).finish()));
+    expect(empty.prism).toBeNull();
+    expect(readGuildHall(new ByteReader(tail(new ByteWriter().u8(0)).finish())).prism).toBeNull();
+    expect(guildAttuneCommand(true)).toBe("guildhall attune");
+    expect(guildAttuneCommand(false)).toBe("guildhall unattune");
   });
 
   it("words the rent and the prestige", () => {
