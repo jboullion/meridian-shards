@@ -321,7 +321,9 @@ export class GameAudio {
       const offset = o.offset === "random" ? Math.random() * buf.duration : Math.min(o.offset ?? 0, buf.duration);
       this.placeAmbient(v, 0, start);
       if (o.fadeIn) {
-        const target = v.gain.gain.value;
+        // What placeAmbient just set. Not gain.value: that's what was last rendered, still 0 here,
+        // and a bed whose volume never changes (the court's) stayed silent (2026-10-27)
+        const target = this.ambientGain(v);
         v.gain.gain.cancelScheduledValues(ctx.currentTime);
         v.gain.gain.setValueAtTime(0, start);
         v.gain.gain.linearRampToValueAtTime(target, start + o.fadeIn / 1000);
@@ -330,7 +332,7 @@ export class GameAudio {
       if (o.duration !== undefined && !o.loop) {
         // Fade out over the last 80 ms, so it doesn't click off
         const end = start + Math.max(0.1, Math.min(o.duration, buf.duration - offset));
-        v.gain.gain.setValueAtTime(v.gain.gain.value, end - 0.08);
+        v.gain.gain.setValueAtTime(this.ambientGain(v), end - 0.08);
         v.gain.gain.linearRampToValueAtTime(0, end);
         src.stop(end + 0.01);
       }
@@ -348,6 +350,16 @@ export class GameAudio {
   /** Ours: an ambient voice's gain and pan from where it is (falling off to nothing at its range) */
   placeAmbient(v: AmbientVoice, ms: number, at?: number): void {
     if (v.done) return;
+    const { g, pan } = this.ambientPlace(v);
+    const t = at ?? v.gain.context.currentTime;
+    v.gain.gain.cancelScheduledValues(t);
+    if (ms <= 0) v.gain.gain.setValueAtTime(g, t);
+    else v.gain.gain.setTargetAtTime(g, t, ms / 3000);
+    v.pan.pan.setTargetAtTime(pan, t, 0.03);
+  }
+
+  /** An ambient voice's gain (its volume, falling off with distance) and pan, from where it is */
+  private ambientPlace(v: AmbientVoice): { g: number; pan: number } {
     let g = v.volume,
       pan = v.fixedPan;
     if (v.at) {
@@ -359,11 +371,11 @@ export class GameAudio {
       // Never hard to one side: a sound beside us still reaches the other ear
       pan = d < 1 ? 0 : 0.85 * Math.max(-1, Math.min(1, (dx * -Math.sin(a) + dy * Math.cos(a)) / d));
     }
-    const t = at ?? v.gain.context.currentTime;
-    v.gain.gain.cancelScheduledValues(t);
-    if (ms <= 0) v.gain.gain.setValueAtTime(g, t);
-    else v.gain.gain.setTargetAtTime(g, t, ms / 3000);
-    v.pan.pan.setTargetAtTime(pan, t, 0.03);
+    return { g, pan };
+  }
+
+  private ambientGain(v: AmbientVoice): number {
+    return this.ambientPlace(v).g;
   }
 
   dropAmbient(v: AmbientVoice): void {
