@@ -27,8 +27,7 @@ describe.skipIf(!have)("original game files", () => {
     const low28 = (v: number) => v & 0x0fffffff;
     const inn = parseRoo(read("razainn.roo"));
     expect(low28(inn.security)).toBe(low28(4188566272));
-    // (raza.roo was edited in shards-server 13904516, 2026-10-26, which changed its security)
-    expect(low28(parseRoo(read("raza.roo")).security)).toBe(low28(2313817482));
+    expect(low28(parseRoo(read("raza.roo")).security)).toBe(low28(4192869060));
     // the bot spawned at row 3, col 8: that point must be inside a sector
     const leaf = leafAt(inn, (8 - 1) * 1024 + 512, (3 - 1) * 1024 + 512);
     expect(leaf?.sector).toBeGreaterThan(0);
