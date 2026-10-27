@@ -109,9 +109,13 @@ function areaExits(src: string, rids: Map<string, number>): RoomClass["doors"] {
   return out;
 }
 
-/** viTerrain_type = TERRAIN_CITY | TERRAIN_SHOP (perhaps over lines ending in "\"): the names */
+/**
+ * viTerrain_type = TERRAIN_CITY | TERRAIN_SHOP (perhaps over lines ending in "\"): the names.
+ * Kod's names ignore case, and 65 rooms spell it viTerrain_Type (the Office of the Justicar, most
+ * of Barloque's, Bergholt's and Cor Noth's buildings): until 2026-10-27 they were all left out.
+ */
 function terrainOf(src: string): string[] {
-  const expr = /\bviTerrain_type\s*=\s*((?:[^\n]*\\\s*\n)*[^\n]*)/.exec(src)?.[1] ?? "";
+  const expr = /\bviTerrain_type\s*=\s*((?:[^\n]*\\\s*\n)*[^\n]*)/i.exec(src)?.[1] ?? "";
   return [...new Set([...expr.matchAll(/\bTERRAIN_(\w+)/g)].map((m) => m[1]))].sort();
 }
 
