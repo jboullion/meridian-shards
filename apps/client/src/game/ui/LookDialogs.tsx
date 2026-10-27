@@ -10,9 +10,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ANIMATE, DF, type ObjectInfo } from "@shards/protocol";
 import { DRAWFX } from "@shards/render";
-import { isNumberItem, parseMarkup, type AmbientPersonInfo, type LookResult } from "@shards/world";
+import { isNumberItem, parseMarkup, splitLookText, type AmbientPersonInfo, type LookResult } from "@shards/world";
 import { neutralPose, type IconRenderer } from "../icons.ts";
-import { Button, scrollRowIntoList, Window } from "./kit.tsx";
+import { Button, scrollRowIntoList, Tabs, Window } from "./kit.tsx";
 import { ObjIcon } from "./Sidebar.tsx";
 import { useTurnDrag } from "./hooks.ts";
 
@@ -26,6 +26,32 @@ export const DESC = {
   /** Ours: someone who takes things from us (OF_OFFERABLE, not a player): typed `offer` opens the same window */
   SELL: 0x200,
 } as const;
+
+/** Ours (2026-10-27): a spell's look has Description and Stats tabs (lookText.ts); the last one chosen stays for the session */
+const DESC_TABS = ["Description", "Stats"] as const;
+type DescTab = (typeof DESC_TABS)[number];
+let lastDescTab: DescTab = "Description";
+
+/** The server's style codes (~B bold, ~I italic, colours), as chat has them */
+function Styled({ text }: { text: string }) {
+  return (
+    <>
+      {parseMarkup(text).map((s, j) => (
+        <span
+          key={j}
+          style={{
+            color: s.color,
+            fontWeight: s.bold ? "bold" : undefined,
+            fontStyle: s.italic ? "italic" : undefined,
+            textDecoration: s.underline ? "underline" : undefined,
+          }}
+        >
+          {s.text}
+        </span>
+      ))}
+    </>
+  );
+}
 
 /** dialog.c PAGE_BREAK_CHAR: splits a long description into pages */
 const PAGE_BREAK = "\xb6";
@@ -117,6 +143,13 @@ export function DescriptionDialog({
   const [page, setPage] = useState(0);
   const [text, setText] = useState(box ?? "");
   const [url, setUrl] = useState(look.url ?? "");
+  // A spell's look: its description and its stats, in tabs
+  const split = splitLookText(look.description ?? "");
+  const [tab, setTab] = useState<DescTab>(lastDescTab);
+  const chooseTab = (t: DescTab) => {
+    lastDescTab = t;
+    setTab(t);
+  };
   const okRef = useRef<HTMLDivElement>(null);
   useEffect(() => okRef.current?.querySelector("button")?.focus(), []);
 
@@ -154,24 +187,45 @@ export function DescriptionDialog({
           )}
           <div className="desc-main">
             <FittedName text={look.name} color={nameColor} />
-            {look.description && (
-              <div className="desc-fixed">
-                {/* The server's style codes (~B bold, ~I italic, colours), as chat has them: a revealed
-                    magic item's name is bold (shards-server item.kod item_magic_name) */}
-                {parseMarkup(look.description).map((s, j) => (
-                  <span
-                    key={j}
-                    style={{
-                      color: s.color,
-                      fontWeight: s.bold ? "bold" : undefined,
-                      fontStyle: s.italic ? "italic" : undefined,
-                      textDecoration: s.underline ? "underline" : undefined,
-                    }}
-                  >
-                    {s.text}
-                  </span>
-                ))}
-              </div>
+            {split.stats ? (
+              <>
+                <Tabs tabs={DESC_TABS} active={tab} onChange={chooseTab} />
+                {tab === "Description" ? (
+                  <div className="desc-fixed desc-tab-page">
+                    <Styled text={split.description} />
+                  </div>
+                ) : (
+                  <div className="desc-tab-page desc-stats-page">
+                    <table className="desc-stats">
+                      <tbody>
+                        {split.stats.map((row, i) =>
+                          "note" in row ? (
+                            <tr key={i} className="desc-stats-note">
+                              <td colSpan={2}>
+                                <Styled text={row.note} />
+                              </td>
+                            </tr>
+                          ) : (
+                            <tr key={i} className={row.sub ? "sub" : undefined}>
+                              <th scope="row">{row.label}</th>
+                              <td>
+                                <Styled text={row.value} />
+                              </td>
+                            </tr>
+                          ),
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            ) : (
+              look.description && (
+                <div className="desc-fixed">
+                  {/* The server's style codes: a revealed magic item's name is bold (shards-server item.kod item_magic_name) */}
+                  <Styled text={look.description} />
+                </div>
+              )
             )}
             {box !== null && (
               <div className="desc-box-row">

@@ -667,19 +667,24 @@ export function GameView({
    * ("vault", "guild" on a stack) still work on the server but have no buttons for now: fast
    * travel makes them less needed.
    */
+  /**
+   * Ours: one of our enchantments ends with "End <it>" beside OK (shardsabilities.kod Uncast; a
+   * double click on it does too). It was "Cancel", alone in the corner, and read as closing the
+   * window (2026-10-27).
+   */
+  const endEnchantmentButton = (look: LookResult): DescButton | undefined => {
+    if (!session.world.enchantments.player.has(look.object.id)) return undefined;
+    const name = look.name ? look.name.charAt(0).toUpperCase() + look.name.slice(1) : "it";
+    return {
+      label: `End ${name}`,
+      title: "End it (curses and poisons can't be shaken off)",
+      onClick: () => {
+        cancelEnchantment(session, look.object.id);
+        setDesc(null);
+      },
+    };
+  };
   const itemAbilities = (look: LookResult): DescButton[] | undefined => {
-    // Ours: one of our enchantments ends with Cancel (shardsabilities.kod Uncast; a double click on it does too)
-    if (session.world.enchantments.player.has(look.object.id))
-      return [
-        {
-          label: "Cancel",
-          title: "End it (curses and poisons can't be shaken off)",
-          onClick: () => {
-            cancelEnchantment(session, look.object.id);
-            setDesc(null);
-          },
-        },
-      ];
     const item = session.world.inventory.get(look.object.id);
     const info = item ? appraisals.get(objId(item.id)) : undefined;
     if (!item || !info?.appraisable) return undefined;
@@ -2578,7 +2583,7 @@ export function GameView({
             icons={icons}
             onAction={(a) => descAction(a, desc.look.object.id, desc.buttons)}
             onSave={(d, u) => descSave(desc.look.object.id, d, u)}
-            extra={friendButton(desc.look)}
+            extra={friendButton(desc.look) ?? endEnchantmentButton(desc.look)}
             abilities={itemAbilities(desc.look)}
             onClose={() => setDesc(null)}
           />
