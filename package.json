@@ -32,6 +32,7 @@
     "quests:bands": "node tools/quests/bands.ts",
     "fixtures": "node tools/fixtures/readers.ts",
     "sounds": "node tools/assets/fetch-sounds.ts",
+    "music": "node tools/music/build.ts",
     "gateway": "node tools/gateway/gateway.ts",
     "headless": "node tools/headless/client.ts",
     "smoke": "node tools/headless/client.ts --user shardbot --pass shardbot --stay 10",
@@ -59,9 +60,11 @@
     "eslint": "^10.12.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.13.0",
+    "spessasynth_core": "4.3.22",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.1",
     "vitest": "^5.0.3",
+    "wasm-media-encoders": "0.7.0",
     "zod": "^4.6.5"
   },
   "dependencies": {

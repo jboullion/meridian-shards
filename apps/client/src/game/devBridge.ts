@@ -5,9 +5,13 @@
 //   shards:game    to the dev server, for the dashboard: who we are and where, every 2 s and on
 //                  each room change
 //   shards:sprite  from the dev server: { name } a sprite the dashboard saved, loaded again here
+//   shards:music   from the dashboard: { file } a track to play in place of the room's (null: the
+//                  room's again); shards:sound { file } a sound to play here
+//   shards:audio   from the dev server: { name } a track or sound rebuilt, fetched anew
 // Started by GameScene in development builds, stopped when it's disposed.
 
 import type { AmbientRoomSpec, GameSession } from "@shards/world";
+import type { GameAudio } from "./audio.ts";
 import { applyTuning, TUNING_DEFAULTS, type TuningValues } from "./tuning.ts";
 
 /** What the dashboard can set about the scene, for this client only */
@@ -52,6 +56,9 @@ export interface BridgeScene {
   readonly roomFile: string;
   /** A sprite's file changed: load it again and draw it anew */
   spriteChanged(file: string): Promise<void>;
+  readonly audio: Pick<GameAudio, "previewMusic" | "playLocal">;
+  /** A track or sound's file changed: fetched anew (restarted if it's the music playing) */
+  audioChanged(file: string): Promise<void>;
 }
 
 export function startDevBridge(scene: BridgeScene, session: GameSession): () => void {
@@ -80,6 +87,12 @@ export function startDevBridge(scene: BridgeScene, session: GameSession): () => 
   hot.on("shards:state", onState);
   const onSprite = ({ name }: { name: string }) => void scene.spriteChanged(name);
   hot.on("shards:sprite", onSprite);
+  const onMusic = ({ file }: { file: string | null }) => scene.audio.previewMusic(file);
+  const onSound = ({ file }: { file: string }) => scene.audio.playLocal(file);
+  const onAudio = ({ name }: { name: string }) => void scene.audioChanged(name);
+  hot.on("shards:music", onMusic);
+  hot.on("shards:sound", onSound);
+  hot.on("shards:audio", onAudio);
   hot.send("shards:game-hello", {});
 
   const report = (): void => {
@@ -107,5 +120,8 @@ export function startDevBridge(scene: BridgeScene, session: GameSession): () => 
     offEvent();
     hot.off("shards:state", onState);
     hot.off("shards:sprite", onSprite);
+    hot.off("shards:music", onMusic);
+    hot.off("shards:sound", onSound);
+    hot.off("shards:audio", onAudio);
   };
 }

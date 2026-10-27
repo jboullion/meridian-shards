@@ -4,3 +4,4 @@ export * from "./bgf.ts";
 export * from "./bsf.ts";
 export * from "./palette.ts";
 export * from "./quantize.ts";
+export * from "./xmi.ts";

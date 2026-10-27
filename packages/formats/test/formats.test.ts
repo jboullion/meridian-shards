@@ -27,7 +27,8 @@ describe.skipIf(!have)("original game files", () => {
     const low28 = (v: number) => v & 0x0fffffff;
     const inn = parseRoo(read("razainn.roo"));
     expect(low28(inn.security)).toBe(low28(4188566272));
-    expect(low28(parseRoo(read("raza.roo")).security)).toBe(low28(4192869060));
+    // (raza.roo was edited in shards-server 13904516, 2026-10-26, which changed its security)
+    expect(low28(parseRoo(read("raza.roo")).security)).toBe(low28(2313817482));
     // the bot spawned at row 3, col 8: that point must be inside a sector
     const leaf = leafAt(inn, (8 - 1) * 1024 + 512, (3 - 1) * 1024 + 512);
     expect(leaf?.sector).toBeGreaterThan(0);
@@ -58,6 +59,8 @@ describe.skipIf(!have)("original game files", () => {
   });
 
   test("rsb has the redbook string", () => {
-    expect(parseRsb(read("rsc0000.rsb")).get(20147)).toBe("Success.");
+    // By value: resource numbers move whenever the Kod gains or loses classes
+    const rsb = parseRsb(read("rsc0000.rsb"));
+    expect([...rsb.entries.keys()].some((id) => rsb.get(id) === "Success.")).toBe(true);
   });
 });

@@ -59,7 +59,7 @@ function spriteName(name: unknown): string {
 }
 
 /** Copies a file into dist/assets under `name` and records it as build-assets.ts would (so its next run leaves it be) */
-function publish(name: string, from: string, manifest = readManifest()): string {
+export function publish(name: string, from: string, manifest = readManifest()): string {
   copyFileSync(from, join(ASSETS, name));
   const hash = sha(new Uint8Array(readFileSync(join(ASSETS, name))));
   manifest.files[name] = { size: statSync(from).size, hash, mtime: statSync(from).mtimeMs };

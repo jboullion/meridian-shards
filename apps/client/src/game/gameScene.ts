@@ -892,6 +892,12 @@ export class GameScene {
     this.forgetRoomCaches();
   }
 
+  /** A track or sound's file changed (the admin dashboard's Music & Sounds tab rebuilt it) */
+  async audioChanged(file: string): Promise<void> {
+    await this.assets.refresh();
+    this.audio.forget(file);
+  }
+
   /**
    * A sprite's file changed (the admin dashboard's sprite editor saved it): loaded again, the old
    * picture kept on show until the new one is in, then every object composited anew.

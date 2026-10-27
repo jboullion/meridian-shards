@@ -32,7 +32,8 @@
 // And foliage.json and windows.json (ours: the seasons' walls, the windows' glass), copied from here.
 // And the client's tables (ours: achievements.json, emoji.json, commands.json, help.json), copied from
 // apps/client/tables, so every client reads them from the server (the browser's clientTables.ts).
-// And our ambient sounds that aren't the game's (dist/sounds/amb_*.ogg, from fetch-sounds.ts),
+// And our music (dist/music/*.ogg, from npm run music: tools/music, first after the icons, so a piece
+// can replace a game track), and our ambient sounds that aren't the game's (dist/sounds/amb_*.ogg, from fetch-sounds.ts),
 // and the login screen's backgrounds (login/*.webp and login/backgrounds.json, from the
 // screenshot tour's ReferenceImages/login-backgrounds).
 //
@@ -87,6 +88,8 @@ const sources: Source[] = [
   // shards-server's tools/iconforge installs restyled item icons here, under the original names, so
   // they replace the installed client's art. ICONFORGE_DIR points elsewhere (e.g. another checkout).
   { label: "restyled icons (iconforge)", dir: process.env.ICONFORGE_DIR ?? join(SERVER, "resource", "graphics", "shards"), recursive: false, exts: new Set([".bgf"]) },
+  // Ours: our music (npm run music, tools/music/build.ts); a piece named as a game track replaces it
+  { label: "our music (npm run music)", dir: join(ROOT, "dist", "music"), recursive: false, exts: new Set([".ogg"]) },
   { label: "server rsb", dir: join(RUN, "rsc"), recursive: false, filter: (n) => n === "rsc0000.rsb" },
   { label: "server rooms", dir: join(RUN, "rooms"), recursive: false },
   { label: "installed client", dir: opt.client!, recursive: true },

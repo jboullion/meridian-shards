@@ -388,3 +388,62 @@ export function saveSprite(name: string, data: Uint8Array): Promise<{ hash: stri
 export const revertSprite = (name: string) => post<{ hash: string; backup: string }>("/__admin/sprites/revert", { name });
 export const registerStyle = (kind: "hair" | "beard", file: string, label: string) =>
   post<{ resource: string; ok: boolean; tail: string; steps: string[] }>("/__admin/sprites/register", { kind, file, label });
+
+// ---------------------------------------------------------------- music and sounds (tools/dev/audioApi.ts)
+
+export interface AudioUse {
+  /** "kod": a class's resource in shards-server; "client": named in this repository's client */
+  where: "kod" | "client";
+  path: string;
+  /** The room's or object's name, else its class */
+  label: string;
+  resource?: string;
+  /** A room's music */
+  music?: boolean;
+}
+export interface AudioFile {
+  name: string;
+  kind: "music" | "sound" | "ambient";
+  size: number;
+  hash: string;
+  seconds: number | null;
+  /** The game track's XMI in resource/audio/xmi */
+  xmi: string | null;
+  /** Ours: the piece in tools/music/pieces */
+  piece: string | null;
+  users: AudioUse[];
+}
+export interface PieceInfo {
+  name: string;
+  file: string;
+  title: string;
+  about: string;
+  bars: number;
+  seconds: number;
+  parts: string[];
+  error?: string;
+}
+export interface AudioList {
+  files: AudioFile[];
+  pieces: PieceInfo[];
+  banks: string[];
+}
+
+export async function loadAudio(): Promise<AudioList> {
+  const res = await fetch("/__admin/audio/list");
+  const out = (await res.json()) as AudioList & { error?: string };
+  if (out.error) throw new Error(out.error);
+  return out;
+}
+/** A game track's XMI rendered as written: its OGG's and MIDI's URLs */
+export const renderOriginal = (name: string, bank: string) => post<{ url: string; midi: string; seconds: number }>("/__admin/audio/original", { name, bank });
+/** Builds one of our pieces and puts it in dist/assets (game tabs fetch it anew) */
+export const buildPiece = (name: string) => post<{ file: string; seconds: number; hash: string; log: string }>("/__admin/audio/piece/build", { name });
+/** Plays a track in the game tabs in place of the room's (null: the room's again) */
+export function musicInGame(file: string | null): void {
+  import.meta.hot?.send("shards:music", { file });
+}
+/** Plays a sound in the game tabs */
+export function soundInGame(file: string): void {
+  import.meta.hot?.send("shards:sound", { file });
+}

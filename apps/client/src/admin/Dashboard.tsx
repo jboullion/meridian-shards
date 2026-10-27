@@ -8,6 +8,8 @@
 //   Quests   write quests and place their givers, then try them out on you (QuestsTab.tsx)
 //   Companions  give yourself one and try out its tiers, death and revival (CompanionsTab.tsx)
 //   Sprites  paint and fix the game's sprites, hair and facial hair, import pictures (SpritesTab.tsx)
+//   Music & Sounds  listen to every track and sound, here or in the game; who plays it; the
+//            tracks' MIDI as written; our own pieces rebuilt (AudioTab.tsx)
 //   Tuning   ambient life's numbers, live in the game tabs; saved back to the source
 //   Server   build and reload the Kod, save, and any maintenance command
 // The server side is tools/dev/adminApi.ts; the game tab's side is game/devBridge.ts.
@@ -24,8 +26,9 @@ import {
 import { QuestsTab } from "./QuestsTab.tsx";
 import { CompanionsTab } from "./CompanionsTab.tsx";
 import { SpritesTab } from "./SpritesTab.tsx";
+import { AudioTab } from "./AudioTab.tsx";
 
-const TABS = ["Spawn", "Items", "Spells", "Rooms", "World", "Quests", "Companions", "Sprites", "Tuning", "Server"] as const;
+const TABS = ["Spawn", "Items", "Spells", "Rooms", "World", "Quests", "Companions", "Sprites", "Music & Sounds", "Tuning", "Server"] as const;
 type Tab = (typeof TABS)[number];
 
 // ---------------------------------------------------------------- pictures from the game files
@@ -102,6 +105,7 @@ export function Dashboard() {
   else if (tab === "Quests") page = <QuestsTab act={act} needMe={needMe} me={me} catalog={catalog} />;
   else if (tab === "Companions") page = <CompanionsTab act={act} me={me} />;
   else if (tab === "Sprites") page = <SpritesTab say={say} />;
+  else if (tab === "Music & Sounds") page = <AudioTab act={act} say={say} />;
   else if (tab === "Tuning") page = <TuningPanel act={act} tuning={link.state.tuning} setTuning={(tuning) => link.set({ tuning })} />;
   else page = <ServerPanel act={act} say={say} />;
 

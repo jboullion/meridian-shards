@@ -11,6 +11,7 @@ On the local development server there's also the **admin dashboard**, at http://
 - **Rooms:** go to any room, rebuild it, or edit it.
 - **World:** the server's time, and your client's weather, terrain and crowd.
 - **Sprites:** a pixel editor for the game's sprites. Hair and facial hair are shown on a head in every hair colour. It can import a PNG and offer a new style in the character creator. Saves go to shards-server's `resource/graphics/shards` and show in game tabs straight away.
+- **Music & Sounds:** every track and sound in the asset build, to play in the dashboard or in the game tab, with the rooms and Kod (or client code) that play it. A game track can be heard as written too: its XMI rendered with Windows' `gm.dls` or GeneralUser GS, its MIDI downloadable. Our own pieces (`tools/music/pieces`, `npm run music`) are rebuilt from here and game tabs fetch them anew.
 - **Tuning:** ambient life's numbers, live.
 - **Quests:** make and edit quests (below).
 - **Companions:** manage your character’s companions (below).

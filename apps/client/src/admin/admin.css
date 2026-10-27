@@ -613,3 +613,50 @@ canvas.source {
     grid-template-columns: 1fr;
   }
 }
+
+/* Music & Sounds (AudioTab.tsx) */
+.split.audio {
+  grid-template-columns: minmax(0, 1fr) 400px;
+}
+.audio .pick .row {
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+}
+.audio .playbtn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+.audio .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.audio .small {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audio .tag {
+  font-size: 11px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.audio audio {
+  width: 100%;
+}
+.audio .buttons button.on {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.audio .users td {
+  font-size: 12px;
+  word-break: break-all;
+}
+.audio .error {
+  color: var(--bad);
+}
+.audio .rows:focus {
+  outline: 1px solid var(--accent);
+}

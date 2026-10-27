@@ -166,6 +166,8 @@ export class GameAudio {
   private music: { file: string; source: AudioBufferSourceNode | null; gain: GainNode } | null = null;
   /** The room's track, kept while music is off so switching it on restarts it (MusicRestart). */
   private wantedMusic: string | null = null;
+  /** Ours: the room's track while the dashboard previews another (previewMusic); "" none */
+  private roomMusic: string | null = null;
   private listener = { x: 0, y: 0, angle: 0 };
   /** What's playing by: the saved settings with the Preferences window's preview on top */
   private settings: Settings;
@@ -238,6 +240,7 @@ export class GameAudio {
   handle(e: SoundEvent): void {
     switch (e.type) {
       case "music":
+        this.roomMusic = null;
         void this.playMusic(e.file);
         break;
       case "stopLoops":
@@ -362,6 +365,36 @@ export class GameAudio {
   /** Ours: every ambient sound stops (the option turned off, the game left) */
   stopAmbient(fadeMs = 0): void {
     for (const v of [...this.ambientVoices]) v.stop(fadeMs);
+  }
+
+  /**
+   * Ours (the admin dashboard's Music & Sounds tab, development only): plays a track in place of
+   * the room's until it's called with null, which brings the room's back, or the next room sends
+   * its own.
+   */
+  previewMusic(file: string | null): void {
+    if (file) {
+      this.roomMusic ??= this.wantedMusic ?? "";
+      if (this.music?.file === file.toLowerCase()) this.stopMusic();
+      void this.playMusic(file);
+      return;
+    }
+    const room = this.roomMusic;
+    this.roomMusic = null;
+    if (room === null) return;
+    this.stopMusic();
+    if (room) void this.playMusic(room);
+    else this.wantedMusic = null;
+  }
+
+  /** Ours (development only): a file changed on the server: fetched anew next time, the track restarted if it's playing */
+  forget(file: string): void {
+    const key = file.toLowerCase();
+    this.buffers.delete(key);
+    if (this.music?.file === key) {
+      this.stopMusic();
+      void this.playMusic(key);
+    }
   }
 
   /** Ours: music that fades in from silence over `fadeInMs` once it starts (the login screen's) */

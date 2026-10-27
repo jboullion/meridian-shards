@@ -10,6 +10,7 @@
 //   /__admin/quests/...          the quests (tools/dev/questApi.ts)
 //   /__admin/companions/...      trying companions out (tools/dev/companionApi.ts)
 //   /__admin/sprites/...         the sprite editor's files (tools/dev/spriteApi.ts)
+//   /__admin/audio/...           the music and sounds, and our pieces (tools/dev/audioApi.ts)
 //   POST /__admin/travel/move    { playerId, id, part: "portal" | "arrival" } -> point id moved there:
 //                                travelnet.kod rewritten, the Kod built, reload system, and for
 //                                the portal the room recreated (it places its portals when built)
@@ -32,6 +33,7 @@ import { maint } from "../maint/maintClient.ts";
 import { questApi } from "./questApi.ts";
 import { companionApi } from "./companionApi.ts";
 import { spriteApi } from "./spriteApi.ts";
+import { audioApi } from "./audioApi.ts";
 import { movePoint, nearestAngle, readHistoricLinks, readPoints, readRids, strayLines, withLinks, type TravelPoint } from "./travelPoints.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -276,6 +278,7 @@ export function adminApi(server: ViteDevServer): void {
   questApi(server, { buildKod, standing: travelHere }, route, body);
   companionApi(server, route, body);
   spriteApi(server, { buildKod, route, body });
+  audioApi(server, route, body);
   server.middlewares.use(
     "/__admin/kod/build",
     route(async () => buildKod()),
