@@ -38,6 +38,7 @@ export * from "./cosmetics.ts";
 export * from "./itemservice.ts";
 export * from "./magic.ts";
 export * from "./training.ts";
+export * from "./schools.ts";
 export * from "./questWay.ts";
 export * from "./ambient/names.ts";
 export * from "./arena/arenaData.ts";

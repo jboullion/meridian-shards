@@ -9,6 +9,7 @@ import {
 } from "@shards/protocol";
 import { animStateFrom, type AnimState } from "./animation.ts";
 import type { SpellFx } from "./spellFx.ts";
+import type { Schools } from "./schools.ts";
 import { SpellRanges } from "./spellRange.ts";
 
 export interface OverlayState extends Overlay {
@@ -101,6 +102,8 @@ export type WorldEvent =
   | { type: "stats"; group: number }
   | { type: "spells" }
   | { type: "skills" }
+  /** Ours: our standing in each school arrived (UC_SCHOOLS; schools.ts) */
+  | { type: "schools" }
   | { type: "enchantments" }
   /** Which inventory items are in use (wielded, worn) changed. */
   | { type: "inUse" }
@@ -238,6 +241,8 @@ export class WorldState {
   spells: Spell[] = [];
   /** UC_SPELL_SCHOOLS: the schools' name resources, by school number (spells.c submenus) */
   spellSchools: number[] = [];
+  /** Ours (UC_SCHOOLS): our standing in each school, and each ability's school and level; null until it arrives */
+  schools: Schools | null = null;
   skills: ObjectInfo[] = [];
   /** Enchantments on us (ENCHANT_PLAYER) and on the room (ENCHANT_ROOM), by object id. */
   readonly enchantments = { player: new ObjectMap<ObjectInfo>(), room: new ObjectMap<ObjectInfo>() };
@@ -349,6 +354,11 @@ export class WorldState {
   setMagicName(id: number, flags: number, name: string): void {
     this.magicNames.set(id, { flags, name });
     this.emit({ type: "inventory" });
+  }
+
+  setSchools(schools: Schools): void {
+    this.schools = schools;
+    this.emit({ type: "schools" });
   }
 
   setSpellSchools(schools: number[]): void {

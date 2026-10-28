@@ -18,7 +18,8 @@ import { DRAG_ITEM } from "../quickSlots.ts";
 import { updateSettings, type Settings } from "../settings.ts";
 import { useTurnDrag, useWorld } from "./hooks.ts";
 import { Button, Window } from "./kit.tsx";
-import { Inventory, NumericStats, ObjIcon, StatBar, StatList, StatTab, TABS, type Tab } from "./Sidebar.tsx";
+import { Inventory, NumericStats, ObjIcon, requestTabStats, StatBar, StatTab, TABS, type Tab } from "./Sidebar.tsx";
+import { AbilitiesList } from "./AbilitiesList.tsx";
 
 /** How much of the window stays in the view however it's dragged or the window shrinks: its title, px */
 const KEEP_X = 120;
@@ -108,13 +109,10 @@ function Figure({ session, icons }: { session: GameSession; icons: IconRenderer 
 
 export function CharacterWindow({
   session, icons, assets, settings, itemSlots, tab, onTab, onClose, onLookItem, onLinkItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, selecting, onSelectObject, onCast,
-  friendsPanel, petsPanel, questsPanel, companionPanel, onStudy, studying, onTrain,
+  friendsPanel, petsPanel, questsPanel, companionPanel, onTrain,
 }: {
   /** Ours: the Stats tab's Train button (docs/adr/0016-abilities.md) */
   onTrain?: () => void;
-  /** Ours: the Spells tab's Study button (StatList) */
-  onStudy?: () => void;
-  studying?: boolean;
   /** Ours: the Friends and Pets tabs' pages (GameView makes them) */
   friendsPanel: ReactNode;
   petsPanel: ReactNode;
@@ -150,8 +148,8 @@ export function CharacterWindow({
   // stats.c: the inventory is always here; other groups are asked for when shown. The Inventory
   // tab shows weight and bulk from the Stats group, so it asks for that.
   useEffect(() => {
-    const group = tab === "inventory" ? STAT_GROUP.STATS : TABS.find((t) => t.tab === tab)?.group;
-    if (group !== undefined && group !== null) session.requestStats(group);
+    if (tab === "inventory") session.requestStats(STAT_GROUP.STATS);
+    else requestTabStats(session, tab);
   }, [session, tab]);
 
   const inUse = [...world.inventory.values()].filter((o) => world.inUse.has(o.id));
@@ -318,15 +316,7 @@ export function CharacterWindow({
             ) : tab === "quests" ? (
           questsPanel
         ) : (
-              <StatList
-                session={session}
-                icons={icons}
-                group={tab === "spells" ? STAT_GROUP.SPELLS : tab === "skills" ? STAT_GROUP.SKILLS : STAT_GROUP.QUESTS}
-                onLook={onLook}
-                onCast={onCast}
-                onStudy={onStudy}
-                studying={studying}
-              />
+              <AbilitiesList session={session} icons={icons} onLook={onLook} onCast={onCast} />
             )}
           </div>
         )}

@@ -826,6 +826,8 @@ export const UC = {
   SPELL_RANGE: 124,
   /** Ours (achievements): the achievements earned, and one just earned (shards-server util/achievements.kod; @shards/world achievements.ts; docs/adr/0025) */
   ACHIEVEMENTS: 125,
+  /** Ours: our standing in each school, for the Abilities tab (shards-server util/shardsabilities.kod SendSchools; @shards/world schools.ts; docs/adr/0028) */
+  SCHOOLS: 126,
 } as const;
 
 /**

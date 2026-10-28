@@ -32,6 +32,7 @@ import { readCosmetics, type CosmeticsEvent } from "./cosmetics.ts";
 import { readItemService } from "./itemservice.ts";
 import { MAGIC_SHOW, magicShow, readMagicName } from "./magic.ts";
 import { readAppraisal, readSellable, readTraining, type Appraisal, type Sellable, type TrainingCost } from "./training.ts";
+import { readSchools } from "./schools.ts";
 import { readPvpUntil, readQuestLog, readQuestOffers, readQuestProgress, readSeason, readSignets, readSocial, readTravelList } from "./userCommands.ts";
 
 /** A line for the chat window, with the original client's default colour for its kind. */
@@ -1130,6 +1131,9 @@ export class GameSession {
             // Ours (itemservicebook.kod SendMagicName): asked for by itemName
             const m = readMagicName(r, (id) => this.resource(id));
             if (m) this.world.setMagicName(m.id, m.flags, m.name);
+          } else if (uc === UC.SCHOOLS) {
+            // Ours (docs/adr/0028): our standing in each school, for the Abilities tab
+            this.world.setSchools(readSchools(r));
           } else if (uc === UC.TRAINING) {
             // Ours (shardsabilities.kod SendTraining)
             this.events.training?.(readTraining(r));

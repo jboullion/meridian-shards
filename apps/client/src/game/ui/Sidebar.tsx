@@ -2,7 +2,8 @@
 //   user area (userarea.c): our face, with our enchantments under it (enchant.c)
 //   main stats (statmain.c): health, mana, vigor and experience bars with their icons
 //   minimap (clientd3d/map.c), with the room's enchantments in its top-right corner
-//   stat groups (stats.c, statbtn.c): Inventory, Stats, Spells, Skills, Quests tabs
+//   stat groups (stats.c, statbtn.c): Inventory, Stats, Abilities (ours: Spells and Skills
+//   together, AbilitiesList.tsx), Quests tabs
 // drawn on the original's background bitmaps from the asset build (ui/*.bmp).
 
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
@@ -17,10 +18,10 @@ import type { Settings } from "../settings.ts";
 import { MiniMap } from "./MiniMap.tsx";
 import type { MapWay } from "../questWays.ts";
 import type { MapAnnotation } from "../annotations.ts";
-import { DRAG_SPELL } from "../quickSlots.ts";
 import { magicRing } from "./magicRing.ts";
 import { statRows } from "../statRows.ts";
 import { Button } from "./kit.tsx";
+import { AbilitiesList } from "./AbilitiesList.tsx";
 
 /** include/proto.h OF_APPLYABLE: used on something else */
 const OF_APPLYABLE = 0x1000;
@@ -32,13 +33,13 @@ export const STAT_HP = 1,
   STAT_XP = 4;
 export const MIN_VIGOR = 10; // statmain.h: below this you can't run; the bar turns red
 
-export type Tab = "inventory" | "stats" | "spells" | "skills" | "quests" | "friends" | "pets" | "companion";
+export type Tab = "inventory" | "stats" | "abilities" | "quests" | "friends" | "pets" | "companion";
 /** The tabs: the original's stat groups (stats.c), then ours, drawn with an icon of our own (no group, no bitmap) */
 export const TABS: { tab: Tab; group: number | null; bitmap: string | null; label: string }[] = [
   { tab: "inventory", group: STAT_GROUP.INVENTORY, bitmap: "statbtn_left_invent.bmp", label: "Inventory" },
   { tab: "stats", group: STAT_GROUP.STATS, bitmap: "statbtn_left_stats.bmp", label: "Statistics" },
-  { tab: "spells", group: STAT_GROUP.SPELLS, bitmap: "statbtn_left_spell.bmp", label: "Spells" },
-  { tab: "skills", group: STAT_GROUP.SKILLS, bitmap: "statbtn_left_skills.bmp", label: "Skills" },
+  // Ours (docs/adr/0028): the Spells and Skills groups in one tab, by school (AbilitiesList.tsx)
+  { tab: "abilities", group: STAT_GROUP.SPELLS, bitmap: "statbtn_left_spell.bmp", label: "Abilities" },
   { tab: "quests", group: STAT_GROUP.QUESTS, bitmap: "statbtn_left_quest.bmp", label: "Quests" },
   // Ours: docs/adr/0005-friends.md and 0006-pets.md
   { tab: "friends", group: null, bitmap: null, label: "Friends" },
@@ -285,15 +286,12 @@ export function HudEnchantments({
 
 export function Sidebar({
   session, icons, assets, getRoom, tab, onTab, settings, onLookItem, onLinkItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, target, selecting, onSelectObject, onCast,
-  annotations, onAnnotate, friendsPanel, petsPanel, questsPanel, companionPanel, getWay, onStudy, studying, onEmotes, onTrain,
+  annotations, onAnnotate, friendsPanel, petsPanel, questsPanel, companionPanel, getWay, onEmotes, onTrain,
 }: {
   /** Ours: a click on our face, when not picking a target, shows the Quick Emotes (Q) */
   onEmotes?: () => void;
   /** Ours: the Stats tab's Train button (docs/adr/0016-abilities.md) */
   onTrain?: () => void;
-  /** Ours: the Spells tab's Study button (StatList) */
-  onStudy?: () => void;
-  studying?: boolean;
   /** Ours: the Friends and Pets tabs' pages (GameView makes them) */
   friendsPanel: ReactNode;
   /** Ours (docs/adr/0009-quests.md 5): tracked quests' areas and the way to them, for the map */
@@ -346,9 +344,9 @@ export function Sidebar({
   /** tooltip.c: names on hover only with Show tooltips (enchant.c TTN_NEEDTEXT, statbtn.c) */
   const tip = (text: string) => (settings.tooltips ? text : undefined);
 
-  const pick = (t: Tab, group: number | null) => {
+  const pick = (t: Tab) => {
     // stats.c: the inventory is always here; other groups are asked for when shown (ours have none)
-    if (t !== "inventory" && group !== null) session.requestStats(group);
+    if (t !== "inventory") requestTabStats(session, t);
     onTab(t);
   };
 
@@ -419,7 +417,7 @@ export function Sidebar({
       </div>
       <div className="stat-tabs">
         {TABS.map((t) => (
-          <StatTab key={t.tab} assets={assets} icons={icons} bitmap={t.bitmap} tab={t.tab} label={t.label} tooltip={settings.tooltips} active={tab === t.tab} onClick={() => pick(t.tab, t.group)} />
+          <StatTab key={t.tab} assets={assets} icons={icons} bitmap={t.bitmap} tab={t.tab} label={t.label} tooltip={settings.tooltips} active={tab === t.tab} onClick={() => pick(t.tab)} />
         ))}
       </div>
       {/* "inventory-panel": where dragging an object from the view picks it up (mermain.c A_ENDDRAG) */}
@@ -452,15 +450,7 @@ export function Sidebar({
         ) : tab === "quests" ? (
           questsPanel
         ) : (
-          <StatList
-            session={session}
-            icons={icons}
-            group={tab === "spells" ? STAT_GROUP.SPELLS : tab === "skills" ? STAT_GROUP.SKILLS : STAT_GROUP.QUESTS}
-            onLook={onLook}
-            onCast={onCast}
-            onStudy={onStudy}
-            studying={studying}
-          />
+          <AbilitiesList session={session} icons={icons} onLook={onLook} onCast={onCast} />
         )}
       </div>
       </div>
@@ -704,112 +694,16 @@ export function NumericStats({
   );
 }
 
-/** statlist.c: icon and "name NN%" (quests: name only; headers green). */
-export function StatList({
-  session, icons, group, onLook, onCast, onStudy, studying,
-}: {
-  session: GameSession;
-  icons: IconRenderer;
-  group: number;
-  onLook: (id: number) => void;
-  onCast: (spell: number, numTargets: number) => void;
-  /** Ours, the Spells tab only: Study mode's window (or stopping it, while `studying`) */
-  onStudy?: () => void;
-  studying?: boolean;
-}) {
-  const world = session.world;
-  const [selected, setSelected] = useState<number | null>(null);
-  // Ours: the Spells tab's search, by name as shown
-  const [search, setSearch] = useState("");
-  const stats = world.stats.get(group) ?? [];
-  const quests = group === STAT_GROUP.QUESTS;
-  const spells = group === STAT_GROUP.SPELLS;
-  const rs = (id: number) => session.resource(id) ?? "";
-  const spellFor = (id: number) => world.spells.find((s) => s.object.id === id);
-  const wanted = spells ? search.trim().toLowerCase() : "";
-  const rows: ReactNode[] = stats.map((s, i) => {
-    const l = s.list!;
-    if (!l) return null;
-    if (wanted && !rs(s.nameRes).toLowerCase().includes(wanted)) return null;
-    const header = quests && l.value === 0;
-    return (
-      <div
-        key={`${s.num}:${i}`}
-        className={`stat-list-row${header ? " header" : ""}${selected === i ? " selected" : ""}`}
-        onClick={() => setSelected(i)}
-        // Ours (the spell revamp, V5): a spell's range ring shows about us while the mouse is on it
-        onPointerEnter={(e) => {
-          if (spells && l.id && e.pointerType === "mouse") session.pointAtSpell(l.id);
-        }}
-        onPointerLeave={() => spells && session.pointAtSpell(null)}
-        // Ours: a spell dragged onto a quick slot fills it (QuickSlots.tsx Hotbar)
-        draggable={group === STAT_GROUP.SPELLS && !!l.id}
-        onDragStart={(e) => {
-          e.dataTransfer.setData(DRAG_SPELL, String(l.id));
-          e.dataTransfer.effectAllowed = "copy";
-        }}
-        onDoubleClick={() => {
-          if (group === STAT_GROUP.SPELLS && l.id) onCast(l.id, spellFor(l.id)?.numTargets ?? 0);
-          else if (l.id) onLook(l.id);
-        }}
-        // statlist.c StatsListRButton: look at it (not quest headers)
-        onContextMenu={(e) => {
-          e.preventDefault();
-          if (!l.id || header) return;
-          setSelected(i);
-          onLook(l.id);
-        }}
-      >
-        {!header && <ObjIcon icons={icons} object={l.icon ? bareIcon(l.icon) : null} className="list-icon" />}
-        <span className="stat-list-name">{quests ? rs(s.nameRes) : `${rs(s.nameRes)} ${l.value}%`}</span>
-        {/* Ours (2026-10-18 play test): every spell has its own Cast, as a double click does */}
-        {spells && l.id ? (
-          <button
-            type="button"
-            className="mk-btn spell-cast"
-            title={`Cast ${rs(s.nameRes)}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onCast(l.id, spellFor(l.id)?.numTargets ?? 0);
-            }}
-            onDoubleClick={(e) => e.stopPropagation()}
-          >
-            Cast
-          </button>
-        ) : null}
-      </div>
-    );
-  });
-  const shown = rows.filter(Boolean);
-  return (
-    <div className="stat-list">
-      {spells && (
-        <div className="spell-search">
-          <span className="mk-edit">
-            <input
-              type="search"
-              value={search}
-              placeholder="Search spells"
-              spellCheck={false}
-              aria-label="Search spells"
-              onChange={(e) => setSearch(e.target.value)}
-              // Esc empties it, then gives the keys back to the game
-              onKeyDown={(e) => {
-                if (e.key !== "Escape") return;
-                e.stopPropagation();
-                if (search) setSearch("");
-                else e.currentTarget.blur();
-              }}
-            />
-          </span>
-          {onStudy && (
-            <Button onClick={onStudy} title={studying ? "Stop practising" : "Practise a spell while you're away"}>
-              {studying ? "Stop" : "Study"}
-            </Button>
-          )}
-        </div>
-      )}
-      {shown.length ? shown : <div className="stat-list-row muted">{wanted ? "No spells match" : "—"}</div>}
-    </div>
-  );
+/**
+ * stats.c: a tab's stat groups, asked for when it's shown. Ours: the Abilities tab shows the
+ * Spells and Skills groups together (AbilitiesList.tsx).
+ */
+export function requestTabStats(session: GameSession, tab: Tab): void {
+  if (tab === "abilities") {
+    session.requestStats(STAT_GROUP.SPELLS);
+    session.requestStats(STAT_GROUP.SKILLS);
+    return;
+  }
+  const group = TABS.find((t) => t.tab === tab)?.group;
+  if (group !== undefined && group !== null) session.requestStats(group);
 }

@@ -2229,7 +2229,7 @@ export function GameView({
 
   /** Ours: a click on our face shows (or puts away) the Quick Emotes, as Q does */
   const toggleEmotes = () => setEmoteMenu((v) => !v);
-  /** The Spells tab's Study button: Study mode's window, or stopping it; the phone's drawer goes away for it */
+  /** The ☰ menu's Actions → Study…: Study mode's window, or stopping it; the phone's drawer goes away for it */
   const studyButton = () => {
     setDrawerOpen(false);
     if (studying) stopStudy();
@@ -2301,10 +2301,13 @@ export function GameView({
             label: "Actions",
             items: [
               ...ACTIONS_MENU.map((a) => (a ? { label: a[1], onSelect: () => runCommand(a[0]) } : { label: "", separator: true })),
+              // Ours: Study mode (study.ts), practising a spell while we're away; Stop studying while it runs
+              { label: "", separator: true },
+              { label: studying ? "Stop studying" : "Study…", onSelect: studyButton },
               // (Ours: no Friends… or Pets…: they're tabs beside the inventory, on P and N)
             ],
           },
-          // (Ours: no Spells menu, spells.c's: the Spells tab has them, with a search)
+          // (Ours: no Spells menu, spells.c's: the Abilities tab has them, with a search)
           // language.c: the Language menu, sorted by name, the chosen one checked
           ...(languages.length > 1
             ? [
@@ -2320,7 +2323,7 @@ export function GameView({
           { label: "Change password…", onSelect: () => setModal({ type: "password" }) },
           // Not on a phone, which logs off on its own when put away (host.ts onAndroidAway)
           ...(touch ? [] : [{ label: "Logout timer…", onSelect: () => setModal({ type: "logoutTimer" }) }]),
-          // (Study… is the Spells tab's button)
+          // (Study… is under Actions)
           { label: "Help…", onSelect: () => setModal({ type: "help" }) },
           { label: "About Meridian…", onSelect: () => setModal({ type: "about" }) },
           // Ours: back to Select character, still logged in
@@ -2521,8 +2524,6 @@ export function GameView({
                 petsPanel={petsPanel}
                 questsPanel={questsPanel}
                 companionPanel={companionPanel}
-                onStudy={studyButton}
-                studying={!!studying}
                 onTrain={() => openTrain()}
               />
             )}
@@ -3066,8 +3067,6 @@ export function GameView({
           petsPanel={petsPanel}
           questsPanel={questsPanel}
           companionPanel={companionPanel}
-          onStudy={studyButton}
-          studying={!!studying}
           onTrain={() => openTrain()}
           onEmotes={toggleEmotes}
         />
