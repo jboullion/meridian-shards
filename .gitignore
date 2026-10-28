@@ -13,8 +13,8 @@
 *.ogg
 *.wav
 *.bof
-# the AI playtester's screenshots show the game's art: they stay on this machine
-/playtest/reports/*.png
+# What the AI playtester finds (reports, notes, screenshots): it stays on this machine
+/playtest/
 
 # --- Node
 node_modules/
