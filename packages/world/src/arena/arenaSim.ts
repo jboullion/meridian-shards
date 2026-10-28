@@ -1,6 +1,6 @@
 // Ours (docs/adr/0007-arena.md): an arena's fights (the Arena of Kraanan's, or the Arena of Death's:
-// arenaRooms.ts), as one simulation that everyone on a game server watches. The relay runs it (tools/gateway/arena.ts) and sends what happens; with no
-// relay the client runs it itself (arenaView.ts). It never touches the game: nothing here reaches
+// arenaRooms.ts), as one simulation that everyone on a game server watches. The gateway runs it (tools/gateway/arena.ts) and sends what happens; with no
+// feed the client runs it itself (arenaView.ts). It never touches the game: nothing here reaches
 // blakserv, and real players are never in it.
 //
 // Rounds: a lot of the season's roster comes onto the floor and fights until one is left
@@ -66,7 +66,7 @@ const SAY_MS = 3200;
 const RETARGET_MS = 4000;
 const CHASE_STEP_MS = 350;
 const FOREVER = 1e9;
-/** A player's bout holds the floor at most this long, unless said again (anyone may say so: the relay asks nobody) */
+/** A player's bout holds the floor at most this long, unless said again (anyone may say so: the gateway asks nobody) */
 export const ARENA_BUSY_MAX_MS = 6 * 60_000;
 /** Bowmen keep this far off (squares) */
 const BOW_KEEP = 3;
@@ -180,7 +180,7 @@ export interface ArenaSimOptions {
   champions: ArenaChampion[];
   season: number;
   seed: number;
-  /** The sim's clock at the start (the relay's ms): times in the messages count from it */
+  /** The sim's clock at the start (the gateway's ms): times in the messages count from it */
   now?: number;
   /** The fighting floor's nav area (arenaRooms.ts arenaFloorArea); the stands are the other big ones. Default 1, the biggest */
   floorArea?: number;
@@ -239,7 +239,7 @@ export class ArenaSim {
   private rosterChanged = new Set<number>();
   private championsChanged = false;
   private seasonChanged = false;
-  /** Called when a round ends (the relay saves the records then) */
+  /** Called when a round ends (the gateway saves the records then) */
   onRoundEnd?: () => void;
 
   constructor(grid: NavGrid, opts: ArenaSimOptions) {

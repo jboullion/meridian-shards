@@ -1,6 +1,6 @@
 // Ours (docs/adr/0019-arena-bouts.md): mock bouts in the arenas, as our server tells us (UC_ARENA,
 // shards-server util/arenabouts.kod SendStatus), and the commands we send back (UC_SHARDS
-// "arena ..."). The bouts are real fights on our server against its ArenaFighters; the relay's
+// "arena ..."). The bouts are real fights on our server against its ArenaFighters; the gateway's
 // show of NPCs (arena/) only gives up the floor while one is fought.
 
 import { objId, type ByteReader } from "@shards/protocol";
@@ -95,7 +95,7 @@ export function readArena(r: ByteReader, resource: (id: number) => string | null
   return { arena, state, place, queueLength, floor, secondsLeft, flags, boutPlayer, opponents, records, title, rank, ended };
 }
 
-/** Whether a bout holds the floor (the relay's fighters give way to it) */
+/** Whether a bout holds the floor (the gateway's fighters give way to it) */
 export function floorTaken(s: ArenaStatus | null): boolean {
   return !!s && s.floor !== BOUT_STATE.IDLE;
 }

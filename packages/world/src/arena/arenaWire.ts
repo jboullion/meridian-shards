@@ -1,7 +1,7 @@
 // Ours (docs/adr/0007-arena.md 3): what the arena's sim tells those watching, whether it runs on the
-// relay or (with no relay) in the client itself. The first message has everything (ArenaState);
+// gateway or (with no feed) in the client itself. The first message has everything (ArenaState);
 // then a tick every 100 ms has what changed (ArenaTick). Positions are fine units, angles client
-// angle units (4096 a turn), times the sim's clock (the relay's ms).
+// angle units (4096 a turn), times the sim's clock (the gateway's ms).
 
 import type { Appearance, Pose } from "../ambient/townsfolk.ts";
 import type { ArenaChampion, ArenaRecord } from "./arenaRoster.ts";
@@ -35,13 +35,13 @@ export interface ArenaPersonWire {
   /** How visible (0-100), and whether fading in (1), out (-1) or not (0) */
   fade: number;
   fd: number;
-  /** A spectator's favourite fighter this round (their id), or -1 (absent from relays before 2026-10-13) */
+  /** A spectator's favourite fighter this round (their id), or -1 (absent from gateways before 2026-10-13) */
   fav?: number;
 }
 
 /**
  * What may change about someone tick to tick: [id, x, y, a, pose, ps, cf, hp, st, fade, fd, fav]
- * (fav last, absent from older relays, and ignored by older clients)
+ * (fav last, absent from older gateways, and ignored by older clients)
  */
 export type ArenaMove = [number, number, number, number, Pose, number, number, number, number, number, number, number?];
 
@@ -106,7 +106,7 @@ export interface ArenaState {
   t: "arenaState";
   now: number;
   season: number;
-  /** Labels for archetypes, weapons and spells, so the client needn't have the relay's config */
+  /** Labels for archetypes, weapons and spells, so the client needn't have the gateway's config */
   labels: { arch: Record<string, string>; weapon: Record<string, string>; spell: Record<string, string> };
   people: ArenaPersonWire[];
   fields: ArenaFieldWire[];

@@ -131,3 +131,5 @@ The user decided these on 2026-10-15.
 - the arena through the new feed.
 
 **Not yet tried:** friends on the hosted server (the save changes, so a copy of the VM's save first, as [ADR 0008](0008-player-homes.md) 3.3 says), and two real browsers following each other across several rooms.
+
+**Cleaned up 2026-10-28:** the move-over in decision 4 is removed (the version 1 friends save, the `shards-social` keys, and a browser-only pet going up to the server), and the arena's feed is `ArenaFeed` in `tools/gateway/arenaFeed.ts`, on `/arena` instead of `/social`.

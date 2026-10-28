@@ -1,6 +1,6 @@
 // Ours (docs/adr/0007-arena.md): what the arena's fighters fight with: the spells, weapons and
 // armour of the game, with the numbers its Kod gives them, and our archetypes made of them. These
-// are the defaults; the relay's arena.json may change any of it (arenaConfig.ts).
+// are the defaults; the gateway's arena.json may change any of it (arenaConfig.ts).
 //
 // The numbers are the server's (cited file:line under server/src/kod/object); the arena is ours.
 // "Spell power" is the caster's, 0-99, as Kod's iSpellPower.

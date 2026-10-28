@@ -1,6 +1,6 @@
 # ADR 0007: The arena, one sim on the relay
 
-- **Status:** accepted, 2026-10-12, and built the same day (see "As built"). Builds on the relay of [ADR 0005](0005-friends.md). **Since 2026-10-16** the relay is only the arena's feed: anyone in the arena's room watches with no sign-in (`ArenaClient`, [ADR 0015](0015-social-on-our-server.md) 3). **Since 2026-10-18** ([ADR 0019](0019-arena-bouts.md)): the Arena of Death has a show of its own (one sim per server and room, `arena/arenaRooms.ts`), and a player's mock bout on our server takes either floor while it's fought (decision 8 below still holds for the show: the bouts aren't the relay's).
+- **Status:** accepted, 2026-10-12, and built the same day (see "As built"). Builds on the relay of [ADR 0005](0005-friends.md). **Since 2026-10-16** the relay is only the arena's feed (**since 2026-10-28** `tools/gateway/arenaFeed.ts` on `/arena`, no longer called the relay; `arenaSource` says "gateway"): anyone in the arena's room watches with no sign-in (`ArenaClient`, [ADR 0015](0015-social-on-our-server.md) 3). **Since 2026-10-18** ([ADR 0019](0019-arena-bouts.md)): the Arena of Death has a show of its own (one sim per server and room, `arena/arenaRooms.ts`), and a player's mock bout on our server takes either floor while it's fought (decision 8 below still holds for the show: the bouts aren't the relay's).
 
 ## Context
 

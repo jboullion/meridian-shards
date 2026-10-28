@@ -1,4 +1,4 @@
-# The WebSocket-to-TCP gateway (tools/gateway/gateway.ts), with the friends relay and the arena.
+# The WebSocket-to-TCP gateway (tools/gateway/gateway.ts), with the arena and its feed.
 # Node 24 runs the TypeScript directly; ws is its only dependency, and the arena's packages sit
 # beside it (packages/, found through register.mjs).
 #

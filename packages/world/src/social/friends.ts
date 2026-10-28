@@ -120,8 +120,6 @@ export class FriendsService {
   /** Whether the server has sent the list yet */
   ready = false;
   private prefs: SavedFriends["prefs"] = {};
-  /** Friends' names the old friends relay kept here, asked again once the server's list is in (0015 4) */
-  private legacy: string[] = [];
   private readonly health = new Map<string, { pct: number; time: number }>();
   /** Our own health, which friends in our room hear (5) */
   private ownHealth: number | null = null;
@@ -167,17 +165,6 @@ export class FriendsService {
       const raw = this.host.storage?.getItem(this.host.storageKey);
       if (!raw) return;
       const s = JSON.parse(raw) as Record<string, unknown>;
-      if (s.version === 1 && Array.isArray(s.friends)) {
-        // The relay's list (version 1): its friends are asked again on the server, their switches kept
-        for (const f of s.friends as Record<string, unknown>[]) {
-          if (typeof f?.name !== "string") continue;
-          this.legacy.push(f.name);
-          this.prefs[keyOf(f.name)] = { locate: f.locate !== false, marker: f.marker !== false };
-        }
-        const o = (s.options ?? {}) as Partial<FriendOptions>;
-        this.options.healthBars = o.healthBars !== false;
-        return;
-      }
       if (s.prefs && typeof s.prefs === "object")
         for (const [k, v] of Object.entries(s.prefs as Record<string, { locate?: unknown; marker?: unknown }>))
           this.prefs[k] = { locate: v?.locate !== false, marker: v?.marker !== false };
@@ -276,20 +263,7 @@ export class FriendsService {
       if (now) this.emit({ type: "startFollowing", key: now, name: e.following! });
     }
     this.ready = true;
-    this.migrate();
     this.changed();
-  }
-
-  /** 0015 4: friends the relay kept here are asked on the server, once */
-  private migrate(): void {
-    if (!this.legacy.length) return;
-    const names = this.legacy;
-    this.legacy = [];
-    for (const name of names) {
-      const key = keyOf(name);
-      if (!this.friendByKey(key) && !this.outgoing.some((r) => r.key === key)) this.host.command(`friend request ${name}`);
-    }
-    this.save();
   }
 
   // ---- requests ----

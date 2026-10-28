@@ -1,5 +1,5 @@
 // Ours (docs/adr/0007-arena.md 4): the arena as this client draws it, from the sim's messages
-// (arenaWire.ts), whether they come from the relay or from a sim running here with no relay. The
+// (arenaWire.ts), whether they come from the gateway or from a sim running here with no feed. The
 // messages are played back a little behind the sim's clock, so a late or bunched tick doesn't
 // show: each tick is applied when its time comes, and figures glide between ticks.
 //

@@ -9,7 +9,7 @@
 //   deploy/.stage/site/           the website (landing page, downloads, wiki) from the
 //                                 meridian-shards-website repository next to this one
 //   deploy/.stage/assets/         the asset build (dist/assets)
-//   deploy/.stage/gateway/        the gateway script, the friends relay and the arena, their one
+//   deploy/.stage/gateway/        the gateway script, the arena and its feed, their one
 //                                 dependency (ws), our packages the arena runs on, and the arena's
 //                                 room from the asset build (arena-assets/)
 //
@@ -151,7 +151,7 @@ copy(join(ROOT, "deploy", "blakserv", "blakserv.cfg"), join(STAGE, "blakserv.cfg
 copy(join(ROOT, "deploy", "blakserv", "maint.sh"), join(STAGE, "maint.sh"));
 
 // Gateway: the script plus ws (pure JS, no dependencies of its own)
-for (const f of ["gateway.ts", "relay.ts", "arena.ts"]) copy(join(ROOT, "tools", "gateway", f), join(STAGE, "gateway", f));
+for (const f of ["gateway.ts", "arenaFeed.ts", "arena.ts"]) copy(join(ROOT, "tools", "gateway", f), join(STAGE, "gateway", f));
 copy(join(ROOT, "node_modules", "ws"), join(STAGE, "gateway", "node_modules", "ws"));
 // The arena (docs/adr/0007-arena.md) runs on our packages: their sources beside it, found through
 // register.mjs (Node won't run TypeScript from node_modules), and the arenas' rooms and nav grids

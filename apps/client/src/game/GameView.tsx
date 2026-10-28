@@ -737,8 +737,7 @@ export function GameView({
   };
   /**
    * Ours (docs/adr/0006-pets.md): this character's pet. Our server keeps it (docs/adr/0015); this
-   * browser's copy (pet.ts) shows it until the server says, and goes up to the server once if the
-   * server has none (a pet chosen before the server kept them).
+   * browser's copy (pet.ts) shows it until the server says.
    */
   const [pet, setPetState] = useState<{ name: string; pet: ReturnType<typeof loadPet> }>({ name: "", pet: null });
   if (socialName && pet.name !== socialName) setPetState({ name: socialName, pet: loadPet(localStorage, gameSocketUrl(), socialName) });
@@ -748,15 +747,9 @@ export function GameView({
   };
   useEffect(() => {
     if (!social) return;
-    let first = true;
     return social.onOwnPet((p) => {
-      const local = loadPet(localStorage, gameSocketUrl(), social.character);
-      if (first && !p && local) social.setPet(local);
-      else {
-        savePet(localStorage, gameSocketUrl(), social.character, p);
-        setPetState({ name: social.character, pet: p });
-      }
-      first = false;
+      savePet(localStorage, gameSocketUrl(), social.character, p);
+      setPetState({ name: social.character, pet: p });
     });
   }, [social]);
   /**

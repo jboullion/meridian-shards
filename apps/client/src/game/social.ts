@@ -12,7 +12,7 @@ import {
   type AmbientExits, type AmbientSeed, type ArenaMessage, type Friend, type GameSession, type PetChoice, type SocialEvent,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
-import { gameSocketUrl, socialSocketUrl } from "../host.ts";
+import { arenaSocketUrl, gameSocketUrl } from "../host.ts";
 
 /** Health's stat in the main group (merintr stats.c), as Sidebar.tsx STAT_HP */
 const STAT_HP = 1;
@@ -64,7 +64,7 @@ export class SocialLink {
     this.session = session;
     this.character = character;
     const world = session.world;
-    this.arena = new ArenaClient({ url: socialSocketUrl(), server: gameSocketUrl() }, (m) => this.arenaListener?.(m));
+    this.arena = new ArenaClient({ url: arenaSocketUrl(), server: gameSocketUrl() }, (m) => this.arenaListener?.(m));
     this.friends = new FriendsService({
       command: (line) => session.shardsCommand(line),
       message: (text) => session.localMessage(text),
@@ -125,7 +125,6 @@ export class SocialLink {
     session.shardsCommand("pet list");
     link.healthChanged();
     link.roomFriendsChanged();
-    forgetRelayKeys();
     return link;
   }
 
@@ -189,14 +188,9 @@ export class SocialLink {
     this.arena.setHour(hour);
   }
 
-  /** A player's mock bout holds the arena's floor (our server says so), for the relay's fighters to give way (sent only when it changes) */
+  /** A player's mock bout holds the arena's floor (our server says so), for the feed's fighters to give way (sent only when it changes) */
   arenaBusy(busy: boolean): void {
     this.arena.setBusy(busy);
-  }
-
-  /** Whether the arena's connection is up (the arena falls back to our own without it) */
-  get relayOnline(): boolean {
-    return this.arena.online;
   }
 
   /** For React: a number that changes whenever anything shown does */
@@ -313,14 +307,5 @@ export class SocialLink {
   objectOf(key: string): number | null {
     for (const [id, f] of this.friendIds) if (f.key === key) return id;
     return null;
-  }
-}
-
-/** 0015 4: the relay's keys (socialKeys.ts, IndexedDB shards-social) aren't needed any more */
-function forgetRelayKeys(): void {
-  try {
-    if (typeof indexedDB !== "undefined") indexedDB.deleteDatabase("shards-social");
-  } catch {
-    // Not there, or not allowed: nothing to forget
   }
 }

@@ -1,6 +1,6 @@
 // FriendsService over our server (docs/adr/0015-social-on-our-server.md): it keeps the server's
 // word, sends its commands, starts and stops following as the server's list says, keeps only the
-// display switches itself, and asks the relay's old friends again once.
+// display switches itself.
 
 import { describe, expect, it } from "vitest";
 import { FriendsService, type FriendsEvent, type FriendsHost, type SocialEvent } from "../src/index.ts";
@@ -128,17 +128,5 @@ describe("friends from our server", () => {
     expect(commands).toEqual(["friend search sh"]);
     fs.handle({ type: "search", names: ["Shardpal", "Ash"] });
     expect(await found).toEqual(["Ash", "Shardpal"]);
-  });
-
-  it("asks the relay's old friends again once, keeping their switches", () => {
-    const old = { version: 1, friends: [{ name: "Shardpal", key: "k1", locate: false, marker: true }, { name: "Gone", key: "k2" }], options: { healthBars: false } };
-    const { fs, commands, store } = make({ friends: JSON.stringify(old) });
-    fs.handle(list());
-    expect(commands).toEqual(["friend request Gone"]);
-    expect(fs.friendByKey("shardpal")?.locate).toBe(false);
-    expect(fs.options.healthBars).toBe(false);
-    fs.handle(list());
-    expect(commands).toHaveLength(1);
-    expect(JSON.parse(store.get("friends")!).version).toBe(2);
   });
 });

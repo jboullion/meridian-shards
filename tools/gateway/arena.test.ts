@@ -1,6 +1,6 @@
-// The arena on the relay (docs/adr/0007-arena.md): everyone on a server watches one arena, it stops
+// The arena on the gateway (docs/adr/0007-arena.md): everyone on a server watches one arena, it stops
 // when nobody does, its season is kept on disk and turns over each Meridian year, and players get
-// it through the relay with an ArenaClient.
+// it through the feed with an ArenaClient.
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -13,7 +13,7 @@ import {
   ArenaClient, DEFAULT_ARENA_CONFIG, SEASON_MS, seasonStart, type ArenaMessage, type ArenaState, type ArenaTick,
 } from "../../packages/world/src/index.ts";
 import { ArenaHost } from "./arena.ts";
-import { ArenaRelay } from "./relay.ts";
+import { ArenaFeed } from "./arenaFeed.ts";
 
 const ASSETS = join(import.meta.dirname, "../../dist/assets");
 const have = existsSync(join(ASSETS, "tosarena.roo"));
@@ -49,7 +49,7 @@ const watcher = () => {
   return { got, send: (t: string) => void got.push(JSON.parse(t) as ArenaMessage) };
 };
 
-describe.skipIf(!have)("the arena on the relay", () => {
+describe.skipIf(!have)("the arena on the gateway", () => {
   it("everyone on a server watches the same arena; another server has its own", () => {
     const clock = { now: seasonStart(3) + 1000 };
     const h = host(clock);
@@ -171,21 +171,21 @@ describe.skipIf(!have)("the arena on the relay", () => {
     expect(h.simOf(SERVER)!.phase).not.toBe("closed");
   });
 
-  it("players watch it through the relay; with no arena there, they're told", async () => {
+  it("players watch it through the feed; with no arena there, they're told", async () => {
     const clock = { now: Date.now() };
     const h = host(clock);
-    const relay = new ArenaRelay({ arena: h });
+    const feed = new ArenaFeed({ arena: h });
     const wss = new WebSocketServer({ noServer: true });
     http = createServer();
     http.on("upgrade", (req, socket, head) =>
       wss.handleUpgrade(req, socket, head, (ws) => {
-        const conn = relay.connect({ send: (t) => ws.send(t), close: (code, r) => ws.close(code, r) });
+        const conn = feed.connect({ send: (t) => ws.send(t), close: (code, r) => ws.close(code, r) });
         ws.on("message", (d) => void conn.receive(String(d)));
         ws.on("close", () => conn.closed());
       }),
     );
     await new Promise<void>((r) => http!.listen(0, "127.0.0.1", r));
-    const url = `ws://127.0.0.1:${(http.address() as AddressInfo).port}/social`;
+    const url = `ws://127.0.0.1:${(http.address() as AddressInfo).port}/arena`;
     const heard: (ArenaMessage | null)[] = [];
     const client = new ArenaClient({ url, server: SERVER }, (m) => heard.push(m));
     clients.push(client);

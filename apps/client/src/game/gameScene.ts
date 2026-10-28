@@ -68,7 +68,7 @@ const NAV_GRIDS_KEPT = 8;
  * the scene starts for it before making a crowd of our own (ms)
  */
 const SOCIAL_START_WAIT_MS = 3000;
-/** The arena: how long to wait for the relay's fights before running our own (docs/adr/0007-arena.md) */
+/** The arena: how long to wait for the gateway's fights before running our own (docs/adr/0007-arena.md) */
 const ARENA_WAIT_MS = 4000;
 /** Ours (pets, docs/adr/0006-pets.md 3.5): at most this many drawn, ours and the nearest */
 const MAX_PETS = 12;
@@ -273,17 +273,17 @@ export class GameScene {
   private readonly startedAt = performance.now();
   /**
    * Ours (docs/adr/0007-arena.md): the arena's fights as we draw them, and the room they're in.
-   * They come from the relay, which runs one arena for everyone on our server; with no relay (or
+   * They come from the gateway, which runs one arena for everyone on our server; with no feed (or
    * none answering in time), from a sim of our own (`arenaLocal`).
    */
   private arena: ArenaView | null = null;
   private arenaRoom = "";
-  private arenaFeed: "waiting" | "relay" | "local" = "waiting";
+  private arenaFeed: "waiting" | "gateway" | "local" = "waiting";
   private arenaWaitUntil = 0;
   private arenaLocal: { sim: ArenaSim; due: number; ticks: number } | null = null;
-  /** The arenas' settings by room, as the relay's defaults have them (for their hours and our own sim) */
+  /** The arenas' settings by room, as the gateway's defaults have them (for their hours and our own sim) */
   private readonly arenaConfigs = readArenaConfigs(undefined).configs;
-  /** The busy floor as last told to the relay or our own sim */
+  /** The busy floor as last told to the gateway or our own sim */
   private arenaBusySent = false;
   /** Cheers the stands give a player's mock bout (our hits in it), heard with the arena's sounds */
   private boutCheers: ArenaEvent[] = [];
@@ -508,7 +508,7 @@ export class GameScene {
   companion: { id: number; hpPct: number } | null = null;
   /** Ours (docs/adr/0019-arena-bouts.md): the arena bout's fighters' health, by object, for a bar under each name */
   arenaHp = new Map<number, number>();
-  /** ...and whether one holds the floor: the relay's show of NPCs gives way to it */
+  /** ...and whether one holds the floor: the gateway's show of NPCs gives way to it */
   arenaFloorBusy = false;
   private pets: Pets | null = null;
   private petsRoom = "";
@@ -1376,8 +1376,8 @@ export class GameScene {
 
   /**
    * Ours (docs/adr/0007-arena.md): the arena's fights while we're in its room (`file`; null when
-   * not, or Ambient Life is off). Watched on the relay, so everyone on our server sees the same; if
-   * the relay has none or doesn't answer within ARENA_WAIT_MS, a sim of our own (the defaults, this
+   * not, or Ambient Life is off). Watched on the gateway, so everyone on our server sees the same; if
+   * the gateway has none or doesn't answer within ARENA_WAIT_MS, a sim of our own (the defaults, this
    * season's roster) runs here instead, much the same to look at.
    */
   private updateArena(dt: number, file: string | null): void {
@@ -1399,19 +1399,19 @@ export class GameScene {
         if (this.arena !== view) return;
         if (!m) return this.startLocalArena(view);
         if (this.arenaFeed === "local") {
-          // The relay came back: its arena from now on
+          // The feed came back: its arena from now on
           if (m.t !== "arenaState") return;
           this.arenaLocal = null;
         }
-        this.arenaFeed = "relay";
+        this.arenaFeed = "gateway";
         view.receive(m);
       }, this.gameHour());
     }
     const view = this.arena;
     if (!view) return;
-    // The relay keeps the arena's hours by our sun (an admin's time change too)
+    // The gateway keeps the arena's hours by our sun (an admin's time change too)
     this.social?.arenaHour(this.gameHour());
-    // A player's mock bout on our server holds the floor: the relay's fighters (or our own sim's) give way
+    // A player's mock bout on our server holds the floor: the gateway's fighters (or our own sim's) give way
     if (this.arenaFloorBusy !== this.arenaBusySent) {
       this.arenaBusySent = this.arenaFloorBusy;
       this.social?.arenaBusy(this.arenaFloorBusy);
@@ -1420,7 +1420,7 @@ export class GameScene {
     if (this.arenaFeed === "waiting" && performance.now() > this.arenaWaitUntil) this.startLocalArena(view);
     const local = this.arenaLocal;
     if (local) {
-      // Fixed ticks, as the relay runs them, and a message every other one
+      // Fixed ticks, as the gateway runs them, and a message every other one
       local.due += Math.min(dt, 1000);
       while (local.due >= ARENA_TICK_MS) {
         local.due -= ARENA_TICK_MS;
@@ -1431,7 +1431,7 @@ export class GameScene {
     view.update(performance.now(), dt);
   }
 
-  /** No arena from the relay: our own, on the room's nav grid once it's there */
+  /** No arena from the gateway: our own, on the room's nav grid once it's there */
   private startLocalArena(view: ArenaView): void {
     if (this.arenaLocal || !this.loaded) return;
     const file = this.arenaRoom;
@@ -1439,7 +1439,7 @@ export class GameScene {
     if (grid === undefined) return void this.loadNavGrid(file, this.loaded.room);
     if (grid === "loading") return;
     const config = this.arenaConfigs[file] ?? this.arenaConfigs["tosarena.roo"]!;
-    // Its season's roster as the relay keeps it: the server's name, and the arena's own key
+    // Its season's roster as the gateway keeps it: the server's name, and the arena's own key
     const server = gameSocketUrl() + (ARENA_ROOM_DEFS[file]?.seasonKey ?? "");
     const season = seasonAt(Date.now());
     const nav = grid === "build" ? buildNavGrid(this.loaded.room, this.waterTextures) : grid;
@@ -1469,8 +1469,8 @@ export class GameScene {
     return this.arenaLocal?.sim ?? null;
   }
 
-  /** Where the arena's fights come from now: the relay, our own sim, or neither yet */
-  get arenaSource(): "waiting" | "relay" | "local" | null {
+  /** Where the arena's fights come from now: the gateway, our own sim, or neither yet */
+  get arenaSource(): "waiting" | "gateway" | "local" | null {
     return this.arena ? this.arenaFeed : null;
   }
 

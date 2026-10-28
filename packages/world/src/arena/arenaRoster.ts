@@ -1,6 +1,6 @@
 // Ours (docs/adr/0007-arena.md): the arena's fighters for a season, and their records. A season is a
 // Meridian year: a game day is two real hours (system.kod SystemInitGameHour, util/system.kod:4361)
-// and a year 240 of them (NewGameDay, :4480), so 20 real days. The relay can't read the server's
+// and a year 240 of them (NewGameDay, :4480), so 20 real days. The gateway can't read the server's
 // year, so seasons count from a fixed day of our own. Each season's roster is made from the game
 // server's name and the season's number, so it's the same wherever it's made.
 

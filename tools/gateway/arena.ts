@@ -1,4 +1,4 @@
-// The arenas on the relay (docs/adr/0007-arena.md): one ArenaSim per game server and arena room
+// The arenas on the gateway (docs/adr/0007-arena.md): one ArenaSim per game server and arena room
 // (packages/world arenaRooms.ts: the Arena of Kraanan's melees by day, the Arena of Death's duels
 // by night), run while anyone on that server watches it (a player with Ambient Life on, in its
 // room), so everyone there sees the same fights, friends or not. It ticks every 50 ms against the
@@ -6,7 +6,7 @@
 // after the last watcher leaves, the round is dropped; the next visitor starts a new one.
 //
 // Each arena's season (roster and records, arenaRoster.ts) is kept in one small JSON file
-// (ARENA_STATE), written when a round ends and when the season turns: the one thing the relay
+// (ARENA_STATE), written when a round ends and when the season turns: the one thing the gateway
 // keeps on disk. The Arena of Kraanan's is kept under the server's name, as it always was; the
 // others' under the name and the room's season key.
 //
@@ -31,7 +31,7 @@ const MAX_CATCH_UP = 40;
 /** Champions kept per server */
 const MAX_CHAMPIONS = 20;
 
-/** Someone watching: the relay's connection, as text */
+/** Someone watching: the feed's connection, as text */
 export interface ArenaWatcher {
   send(text: string): void;
 }
@@ -112,7 +112,7 @@ export class ArenaHost {
     if (known !== undefined) return known;
     const roo = join(this.opts.assetsDir, room);
     if (!ARENA_ROOM_DEFS[room] || !existsSync(roo)) {
-      this.log(`arena: no ${roo}, so no arena there on the relay`);
+      this.log(`arena: no ${roo}, so no arena there on the gateway`);
       this.grids.set(room, null);
       return null;
     }

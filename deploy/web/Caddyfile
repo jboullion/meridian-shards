@@ -1,5 +1,5 @@
 # Caddy: HTTPS for the website at / (with the downloads at /download/ and the wiki at /wiki/),
-# the browser client at /play/, the game assets, the WebSocket gateway at /ws and the friends relay at /social. The apps
+# the browser client at /play/, the game assets, the WebSocket gateway at /ws and the arena's feed at /arena. The apps
 # themselves are GitHub Releases. SITE_ADDRESS is the hostname (e.g. 34-123-45-67.sslip.io), or
 # several separated by a comma *and a space*, quoted in .env: SITE_ADDRESS="a.sslip.io, example.com"
 # (without the space Caddy refuses to start). Caddy gets its certificates from Let's Encrypt by
@@ -27,9 +27,9 @@
 		}
 	}
 
-	# The friends relay (docs/adr/0005-friends.md), in the gateway's process: it limits connections
+	# The arena's feed (docs/adr/0007-arena.md), in the gateway's process: it limits connections
 	# per address the same way.
-	handle /social {
+	handle /arena {
 		reverse_proxy gateway:8059 {
 			header_up X-Forwarded-For {client_ip}
 		}

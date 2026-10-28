@@ -1,5 +1,5 @@
 // Ours (docs/adr/0007-arena.md): everything about the arena that can be changed without code. The
-// defaults are here; the relay reads an arena.json (ARENA_CONFIG) and merges it over them with
+// defaults are here; the gateway reads an arena.json (ARENA_CONFIG) and merges it over them with
 // `readArenaConfig`, which keeps only what it understands and says what it threw away.
 
 import { ARENA_ARCHETYPES, ARENA_ARMOUR, ARENA_SPELLS, ARENA_WEAPONS, type ArchetypeDef, type ArenaSpellDef, type ArenaWeaponDef } from "./arenaData.ts";

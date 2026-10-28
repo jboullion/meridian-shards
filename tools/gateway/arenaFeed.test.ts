@@ -1,10 +1,10 @@
-// The arena's feed (relay.ts, docs/adr/0015-social-on-our-server.md 3): watching needs no sign-in,
-// only the server and the arena's room; anything else is told there's no arena, and the relay
-// keeps its limits. The fights themselves are arena.test.ts's.
+// The arena's feed (arenaFeed.ts, docs/adr/0015-social-on-our-server.md 3): watching needs no
+// sign-in, only the server and the arena's room; anything else is told there's no arena, and the
+// feed keeps its limits. The fights themselves are arena.test.ts's.
 
 import { describe, expect, it } from "vitest";
 import type { ArenaHost, ArenaWatcher } from "./arena.ts";
-import { ArenaRelay, RELAY_MAX_MESSAGE, RELAY_RATE } from "./relay.ts";
+import { ArenaFeed, FEED_MAX_MESSAGE, FEED_RATE } from "./arenaFeed.ts";
 
 /** An arena host that only notes who watches */
 function fakeHost() {
@@ -41,9 +41,9 @@ function peer() {
 describe("the arena's feed", () => {
   it("watches with no sign-in, hears the hour, and stops when asked or gone", async () => {
     const { host, watching, hours } = fakeHost();
-    const relay = new ArenaRelay({ arena: host });
+    const feed = new ArenaFeed({ arena: host });
     const p = peer();
-    const conn = relay.connect(p.peer);
+    const conn = feed.connect(p.peer);
     await conn.receive(JSON.stringify({ t: "arenaWatch", server: "ws://test/ws", room: "tosarena.roo", hour: 14 }));
     expect(watching).toHaveLength(1);
     expect(watching[0]).toMatchObject({ server: "ws://test/ws", hour: 14 });
@@ -56,14 +56,14 @@ describe("the arena's feed", () => {
     expect(watching).toHaveLength(1);
     conn.closed();
     expect(watching).toHaveLength(0);
-    expect(relay.size).toBe(0);
+    expect(feed.size).toBe(0);
   });
 
   it("watches the Arena of Death too, and passes on a player's bout holding the floor", async () => {
     const { host, watching, busy } = fakeHost();
-    const relay = new ArenaRelay({ arena: host });
+    const feed = new ArenaFeed({ arena: host });
     const p = peer();
-    const conn = relay.connect(p.peer);
+    const conn = feed.connect(p.peer);
     // Not before watching
     await conn.receive(JSON.stringify({ t: "arenaBusy", busy: true }));
     expect(busy).toEqual([]);
@@ -80,14 +80,14 @@ describe("the arena's feed", () => {
 
   it("says there's no arena for another room, no server, or no arena at all", async () => {
     const { host, watching } = fakeHost();
-    const relay = new ArenaRelay({ arena: host });
+    const feed = new ArenaFeed({ arena: host });
     const p = peer();
-    const conn = relay.connect(p.peer);
+    const conn = feed.connect(p.peer);
     await conn.receive(JSON.stringify({ t: "arenaWatch", server: "ws://test/ws", room: "tos.roo" }));
     await conn.receive(JSON.stringify({ t: "arenaWatch", room: "tosarena.roo" }));
     expect(p.sent.map((m) => m.t)).toEqual(["arenaOff", "arenaOff"]);
     expect(watching).toHaveLength(0);
-    const none = new ArenaRelay();
+    const none = new ArenaFeed();
     const q = peer();
     await none.connect(q.peer).receive(JSON.stringify({ t: "arenaWatch", server: "ws://test/ws", room: "tosarena.roo" }));
     expect(q.sent.map((m) => m.t)).toEqual(["arenaOff"]);
@@ -96,16 +96,16 @@ describe("the arena's feed", () => {
   it("drops what's over the rate and closes on a message too big", async () => {
     let now = 0;
     const { host, watching } = fakeHost();
-    const relay = new ArenaRelay({ arena: host, now: () => now });
+    const feed = new ArenaFeed({ arena: host, now: () => now });
     const p = peer();
-    const conn = relay.connect(p.peer);
+    const conn = feed.connect(p.peer);
     const watch = JSON.stringify({ t: "arenaWatch", server: "ws://test/ws", room: "tosarena.roo" });
-    for (let i = 0; i < 3 * RELAY_RATE; i++) await conn.receive(watch);
+    for (let i = 0; i < 3 * FEED_RATE; i++) await conn.receive(watch);
     // A burst of twice the rate is let through, each watch replacing the last
-    expect(p.sent).toHaveLength(2 * RELAY_RATE);
+    expect(p.sent).toHaveLength(2 * FEED_RATE);
     expect(watching).toHaveLength(1);
     now += 1000;
-    await conn.receive("x".repeat(RELAY_MAX_MESSAGE + 1));
+    await conn.receive("x".repeat(FEED_MAX_MESSAGE + 1));
     expect(p.closes).toEqual([1009]);
     expect(watching).toHaveLength(0);
   });

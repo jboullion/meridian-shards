@@ -1,24 +1,23 @@
 // The arena's feed (docs/adr/0007-arena.md; docs/adr/0015-social-on-our-server.md 3): anyone in
 // the arena's room watches its fights, which this gateway runs (arena.ts), one sim per game
 // server. No sign-in: a connection says which server and room it's in and gets the fights, then
-// the changes, until it stops. Friends, presence and pets were here once (the friends relay of
-// docs/adr/0005-friends.md); our server keeps them now (shards-server util/shardssocial.kod).
-// Transport-agnostic: gateway.ts feeds it WebSocket text frames; the tests feed it directly.
+// the changes, until it stops. (It was the friends relay once; our server keeps friends and pets
+// now, shards-server util/shardssocial.kod.) Transport-agnostic: gateway.ts feeds it WebSocket text frames; the tests feed it directly.
 
 import type { ArenaHost, ArenaWatcher } from "./arena.ts";
 
 /** The longest message (bytes), and the most a connection may send a second (a burst of twice that) */
-export const RELAY_MAX_MESSAGE = 4096;
-export const RELAY_RATE = 20;
+export const FEED_MAX_MESSAGE = 4096;
+export const FEED_RATE = 20;
 const MAX_SERVER = 200;
 
-export interface RelayPeer {
+export interface FeedPeer {
   send(text: string): void;
   close(code: number, reason: string): void;
 }
 
 interface Conn {
-  peer: RelayPeer;
+  peer: FeedPeer;
   /** The game server it watches the arena of, once it asks, and the arena's room */
   server: string;
   room: string;
@@ -31,7 +30,7 @@ interface Conn {
 
 type Json = Record<string, unknown>;
 
-export class ArenaRelay {
+export class ArenaFeed {
   private readonly now: () => number;
   private readonly log: (...a: unknown[]) => void;
   private readonly arena: ArenaHost | null;
@@ -48,8 +47,8 @@ export class ArenaRelay {
     return this.conns;
   }
 
-  connect(peer: RelayPeer): { receive: (text: string) => Promise<void>; closed: () => void } {
-    const c: Conn = { peer, server: "", room: "", arena: null, tokens: 2 * RELAY_RATE, refilled: this.now(), closed: false };
+  connect(peer: FeedPeer): { receive: (text: string) => Promise<void>; closed: () => void } {
+    const c: Conn = { peer, server: "", room: "", arena: null, tokens: 2 * FEED_RATE, refilled: this.now(), closed: false };
     this.conns++;
     return { receive: async (text) => this.receive(c, text), closed: () => this.closed(c) };
   }
@@ -68,7 +67,7 @@ export class ArenaRelay {
   /** The token bucket: false when this message is over the rate (it's dropped) */
   private allowed(c: Conn): boolean {
     const now = this.now();
-    c.tokens = Math.min(2 * RELAY_RATE, c.tokens + ((now - c.refilled) * RELAY_RATE) / 1000);
+    c.tokens = Math.min(2 * FEED_RATE, c.tokens + ((now - c.refilled) * FEED_RATE) / 1000);
     c.refilled = now;
     if (c.tokens < 1) return false;
     c.tokens -= 1;
@@ -77,7 +76,7 @@ export class ArenaRelay {
 
   private receive(c: Conn, text: string): void {
     if (c.closed) return;
-    if (text.length > RELAY_MAX_MESSAGE) {
+    if (text.length > FEED_MAX_MESSAGE) {
       this.closed(c);
       return c.peer.close(1009, "too big");
     }
@@ -96,7 +95,7 @@ export class ArenaRelay {
       case "arenaLeave":
         return this.leaveArena(c);
       case "arenaHour":
-        if (c.arena) this.arena?.setHour(c.server, ArenaRelay.readHour(m.hour));
+        if (c.arena) this.arena?.setHour(c.server, ArenaFeed.readHour(m.hour));
         return;
       case "arenaBusy":
         // A player's mock bout holds the floor (docs/adr/0019-arena-bouts.md): anyone watching may
@@ -114,7 +113,7 @@ export class ArenaRelay {
     const room = m.room;
     if (!this.arena || typeof room !== "string" || !this.arena.rooms.includes(room)) return this.send(c, { t: "arenaOff" });
     const w: ArenaWatcher = { send: (text) => void (!c.closed && c.peer.send(text)) };
-    if (!this.arena.watch(server, w, ArenaRelay.readHour(m.hour), room)) return this.send(c, { t: "arenaOff" });
+    if (!this.arena.watch(server, w, ArenaFeed.readHour(m.hour), room)) return this.send(c, { t: "arenaOff" });
     c.server = server;
     c.room = room;
     c.arena = w;

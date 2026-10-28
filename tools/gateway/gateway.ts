@@ -9,10 +9,9 @@
 // GATEWAY_ORIGINS (comma-separated allowed Origin headers; empty = allow all),
 // GATEWAY_TRUST_PROXY=1 (take the client IP from X-Forwarded-For).
 //
-// The path /social is the arena's feed instead (relay.ts, docs/adr/0007-arena.md): JSON text
+// The path /arena is the arena's feed instead (arenaFeed.ts, docs/adr/0007-arena.md): JSON text
 // frames, never reaching blakserv, with its own per-IP limit, the same number, so a player's two
-// connections don't crowd each other out. (It carried the friends relay too until our server took
-// friends and pets over, docs/adr/0015-social-on-our-server.md; the path keeps its name.)
+// connections don't crowd each other out.
 //
 // The gateway runs the arena's fights (arena.ts):
 // ARENA_ASSETS (the asset build with tosarena.roo, default dist/assets), ARENA_STATE (the season
@@ -26,7 +25,7 @@ import { parseArgs } from "node:util";
 import { WebSocketServer } from "ws";
 import { readArenaConfigs } from "@shards/world";
 import { ArenaHost } from "./arena.ts";
-import { ArenaRelay, RELAY_MAX_MESSAGE } from "./relay.ts";
+import { ArenaFeed, FEED_MAX_MESSAGE } from "./arenaFeed.ts";
 
 const { values: args } = parseArgs({
   options: {
@@ -45,7 +44,7 @@ const TRUST_PROXY = process.env.GATEWAY_TRUST_PROXY === "1";
 const MAX_MESSAGE = 1 << 20;
 
 const perIp = new Map<string, number>();
-const socialPerIp = new Map<string, number>();
+const arenaPerIp = new Map<string, number>();
 let nextId = 1;
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
@@ -87,8 +86,8 @@ const arena = new ArenaHost({
   statePath: statePath === "none" ? null : statePath,
   log,
 });
-const social = new ArenaRelay({ log, arena });
-const socialWss = new WebSocketServer({ noServer: true, maxPayload: RELAY_MAX_MESSAGE, perMessageDeflate: false });
+const feed = new ArenaFeed({ log, arena });
+const feedWss = new WebSocketServer({ noServer: true, maxPayload: FEED_MAX_MESSAGE, perMessageDeflate: false });
 
 /** One fewer connection from this address */
 const release = (counts: Map<string, number>, ip: string) => {
@@ -109,27 +108,27 @@ http.on("upgrade", (req, socket, head) => {
     socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
     return;
   }
-  const isSocial = (req.url ?? "/").split("?")[0] === "/social";
-  const counts = isSocial ? socialPerIp : perIp;
+  const isArena = (req.url ?? "/").split("?")[0] === "/arena";
+  const counts = isArena ? arenaPerIp : perIp;
   const count = counts.get(ip) ?? 0;
   if (count >= MAX_PER_IP) {
-    log(`reject ${ip}: ${count} ${isSocial ? "social " : ""}connections already`);
+    log(`reject ${ip}: ${count} ${isArena ? "arena " : ""}connections already`);
     socket.end("HTTP/1.1 429 Too Many Requests\r\n\r\n");
     return;
   }
   counts.set(ip, count + 1);
 
-  if (isSocial) {
-    socialWss.handleUpgrade(req, socket, head, (ws) => {
+  if (isArena) {
+    feedWss.handleUpgrade(req, socket, head, (ws) => {
       let open = true;
-      const conn = social.connect({
+      const conn = feed.connect({
         send: (text) => ws.send(text),
         close: (code, reason) => ws.close(code, reason),
       });
       const finish = () => {
         if (!open) return;
         open = false;
-        release(socialPerIp, ip);
+        release(arenaPerIp, ip);
         conn.closed();
       };
       ws.on("message", (data, isBinary) => {
@@ -189,7 +188,7 @@ http.on("upgrade", (req, socket, head) => {
 });
 
 http.listen(PORT, () => {
-  log(`gateway listening on ws://localhost:${PORT} -> ${SERVER_HOST}:${SERVER_PORT} (max ${MAX_PER_IP}/IP), the arena's feed on /social`);
+  log(`gateway listening on ws://localhost:${PORT} -> ${SERVER_HOST}:${SERVER_PORT} (max ${MAX_PER_IP}/IP), the arena's feed on /arena`);
 });
 
 // The arena's season is saved before going (docker stop sends SIGTERM)

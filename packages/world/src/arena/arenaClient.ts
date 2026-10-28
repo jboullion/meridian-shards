@@ -10,7 +10,7 @@ const BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30_000;
 
 export interface ArenaClientOptions {
-  /** The gateway's arena socket (/social) */
+  /** The gateway's arena socket (/arena) */
   url: string;
   /** The game server we play on (its game socket URL): each has its own arena */
   server: string;
@@ -54,7 +54,7 @@ export class ArenaClient {
   }
 
   /**
-   * A player's mock bout holds the floor (our server says so: UC_ARENA): the relay's fighters give
+   * A player's mock bout holds the floor (our server says so: UC_ARENA): the gateway's fighters give
    * way to it until it's over. Said again on every watch, so a reconnect keeps it
    */
   setBusy(busy: boolean): void {
