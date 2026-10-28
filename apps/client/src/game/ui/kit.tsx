@@ -345,10 +345,12 @@ export function Text({ at: r, wrap, className, children }: { at?: Rect; wrap?: b
 
 /** PUSHBUTTON / DEFPUSHBUTTON: a stone bevel. */
 export function Button({
-  at: r, isDefault, disabled, onClick, type = "button", className, title, label, children,
+  at: r, isDefault, disabled, onClick, type = "button", className, title, label, autoFocus, children,
 }: {
   at?: Rect;
   isDefault?: boolean;
+  /** Focused as it appears, so Enter presses it (a window opened from another) */
+  autoFocus?: boolean;
   disabled?: boolean;
   onClick?: () => void;
   type?: "button" | "submit";
@@ -367,6 +369,7 @@ export function Button({
       onClick={onClick}
       title={title}
       aria-label={label}
+      autoFocus={autoFocus}
     >
       {children}
     </button>

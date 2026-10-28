@@ -190,7 +190,7 @@ export function QuestDialog({
       <Window title={quest.name} onClose={onClose} className="game-dialog quest-dialog">
         <p className="quest-story">{last ? quest.text.complete : next?.brief || quest.text.progress || "There's more to do."}</p>
         {last ? (
-          <p className="quest-reward">Reward: {rewardText(quest)}</p>
+          <Reward quest={quest} />
         ) : (
           next && (
             <>
@@ -241,7 +241,7 @@ export function QuestDialog({
       <h4>{state === QUEST_OFFER.OFFER || state === QUEST_OFFER.SOON ? "Objectives" : "Progress"}</h4>
       <Objectives quest={quest} step={active ? step : undefined} count={active?.count} />
       {(state === QUEST_OFFER.OFFER || state === QUEST_OFFER.SOON || (state === QUEST_OFFER.READY && step >= quest.steps.length)) && (
-        <p className="quest-reward">Reward: {rewardText(quest)}</p>
+        <Reward quest={quest} />
       )}
       <div className="mk-buttons">
         {state === QUEST_OFFER.OFFER && (
@@ -259,6 +259,17 @@ export function QuestDialog({
         <Button onClick={onClose}>{state === QUEST_OFFER.OFFER ? "Decline" : "Close"}</Button>
       </div>
     </Window>
+  );
+}
+
+/** A quest's reward, under a heading as Progress is */
+function Reward({ quest }: { quest: CatalogQuest }) {
+  const text = rewardText(quest);
+  return (
+    <>
+      <h4>Reward</h4>
+      <p className="quest-reward">{text.charAt(0).toUpperCase() + text.slice(1)}</p>
+    </>
   );
 }
 
@@ -292,21 +303,22 @@ export function QuestInfoDialog({ id, store, session, onClose }: { id: number; s
   const where = quest.giver.rooms.map((r) => r.name).join(" or ");
   return (
     <Window title={quest.name} onClose={onClose} className="game-dialog quest-dialog quest-info">
+      {/* Who gives it, and what it asks: a heading as Progress and Reward are, the health under it */}
+      <h4 className="quest-giver">
+        {quest.giver.name}
+        {where ? `, ${where}` : ""}
+      </h4>
       <p className="quest-band">
         {bandText(quest)}
         {quest.repeatHours !== null ? ", can be done again" : ""}
         {!active && done ? `, done${done.times > 1 ? ` ${done.times} times` : ""}` : ""}
-      </p>
-      <p className="quest-giver">
-        Given by {quest.giver.name}
-        {where ? `, ${where}` : ""}
       </p>
       <p className="quest-story">{quest.text.offer}</p>
       {current?.brief && <p className="quest-story">{current.brief}</p>}
       <h4>{active ? "Progress" : "Objectives"}</h4>
       <Objectives quest={quest} step={step} count={active?.count} />
       {timed && <p className="quest-time">Time left: {timeLeftText(left)}</p>}
-      <p className="quest-reward">Reward: {rewardText(quest)}</p>
+      <Reward quest={quest} />
       <div className="mk-buttons">
         {active && <Check label="Track" title="Show its way on the map, and first in the quest box (up to three)" checked={store.isTracked(id)} onChange={(v) => store.setTracked(id, v)} />}
         {active && (
@@ -320,7 +332,7 @@ export function QuestInfoDialog({ id, store, session, onClose }: { id: number; s
             Abandon
           </Button>
         )}
-        <Button isDefault onClick={onClose}>
+        <Button isDefault autoFocus onClick={onClose}>
           Close
         </Button>
       </div>

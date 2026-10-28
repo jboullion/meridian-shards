@@ -802,14 +802,7 @@ export function GameView({
   const getWay = useCallback(() => questWays.get(sceneRef.current?.roomFile ?? ""), [questWays]);
   const openQuestInfo = useCallback((id: number) => setModal({ type: "questInfo", id }), []);
   const questsPanel = (
-    <QuestsPanel
-      store={quests}
-      session={session}
-      maxHealth={petStats.maxHealth}
-      onOpen={openQuestInfo}
-      showSuggested={settings.questSuggestions}
-      onShowSuggested={(on) => updateSettings({ questSuggestions: on })}
-    />
+    <QuestsPanel store={quests} maxHealth={petStats.maxHealth} onOpen={openQuestInfo} />
   );
   // Ours (docs/adr/0010-followers.md 9.2): the Companion tab
   const companionVersion = useCompanion(companion);

@@ -40,7 +40,8 @@ export const TABS: { tab: Tab; group: number | null; bitmap: string | null; labe
   { tab: "stats", group: STAT_GROUP.STATS, bitmap: "statbtn_left_stats.bmp", label: "Statistics" },
   // Ours (docs/adr/0028): the Spells and Skills groups in one tab, by school (AbilitiesList.tsx)
   { tab: "abilities", group: STAT_GROUP.SPELLS, bitmap: "statbtn_left_spell.bmp", label: "Abilities" },
-  { tab: "quests", group: STAT_GROUP.QUESTS, bitmap: "statbtn_left_quest.bmp", label: "Quests" },
+  // Ours: a scroll (TAB_ART) for the original's book glyph, which was hard to make out
+  { tab: "quests", group: STAT_GROUP.QUESTS, bitmap: null, label: "Quests" },
   // Ours: docs/adr/0005-friends.md and 0006-pets.md
   { tab: "friends", group: null, bitmap: null, label: "Friends" },
   { tab: "pets", group: null, bitmap: null, label: "Pets" },
@@ -50,15 +51,20 @@ export const TABS: { tab: Tab; group: number | null; bitmap: string | null; labe
 
 /**
  * Our tabs' pictures, drawn where the original's tabs have their glyph bitmap: the game's own art,
- * as an item's in the inventory (group 1). Friends: the knight's shield (knhtshld.kod
- * knightshield_icon_rsc); Pets: the baby spider (spdrbaby.kod), the first pet there is.
+ * as an item's in the inventory (group 1). Friends: an ale mug (mug.kod mug_icon_rsc), as among
+ * friends at the inn; Pets: the baby spider (spdrbaby.kod), the first pet there is; Companion:
+ * the herald shield (guilshld.kod guildshield_base_sash), in its own colours.
  */
 const TAB_ART: Partial<Record<Tab, string>> = {
-  friends: "mtlshld.bgf",
+  // A rolled scroll with its red ribbon and seal (scr05.bgf), for the Quests tab
+  quests: "scr05.bgf",
+  friends: "mug.bgf",
   pets: "spdrby.bgf",
-  // The knight's helm, as a soldier at your side
-  companion: "khelm.bgf",
+  // The herald shield, as one sworn to your side
+  companion: "gshA.bgf",
 };
+/** Art wider than it's tall: drawn across the whole tab, not in the glyph's square */
+const WIDE_ART = new Set<Tab>(["quests"]);
 
 export function ObjIcon({
   icons, object, opts, className, title, onContextMenu, onClick, onDoubleClick,
@@ -118,7 +124,7 @@ export function StatTab({
   return (
     <button className={`stat-tab${active ? " active" : ""}${icon ? " drawn" : ""}`} title={tooltip ? label : undefined} aria-label={label} onClick={onClick}>
       <span className="mid" style={half(mid)} />
-      <span className={icon ? "glyph drawn" : "glyph"} style={half(left)}>
+      <span className={icon ? `glyph drawn${tab && WIDE_ART.has(tab) ? " wide" : ""}` : "glyph"} style={half(left)}>
         {icon}
       </span>
       <span className="cap" style={half(right)} />

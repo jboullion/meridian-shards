@@ -6,9 +6,9 @@
 // them size it (settings questBoxAt, questBoxWidth, questBoxTall). It's zoomed by the HUD size:
 // its place is in its parent's pixels, its size in its own.
 
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { objectiveLine, timeLeftText } from "@shards/world";
-import { SIGNET_QUEST_NAME, signetObjective, useQuests, type QuestStore } from "../quests.ts";
+import { SIGNET_QUEST_NAME, signetObjective, useQuests, type ActiveQuest, type QuestStore } from "../quests.ts";
 import { DEFAULT_SETTINGS, updateSettings, type Settings } from "../settings.ts";
 
 const MIN_WIDTH = 160;
@@ -21,8 +21,63 @@ const KEEP_Y = 30;
 /** A second press on the title strip within this puts it back */
 const DOUBLE_MS = 400;
 
+/**
+ * One quest as the quest box and the Quests tab (QuestsPanel.tsx) draw it: its name (gold when
+ * tracked, bronze for a signet ring), its time left, and one line under it. A double click (or
+ * Enter, where it can take the focus) opens its window.
+ */
+export function QuestEntry({
+  name, line, ready, time, tone = "plain", title, selected, aside, onOpen, onSelect,
+}: {
+  name: string;
+  line?: ReactNode;
+  /** The line is "Return to X": the quest's step is done */
+  ready?: boolean;
+  time?: string;
+  tone?: "tracked" | "plain" | "bronze";
+  title?: string;
+  selected?: boolean;
+  /** Something at its right, as the Quests tab's Track (clicks on it neither select nor open) */
+  aside?: ReactNode;
+  onOpen?: () => void;
+  /** Given, a click selects it and it can take the focus */
+  onSelect?: () => void;
+}) {
+  return (
+    <div
+      className={`quest-tracked${tone === "plain" ? "" : ` ${tone}`}${selected ? " selected" : ""}`}
+      title={title}
+      tabIndex={onSelect ? 0 : undefined}
+      onClick={onSelect}
+      onDoubleClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" || !onOpen) return;
+        e.preventDefault();
+        onOpen();
+      }}
+    >
+      {aside && (
+        <span className="quest-entry-aside" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+          {aside}
+        </span>
+      )}
+      <b>{name}</b>
+      {time && <small> {time}</small>}
+      {line && <div className={ready ? "ready" : ""}>{line}</div>}
+    </div>
+  );
+}
+
+/** A quest going's line: its current step, or "Return to X" once the step's done */
+export function currentStepLine(a: ActiveQuest): { line: string; ready: boolean } | null {
+  const s = a.quest?.steps[a.step - 1];
+  if (!s) return null;
+  const ready = !s.auto && s.kind !== "talk" && s.kind !== "deliver" && a.count >= s.count;
+  return { line: ready ? `Return to ${s.turnin.name}` : objectiveLine(s, a.count), ready };
+}
+
 /** Re-render every second while a quest has a time limit, for its countdown */
-function useTicking(on: boolean): void {
+export function useTicking(on: boolean): void {
   const [, setN] = useState(0);
   useEffect(() => {
     if (!on) return;
@@ -140,28 +195,24 @@ export function QuestBox({ store, settings, onOpen }: { store: QuestStore | null
       </div>
       <div className="quest-box-list">
         {quests.map((a) => {
-          const s = a.quest?.steps[a.step - 1];
           const left = store.secondsLeft(a);
-          const ready = s && !s.auto && s.kind !== "talk" && s.kind !== "deliver" && a.count >= s.count;
+          const step = currentStepLine(a);
           return (
-            <div
+            <QuestEntry
               key={a.id}
-              className={store.isTracked(a.id) ? "quest-tracked tracked" : "quest-tracked"}
+              name={a.quest?.name ?? `Quest ${a.id}`}
+              line={step?.line}
+              ready={step?.ready}
+              time={left >= 0 ? timeLeftText(left) : undefined}
+              tone={store.isTracked(a.id) ? "tracked" : "plain"}
               title="Double-click for the quest's details"
-              onDoubleClick={() => onOpen(a.id)}
-            >
-              <b>{a.quest?.name ?? `Quest ${a.id}`}</b>
-              {left >= 0 && <small> {timeLeftText(left)}</small>}
-              {s && <div className={ready ? "ready" : ""}>{ready ? `Return to ${s.turnin.name}` : objectiveLine(s, a.count)}</div>}
-            </div>
+              onOpen={() => onOpen(a.id)}
+            />
           );
         })}
         {/* Ours: signet rings we carry, bronze (UC_SIGNETS) */}
         {store.signets.map((r) => (
-          <div key={`signet-${r.id}`} className="quest-tracked bronze">
-            <b>{SIGNET_QUEST_NAME}</b>
-            <div>{signetObjective(r)}</div>
-          </div>
+          <QuestEntry key={`signet-${r.id}`} name={SIGNET_QUEST_NAME} line={signetObjective(r)} tone="bronze" />
         ))}
       </div>
       <div className="quest-box-resize-left" onPointerDown={(e) => resize(e, true, false)} title="Drag to make the quests wider or narrower" aria-hidden />

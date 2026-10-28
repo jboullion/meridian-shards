@@ -484,8 +484,6 @@ export interface Settings {
   ambientVolume: number;
   /** Ours, Second Hotbar (the Modern interface): quick slots 11-20 in a row above the first, on the numpad's keys; off by default */
   secondHotbar: boolean;
-  /** Ours: the Quests tab's "Suggested for you" (its Show suggestions checkbox); off by default */
-  questSuggestions: boolean;
   /** Ours, Limit to 60 FPS: a faster screen draws at most 60 frames a second (cooler, kinder to batteries) */
   frameLimit: boolean;
 }
@@ -587,7 +585,6 @@ export const DEFAULT_SETTINGS: Settings = {
   ambientVolume: 70,
   frameLimit: true,
   secondHotbar: false,
-  questSuggestions: false,
 };
 
 const STORAGE_KEY = "shards.settings";
@@ -683,6 +680,8 @@ export function migrate(s: SavedSettings): Settings {
     if (taken) keys.achievements = keys.achievements.filter((b) => b.code !== "KeyU" || b.alt || b.ctrl);
   }
   delete (out as SavedSettings).mouseSpeed;
+  // The Quests tab's Show suggestions checkbox: Suggested is a tab of its own since 2026-10-28
+  delete (out as unknown as Record<string, unknown>).questSuggestions;
   delete (out as SavedSettings).rightClickLooks;
   for (const k of OLD_GRAPHICS_KEYS) delete (out as unknown as Record<string, unknown>)[k];
   if (!Array.isArray(out.hotkeyAliases) || out.hotkeyAliases.length !== 12) out.hotkeyAliases = DEFAULT_HOTKEY_ALIASES;

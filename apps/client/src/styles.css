@@ -1064,12 +1064,13 @@ button.link {
 }
 
 /* ---- in-game dialogs (Dialogs.tsx), in the kit's windows ---- */
+/* Over the Modern character window (7), which opens many of them (a quest, a description) */
 .mk-window.game-dialog {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  z-index: 5;
+  z-index: 8;
   display: flex;
   flex-direction: column;
   width: min(420px, calc(100% - 16px));
@@ -4896,6 +4897,11 @@ canvas.server-wait {
   height: calc(100% - 6px);
 }
 
+/* Wide art (Sidebar.tsx WIDE_ART: the Quests tab's scroll) across the whole tab */
+.stat-tab .glyph.drawn.wide {
+  width: 100%;
+}
+
 /* Our tabs: the middle piece the whole width, our icon over it (the phone's drawer too, whose
    tabs place the middle piece after a wider glyph) */
 .stat-tab.drawn .mid,
@@ -5529,15 +5535,26 @@ canvas.server-wait {
 /* ---- Quests (ours, docs/adr/0009-quests.md): the quest window (ui/QuestDialog.tsx), the Quests
    tab (ui/QuestsPanel.tsx) and the Modern interface's quest box (ui/QuestBox.tsx) ---- */
 
+/* Its sections spaced apart: the giver, Progress and Reward under gold headings (2026-10-28) */
 .quest-dialog .mk-body p {
-  margin: 4px 2px;
+  margin: 6px 2px;
   white-space: normal;
 }
 
 .quest-dialog h4 {
-  margin: 8px 2px 2px;
+  margin: 14px 2px 4px;
   font: bold 13px Georgia, "Times New Roman", serif;
   color: rgb(240, 208, 25);
+}
+
+/* The giver's heading opens the window, its health line just under it */
+.quest-dialog h4.quest-giver {
+  margin-top: 2px;
+}
+
+.quest-dialog h4.quest-giver + .quest-band {
+  margin-top: 0;
+  margin-bottom: 10px;
 }
 
 .quest-band,
@@ -5564,9 +5581,7 @@ canvas.server-wait {
   color: rgb(255, 230, 150);
 }
 
-.quest-objectives small,
-.quest-suggested small,
-.quest-done small {
+.quest-objectives small {
   opacity: 0.75;
 }
 
@@ -5633,15 +5648,47 @@ canvas.server-wait {
   color: rgb(231, 231, 231);
 }
 
-.quests-panel .mk-edit.list {
-  display: block;
-  height: 90px;
+/* Current, Done and Suggested, and their quests as the quest box draws them (QuestEntry) */
+.quests-panel .mk-tabs {
+  display: flex;
+  gap: 2px;
 }
 
-.quest-suggested,
-.quest-done {
-  margin: 0;
-  padding-left: 16px;
+/* Smaller than the kit's dialog tabs: a list's sub-tabs, not a window's pages */
+.quests-panel .mk-tabs button {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  font-size: 13px;
+}
+
+.quests-panel .mk-tabs button.active {
+  height: 25px;
+}
+
+.quests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.quests-list .quest-tracked {
+  padding: 3px 4px;
+}
+
+.quests-list .quest-tracked b {
+  font-size: 14px;
+}
+
+.quest-tracked.selected {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* A quest going's Track, at its right */
+.quest-entry-aside {
+  float: right;
+  margin-left: 6px;
+  font-size: 12px;
 }
 
 .quest-stale {
@@ -5653,7 +5700,6 @@ canvas.server-wait {
   width: min(460px, calc(100vw - 24px));
 }
 
-.quest-giver,
 .quest-time {
   font-size: 12px;
 }
