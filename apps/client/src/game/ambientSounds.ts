@@ -1,15 +1,16 @@
 // Ours: the sounds of ambient life and the weather (the Ambient Sounds option), none of them the
 // server's. Each frame the scene says what's about (how many townsfolk, the room's kind, the
 // rain) and what happened (a swing, a cheer, a strike), and this plays it:
-//   - a bed of chatter under the townsfolk, inn patrons, courtiers and the arena's crowd, as loud
-//     as how many are about, muffled in the rain;
+//   - a bed of chatter under the townsfolk, courtiers and the arena's crowd, as loud as how many
+//     are about, muffled in the rain;
 //   - the arena (arena/, docs/adr/0007-arena.md): what the game plays for a fight: weapons
 //     swinging and striking by how hard (player.kod DoHitMessageSound), the hurt crying out by how
 //     hurt (GetOuchSound), each spell's own sound, webs, brambles and fire frying whoever they
 //     catch, the fog's cough; and the stands' cheers and applause;
-//   - inns: dice and drinks now and then;
-//   - the Office of the Justicar's court (docs/adr/0026): its gallery's quiet murmur, whoever is
-//     about, and a cough now and then (the judge's gavel is the server's);
+//   - inns: no chatter, but the hearth, the door as people come and go, a chair creaking, and
+//     the patrons' dice and drinks now and then;
+//   - the Office of the Justicar's court (docs/adr/0026): no murmur (2026-10-27), but a cough
+//     from the gallery now and then (the judge's gavel is the server's);
 //   - thunder after each lightning strike, later and duller the further off;
 //   - critters squeaking now and then, fish splashing;
 //   - splashing steps through puddles.
@@ -63,20 +64,12 @@ export interface AmbientSoundFrame {
 /** The chatter under each kind of crowd: the file, how loud, and how many people make it full */
 const BEDS: Partial<Record<AmbientKind, { file: string; indoorFile?: string; volume: number; full: number }>> = {
   town: { file: "amb_town_talk.ogg", volume: 0.18, full: 7 },
-  // (Louder since 2026-10-12: the talk was lost under the room's own sounds)
-  inn: { file: "amb_inn_talk.ogg", volume: 0.45, full: 4 },
   castle: { file: "amb_town_talk.ogg", indoorFile: "amb_hall_talk.ogg", volume: 0.15, full: 5 },
   arena: { file: "amb_hall_talk.ogg", volume: 0.29, full: 10 },
 };
 
-/**
- * Rooms with a bed of their own, whatever ambient people are about: the court's gallery is the
- * server's NPCs (courtassizes.kod), so nobody of ours counts toward its crowd. Quiet, under the
- * trial's lines.
- */
-const ROOM_BEDS: Readonly<Record<string, { file: string; volume: number }>> = {
-  "barcourt.roo": { file: "amb_court_talk.ogg", volume: 0.3 },
-};
+/** The Office of the Justicar's court: its gallery is the server's NPCs (courtassizes.kod) */
+const COURT_ROOM = "barcourt.roo";
 
 /**
  * The court's gallery coughs now and then, one cough at a time: each recording holds several,
@@ -93,6 +86,21 @@ const COURT_COUGHS: readonly { file: string; offset: number; seconds: number }[]
   { file: "amb_cough_f.ogg", offset: 4.45, seconds: 1.1 },
 ];
 const COURT_COUGH_EVERY: [number, number] = [20000, 40000];
+
+/**
+ * The inns, whoever is about: no chatter (2026-10-27), but a hearth under the room, the door across
+ * the room as people come and go, and a chair creaking now and then.
+ */
+const INN_HEARTH = { file: "amb_fireplace.ogg", volume: 0.6 };
+/** room.kod's creaky door (creaky_door_sound), quieter and duller than ours going through it */
+const INN_DOOR = "doropen1.ogg";
+const INN_DOOR_EVERY: [number, number] = [30000, 70000];
+/**
+ * A second or three of a recording of forty-odd creaks, a creak every second or so and never more
+ * than 2 s apart (found from its loudness), so each piece holds one or two
+ */
+const INN_CHAIR = { file: "amb_chair.ogg", seconds: 55 };
+const INN_CHAIR_EVERY: [number, number] = [25000, 60000];
 
 const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length) % list.length];
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -124,6 +132,8 @@ export class AmbientSounds {
   private cheerMs = 0;
   private stepMs = 0;
   private coughMs = 0;
+  private doorMs = 0;
+  private chairMs = 0;
 
   constructor(audio: GameAudio) {
     this.audio = audio;
@@ -149,11 +159,12 @@ export class AmbientSounds {
     this.updatePets(f);
     this.updateSteps(f);
     this.updateCourt(f);
+    this.updateInn(f);
   }
 
   /**
    * Dev tools: hear one cue by itself, about us (window.shards.gameScene.ambientSoundBoard.audition("thunder")).
-   * Cues: town, inn, hall, court (5 s of each chatter), court-cough, swing, miss, hit, cast-fire, cast-lightning, zap,
+   * Cues: town, hall (5 s of each chatter), inn (5 s of the hearth), inn-door, inn-chair, court-cough, swing, miss, hit, cast-fire, cast-lightning, zap,
    * blind, dazzle, frying, cough, cheer, applause, thunder, critter, splash, step, dice, drink,
    * ouch, death
    */
@@ -166,9 +177,10 @@ export class AmbientSounds {
     };
     switch (cue) {
       case "town": taste(BEDS.town!.file, BEDS.town!.volume); break;
-      case "inn": taste(BEDS.inn!.file, BEDS.inn!.volume); break;
+      case "inn": taste(INN_HEARTH.file, INN_HEARTH.volume); break;
+      case "inn-door": this.innDoor(); break;
+      case "inn-chair": this.innChair(); break;
       case "hall": taste(BEDS.arena!.file, BEDS.arena!.volume); break;
-      case "court": taste(ROOM_BEDS["barcourt.roo"]!.file, ROOM_BEDS["barcourt.roo"]!.volume); break;
       case "court-cough": this.courtCough(); break;
       case "swing": once(pick(SWISH), 0.45); break;
       case "miss": once(MISS, 0.4); break;
@@ -192,7 +204,7 @@ export class AmbientSounds {
       case "death": once("pdeath.ogg", 0.5); break;
     }
     return [
-      "town", "inn", "hall", "court", "court-cough", "swing", "miss", "hit", "cast-fire", "cast-lightning", "zap", "blind", "dazzle", "frying", "cough", "cheer", "applause",
+      "town", "inn", "inn-door", "inn-chair", "hall", "court-cough", "swing", "miss", "hit", "cast-fire", "cast-lightning", "zap", "blind", "dazzle", "frying", "cough", "cheer", "applause",
       "thunder", "critter", "splash", "step", "dice", "drink", "ouch", "death",
     ];
   }
@@ -210,7 +222,7 @@ export class AmbientSounds {
     // The towns' streets fall quiet at night (20 to 5): no talk under the few still out
     const night = f.hour !== null && (f.hour >= 20 || f.hour < 5);
     const spec = f.kind && !(night && f.kind === "town") ? (BEDS[f.kind] ?? null) : null;
-    const own = ROOM_BEDS[f.room.toLowerCase()];
+    const own = f.kind === "inn" ? INN_HEARTH : undefined;
     const file = own ? own.file : spec ? (f.indoors && spec.indoorFile) || spec.file : null;
     let volume = own ? own.volume : spec && f.people > 0 ? spec.volume * Math.min(1, 0.25 + (0.75 * f.people) / spec.full) : 0;
     // The rain drowns out the street, and muffles it
@@ -234,7 +246,7 @@ export class AmbientSounds {
 
   /** The court's gallery: a cough now and then, from somewhere about us */
   private updateCourt(f: AmbientSoundFrame): void {
-    if (!ROOM_BEDS[f.room.toLowerCase()]) {
+    if (f.room.toLowerCase() !== COURT_ROOM) {
       this.coughMs = rnd(...COURT_COUGH_EVERY);
       return;
     }
@@ -247,6 +259,35 @@ export class AmbientSounds {
   private courtCough(): void {
     const c = pick(COURT_COUGHS);
     this.audio.playAmbient(c.file, { volume: rnd(0.12, 0.2), offset: c.offset, duration: c.seconds, pan: rnd(-0.7, 0.7), lowpass: 6000, rate: rnd(0.95, 1.05) });
+  }
+
+  /** An inn: someone at the door and a chair creaking, now and then, from somewhere about us */
+  private updateInn(f: AmbientSoundFrame): void {
+    if (f.kind !== "inn") {
+      this.doorMs = rnd(...INN_DOOR_EVERY);
+      this.chairMs = rnd(...INN_CHAIR_EVERY);
+      return;
+    }
+    if ((this.doorMs -= f.dt) <= 0) {
+      this.doorMs = rnd(...INN_DOOR_EVERY);
+      this.innDoor();
+    }
+    if ((this.chairMs -= f.dt) <= 0) {
+      this.chairMs = rnd(...INN_CHAIR_EVERY);
+      this.innChair();
+    }
+  }
+
+  private innDoor(): void {
+    this.audio.playAmbient(INN_DOOR, { volume: rnd(0.15, 0.25), pan: rnd(-0.8, 0.8), lowpass: 3000, rate: rnd(0.92, 1.05) });
+  }
+
+  private innChair(): void {
+    const seconds = rnd(2.2, 3.5);
+    this.audio.playAmbient(INN_CHAIR.file, {
+      volume: rnd(0.15, 0.25), offset: rnd(0.2, INN_CHAIR.seconds - seconds), duration: seconds, fadeIn: 150,
+      pan: rnd(-0.7, 0.7), lowpass: 7000, rate: rnd(0.95, 1.05),
+    });
   }
 
   // ---- what the crowd did ----

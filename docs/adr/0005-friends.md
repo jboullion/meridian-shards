@@ -44,7 +44,7 @@ What we have to build on:
 
 ### 3. The Friends window
 
-A stone window (`kit.tsx`), from the ☰ menu (Actions → Friends…) and a Bind Editor key in the Interface tab (unbound in the original preset). Three parts:
+A stone window (`kit.tsx`), from the ☰ menu (Actions → Friends…) and a key in the Configuration window's Interface tab (unbound in the original preset). Three parts:
 
 1. **Find:** a search box. The relay returns the online characters on this server whose names start with the text (at least 2 letters, up to 20 results). **Only players of this client are listed**, because only they announce themselves to the relay. "Add" sends the request (2.4).
 2. **Requests:** incoming ones with Accept and Decline; our outgoing ones with Cancel. Requests live only while both are online (no mail-like queue).

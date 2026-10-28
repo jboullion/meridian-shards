@@ -6,24 +6,29 @@
 - Godot had an interesting character stat screen. Maybe we should copy that!?
 
 
-- Remove or fix this thing: ![[Pasted image 20261025221439.png]] I don't understand what it does.
+- Remove the PvP thing. What is it and what does it do? It isn't a timer so I don't think it is a PvP timer?
+
+- What are the max training points?
+	- It looks like thousands, we should probably limit that to like 1000?
+	- Do they still get given out everyday?
+
+
+- Hammer Sound
+
+- Update the admin center to allow moving the Trophy Case
+	- Remove the prism pedestal and update the Prisms to just be required to be placed in the guild hall.
+		- Or they can be brought to a faction leader for renown?
+
+- Where do we see achievements?
+
+- Move the faction button to the left side of the map and have it "under" the mini map.
 
 ### Bugs
 
-- Sometimes the ambient / occlusion shadows at the corners of walls flicker. Can this be avoided?
-	- Similarly, the shadows seem to be a couple pixels away from the walls. Can they be closer?
+- Update tailor to only work on clothes / armor and not weapons
 
-- Can we turn down the light glow from the starting Raza inn windows?
 
 ## Spells
-
-- how do we handle riija sword and getting to riija Temple?
-- What does "Blood Inheritance" do? Does it show something cool similar to the spiritual sword?
-- the spell rings are probably too thick. Make half as thick.
-- The spell descriptions are a little hard to read. Can we simplify them?
-	- or at least show a simple x - y damage message near the top since that is all players
-- 
-
 
 
 
@@ -41,12 +46,9 @@
 
 ### Maps
 
-- Tendrath should sell lightning wall scrolls so anyone can open brax not just level 6 faren
-	- How does brax open now? Is it still lightning wall only?
 
 
 ### Towns
-- Tos should get more lanturns along the main street so it feels more vibrant
 
 - Make the Inns feel more lively. Perhaps more fires and more ambiance? more sounds? 
 
@@ -81,7 +83,6 @@
 
 
 ## Quest Chain
-- Skip the tutorial should take you to 40hp with the Road to Cor Noth quest sending you to Rook
 
 Raza Chain
 
@@ -90,12 +91,21 @@ Raza Chain
 
 
 Marion Chain
-- Word to Cor Noth should be available at 35 in case people want to get out of Marion quick
 
 
 
-Cor noth 
-
+Cor Noth 
+- Mychel in the Meridian 59 Museum should probably have some silver quests to visit a historic city
+- "Learn a skill from Rook" is an optional quest. Not everyone wants to buy a skill
+	- Offer the Cor Noth Portal and Put it to Practice quests at the same time with no requirements
+- Spiders on Merchant Way should only require 10
+	- Give a similar "Ants in the Flatlands" quest along with the spider quest for 10 kills
+	- Upgrade Ants a little bit and have them give 45 hp max.
+- Reduce the Faction Leader quests to 40hp requirement
+	- Reduce the Orc Raiders to 40hp
+	- We want people who skip the tutorial to be able to go out into the world right away
+	- The faction quests should not be portal quests. Instead go straight to the faction leaders
+		- Have someone else in each of the towns give the portal quests
 
 
 
@@ -105,9 +115,12 @@ Tos
 
 
 Barloque
-- Can we have Frular, the Guildmaster's Hall, give out the guild quests? Can a Duke / Jonas player enter Barloque normally?
+- Cylil (Source of the River illeria) should give a quest for the nearby "friends of the forest" dungeon
+
 
 Jasper
+- Parrin's Warning has multiple rewards, what is that about?
+	- ![[Pasted image 20261026153308.png|213]]
 
 
 

@@ -1160,7 +1160,7 @@ export class GameScene {
     const ambient = [...(this.ambient?.objects() ?? []), ...(this.arena?.objects() ?? []), ...(this.critters?.objects() ?? []), ...(this.pets?.objects() ?? [])];
     this.animate([...world.objects.values(), ...ambient], dt);
     const lighting = world.lighting;
-    // Enhanced Lighting (the Bind Editor's Options), or the original's
+    // Enhanced Lighting (the Configuration window's Options), or the original's
     const enhanced = this.settings.enhanced;
     // Its moods: the sun, the light's tint, haze and grading (mood.ts)
     const mood = enhanced ? this.applyMood(room, now, dt) : this.noMood();
@@ -3535,6 +3535,7 @@ export class GameScene {
       case "pets":
       case "companion":
       case "war":
+      case "achievements":
       case "who":
       case "offer":
       case "buy":

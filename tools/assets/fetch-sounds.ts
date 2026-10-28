@@ -1,5 +1,5 @@
-// Downloads the ambient sounds that aren't the game's own (ours: town and inn chatter, the arena's
-// crowd, distant thunder) into dist/sounds, where `npm run assets` picks them up. Like the game's
+// Downloads the ambient sounds that aren't the game's own (ours: town chatter, the arena's crowd,
+// distant thunder, the inns' hearth) into dist/sounds, where `npm run assets` picks them up. Like the game's
 // own sounds they never go in git. Every one is CC0 (public domain), from BigSoundBank
 // (Joseph Sardin, https://bigsoundbank.com); docs/ambient-sounds.md lists what plays where.
 //
@@ -15,7 +15,6 @@ const OUT = join(ROOT, "dist", "sounds");
 /** Our file name, BigSoundBank's sound number, and what it is */
 export const EXTRA_SOUNDS: { name: string; id: string; what: string }[] = [
   { name: "amb_town_talk.ogg", id: "3096", what: "Outside Talks #6: about fifty people chatting outdoors" },
-  { name: "amb_inn_talk.ogg", id: "3542", what: "Small Restaurant Conversations: about fifteen people indoors" },
   { name: "amb_hall_talk.ogg", id: "3516", what: "Crowd of 50-60 People #2: a gathering indoors" },
   { name: "amb_cheer1.ogg", id: "0236", what: "Shouts and Applauses of Teens #1" },
   { name: "amb_cheer2.ogg", id: "0237", what: "Shouts and Applauses of Teens #2" },
@@ -24,14 +23,16 @@ export const EXTRA_SOUNDS: { name: string; id: string; what: string }[] = [
   { name: "amb_thunder2.ogg", id: "3114", what: "Thunder #3: a thunderclap" },
   { name: "amb_thunder3.ogg", id: "3179", what: "Thunder #6: a thunderclap" },
   { name: "amb_thunder4.ogg", id: "3180", what: "Thunder #7: a thunderclap" },
-  // The Office of the Justicar's court (docs/adr/0026): its gallery's murmur and coughs; the
+  // The Office of the Justicar's court (docs/adr/0026): its gallery's coughs; the
   //  judge's gavel is the server's (courtfolk.kod)
-  { name: "amb_court_talk.ogg", id: "0681", what: "Evening with Friends (Sofia Coppola): quiet talk indoors" },
   { name: "amb_cough_m.ogg", id: "0488", what: "Man cough #1" },
   { name: "amb_cough_f.ogg", id: "0654", what: "Woman cough" },
   { name: "amb_gavel1.ogg", id: "1588", what: "Gavel, 1 blow" },
   { name: "amb_gavel2.ogg", id: "1589", what: "Gavel, 2 blows" },
   { name: "amb_gavel3.ogg", id: "1590", what: "Gavel, 3 blows" },
+  // The inns: a hearth under the room, and a chair creaking now and then (the doors are the game's)
+  { name: "amb_fireplace.ogg", id: "2856", what: "Fireplace #4: a steady crackle" },
+  { name: "amb_chair.ogg", id: "0666", what: "Chair: a wooden chair creaking, about forty creaks" },
 ];
 
 if (process.argv[1]?.endsWith("fetch-sounds.ts")) {

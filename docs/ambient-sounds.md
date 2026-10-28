@@ -11,8 +11,9 @@ To hear one cue by itself in dev: `window.shards.gameScene.ambientSoundBoard.aud
 | Cue (audition name) | When | File(s) | Volume | Notes |
 |---|---|---|---|---|
 | Town chatter (`town`) | Townsfolk within 14 squares (towns, castle courtyards); none in towns from 20 to 5 | `amb_town_talk.ogg` | 0.18 (0.15 in castles), less with fewer people | Loops from a random point; muffled and quieter in the rain outdoors |
-| Inn chatter (`inn`) | Patrons about | `amb_inn_talk.ogg` | 0.45 | |
-| Court murmur (`court`) | Always, in the Office of the Justicar (`barcourt.roo`, ADR 0026): its gallery is the server's NPCs, so it doesn't wait for ambient people | `amb_court_talk.ogg` | 0.3 | Quiet under the trial's lines: the recording is about as loud as the inn's (played at 0.45), and 0.12 (2026-10-27) was lost under the music |
+| Inn hearth (`inn`) | Always, in an inn: no chatter there since 2026-10-27 | `amb_fireplace.ogg` | 0.6 | Fireplace #4, the steadiest of BigSoundBank's |
+| Inn door (`inn-door`) | An inn, every 30-70 s: someone coming in or going out | `doropen1.ogg` (room.kod's `creaky_door_sound`) | 0.15-0.25 | Panned at random, muffled (lowpass 3000) so it is across the room, not our own door |
+| Inn chair (`inn-chair`) | An inn, every 25-60 s | `amb_chair.ogg` | 0.15-0.25 | 2.2-3.5 s from a random point of the 55 s recording: its creaks come every second or so, never 2 s apart, so each piece holds one or two |
 | Court cough (`court-cough`) | The court's gallery, every 20-40 s | `amb_cough_m.ogg`, `amb_cough_f.ogg` | 0.12-0.2 | One cough at a time: each recording holds several, and `COURT_COUGHS` lists each by its offset and length (found from the loudness). Panned at random, a little muffled |
 | Hall and arena crowd (`hall`) | Courtiers under a roof; the arena | `amb_hall_talk.ogg` | 0.15 castles, 0.29 arena | |
 | Weapon swing (`swing`) | An arena fighter's swing ([ADR 0007](adr/0007-arena.md)) | `swswish1`-`3.ogg` (stroke.kod's) | 0.45 | |
@@ -46,11 +47,11 @@ All are **CC0** (public domain) from [BigSoundBank](https://bigsoundbank.com) by
 | Our file | BigSoundBank sound |
 |---|---|
 | `amb_town_talk.ogg` | [Outside Talks #6](https://bigsoundbank.com/outside-talks-6-s3096.html) |
-| `amb_inn_talk.ogg` | [Small Restaurant Conversations](https://bigsoundbank.com/small-restaurant-conversations-s3542.html) |
+| `amb_fireplace.ogg` | [Fireplace #4](https://bigsoundbank.com/fireplace-4-s2856.html) |
+| `amb_chair.ogg` | [Chair](https://bigsoundbank.com/chair-s0666.html) |
 | `amb_hall_talk.ogg` | [Crowd of 50-60 People #2](https://bigsoundbank.com/crowd-of-50-60-people-2-s3516.html) |
 | `amb_cheer1.ogg`, `amb_cheer2.ogg` | [Shouts and Applauses of Teens #1](https://bigsoundbank.com/shouts-and-applauses-of-teens-1-s0236.html), [#2](https://bigsoundbank.com/shouts-and-applauses-of-teens-2-s0237.html) |
 | `amb_applause.ogg` | [Applause: 150 People](https://bigsoundbank.com/applause-150-people-s0019.html) |
-| `amb_court_talk.ogg` | [Evening with Friends (Sofia Coppola)](https://bigsoundbank.com/evening-with-friends-sofia-coppola-s0681.html) |
 | `amb_cough_m.ogg`, `amb_cough_f.ogg` | [Man cough #1](https://bigsoundbank.com/man-cough-s0488.html), [Woman cough](https://bigsoundbank.com/sound-0654-woman-cough.html) |
 | `amb_gavel1`-`3.ogg` | [Gavel, 1 blow](https://bigsoundbank.com/gavel-1-blow-s1588.html), [2 blows](https://bigsoundbank.com/gavel-2-blows-s1589.html), [3 blows](https://bigsoundbank.com/gavel-3-blows-s1590.html). The server plays these (`courtfolk.kod` `Gavel`), as a room sound |
 | `amb_thunder1`-`4.ogg` | [Thunder #2](https://bigsoundbank.com/thunder-2-s3113.html), [#3](https://bigsoundbank.com/thunder-3-s3114.html), [#6](https://bigsoundbank.com/thunder-6-s3179.html), [#7](https://bigsoundbank.com/thunder-7-s3180.html) |

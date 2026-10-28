@@ -159,7 +159,7 @@ Android's System WebView is Chromium, the engine we test in. Most of the client 
      - from the VM, the last 258 MB came down in 55 s, with all 4,788 hashes checked;
      - with the bundled build, the Inn's 194 requests all came from the APK and nothing was downloaded.
 3. **Touch controls and the phone layout.** *Done 2026-10-08 in the emulator; a real phone next.*
-   - Touch Controls (Auto/On/Off) in the Bind Editor's Options. On Auto it's on for a coarse pointer, so it also applies to phone browsers.
+   - Touch Controls (Auto/On/Off) in the Bind Editor's Options (now the Configuration window). On Auto it's on for a coarse pointer, so it also applies to phone browsers.
    - The view fills the screen under the title bar:
      - health, mana and vigor at the top left, with the last chat lines under them;
      - Map, Chat and Items at the top right;

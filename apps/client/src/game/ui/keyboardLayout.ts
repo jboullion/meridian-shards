@@ -59,7 +59,7 @@ export interface KeyUse {
   label: string;
   /** As short as fits on a key cap */
   short: string;
-  /** The Bind Editor tab it's on, for its colour; "alias" for a hotkey alias */
+  /** The Configuration tab it's on, for its colour; "alias" for a hotkey alias */
   group: ActionTab | "alias";
   /** "Alt" or "Ctrl" (or "Ctrl+Alt") when the binding needs it */
   mods: string;

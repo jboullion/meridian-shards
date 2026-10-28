@@ -17,7 +17,7 @@ import { helpTable, type HelpItem, type HelpLayout } from "../clientTables.ts";
 const HELP_TABS = ["Controls", "HUD", "Interface"] as const;
 type HelpTab = (typeof HELP_TABS)[number];
 
-/** The colour of each Bind Editor tab's keys, and the hotkey aliases' */
+/** The colour of each Configuration tab's keys, and the hotkey aliases' */
 const GROUPS: { key: KeyUse["group"]; label: string; color: string }[] = [
   { key: "Movement", label: "Movement", color: "#4f9fe8" },
   { key: "Interaction", label: "Interaction", color: "#e0a030" },
@@ -40,7 +40,7 @@ export function HelpDialog({
   captureView: () => Promise<HTMLCanvasElement | null>;
   /** The game's element, for the HUD picture */
   getRoot: () => HTMLElement | null;
-  /** Opens the Bind Editor (and closes Help) */
+  /** Opens the Configuration window (and closes Help) */
   onConfiguration: () => void;
   onClose: () => void;
 }) {
@@ -103,7 +103,7 @@ function ControlsPage({ settings, layout, onConfiguration }: { settings: Setting
       </section>
       <div className="help-row">
         <Button onClick={onConfiguration}>Change keys…</Button>
-        <span className="help-note">The Bind Editor (☰ → Configuration…)</span>
+        <span className="help-note">Configuration (☰ → Configuration…)</span>
       </div>
     </div>
   );
@@ -190,7 +190,7 @@ function MouseDiagram({ settings, layout, uses }: { settings: Settings; layout: 
     },
     { n: 4, name: "Side buttons", lines: [...bound(3).map((l) => `Back: ${l}`), ...bound(4).map((l) => `Forward: ${l}`)] },
   ];
-  if (!parts[3].lines.length) parts[3].lines.push("Nothing yet: bind them in the Bind Editor");
+  if (!parts[3].lines.length) parts[3].lines.push("Nothing yet: bind them in Configuration");
   const tag = (n: number) => <span className="mouse-tag">{n}</span>;
   return (
     <div className="mouse-help">

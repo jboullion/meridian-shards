@@ -7,7 +7,7 @@ import { interpretLine, resolveTell } from "./commands.ts";
 import { ACTIONS, ACTION_TABS, PRESETS, actionsFor, migrate, mouseCode, updateSettings, DEFAULT_SETTINGS } from "./settings.ts";
 
 describe("settings", () => {
-  it("binds every action in both presets, each in one Bind Editor tab", () => {
+  it("binds every action in both presets, each in one Configuration tab", () => {
     const tabbed = Object.values(ACTION_TABS).flat();
     expect(new Set(tabbed).size).toBe(tabbed.length);
     for (const a of ACTIONS) {

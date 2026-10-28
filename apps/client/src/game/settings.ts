@@ -4,7 +4,7 @@
 //                  aren't implemented yet; they're kept so they work once they are
 //                  (docs/missing-features.md). The Game Options live on the server
 //                  instead (CF_* via UC_SEND_PREFERENCES).
-//   Configuration  the Bind Editor (m59bind.exe, config.ini [config] and [keys]) without
+//   Configuration  the original's Bind Editor (m59bind.exe, config.ini [config] and [keys]) without
 //                  Classic Key Binding or Software Renderer.
 //   Actions        Who (ignore lists), groups (groups.c), hotkey and command aliases (alias.c).
 //
@@ -14,7 +14,7 @@
 
 import { AMBIENT_SCALE, type AmbientLevel } from "@shards/world";
 
-/** Bind Editor actions, by tab, in its order (m59bind.exe; config.ini [keys]). */
+/** The Configuration window's actions, by tab, in its order (m59bind.exe; config.ini [keys]). */
 export const ACTION_TABS = {
   // Ours: no Mouselook Toggle (the mouse is never captured but while the right button drags the view)
   Movement: ["forward", "backward", "turnLeft", "turnRight", "strafeLeft", "strafeRight", "run", "lookUp", "lookDown", "lookStraight", "flip"],
@@ -37,7 +37,7 @@ export type ActionTab = keyof typeof ACTION_TABS;
 export type Action = (typeof ACTION_TABS)[ActionTab][number];
 export const ACTIONS: readonly Action[] = Object.values(ACTION_TABS).flat();
 
-/** The Bind Editor's labels (ours for the Interface tab). */
+/** The Configuration window's labels (ours for the Interface tab). */
 export const ACTION_LABELS: Record<Action, string> = {
   forward: "Forward",
   backward: "Backward",
@@ -357,7 +357,7 @@ export interface Settings {
   profanityExtra: boolean;
   xpAsPercent: boolean;
 
-  // ---- Configuration (the Bind Editor's Options and Mouse tab)
+  // ---- Configuration (the Configuration window's Options and Mouse tabs)
   /** Quick Chat: typing a letter starts a chat line (the original's A_TEXTINSERT keys) */
   typeToChat: boolean;
   /** Always Run: run unless the Run/Walk key is held */
@@ -370,7 +370,7 @@ export interface Settings {
   damageNumbers: boolean;
   /**
    * Touch Controls (ours, ADR 0003): the phone layout, with a joystick and buttons on the view.
-   * Not in the Bind Editor any more (Auto is what everyone gets); set by hand for testing.
+   * Not in the Configuration window any more (Auto is what everyone gets); set by hand for testing.
    * Auto: on a touch screen (a coarse pointer), as the Android app and phone browsers have
    */
   touchControls: TouchControls;
@@ -440,7 +440,7 @@ export interface Settings {
   hudScale: number;
 
   /**
-   * Ours, Enhanced Visuals (it was Enhanced Lighting; the Bind Editor's Options, the phone's
+   * Ours, Enhanced Visuals (it was Enhanced Lighting; the Configuration window's Options, the phone's
    * Configuration; on by default): soft highlights (lighting.ts softHighlight),
    * flickering flames (objectLighting.ts flicker), light that stops at walls
    * (lightOcclusion.ts), glowing flames and a vignette (postFx.ts), shaded corners
@@ -450,7 +450,7 @@ export interface Settings {
   enhanced: boolean;
 
   /**
-   * Ours, Ambient Life (the Bind Editor's Options, the phone's Configuration): townsfolk walking
+   * Ours, Ambient Life (the Configuration window's Ambient tab, the phone's Configuration): townsfolk walking
    * the streets and patrons in the inns, seen by this client only (packages/world ambient/).
    */
   ambientLife: AmbientLevel;
@@ -622,7 +622,7 @@ export function migrate(s: SavedSettings): Settings {
     const used = Object.values(keys).some((list) => list.some((b) => b.code === "Mouse1"));
     if (!used) keys.examine = [...keys.examine, { code: "Mouse1" }];
   }
-  // Version 5: Touch Controls left the Bind Editor, so nothing could undo an On or Off saved before
+  // Version 5: Touch Controls left the Configuration window, so nothing could undo an On or Off saved before
   if (version < 5) out.touchControls = "auto";
   // Version 6 (the Modern interface): new players get it, players who had settings keep the layout they knew (until version 8)
   if (version < 6) out.interfaceStyle = "classic";
@@ -635,7 +635,7 @@ export function migrate(s: SavedSettings): Settings {
       if (!used.has(code)) keys[slot] = [...keys[slot], { code }];
     }
   }
-  // Version 8 (0.4.0, Enhanced Lighting): everyone moves to the Modern interface once; Classic is still in the Bind Editor
+  // Version 8 (0.4.0, Enhanced Lighting): everyone moves to the Modern interface once; Classic is still in the Configuration window
   if (version < 8) out.interfaceStyle = "modern";
   // Version 9 (the Modern interface's second row of quick slots): the numpad's digits, which also
   // used slots 1-10 since version 7, now use slots 11-20 (the preset gives them); off slots 1-10

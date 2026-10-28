@@ -39,7 +39,7 @@
     {"title": "The ☰ menu",
      "items": [
        {"term":"Preferences… (O, F10)","text":"The game's options: sound and music, the halo round your target, tooltips, the profanity filter, the server's game options (grouping, autoloot, autocombine, bags, spellpower), and more."},
-       {"term":"Configuration…","text":"The Bind Editor: your keys and mouse buttons, and options of ours (the interface, lighting, ambient life, pets, HUD size)."},
+       {"term":"Configuration…","text":"Your keys and mouse buttons, and options of ours (the interface, lighting, ambient life, pets, HUD size)."},
        {"term":"Admin console… (Shift+4)","text":"For admins: travel, players, and commands on the live world. Take care.","admin":true},
        {"term":"Actions","text":"Who is logged on (and ignoring players), groups to talk to, hotkey aliases (what F1 to F12 type), command aliases and your guild."},
        {"term":"Language","text":"The language of the game's text, where the server has it."},

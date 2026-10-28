@@ -1,7 +1,7 @@
 // The options windows behind the game's menu (GameView's ☰): Preferences, Configuration
 // and Actions, each laid out like the original client's:
 //   Preferences     client.rc IDD_SETTINGS (maindlg.c PreferencesDialogProc), without Web Browser
-//   Configuration   the Bind Editor (m59bind.exe): six tabs of keys, Options, Restore Defaults
+//   Configuration   the original's Bind Editor (m59bind.exe): six tabs of keys, Options, Restore Defaults
 //   Actions         merintr actions.c without the emotes: Who (msgfiltr.c IDD_WHO), groups
 //                   (groupdlg.c IDD_GROUP), hotkey and command aliases (alias.c IDD_ALIAS,
 //                   IDD_CMDALIAS), guild configuration
@@ -532,8 +532,11 @@ function AmbientLifeSelect({ value, onChange }: { value: AmbientLevel; onChange:
   );
 }
 
-/** The Bind Editor's tabs: its Options box first (ours: a tab, for room), then the keys and the mouse */
-const CONFIG_TABS = ["Options", ...(Object.keys(ACTION_TABS) as ActionTab[]), "Mouse"] as const;
+/**
+ * The Configuration window's tabs: its Options box first (ours: a tab, for room), our ambient life, pets
+ * and sounds, then the keys and the mouse
+ */
+const CONFIG_TABS = ["Options", "Ambient", ...(Object.keys(ACTION_TABS) as ActionTab[]), "Mouse"] as const;
 type ConfigTab = (typeof CONFIG_TABS)[number];
 
 const MODIFIER_CODES = new Set(["AltLeft", "AltRight", "ControlLeft", "ControlRight", "ShiftLeft", "ShiftRight", "MetaLeft", "MetaRight"]);
@@ -586,7 +589,7 @@ function useKeyListener(active: boolean, onKey: (b: KeyBinding | null) => void):
   }, [active, onKey]);
 }
 
-/** The Bind Editor (m59bind.exe) without Classic Key Binding and Software Renderer. */
+/** The Configuration window: the original's Bind Editor (m59bind.exe) without Classic Key Binding and Software Renderer. */
 export function ConfigurationDialog({ settings, onApply, onClose }: { settings: Settings; onApply: (patch: Patch) => void; onClose: () => void }) {
   const [d, setD] = useState<Settings>(settings);
   const [tab, setTab] = useState<ConfigTab>("Options");
@@ -618,7 +621,7 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
   );
   return (
     <Modal>
-      <Window title="Bind Editor" onClose={() => !listening && onClose()} className="options-dialog bind-editor">
+      <Window title="Configuration" onClose={() => !listening && onClose()} className="options-dialog config-window">
         <div className="bind-layout">
           <Tabs tabs={CONFIG_TABS} active={tab} onChange={setTab} />
           <div className="mk-page bind-page">
@@ -644,13 +647,6 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
                   <Check label="Enhanced Visuals" title={ENHANCED_TITLE} checked={d.enhanced} onChange={(v) => set({ enhanced: v })} />
                   <Check label="Damage Numbers" checked={d.damageNumbers} onChange={(v) => set({ damageNumbers: v })} />
                   <Check label="Limit to 60 FPS" title={FRAME_LIMIT_TITLE} checked={d.frameLimit} onChange={(v) => set({ frameLimit: v })} />
-                  <AmbientLifeSelect value={d.ambientLife} onChange={(v) => set({ ambientLife: v })} />
-                  <Check label="Critters" title={CRITTERS_TITLE} checked={d.critters} onChange={(v) => set({ critters: v })} />
-                  <Check label="Birds and Bats" title={FLYERS_TITLE} checked={d.flyers} onChange={(v) => set({ flyers: v })} />
-                  <Check label="Nature" title={NATURE_TITLE} checked={d.nature} onChange={(v) => set({ nature: v })} />
-                  <AmbientSoundsOption d={d} set={set} />
-                  <Check label="Show Pets" title={PETS_TITLE} checked={d.showPets} onChange={(v) => set({ showPets: v })} />
-                  <Check label="Show Pet Names" title={PET_NAMES_TITLE} checked={d.showPetNames} onChange={(v) => set({ showPetNames: v })} />
                   <Check label="Show Quest Markers" title={QUEST_MARKERS_TITLE} checked={d.questMarkers} onChange={(v) => set({ questMarkers: v })} />
                   <Check label="Show The Way" title={SHOW_WAY_TITLE} checked={d.showWay} onChange={(v) => set({ showWay: v })} />
                 </GroupBox>
@@ -675,6 +671,22 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
                     <Trackbar min={75} max={150} step={5} value={d.hudScale} onChange={(v) => set({ hudScale: v })} label="HUD size" />
                     <span className="bind-scale-value">{d.hudScale}%</span>
                   </label>
+                </GroupBox>
+              </div>
+            ) : tab === "Ambient" ? (
+              <div className="bind-options">
+                <GroupBox label="Life" className="flow">
+                  <AmbientLifeSelect value={d.ambientLife} onChange={(v) => set({ ambientLife: v })} />
+                  <Check label="Critters" title={CRITTERS_TITLE} checked={d.critters} onChange={(v) => set({ critters: v })} />
+                  <Check label="Birds and Bats" title={FLYERS_TITLE} checked={d.flyers} onChange={(v) => set({ flyers: v })} />
+                  <Check label="Nature" title={NATURE_TITLE} checked={d.nature} onChange={(v) => set({ nature: v })} />
+                </GroupBox>
+                <GroupBox label="Pets" className="flow">
+                  <Check label="Show Pets" title={PETS_TITLE} checked={d.showPets} onChange={(v) => set({ showPets: v })} />
+                  <Check label="Show Pet Names" title={PET_NAMES_TITLE} checked={d.showPetNames} onChange={(v) => set({ showPetNames: v })} />
+                </GroupBox>
+                <GroupBox label="Sounds" className="flow">
+                  <AmbientSoundsOption d={d} set={set} />
                 </GroupBox>
               </div>
             ) : tab === "Mouse" ? (
@@ -1087,8 +1099,8 @@ export function CommandAliasesDialog({ settings, onApply, onOpen, onClose }: { s
 }
 
 /**
- * Ours: the phone's Configuration instead of the Bind Editor (no keys to bind there): how fast a
- * drag looks around, and the Bind Editor's options that matter on a touch screen.
+ * Ours: the phone's Configuration instead of the desktop's (no keys to bind there): how fast a
+ * drag looks around, and the desktop Configuration's options that matter on a touch screen.
  */
 export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Settings; onApply: (patch: Patch) => void; onClose: () => void }) {
   const [d, setD] = useState<Settings>(settings);

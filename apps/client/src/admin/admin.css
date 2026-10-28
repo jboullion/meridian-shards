@@ -173,6 +173,15 @@ label.check {
   flex-direction: row;
   align-items: center;
 }
+/* The World tab's Character box: the name, a number and its button on one line */
+label.char-row {
+  display: grid;
+  grid-template-columns: 9.5em 6em auto;
+  align-items: center;
+  justify-content: start;
+  gap: 8px;
+  margin: 6px 0;
+}
 
 .split {
   display: grid;

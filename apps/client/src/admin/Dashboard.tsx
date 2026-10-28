@@ -4,7 +4,8 @@
 //   Items    anything, into our inventory
 //   Spells   cast at what's in our room (the dummies), as us
 //   Rooms    every room: go there, rebuild it on the server, open it in the room editor
-//   World    the server's time of day; our client's hour, weather, terrain and crowd
+//   World    the server's time of day; our portals and our character's level, health, mana and
+//            shillings; our client's hour, weather, terrain and crowd
 //   Quests   write quests and place their givers, then try them out on you (QuestsTab.tsx)
 //   Companions  give yourself one and try out its tiers, death and revival (CompanionsTab.tsx)
 //   Sprites  paint and fix the game's sprites, hair and facial hair, import pictures (SpritesTab.tsx)
@@ -20,7 +21,7 @@ import { IconRenderer } from "../game/icons.ts";
 import { TUNING_DEFAULTS, TUNING_TABLES, type TuningValues } from "../game/tuning.ts";
 import type { SceneOverrides } from "../game/devBridge.ts";
 import {
-  buildKod, castSpell, findRoom, giveItem, loadCatalog, maint, objectsHere, provingGrounds, PROVING_GROUNDS_RID, saveTuning, spawnBeside, travelHere, travelMove,
+  buildKod, castSpell, findRoom, giveItem, loadCatalog, maint, objectsHere, provingGrounds, PROVING_GROUNDS_RID, returnedInt, saveTuning, spawnBeside, travelHere, travelMove,
   useDevLink, type Catalog, type CatalogEntry, type GameReport, type TravelHere, type TravelPoint,
 } from "./api.ts";
 import { QuestsTab } from "./QuestsTab.tsx";
@@ -422,6 +423,98 @@ const CROWDS: Record<string, SceneOverrides["crowd"]> = {
   shop: { kind: "shop", count: 2, place: "tos" },
 };
 
+/** Our character's numbers, as the server has them (player.kod, battler.kod) */
+interface CharacterNumbers {
+  level: number;
+  health: number;
+  maxHealth: number;
+  mana: number;
+  maxMana: number;
+}
+
+async function readCharacter(id: number): Promise<CharacterNumbers> {
+  const out = await maint(
+    `send object ${id} GetBaseMaxHealth`,
+    `send object ${id} GetHealth`,
+    `send object ${id} GetMaxHealth`,
+    `send object ${id} GetMana`,
+    `send object ${id} GetMaxMana`,
+  );
+  const [level, health, maxHealth, mana, maxMana] = out.map((o) => returnedInt(o) ?? 0);
+  return { level, health, maxHealth, mana, maxMana };
+}
+
+/**
+ * Our character's level (base max health), health, mana and shillings, set to a number. The
+ * level is capped by Stamina (100 + Stamina, and 150: Player.GetBaseMaxHealth), so what the
+ * server allowed is read back; XP is reset to the new level (ResetXPToLevel) so the next kill
+ * doesn't undo it. Max mana isn't set: the server works it out from nodes and items (ComputeMaxMana).
+ */
+function CharacterBox({ act, needMe, me }: { act: Act; needMe: () => GameReport; me: GameReport | null }) {
+  const [now, setNow] = useState<CharacterNumbers | null>(null);
+  const [level, setLevel] = useState("");
+  const [health, setHealth] = useState("");
+  const [mana, setMana] = useState("");
+  const [money, setMoney] = useState("1000");
+  const playerId = me?.playerId;
+  useEffect(() => {
+    if (!playerId) return;
+    let live = true;
+    void readCharacter(playerId).then((n) => live && setNow(n), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, [playerId]);
+  const num = (v: string, what: string): number => {
+    const n = Math.round(Number(v));
+    if (v.trim() === "" || !Number.isFinite(n)) throw new Error(`${what}: not a number`);
+    return n;
+  };
+  /** Runs the commands, then shows the numbers as they are now */
+  const change = (what: string, commands: (id: number, before: CharacterNumbers) => string[] | Promise<string[]>) =>
+    act(what, async () => {
+      const id = needMe().playerId;
+      const before = await readCharacter(id);
+      await maint(...(await commands(id, before)));
+      const after = await readCharacter(id);
+      setNow(after);
+      return `level ${after.level}, health ${after.health}/${after.maxHealth}, mana ${after.mana}/${after.maxMana}`;
+    });
+  const setLevelTo = change("Set level", async (id) => {
+    const want = num(level, "Level");
+    const [raw] = await maint(`send object ${id} GetUncappedBaseMaxHealth`);
+    const has = returnedInt(raw ?? "") ?? 0;
+    return [`send object ${id} GainBaseMaxHealth amount int ${want - has}`, `send object ${id} ResetXPToLevel`, `send object ${id} DrawXP`];
+  });
+  const setHealthTo = change("Set health", (id) => [`send object ${id} SetHealth amount int ${num(health, "Health")}`]);
+  const setManaTo = change("Set mana", (id, b) => [`send object ${id} GainMana amount int ${num(mana, "Mana") - b.mana}`]);
+  const fill = change("Fill health and mana", (id, b) => [`send object ${id} SetHealth amount int ${b.maxHealth}`, `send object ${id} GainMana amount int ${b.maxMana - b.mana}`]);
+  const field = (label: string, value: string, set: (v: string) => void, go: () => void, button: string) => (
+    <label className="char-row">
+      <span>{label}</span>
+      <input type="number" value={value} onChange={(e) => set(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} />
+      <button onClick={go}>{button}</button>
+    </label>
+  );
+  return (
+    <>
+      <h2>Character (you)</h2>
+      <p className="dim">
+        {now ? `Level ${now.level} · health ${now.health} of ${now.maxHealth} · mana ${now.mana} of ${now.maxMana}` : me ? "Asking the server..." : "No game tab is in the game"}
+      </p>
+      {field("Level (max health)", level, setLevel, setLevelTo, "Set")}
+      {field("Health", health, setHealth, setHealthTo, "Set")}
+      {field("Mana", mana, setMana, setManaTo, "Set")}
+      {field("Shillings", money, setMoney, act("Give shillings", async () => giveItem("Shillings", needMe().playerId, num(money, "Shillings"), true)), "Give")}
+      <div className="buttons">
+        <button onClick={fill}>Fill health and mana</button>
+        <button onClick={act("Read", async () => void setNow(await readCharacter(needMe().playerId)))}>Read again</button>
+      </div>
+      <p className="dim">The level is capped by Stamina (100 + Stamina, at most 150); your XP is reset to the new level. Max mana comes from your nodes and items.</p>
+    </>
+  );
+}
+
 /** The main network's points (shards-server util/travelnet.kod GetPoints) */
 const TRAVEL_POINTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 90];
 
@@ -457,6 +550,7 @@ function WorldPanel({ act, needMe, me, scene, setScene }: { act: Act; needMe: ()
         </div>
         <p className="dim">Portals you've forgotten show their gold "!" again once you re-enter the room.</p>
         <PortalPlacer act={act} me={me} />
+        <CharacterBox act={act} needMe={needMe} me={me} />
       </div>
       <div>
         <h2>Our client only (the game tabs)</h2>
