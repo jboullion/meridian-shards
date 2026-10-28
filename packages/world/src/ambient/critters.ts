@@ -80,11 +80,17 @@ const has = (t: readonly string[], ...names: string[]) => names.some((n) => t.in
 const VAULTS = new Set(["barvault.roo", "bergvault.roo", "jasvault.roo", "razavault.roo", "kocbank.roo"]);
 /** Castle Victoria, a dungeon (its rooms say no terrain): rats and spiders, and bats (gameScene) */
 const DUNGEONS = new Set(["castle1.roo", "castle1b.roo", "castle1d.roo", "throne1.roo", "throne2.roo", "greeny.roo"]);
+/**
+ * The Tos inn's cellar (toscellar.roo, terrain CITY): spiders, never rats. Its quest has players
+ * kill twenty of the server's small rats, and ours would look like them (2026-10-28).
+ */
+const SPIDER_CELLARS = new Set(["toscellar.roo"]);
 
 export function habitatOf(roomFile: string, terrain: readonly string[] | undefined): Habitat | null {
   // The vaults' cellars have rats; the arena has none (its crowd is enough)
   if (VAULTS.has(roomFile)) return { name: "vault", count: 4, mix: [["rat", 1]] };
   if (DUNGEONS.has(roomFile)) return { name: "dungeon", count: 5, mix: [["rat", 3], ["spider", 2]] };
+  if (SPIDER_CELLARS.has(roomFile)) return { name: "cellar", count: 4, mix: [["spider", 1]] };
   if (AMBIENT_ROOMS[roomFile]?.kind === "arena") return null;
   const t = terrain ?? [];
   if (!t.length) {

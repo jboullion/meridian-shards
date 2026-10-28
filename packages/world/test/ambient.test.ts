@@ -430,6 +430,8 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
 
   test("critters by terrain: what lives where", () => {
     expect(habitatOf("barlsew.roo", ["SEWERS", "WATERFALL"])?.name).toBe("sewer");
+    // The Tos inn's cellar: spiders only, apart from its quest's rats
+    expect(habitatOf("toscellar.roo", ["CITY"])?.mix.map(([n]) => n)).toEqual(["spider"]);
     expect(habitatOf("ratcave1.roo", ["CAVES"])?.mix.map(([n]) => n)).toContain("spider");
     expect(habitatOf("b6.roo", ["HILLS", "MOUNTAIN"])?.mix.map(([n]) => n)).toEqual(["mutantAnt", "scorpion"]);
     expect(habitatOf("tos.roo", ["CITY", "FOUNTAIN", "ROAD"])?.mix).toEqual([["rat", 1]]);
