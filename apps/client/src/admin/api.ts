@@ -238,7 +238,7 @@ export interface QuestFile {
 }
 
 export interface QuestStepFile {
-  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune" | "arena" | "train" | "node" | "claim" | "battle" | "siege" | "fallen" | "shrine";
+  kind: "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune" | "arena" | "train" | "node" | "claim" | "battle" | "siege" | "fallen" | "shrine" | "eat";
   auto?: boolean;
   rewards?: QuestRewardsFile;
   spell?: string;

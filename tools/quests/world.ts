@@ -129,6 +129,8 @@ export const isMonster = (w: World, cls: string): boolean => isA(w.classes, cls,
 
 export const isItem = (w: World, cls: string): boolean => isA(w.classes, cls, "Item");
 
+export const isFood = (w: World, cls: string): boolean => isA(w.classes, cls, "Food");
+
 export const isNumberItem = (w: World, cls: string): boolean => isA(w.classes, cls, "NumberItem");
 
 export const isSpell = (w: World, cls: string): boolean => isA(w.classes, cls, "Spell");

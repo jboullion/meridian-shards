@@ -31,11 +31,11 @@ export const ARENAS = {
 } as const;
 export type ArenaName = keyof typeof ARENAS;
 
-export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine"] as const;
+export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine", "eat"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
 /** Steps that happen by doing something, once (the guide chains' kinds): done by themselves unless `auto` is false */
-export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine"];
+export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine", "eat"];
 
 /** How a quest's markers look: gold for the main and levelling chains, silver for story quests, bronze for errands */
 export const TIERS = ["main", "story", "errand"] as const;
@@ -54,7 +54,8 @@ export type Tier = (typeof TIERS)[number];
  * (`battle`; with `win`, only one won), win the campaign's siege on a rival's capital (`siege`,
  * `against`: saying "march" to one's liege on the step calls it; docs/adr/0021), or be there when a
  * Fallen Hall's boss falls, having struck it (`fallen`, `hall`; docs/adr/0022 decision 31), or make
- * an offering at a shrine (`shrine`, of `school`'s god or any; docs/adr/0027).
+ * an offering at a shrine (`shrine`, of `school`'s god or any; docs/adr/0027), or eat something
+ * (`eat`: the food `item`, or any).
  */
 export interface QuestStep {
   kind: StepKind;
@@ -97,7 +98,7 @@ export interface QuestStep {
   exact?: boolean;
   /** kill: only kills in `rooms` count (a region's own: the bone faction's chieftains) */
   inRooms?: boolean;
-  /** collect: the item class. stash, buy: the item (left out, anything) */
+  /** collect: the item class. stash, buy, eat: the item (left out, anything; eat: any food) */
   item?: string;
   /** kill, collect: how many (default 1) */
   count?: number;

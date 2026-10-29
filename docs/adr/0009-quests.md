@@ -517,6 +517,9 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
   - **The `shrine` kind** (`QK_SHRINE` 25): make an offering at any shrine, of the step's `school` (its amount, 1-6; left out, any school).
   - The bottle remembers who last held it, and `Shrine.MakeOffering` calls `QuestBook.ShrineOffered` for that player.
   - Each temple's daily offering quest now gives the bottle with its incantation (a `talk` step's reward) and ends at a shrine. They are 85-87 (Faren, Kraanan, Riija) and the new Shal'ille, Qor and Jala ones.
+- **Eating** (2026-10-28):
+  - **The `eat` kind** (`QK_EAT` 26): eat the step's food `item` (its class, subclasses too), or any food when it is left out. `Food.NewApplied` (and `ChaosFood`'s) calls `QuestBook.FoodEaten`.
+  - Gaining a hit point no longer refills vigor, so players need to know to eat. "A Full Belly" (353, `raza-a-full-belly.json`) is Eric d'Jorn's at the Raza bar: eat anything, come back. His lines explain that vigor drives health regeneration (about a second a point when well fed, four when starving).
 - **The Vale of Sorrows** (`feyforst.kod`, `feyforst/c2.kod`):
   - **The gate is back:** the fey node shows only while all eight rooms are very good or all very evil. The elhai (good) or dirhai (evil) node is the same `NODE_FAERIE`. Its karma check (`FeyNode.LashOut`) stays off, so anyone may bond either way.
   - **Locks** (`FeyForest.CastLock`): casting Detect Evil (Shal'ille) in a vale room locks it good, and Detect Good (Qor) locks it evil, for a Meridian day (`FEY_LOCK_TIME`, 2 real hours). Potions don't count.

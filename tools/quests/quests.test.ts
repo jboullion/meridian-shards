@@ -17,6 +17,8 @@ const WORLD = worldFrom(
     kod("giaratsm.kod", "SmallRat is GiantRat\nresources:\n   smallrat_name = \"small rat\"\nclassvars:\n   vrName = smallrat_name\n"),
     kod("item.kod", "Item is PassiveObject\n"),
     kod("numbitem.kod", "NumberItem is Item\n"),
+    kod("food.kod", "Food is NumberItem\n"),
+    kod("apple.kod", "Apple is Food\nresources:\n   apple_name_rsc = \"apple\"\nclassvars:\n   vrName = apple_name_rsc\n"),
     kod("orctooth.kod", "OrcTooth is NumberItem\nresources:\n   orctooth_name = \"orc tooth\"\nclassvars:\n   vrName = orctooth_name\n"),
     kod(
       "tosinn.kod",
@@ -372,6 +374,18 @@ describe("the quest generator", () => {
     expect(g.kod).toContain("1, $, $, $, 8 ]");
     expect(g.catalog.quests[0]!.steps[0]!.objective).toBe("Bond with the mana node");
     expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "node", node: "NODE_NOWHERE" }] }]), WORLD).errors.join()).toMatch(/no NODE_NOWHERE in blakston.khd/);
+  it("writes the eat kind: eating a food, or any (Food.NewApplied)", () => {
+    const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "eat", item: "Apple" }, { kind: "eat" }] }]), WORLD);
+    expect(g.errors).toEqual([]);
+    // QK_EAT 26, done by itself, the food as its class
+    expect(g.kod).toContain("[ 26, &Apple, 1, 0, &TosInnKeeper, 0, qd_1_s1, $, $, qd_1_t1,\r\n               1, $, $, $, 0 ]");
+    expect(g.kod).toContain("[ 26, $, 1, 0, &TosInnKeeper, 0, qd_1_s2, $, $, qd_1_t2,\r\n               1, $, $, $, 0 ]");
+    expect(g.catalog.quests[0]!.steps.map((s) => s.objective)).toEqual(["Eat apple", "Eat something"]);
+    expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "eat", item: "OrcTooth" }] }]), WORLD).errors).toEqual([
+      "cellar-rats.json: step 1: item: OrcTooth isn't a food class",
+    ]);
+  });
+
     expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "node" }] }]), WORLD).errors.join()).toMatch(/node: a NODE_ constant/);
   });
 

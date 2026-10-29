@@ -11,10 +11,10 @@ import {
 
 type Act = (what: string, fn: () => Promise<string | void>) => () => void;
 
-const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine"];
+const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine", "eat"];
 
 /** The kinds that happen once by doing something: done by themselves unless Auto is unticked */
-const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine"];
+const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine", "eat"];
 
 const TIER_LABEL = { main: "Main (gold)", story: "Story (silver)", errand: "Errand (bronze)" } as const;
 
@@ -419,6 +419,11 @@ function QuestForm({
               )}
             </div>
           )}
+          {s.kind === "eat" && (
+            <label>
+              Food <input list="quest-items" value={s.item ?? ""} placeholder="any food" onChange={(e) => setStep(i, { item: e.target.value || undefined })} />
+            </label>
+          )}
           {s.kind === "equip" && (
             <label>
               Any one of these items{" "}
@@ -738,7 +743,7 @@ function clean(q: QuestFile): QuestFile {
       if (s.kind === "deliver") out.parcel = s.parcel;
       if (s.kind === "cast") out.spell = s.spell;
       if ((s.kind === "deposit" || s.kind === "stash" || s.kind === "buy") && s.with) out.with = s.with;
-      if ((s.kind === "stash" || s.kind === "buy") && s.item) out.item = s.item;
+      if ((s.kind === "stash" || s.kind === "buy" || s.kind === "eat") && s.item) out.item = s.item;
       if (s.kind === "equip") out.items = s.items;
       if (s.kind === "learn") Object.assign(out, s.skills?.length ? { skills: s.skills } : {}, s.spells?.length ? { spells: s.spells } : {});
       if (s.kind === "attune") out.point = s.point ?? 1;
