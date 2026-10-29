@@ -16,8 +16,15 @@ export interface CatalogNpc {
 
 export type QuestStepKind = "kill" | "collect" | "talk" | "deliver" | "visit" | "cast" | "deposit" | "stash" | "buy" | "equip" | "health" | "hometown" | "nodes" | "companion" | "convey" | "learn" | "attune" | "arena" | "train" | "node" | "claim" | "battle" | "siege" | "fallen" | "shrine" | "eat";
 
-/** How a quest's markers look: gold (main and levelling chains), silver (story), bronze (errands) */
+/**
+ * What kind of quest it is: the main and levelling chains, story quests, errands (repeatable,
+ * common work). The quest windows' badge says it (QUEST_TIER_LABEL); the markers over NPCs no
+ * longer do (all gold since 29 October, not gold, silver and bronze)
+ */
 export type QuestTier = "main" | "story" | "errand";
+
+/** A quest's kind in a word or two, for the quest windows' badge */
+export const QUEST_TIER_LABEL: Record<QuestTier, string> = { main: "Main quest", story: "Story", errand: "Errand" };
 
 export interface CatalogRewards {
   xp: number;

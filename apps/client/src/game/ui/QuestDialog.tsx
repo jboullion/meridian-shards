@@ -8,7 +8,7 @@
 // Quests tab shows its story, who gave it, the progress and the reward, with Track and Abandon.
 
 import { useEffect, useRef, useState } from "react";
-import { bandText, itemText, objectiveLine, QUEST_OFFER, rewardsLine, rewardText, timeLeftText, type CatalogQuest, type CatalogStep, type GameSession, type QuestOffer } from "@shards/world";
+import { bandText, itemText, objectiveLine, QUEST_OFFER, QUEST_TIER_LABEL, rewardsLine, rewardText, timeLeftText, type CatalogQuest, type CatalogStep, type GameSession, type QuestOffer } from "@shards/world";
 import { useQuests, type QuestStore } from "../quests.ts";
 import { Button, Check, ListBox, Window } from "./kit.tsx";
 
@@ -248,9 +248,12 @@ export function QuestDialog({
   return (
     <Window title={quest.name} onClose={onClose} className="game-dialog quest-dialog">
       <p className="quest-band">
-        {bandText(quest)}
-        {quest.timeLimitMinutes ? `, ${timeLeftText(quest.timeLimitMinutes * 60)} to do it` : ""}
-        {quest.repeatHours !== null ? ", can be done again" : ""}
+        <TierBadge quest={quest} />
+        <span className="quest-band-text">
+          {bandText(quest)}
+          {quest.timeLimitMinutes ? `, ${timeLeftText(quest.timeLimitMinutes * 60)} to do it` : ""}
+          {quest.repeatHours !== null ? ", can be done again" : ""}
+        </span>
       </p>
       <p className="quest-story">{story}</p>
       {state === QUEST_OFFER.SOON && <p className="quest-later">Come back when you have {quest.band.min} health.</p>}
@@ -289,6 +292,11 @@ export function QuestDialog({
       </div>
     </Window>
   );
+}
+
+/** What kind of quest it is, before its health line: Main quest, Story or Errand (the markers over NPCs are all gold) */
+function TierBadge({ quest }: { quest: CatalogQuest }) {
+  return <span className={`quest-tier quest-tier-${quest.tier}`}>{QUEST_TIER_LABEL[quest.tier]}</span>;
 }
 
 /** A quest's reward, under a heading as Progress is; with `chose`, the reward chosen in place of the choice */
@@ -339,9 +347,12 @@ export function QuestInfoDialog({ id, store, session, onClose }: { id: number; s
         {where ? `, ${where}` : ""}
       </h4>
       <p className="quest-band">
-        {bandText(quest)}
-        {quest.repeatHours !== null ? ", can be done again" : ""}
-        {!active && done ? `, done${done.times > 1 ? ` ${done.times} times` : ""}` : ""}
+        <TierBadge quest={quest} />
+        <span className="quest-band-text">
+          {bandText(quest)}
+          {quest.repeatHours !== null ? ", can be done again" : ""}
+          {!active && done ? `, done${done.times > 1 ? ` ${done.times} times` : ""}` : ""}
+        </span>
       </p>
       <p className="quest-story">{quest.text.offer}</p>
       {current?.brief && <p className="quest-story">{current.brief}</p>}

@@ -2769,7 +2769,7 @@ export class GameScene {
       }
       const el = this.markerPool[n] ?? this.labelsEl.appendChild(document.createElement("div"));
       this.markerPool[n++] = el;
-      el.className = marker.grey ? "world-marker grey" : marker.tier === "gold" ? "world-marker" : `world-marker ${marker.tier}`;
+      el.className = marker.grey ? "world-marker grey" : "world-marker";
       if (el.textContent !== glyph) el.textContent = glyph;
       // Bigger up close: up to MARKER_NEAR_SCALE within MARKER_NEAR squares, the CSS size from MARKER_FAR on
       const near = Math.min(1, Math.max(0, (MARKER_FAR - dist) / (MARKER_FAR - MARKER_NEAR)));

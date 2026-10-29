@@ -16,7 +16,7 @@ const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "v
 /** The kinds that happen once by doing something: done by themselves unless Auto is unticked */
 const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine", "eat"];
 
-const TIER_LABEL = { main: "Main (gold)", story: "Story (silver)", errand: "Errand (bronze)" } as const;
+const TIER_LABEL = { main: "Main", story: "Story", errand: "Errand" } as const;
 
 const FACTION_LABEL: Record<FactionName, string> = { neutral: "Neutral only", duke: "The Duke's", princess: "The Princess's", rebel: "The rebels'", any: "Any faction" };
 const SCHOOLS: SchoolName[] = ["shalille", "qor", "kraanan", "faren", "riija", "jala"];

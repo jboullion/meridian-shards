@@ -18,7 +18,11 @@ export const MM_OURS = {
   TRAVEL_UNATTUNED: 0x80000,
   /** An NPC waiting on a step of ours that isn't done yet: grey "?" */
   QUEST_PENDING: 0x100000,
-  /** The quest's tier, for the mark's colour: silver (story), bronze (errands); neither is gold (the main chains) */
+  /**
+   * The quest's tier: silver (story), bronze (errands), neither the main chains. The server still
+   * sends them, but every mark is gold (29 October: the colours confused more than they told);
+   * the quest window's badge says the tier
+   */
   QUEST_SILVER: 0x200000,
   QUEST_BRONZE: 0x400000,
   /** A tailor or barber (docs/adr/0012-cosmetics.md): a double-click talks to them, not their shop */
@@ -26,9 +30,6 @@ export const MM_OURS = {
   /** An NPC that pays shillings for what we offer (MOB_BUYER): only they get a Sell button */
   BUYS: 0x1000000,
 } as const;
-
-/** A mark's colour: a quest's tier, or gold for a portal */
-export type MarkerTier = "gold" | "silver" | "bronze";
 
 /** Any quest bit on an NPC: activating it opens the quest window */
 export const MM_QUEST_NPC = MM_OURS.QUEST_OFFER | MM_OURS.QUEST_TURNIN | MM_OURS.QUEST_SOON | MM_OURS.QUEST_PENDING;
@@ -39,10 +40,8 @@ export const MM_TALK_NPC = MM_QUEST_NPC | MM_OURS.SERVICE;
 export interface Marker {
   /** What's drawn over the object in the view: "!" (something for you here), "?" (hand it in), or null */
   glyph: "!" | "?" | null;
-  /** Greyed: not yet ("!" soon, "?" once the step is done) */
+  /** Greyed: not yet ("!" soon, "?" once the step is done); gold otherwise */
   grey: boolean;
-  /** Its colour when not greyed */
-  tier: MarkerTier;
   /**
    * How the minimap draws it: the glyph in place of the dot, a portal's ring, or a gold ring
    * round the object's usual dot
@@ -50,29 +49,21 @@ export interface Marker {
   map: "glyph" | "portal" | "ring";
 }
 
-/** The quest tier the bits carry */
-const tierOf = (flags: number): MarkerTier => (flags & MM_OURS.QUEST_BRONZE ? "bronze" : flags & MM_OURS.QUEST_SILVER ? "silver" : "gold");
-
 /** The marker an object's minimap bits ask for, or null. Quests' are left out when `quests` is off */
 export function markerFor(minimapFlags: number, quests = true): Marker | null {
-  const tier = tierOf(minimapFlags);
   if (quests) {
-    if (minimapFlags & MM_OURS.QUEST_TURNIN) return { glyph: "?", grey: false, tier, map: "glyph" };
-    if (minimapFlags & MM_OURS.QUEST_OFFER) return { glyph: "!", grey: false, tier, map: "glyph" };
+    if (minimapFlags & MM_OURS.QUEST_TURNIN) return { glyph: "?", grey: false, map: "glyph" };
+    if (minimapFlags & MM_OURS.QUEST_OFFER) return { glyph: "!", grey: false, map: "glyph" };
   }
-  if (minimapFlags & MM_OURS.TRAVEL_UNATTUNED) return { glyph: "!", grey: false, tier: "gold", map: "glyph" };
-  if (minimapFlags & MM_OURS.TRAVEL) return { glyph: null, grey: false, tier: "gold", map: "portal" };
+  if (minimapFlags & MM_OURS.TRAVEL_UNATTUNED) return { glyph: "!", grey: false, map: "glyph" };
+  if (minimapFlags & MM_OURS.TRAVEL) return { glyph: null, grey: false, map: "portal" };
   if (quests) {
-    if (minimapFlags & MM_OURS.QUEST_PENDING) return { glyph: "?", grey: true, tier, map: "glyph" };
-    if (minimapFlags & MM_OURS.QUEST_SOON) return { glyph: "!", grey: true, tier, map: "glyph" };
-    if (minimapFlags & MM_OURS.QUEST_TARGET) return { glyph: null, grey: false, tier: "gold", map: "ring" };
+    if (minimapFlags & MM_OURS.QUEST_PENDING) return { glyph: "?", grey: true, map: "glyph" };
+    if (minimapFlags & MM_OURS.QUEST_SOON) return { glyph: "!", grey: true, map: "glyph" };
+    if (minimapFlags & MM_OURS.QUEST_TARGET) return { glyph: null, grey: false, map: "ring" };
   }
   return null;
 }
 
-/** A tier's colour, for the minimap: fill and outline */
-export const TIER_COLOR: Record<MarkerTier, [string, string]> = {
-  gold: ["rgb(255,200,40)", "rgb(40,20,0)"],
-  silver: ["rgb(222,228,238)", "rgb(30,34,44)"],
-  bronze: ["rgb(214,138,66)", "rgb(40,18,4)"],
-};
+/** A mark's gold, for the minimap: fill and outline */
+export const MARK_COLOR: [string, string] = ["rgb(255,200,40)", "rgb(40,20,0)"];

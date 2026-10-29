@@ -227,15 +227,6 @@ button.link {
   pointer-events: none;
   animation: world-marker-bob 1.6s ease-in-out infinite;
 }
-/* Ours: a story quest's marks are silver, an errand's bronze (the main chains' are gold, above) */
-.world-marker.silver {
-  color: rgb(222 228 238);
-  text-shadow: var(--marker-outline), 0 0 6px rgb(20 24 34), 0 0 12px rgb(200 215 255 / 0.5);
-}
-.world-marker.bronze {
-  color: rgb(214 138 66);
-  text-shadow: var(--marker-outline), 0 0 6px rgb(40 18 4), 0 0 12px rgb(230 130 40 / 0.5);
-}
 /* Ours (docs/adr/0009-quests.md 2): a quest not ready yet, or one we nearly qualify for */
 .world-marker.grey {
   color: rgb(185 185 185);
@@ -5557,10 +5548,39 @@ canvas.server-wait {
   margin-bottom: 10px;
 }
 
-.quest-band,
+.quest-band {
+  font-size: 12px;
+}
+
+.quest-band-text,
 .quest-later {
   font-size: 12px;
   opacity: 0.8;
+}
+
+/* What kind of quest it is (QuestDialog TierBadge), before the health line */
+.quest-tier {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: bold;
+  line-height: 16px;
+  vertical-align: 1px;
+}
+
+.quest-tier-main {
+  color: rgb(255, 200, 40);
+}
+
+.quest-tier-story {
+  color: rgb(205, 214, 232);
+}
+
+.quest-tier-errand {
+  color: rgb(214, 150, 90);
 }
 
 .quest-story {
@@ -5787,7 +5807,7 @@ canvas.server-wait {
   color: rgb(240, 208, 25);
 }
 
-/* Signet rings to return, bronze as errands are (game/markers.ts TIER_COLOR) */
+/* Signet rings to return, in bronze */
 .quest-tracked.bronze b,
 .mk-list li.quest-bronze {
   color: rgb(214, 138, 66);

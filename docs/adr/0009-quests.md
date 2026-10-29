@@ -591,3 +591,8 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
 - **Our client:** the reward line says "your choice of A, B or C"; on the last hand-in the quest window lists them and Complete waits for a pick (the list's own Complete opens the quest instead); after, the reward shows what was chosen. The playtester's `quest` tool takes `choice`, and `quest_info` lists them.
 - **The 26 quests that drew:** the dwarf's offering (53, now all six schools: Jala's was missing) and the Avar war's 500 reagents (30) are choices; the other 24 give a fixed reward, mostly the middle of the money they drew from (the lieges' favours 300, the errands 525 to 1,700, the story quests 750 to 1,700), and three an item: the chicken soup a long sword, the hypochondriac scale armor, Moxal a mace (the draw's favourite, 10 in 16).
 - **Not yet tried:** a choice made in the browser client, against a running server.
+
+## Every marker is gold; the quest window says the kind (2026-10-29)
+
+- **The markers over NPCs and on the minimap are all gold.** Silver (story) and bronze (errands) confused more than they told. The server still sends `MM_QUEST_SILVER` and `MM_QUEST_BRONZE`; our client ignores them (`markers.ts`), so the colours could come back without a server change. A grey mark is still a quest not ready yet.
+- **The quest windows show a badge** before the health line: Main quest, Story or Errand (`QUEST_TIER_LABEL`), tinted gold, silver and bronze, in both the window at the giver and the one away from it. The tier still orders the Suggested list and the dashboard edits it as before.

@@ -37,7 +37,7 @@ export type StepKind = (typeof STEP_KINDS)[number];
 /** Steps that happen by doing something, once (the guide chains' kinds): done by themselves unless `auto` is false */
 export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine", "eat"];
 
-/** How a quest's markers look: gold for the main and levelling chains, silver for story quests, bronze for errands */
+/** What kind of quest it is: the main and levelling chains, story quests, errands. The quest windows show it as a badge (the markers over NPCs are all gold) */
 export const TIERS = ["main", "story", "errand"] as const;
 export type Tier = (typeof TIERS)[number];
 

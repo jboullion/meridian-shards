@@ -10,7 +10,7 @@ import { FINENESS, type Room } from "@shards/formats";
 import { DRAWFX, OF } from "@shards/render";
 import type { WorldState } from "@shards/world";
 import { currentSocial } from "../social.ts";
-import { markerFor, TIER_COLOR, type MarkerTier } from "../markers.ts";
+import { MARK_COLOR, markerFor } from "../markers.ts";
 import type { MapWay } from "../questWays.ts";
 
 /** include/proto.h MM_* (ours: not MM_TEMPSAFE, 0x200, or MM_NO_PVP, 0x2000: the guardian angel's
@@ -196,7 +196,7 @@ export function MiniMap({
         // "!" and "?" in place of the NPC's dot, and a gold ring round a monster we're to kill
         const marker = markerFor(mm, questMarkersRef.current);
         if (marker?.map === "glyph" && marker.glyph) {
-          glyphMark(ctx, marker.glyph, marker.grey, marker.tier, x, y, Math.max(7, 3.2 * radius));
+          glyphMark(ctx, marker.glyph, marker.grey, x, y, Math.max(7, 3.2 * radius));
           continue;
         }
         if (marker?.map === "portal") {
@@ -367,13 +367,13 @@ function star(ctx: CanvasRenderingContext2D, size: number, x: number, y: number)
 }
 
 /** Ours (markers.ts): a gold "!" or "?" standing on the spot (grey: not yet), outlined to read on any floor */
-function glyphMark(ctx: CanvasRenderingContext2D, glyph: string, grey: boolean, tier: MarkerTier, x: number, y: number, size: number): void {
+function glyphMark(ctx: CanvasRenderingContext2D, glyph: string, grey: boolean, x: number, y: number, size: number): void {
   ctx.save();
   ctx.font = `bold ${Math.round(size * 1.6)}px sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
   ctx.lineWidth = 3;
-  const [fill, outline] = TIER_COLOR[tier];
+  const [fill, outline] = MARK_COLOR;
   ctx.strokeStyle = grey ? "rgb(30,30,30)" : outline;
   ctx.strokeText(glyph, x, y + size * 0.6);
   ctx.fillStyle = grey ? "rgb(170,170,170)" : fill;
