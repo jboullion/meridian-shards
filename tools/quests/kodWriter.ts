@@ -6,10 +6,10 @@
 //   quest: [ id, name, giver class, giver placed id, band min, band max, prerequisites,
 //            karma min, karma max, cooldown seconds ($ once), time limit seconds ($ none),
 //            steps, xp, shillings, items, training points, tier, faction ($ any, -1 any but
-//            neutral, else FACTION_*), one of these items, requirement bits (QBQ_*), special rewards,
+//            neutral, else FACTION_*), the items to choose one of, requirement bits (QBQ_*), special rewards,
 //            quests that keep it from being offered, health below ($ any), renown min ($ any) ]
 //   step:  [ kind, class, count, exact (1; 2: only kills in its rooms count),  turn-in class, turn-in placed id, objective, rooms, parcel,
-//            turn-in's name, auto, rewards ([ xp, shillings, training points, items, one of, special ] or $),
+//            turn-in's name, auto, rewards ([ xp, shillings, training points, items, $ (a step has no choice), special ] or $),
 //            with (an NPC class), classes (equip's), amount ]
 //   giver: [ id, name, icon, desc, room, row, col, fine row, fine col, angle, service ]
 //   replaced: [ 1 (an old QuestEngine template) or 2 (a guide chain), its QST_ID or chain number, quest id ]
@@ -59,8 +59,8 @@ const specialList = (r: ResolvedRewards) => list(r.special.map(([k, n]) => `[ ${
 
 /** A step's rewards, or $ for none */
 const stepRewards = (r: ResolvedRewards) =>
-  r.xp || r.shillings || r.trainingPoints || r.items.length || r.oneOf.length || r.special.length
-    ? `[ ${r.xp}, ${r.shillings}, ${r.trainingPoints}, ${itemList(r.items)}, ${itemList(r.oneOf)}, ${specialList(r)} ]`
+  r.xp || r.shillings || r.trainingPoints || r.items.length || r.special.length
+    ? `[ ${r.xp}, ${r.shillings}, ${r.trainingPoints}, ${itemList(r.items)}, $, ${specialList(r)} ]`
     : "$";
 
 function replacedRows(quests: ResolvedQuest[]): string {
@@ -88,7 +88,7 @@ export function writeQuestDefs(quests: ResolvedQuest[], givers: ResolvedGiver[],
         `         [ ${q.id}, qd_${q.id}_name, ${cls(q.giver.cls)}, ${q.giver.placed}, ${q.band.min}, ${q.band.max}, ${list(q.prereqs.map(String))},`,
         `           ${opt(q.karmaMin)}, ${opt(q.karmaMax)}, ${opt(q.cooldownSeconds)}, ${opt(q.timeLimitSeconds)},`,
         `           [ ${steps.join(",\n             ")} ],`,
-        `           ${q.rewards.xp}, ${q.rewards.shillings}, ${itemList(q.rewards.items)}, ${q.rewards.trainingPoints}, ${TIER_NUM[q.tier]}, ${q.faction === null ? "$" : FACTION_NUM[q.faction]}, ${itemList(q.rewards.oneOf)}, ${q.needs}, ${specialList(q.rewards)}, ${list(q.excludes.map(String))}, ${opt(q.healthBelow)}, ${opt(q.renownMin)} ]`,
+        `           ${q.rewards.xp}, ${q.rewards.shillings}, ${itemList(q.rewards.items)}, ${q.rewards.trainingPoints}, ${TIER_NUM[q.tier]}, ${q.faction === null ? "$" : FACTION_NUM[q.faction]}, ${itemList(q.rewards.choice)}, ${q.needs}, ${specialList(q.rewards)}, ${list(q.excludes.map(String))}, ${opt(q.healthBelow)}, ${opt(q.renownMin)} ]`,
       ].join("\n"),
     );
   }

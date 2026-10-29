@@ -1,20 +1,25 @@
 // Ours (docs/adr/0009-quests.md 3.3): the quest window, opened by what an NPC we talked to has for
 // us (UC_QUEST_OFFERS, after activating them). Several quests are listed first. An offer shows
 // the story, the band, the objectives with where they are, and the rewards, with Accept; a step
-// ready to hand in shows Complete, then what comes next (or the reward). Everything is checked
+// ready to hand in shows Complete, then what comes next (or the reward); a quest whose reward is
+// a choice (rewards.choice) lists it, and Complete waits for one to be picked. Everything is checked
 // again by the server (util/questbook.kod); the text is the catalogue's (quests.ts).
 // QuestInfoDialog is a quest's window away from its giver: a double click in the quest box or the
 // Quests tab shows its story, who gave it, the progress and the reward, with Track and Abandon.
 
 import { useEffect, useRef, useState } from "react";
-import { bandText, objectiveLine, QUEST_OFFER, rewardsLine, rewardText, timeLeftText, type CatalogQuest, type CatalogStep, type GameSession, type QuestOffer } from "@shards/world";
+import { bandText, itemText, objectiveLine, QUEST_OFFER, rewardsLine, rewardText, timeLeftText, type CatalogQuest, type CatalogStep, type GameSession, type QuestOffer } from "@shards/world";
 import { useQuests, type QuestStore } from "../quests.ts";
 import { Button, Check, ListBox, Window } from "./kit.tsx";
 
 /** As the server's QUEST_REACH (4 squares), and a little: past it, the window closes */
 const QUEST_REACH = 5 * 1024;
 
-type View = { kind: "list" } | { kind: "quest"; id: number } | { kind: "after"; id: number; step: number };
+/** "after": a hand-in, and the reward chosen at it (an index into rewards.choice) */
+type View = { kind: "list" } | { kind: "quest"; id: number } | { kind: "after"; id: number; step: number; chose?: number };
+
+/** Handing in this step finishes a quest whose reward is the player's choice */
+const choosesAt = (quest: CatalogQuest | undefined, step: number) => !!quest && step >= quest.steps.length && quest.rewards.choice.length > 0;
 
 /** The list's own state for a quest handed in from it and finished (not one of QUEST_OFFER's) */
 const LIST_DONE = 0;
@@ -69,6 +74,8 @@ export function QuestDialog({
   const [picked, setPicked] = useState<number | null>(offers[0]?.id ?? null);
   /** Quests accepted or handed in from the list's own buttons; the log (UC_QUEST_LOG) says when the server did it */
   const [sent, setSent] = useState<ReadonlySet<number>>(new Set());
+  /** The reward picked from a quest's choice, before Complete: that quest's, and the index */
+  const [picks, setPicks] = useState<{ id: number; n: number } | null>(null);
   useQuests(store);
   const underWay = (id: number) => store.active.some((a) => a.id === id);
   const activeStep = (id: number) => store.active.find((a) => a.id === id)?.step;
@@ -105,6 +112,11 @@ export function QuestDialog({
       return x.state;
     };
     const fromList = (command: "accept" | "turnin", x: QuestOffer) => {
+      // A reward to choose is chosen in the quest's own window
+      if (command === "turnin" && choosesAt(store.quest(x.id), x.step)) {
+        setView({ kind: "quest", id: x.id });
+        return;
+      }
       session.shardsCommand(`quest ${command} ${x.id}`);
       setSent((t) => new Set(t).add(x.id));
       // A hand-in shows what comes next, or the giver's closing words and the reward, as the
@@ -190,7 +202,7 @@ export function QuestDialog({
       <Window title={quest.name} onClose={onClose} className="game-dialog quest-dialog">
         <p className="quest-story">{last ? quest.text.complete : next?.brief || quest.text.progress || "There's more to do."}</p>
         {last ? (
-          <Reward quest={quest} />
+          <Reward quest={quest} chose={view.chose} />
         ) : (
           next && (
             <>
@@ -212,6 +224,9 @@ export function QuestDialog({
   const active = store.active.find((a) => a.id === quest.id);
   const step = active?.step ?? offer?.step ?? 1;
   const current = quest.steps[step - 1];
+  const choosing = state === QUEST_OFFER.READY && choosesAt(quest, step);
+  const chose = picks?.id === quest.id ? picks.n : null;
+  const setChose = (n: number) => setPicks({ id: quest.id, n });
 
   let story: string;
   if (state === QUEST_OFFER.OFFER || state === QUEST_OFFER.SOON) story = quest.text.offer;
@@ -225,8 +240,9 @@ export function QuestDialog({
     onClose();
   };
   const handIn = () => {
-    session.shardsCommand(`quest turnin ${quest.id}`);
-    setView({ kind: "after", id: quest.id, step });
+    if (choosing && chose === null) return;
+    session.shardsCommand(`quest turnin ${quest.id}${choosing ? ` ${chose! + 1}` : ""}`);
+    setView({ kind: "after", id: quest.id, step, ...(choosing ? { chose: chose! } : {}) });
   };
 
   return (
@@ -243,6 +259,19 @@ export function QuestDialog({
       {(state === QUEST_OFFER.OFFER || state === QUEST_OFFER.SOON || (state === QUEST_OFFER.READY && step >= quest.steps.length)) && (
         <Reward quest={quest} />
       )}
+      {choosing && (
+        <>
+          <h4>Choose your reward</h4>
+          <ListBox
+            label="Choose your reward"
+            className="quest-choice"
+            selected={chose}
+            onSelect={setChose}
+            onActivate={setChose}
+            items={quest.rewards.choice.map((c, i) => ({ key: i, label: itemText(c) }))}
+          />
+        </>
+      )}
       <div className="mk-buttons">
         {state === QUEST_OFFER.OFFER && (
           <Button isDefault onClick={accept}>
@@ -250,7 +279,7 @@ export function QuestDialog({
           </Button>
         )}
         {state === QUEST_OFFER.READY && (
-          <Button isDefault onClick={handIn}>
+          <Button isDefault disabled={choosing && chose === null} onClick={handIn}>
             {step >= quest.steps.length ? "Complete" : "Hand in"}
           </Button>
         )}
@@ -262,9 +291,10 @@ export function QuestDialog({
   );
 }
 
-/** A quest's reward, under a heading as Progress is */
-function Reward({ quest }: { quest: CatalogQuest }) {
-  const text = rewardText(quest);
+/** A quest's reward, under a heading as Progress is; with `chose`, the reward chosen in place of the choice */
+function Reward({ quest, chose }: { quest: CatalogQuest; chose?: number }) {
+  const picked = chose !== undefined ? quest.rewards.choice[chose] : undefined;
+  const text = rewardText(picked ? { ...quest, rewards: { ...quest.rewards, items: [...quest.rewards.items, picked], choice: [] } } : quest);
   return (
     <>
       <h4>Reward</h4>

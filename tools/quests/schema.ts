@@ -127,8 +127,11 @@ export interface QuestRewards {
   trainingPoints?: number;
   /** `school`: the item is made for that school (a disciple robe) */
   items?: { class: string; count?: number; school?: School }[];
-  /** One of these, at random (the old QuestEngine's prize lists) */
-  oneOf?: { class: string; count?: number; school?: School }[];
+  /**
+   * The player chooses one of these as they hand the quest in (2 to 10). Only on a quest's own
+   * rewards, not a step's, and its last step is handed in to someone (not auto)
+   */
+  choice?: { class: string; count?: number; school?: School }[];
   /** The player joins this faction (leaving any other) */
   joinFaction?: "duke" | "princess" | "rebel";
   /** The player's guild shield is embossed with this sign */
@@ -307,7 +310,9 @@ function checkRewards(r: Record<string, unknown>, where: string): string[] {
   const errs: string[] = [];
   for (const k of ["xp", "shillings", "trainingPoints"] as const) if (r[k] !== undefined && !isInt(r[k], 0, 10_000_000)) errs.push(`${where}.${k}`);
   if (r.xpPoints !== undefined && !(typeof r.xpPoints === "number" && r.xpPoints > 0 && r.xpPoints <= 20)) errs.push(`${where}.xpPoints: a number above 0, at most 20`);
-  for (const k of ["items", "oneOf"] as const)
+  if (r.oneOf !== undefined) errs.push(`${where}.oneOf: gone; a fixed reward, or a choice the player makes (choice)`);
+  if (r.choice !== undefined && Array.isArray(r.choice) && (r.choice.length < 2 || r.choice.length > 10)) errs.push(`${where}.choice: 2 to 10 of them`);
+  for (const k of ["items", "choice"] as const)
     if (
       r[k] !== undefined &&
       (!Array.isArray(r[k]) ||
@@ -333,6 +338,7 @@ function checkStepShape(s: unknown, where: string): string[] {
   if (s.rewards !== undefined) {
     if (!isObj(s.rewards)) errs.push(`${where}: rewards: an object`);
     else errs.push(...checkRewards(s.rewards, `${where}: rewards`));
+    if (isObj(s.rewards) && s.rewards.choice !== undefined) errs.push(`${where}: rewards.choice: only a quest's own rewards offer a choice`);
   }
   if (s.with !== undefined && !isText(s.with)) errs.push(`${where}: with: an NPC class`);
   if (s.amount !== undefined && !isInt(s.amount, 1, 10_000_000)) errs.push(`${where}: amount: a whole number from 1`);

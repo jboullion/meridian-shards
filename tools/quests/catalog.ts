@@ -13,7 +13,7 @@ const rewardsOf = (r: ResolvedRewards): CatalogRewards => ({
   shillings: r.shillings,
   trainingPoints: r.trainingPoints,
   items: r.items.map((i) => ({ className: i.cls, name: i.name, count: i.count })),
-  oneOf: r.oneOf.map((i) => ({ className: i.cls, name: i.name, count: i.count })),
+  choice: r.choice.map((i) => ({ className: i.cls, name: i.name, count: i.count })),
   special: r.specialText,
 });
 

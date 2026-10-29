@@ -69,7 +69,7 @@ export const PLAY: Record<string, (body: Body, a: Args) => string | Promise<stri
   examine: (body, a) => act.examine(body, n(a.id)),
   talk: (body, a) => act.talk(body, n(a.id)),
   quest: async (body, a) => {
-    const said = await act.quest(body, a.action as "accept" | "turnin" | "abandon" | "offers" | "log", nOpt(a.id));
+    const said = await act.quest(body, a.action as "accept" | "turnin" | "abandon" | "offers" | "log", nOpt(a.id), nOpt(a.choice));
     return `${said}${said ? "\n\n" : ""}Quest log:\n${questLogText(body.questLog, body.data.catalog)}`;
   },
   quest_info: (body, a) => questText(body.data.catalog, n(a.id)),

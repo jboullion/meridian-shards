@@ -191,7 +191,8 @@ export interface QuestRewardsFile {
   shillings?: number;
   trainingPoints?: number;
   items?: { class: string; count?: number; school?: SchoolName }[];
-  oneOf?: { class: string; count?: number; school?: SchoolName }[];
+  /** The player chooses one of these as they hand the quest in */
+  choice?: { class: string; count?: number; school?: SchoolName }[];
   joinFaction?: "duke" | "princess" | "rebel";
   insignia?: InsigniaName;
   /** Renown with the player's faction, 1 to 100 (ADR 0021) */

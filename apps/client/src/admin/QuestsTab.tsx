@@ -2,7 +2,7 @@
 // then try them out on your own character. Saving writes shards-server's quests/<key>.json;
 // applying runs the generator, builds the Kod and reloads the server (tools/dev/questApi.ts).
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   applyQuests, deleteGiver, loadQuests, questPlayer, retireQuest, saveGiver, saveQuest, travelHere,
   type Catalog, type FactionName, type GameReport, type GiverFile, type InsigniaName, type NpcRef, type PlayerQuests, type QuestFile, type QuestList, type QuestRewardsFile,
@@ -591,44 +591,48 @@ function QuestForm({
           Training points <input type="number" value={q.rewards.trainingPoints ?? 0} onChange={(e) => set({ rewards: { ...q.rewards, trainingPoints: num(e.target.value) ?? 0 } })} />
         </label>
       </div>
-      {(q.rewards.items ?? []).map((it, i) => (
-        <div key={i} className="row3">
-          <label>
-            Item <input list="quest-items" value={it.class} onChange={(e) => set({ rewards: { ...q.rewards, items: (q.rewards.items ?? []).map((x, j) => (j === i ? { ...x, class: e.target.value } : x)) } })} />
-          </label>
-          <label>
-            How many{" "}
-            <input
-              type="number"
-              value={it.count ?? 1}
-              onChange={(e) => set({ rewards: { ...q.rewards, items: (q.rewards.items ?? []).map((x, j) => (j === i ? { ...x, count: num(e.target.value) ?? 1 } : x)) } })}
-            />
-          </label>
-          <label>
-            Made for{" "}
-            <select
-              value={it.school ?? ""}
-              onChange={(e) =>
-                set({ rewards: { ...q.rewards, items: (q.rewards.items ?? []).map((x, j) => (j === i ? { ...x, school: (e.target.value || undefined) as SchoolName | undefined } : x)) } })
-              }
-            >
-              <option value="">(no school)</option>
-              {SCHOOLS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </label>
+      {(["items", "choice"] as const).map((key) => (
+        <Fragment key={key}>
+          {key === "choice" && <p className="dim">The player chooses one of these as they hand the quest in (2 to 10, or none). The last step can't be done by itself.</p>}
+          {(q.rewards[key] ?? []).map((it, i) => (
+            <div key={i} className="row3">
+              <label>
+                {key === "items" ? "Item" : "Or"} <input list="quest-items" value={it.class} onChange={(e) => set({ rewards: { ...q.rewards, [key]: (q.rewards[key] ?? []).map((x, j) => (j === i ? { ...x, class: e.target.value } : x)) } })} />
+              </label>
+              <label>
+                How many{" "}
+                <input
+                  type="number"
+                  value={it.count ?? 1}
+                  onChange={(e) => set({ rewards: { ...q.rewards, [key]: (q.rewards[key] ?? []).map((x, j) => (j === i ? { ...x, count: num(e.target.value) ?? 1 } : x)) } })}
+                />
+              </label>
+              <label>
+                Made for{" "}
+                <select
+                  value={it.school ?? ""}
+                  onChange={(e) =>
+                    set({ rewards: { ...q.rewards, [key]: (q.rewards[key] ?? []).map((x, j) => (j === i ? { ...x, school: (e.target.value || undefined) as SchoolName | undefined } : x)) } })
+                  }
+                >
+                  <option value="">(no school)</option>
+                  {SCHOOLS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="buttons">
+                <button onClick={() => set({ rewards: { ...q.rewards, [key]: (q.rewards[key] ?? []).filter((_, j) => j !== i) } })}>Remove</button>
+              </div>
+            </div>
+          ))}
           <div className="buttons">
-            <button onClick={() => set({ rewards: { ...q.rewards, items: (q.rewards.items ?? []).filter((_, j) => j !== i) } })}>Remove</button>
+            <button onClick={() => set({ rewards: { ...q.rewards, [key]: [...(q.rewards[key] ?? []), { class: "", count: 1 }] } })}>{key === "items" ? "Add an item" : "Add an item to choose from"}</button>
           </div>
-        </div>
+        </Fragment>
       ))}
-      <div className="buttons">
-        <button onClick={() => set({ rewards: { ...q.rewards, items: [...(q.rewards.items ?? []), { class: "", count: 1 }] } })}>Add an item</button>
-      </div>
-      {!!q.rewards.oneOf?.length && <p className="dim">And one of {q.rewards.oneOf.length} more, at random (edit `oneOf` in the file).</p>}
       <div className="row3">
         <label>
           Joins the faction{" "}
@@ -791,7 +795,7 @@ function cleanRewards(r: QuestRewardsFile): QuestRewardsFile {
     ...(r.trainingPoints ? { trainingPoints: r.trainingPoints } : {}),
     ...(r.shillings ? { shillings: r.shillings } : {}),
     ...(r.items?.length ? { items: r.items.map((it) => (it.school ? it : { class: it.class, ...(it.count && it.count !== 1 ? { count: it.count } : {}) })) } : {}),
-    ...(r.oneOf?.length ? { oneOf: r.oneOf } : {}),
+    ...(r.choice?.length ? { choice: r.choice.map((it) => (it.school ? it : { class: it.class, ...(it.count && it.count !== 1 ? { count: it.count } : {}) })) } : {}),
     ...(r.joinFaction ? { joinFaction: r.joinFaction } : {}),
     ...(r.insignia ? { insignia: r.insignia } : {}),
     ...(r.renown ? { renown: r.renown } : {}),

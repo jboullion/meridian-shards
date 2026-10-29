@@ -261,7 +261,7 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
 **The engine** (`util/questbook.kod`, `QuestBook is QuestDefs`, `SYS@GetQuestBook`):
 - The tables are cached on it and read again whenever the hash changes (a rebuild).
 - **Per player:** `User.plQuestLog` (`[id, step, count, deadline]`) and `plQuestDone` (`[id, times, when]`), and `poQuestNpc`.
-- **Talking to an NPC is activating it.** Kod can't turn a number in a text command back into an object, so `Monster.TryActivate` (for `AI_NPC`) calls `NpcActivated`: within 4 squares, the player gets `UC_QUEST_OFFERS` and the NPC is remembered. `quest accept <id>` and `quest turnin <id>` act on it, checked again (still in the room, still near).
+- **Talking to an NPC is activating it.** Kod can't turn a number in a text command back into an object, so `Monster.TryActivate` (for `AI_NPC`) calls `NpcActivated`: within 4 squares, the player gets `UC_QUEST_OFFERS` and the NPC is remembered. `quest accept <id>` and `quest turnin <id> [n]` act on it (n: the reward chosen, below), checked again (still in the room, still near).
 - **Steps:** kill (from `Monster.Killed`, outside arenas, for the killer and everyone in the room's builder group with them; `IsClass` unless exact), collect (counted from what's carried, bags too; on pickup from `User.NewHold`; taken at the hand-in), talk, deliver (a `QuestParcel` named by the quest, given at the step's start, taken at the hand-in), visit (from `Player.NewOwner`). Each count sends a line ("Small rats slain: 7/20") and `UC_QUEST_PROGRESS`.
 - **Rewards:** `AddXP`, shillings and items, into the pack or at the player's feet.
 - **The cap** is 10 active quests. A deadline is checked on each command and at logon; a quest whose id is gone (retired) is dropped at logon.
@@ -304,7 +304,7 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
   - **tiers** (`tier`: main, story, errand), sent as `MM_QUEST_SILVER` 0x200000 and `MM_QUEST_BRONZE` 0x400000 (gold has neither); each kind of mark takes the best tier among its quests;
   - **auto steps** (`auto`), done as soon as they're counted, with no hand-in (the default for the action kinds); their turn-in NPCs never show "?";
   - **step rewards** (`rewards` on a step) and **training points**, at the step or the end;
-  - **a random pick** (`rewards.oneOf`): one of a list, as the old prize lists;
+  - **a reward to choose** (`rewards.choice`): the player picks one of a list at the last hand-in (it was a random pick, `oneOf`, as the old prize lists, until 2026-10-28);
   - **the guide chains' kinds:** `cast` (`Spell.CastSpell`, any spell), `deposit` and `stash` (the banker's and vault keeper's `User.MadeMoneyDeposit` / `MadeItemDeposit`), `buy` (`User.BoughtAnItem`), `equip` (`User.NewUsing`, any item), `health` (a base health), `hometown` (`User.CanChangeHomeroom` no longer), `nodes` (`Player.NumManaNodes`, checked on each node bonded); a deposit's or purchase's area is where its NPC stands;
   - **a faction requirement** (`requires.faction`: neutral, duke, princess, rebel, or any but neutral);
   - **NPCs by kind:** an NPC reference matches the class and its kinds (`IsClass`), so "any citizen of Ko'catan" is `KocatanTown`; a reference can name `rooms` when no room Kod creates the NPC (the faction leaders and the councillors, placed by the parliament: their rooms were asked of the running server);
@@ -336,7 +336,7 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
   - **items made for a school** (`school` on an item: `[ class, count, SS_* ]`, `Create(..., #school=)`), for the disciple robes;
   - **teaching:** `Monster.HasDoneLearnQuest` also asks `QuestBook.HasDoneReplacing`: the quest that replaced the teacher's `viQuestID` done counts (the temples' disciple quests, the lieges' favours, the pupil quests);
   - **wandering NPCs** (the Minstrel, Maleval: `Wanderer`) have no room for the maps, though the god room's Kod makes them;
-  - **the dashboard** edits the faction and the requirement boxes, the special rewards and an item's school; saving keeps `oneOf` and a faction-only `requires` (it dropped both before).
+  - **the dashboard** edits the faction and the requirement boxes, the special rewards and an item's school; edits `choice` as it does `items`, and saving keeps a faction-only `requires` (it dropped both before).
 - **The quests** (70-112, `quests/faction-*`, `soldier-*`, `disciple-*`, `offering-*`, `insignia-*`, `pupil-*`, `guild-shield`, `necromancer-guild`, `errand-*`):
   - **main (gold):** joining each faction (70-72: a ruby for the Duke, a letter to Priestess Xiana for the Princess, a scimitar for Jonas; neutral, intriguing players), the soldier shields (76-78: one enemy soldier of each other side at the flagpoles), the four disciples (79-82: robes by school), raising Queen Venya'cyr (98, players in no guild), and the five pupils (99-103: Dementia, Fade, Sporeburst, the scimitar, the songs of Jala);
   - **story (silver):** the lieges' favours (73-75, every 12 hours), the five offerings (83-87, daily; Shal'ille for good karma, Qor for evil), the insignia (88-93 a tithe of reagents to each temple, Jala's to the Jala priestess in Bergholt rather than the wandering Minstrel; 94-96 a liege's spy errand for members), the guild shield for guild masters (97);
@@ -582,3 +582,12 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
 - **Minor Heal and Qor:** `Spell.KarmaCheck` lets a free spell (`IsFreeToLearn`) through and skips free spells when it looks for the opposed school, so Minor Heal no longer keeps anyone from Qor, nor a Qor caster from Minor Heal.
 - **Tried** over the maintenance port: 352 is offered to Shardbot (122 HP) and Shardpal (150); four shards made for Shardpal bound into a sword of Riija made for them; the fey hatred was right both ways for a player with Qor and one without.
 - **Not yet tried:** the chain played through, and the fey and the newly aggressive monsters in play.
+
+## Rewards are chosen, never random (2026-10-28)
+
+- **No quest reward is left to chance.** The old QuestEngine's prize lists (`oneOf`: one item drawn at random, a repeated entry weighing the draw) are gone: the schema refuses `oneOf`. The quest window only said "one of: ...", so players couldn't tell a draw from a choice, nor see the weights.
+- **`rewards.choice`:** 2 to 10 items (`{ class, count?, school? }`, as `items`), of which the player picks one. Only on a quest's own rewards, never a step's, and only when the last step is handed in to someone (not `auto`), since that's where the choice is made.
+- **The wire:** `quest turnin <id> <n>` (n from 1) on the last step; without a good n the server says "Choose your reward first." and takes nothing (`QuestBook.TurnIn`). `QB_CHOICE` is the quest's field 19 (was `QB_ONE_OF`); a step's rewards keep their shape with `$` there. An admin's Complete gives the first.
+- **Our client:** the reward line says "your choice of A, B or C"; on the last hand-in the quest window lists them and Complete waits for a pick (the list's own Complete opens the quest instead); after, the reward shows what was chosen. The playtester's `quest` tool takes `choice`, and `quest_info` lists them.
+- **The 26 quests that drew:** the dwarf's offering (53, now all six schools: Jala's was missing) and the Avar war's 500 reagents (30) are choices; the other 24 give a fixed reward, mostly the middle of the money they drew from (the lieges' favours 300, the errands 525 to 1,700, the story quests 750 to 1,700), and three an item: the chicken soup a long sword, the hypochondriac scale armor, Moxal a mace (the draw's favourite, 10 in 16).
+- **Not yet tried:** a choice made in the browser client, against a running server.

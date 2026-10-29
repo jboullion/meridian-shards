@@ -24,8 +24,8 @@ export interface CatalogRewards {
   shillings: number;
   trainingPoints: number;
   items: { className: string; name: string; count: number }[];
-  /** One of these, at random */
-  oneOf: { className: string; name: string; count: number }[];
+  /** The player chooses one of these as they hand the quest in (a quest's own rewards only) */
+  choice: { className: string; name: string; count: number }[];
   /** Rewards that aren't things, in words: joining a faction, an insignia, the necromancer guild */
   special: string[];
 }
@@ -98,17 +98,17 @@ export function objectiveLine(step: CatalogStep, count: number): string {
 /** Whether a step's count says it's done; talk and deliver are done at the hand-in */
 export const stepCounted = (step: CatalogStep, count: number): boolean => (step.kind === "talk" || step.kind === "deliver" ? false : count >= step.count);
 
+/** A reward item in words: "2 Inky-cap mushroom", "Long sword" */
+export const itemText = (i: { name: string; count: number }): string => (i.count > 1 ? `${i.count} ${i.name}` : i.name);
+
 /** What a reward is, in a line: "300 experience, 50 shillings, 2 Inky-cap mushroom"; "" for none */
 export function rewardsLine(r: CatalogRewards): string {
   const parts: string[] = [];
   if (r.xp) parts.push(`${r.xp} experience`);
   if (r.trainingPoints) parts.push(`${r.trainingPoints} training points`);
   if (r.shillings) parts.push(`${r.shillings} shillings`);
-  for (const i of r.items) parts.push(i.count > 1 ? `${i.count} ${i.name}` : i.name);
-  // The same item more than once in the list only weighs the draw
-  const pick = [...new Map(r.oneOf.map((i) => [`${i.count} ${i.name}`, i.count > 1 ? `${i.count} ${i.name}` : i.name])).values()];
-  if (pick.length === 1) parts.push(pick[0]!);
-  else if (pick.length) parts.push(`one of: ${pick.join(", ")}`);
+  for (const i of r.items) parts.push(itemText(i));
+  if (r.choice.length) parts.push(`your choice of ${r.choice.map(itemText).join(", ").replace(/, ([^,]*)$/, " or $1")}`);
   parts.push(...r.special);
   return parts.join(", ");
 }

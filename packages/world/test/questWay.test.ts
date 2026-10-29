@@ -24,7 +24,7 @@ const step = (s: Partial<CatalogStep>): CatalogStep => ({
   parcel: null,
   turnin: { name: "Paddock", className: "TosInnKeeper", placed: 0, rooms: [{ rid: 52, name: "Familiars" }] },
   auto: false,
-  rewards: { xp: 0, shillings: 0, trainingPoints: 0, items: [], oneOf: [], special: [] },
+  rewards: { xp: 0, shillings: 0, trainingPoints: 0, items: [], choice: [], special: [] },
   withName: null,
   amount: 0,
   items: [],

@@ -27,7 +27,8 @@ export interface ResolvedRewards {
   shillings: number;
   trainingPoints: number;
   items: ResolvedItem[];
-  oneOf: ResolvedItem[];
+  /** The player picks one at the hand-in ("quest turnin <id> <n>") */
+  choice: ResolvedItem[];
   /** QuestBook's special rewards: [ QRW_* kind, its number ] */
   special: [number, number][];
   /** The special rewards in words, for our client */
@@ -245,7 +246,7 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
         shillings: r?.shillings ?? 0,
         trainingPoints: r?.trainingPoints ?? 0,
         items: itemsOf(r?.items, `${where}.items`),
-        oneOf: itemsOf(r?.oneOf, `${where}.oneOf`),
+        choice: itemsOf(r?.choice, `${where}.choice`),
         special,
         specialText,
       };
@@ -268,8 +269,8 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
       if (s.kind === "collect" || ((s.kind === "stash" || s.kind === "buy" || s.kind === "eat") && s.item)) {
         cls = classOf(w, s.item!);
         if (!cls || !isItem(w, cls)) errs.push(`${where}: item: ${s.item} isn't an item class`);
-      }
         else if (s.kind === "eat" && !isFood(w, cls)) errs.push(`${where}: item: ${s.item} isn't a food class`);
+      }
       if (s.kind === "cast") {
         cls = classOf(w, s.spell!);
         if (!cls || !isSpell(w, cls)) errs.push(`${where}: spell: ${s.spell} isn't a spell class`);
@@ -386,9 +387,9 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
                                                   ? `Drive the Order from ${(hallRid !== undefined && w.rooms.get(hallRid)) || s.hall}`
                                                 : s.kind === "shrine"
                                                   ? `Make an offering${s.school ? ` to ${GOD_NAME[s.school]}` : ""} at a shrine`
-                                        : arena
                                                 : s.kind === "eat"
                                                   ? `Eat ${clsName ?? "something"}`
+                                        : arena
                                           ? `${s.win ? "Win" : "Fight"} a mock bout in ${arena.name}`
                                         : "Bond with every mana node");
       kodText(objective, `${where}: objective`, errs);
@@ -453,6 +454,11 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
   for (const q of quests)
     if (q.tier === "main" && q.rewards.xp <= 0 && !q.steps.some((s) => s.rewards.xp > 0))
       errs.push(`${q.key}.json: a main quest gives XP (rewards.xpPoints or rewards.xp)`);
+
+  // A reward to choose is chosen at the hand-in: someone must take the last step
+  for (const q of quests)
+    if (q.rewards.choice.length && q.steps[q.steps.length - 1]!.auto)
+      errs.push(`${q.key}.json: rewards.choice: the last step is done by itself, so there's no hand-in to choose at`);
 
   // Prerequisites name quests that exist, and no quest needs itself
   for (const q of quests)

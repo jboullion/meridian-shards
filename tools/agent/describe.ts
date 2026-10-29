@@ -4,7 +4,7 @@
 // Pure, tested in describe.test.ts.
 
 import { exitsTo, squareOf, type AmbientExits, type QuestCatalog, type QuestLogEntry, type WorldObject, type WorldState } from "../../packages/world/src/index.ts";
-import { objectiveLine } from "../../packages/world/src/quests.ts";
+import { itemText, objectiveLine, rewardText } from "../../packages/world/src/quests.ts";
 import { STAT_GROUP, type ObjectInfo } from "../../packages/protocol/src/index.ts";
 
 const SQ = 1024;
@@ -209,6 +209,8 @@ export function questText(catalog: QuestCatalog, id: number): string {
   if (!q) return `No quest ${id} in the catalogue.`;
   const lines = [`[${q.id}] ${q.name} (${q.tier}, ${q.band.min}-${q.band.max} health), from ${q.giver.name}${q.giver.rooms[0] ? ` in ${q.giver.rooms.map((r) => r.name).join(" / ")}` : ""}.`, `Offer: ${q.text.offer}`];
   q.steps.forEach((s, i) => lines.push(`Step ${i + 1}: ${s.objective}${s.count > 1 ? ` (${s.count})` : ""}${s.rooms.length ? ` in ${s.rooms.map((r) => `${r.name} (RID ${r.rid})`).join(", ")}` : ""}${s.auto ? "" : `, hand in to ${s.turnin.name}`}`));
+  lines.push(`Reward: ${rewardText(q)}`);
+  if (q.rewards.choice.length) lines.push(`Choose at the last hand-in (quest turnin with choice): ${q.rewards.choice.map((c, i) => `${i + 1}. ${itemText(c)}`).join(", ")}`);
   return lines.join("\n");
 }
 

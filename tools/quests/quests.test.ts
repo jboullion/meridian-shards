@@ -238,6 +238,22 @@ describe("the quest generator", () => {
     ]);
   });
 
+  it("writes a reward the player chooses, only on a quest that's handed in at its end", () => {
+    const q = { ...RATS, rewards: { choice: [{ class: "OrcTooth", count: 5 }, { class: "Apple" }] } };
+    const g = generateFrom(sources([q]), WORLD);
+    expect(g.errors).toEqual([]);
+    expect(g.kod).toContain("[ [ &OrcTooth, 5 ], [ &Apple, 1 ] ]");
+    expect(g.catalog.quests[0]!.rewards.choice.map((c) => c.name)).toEqual(["orc tooth", "apple"]);
+    const one = { ...RATS, rewards: { choice: [{ class: "Apple" }] } };
+    expect(generateFrom(sources([one]), WORLD).errors).toEqual(["cellar-rats.json: rewards.choice: 2 to 10 of them"]);
+    const old = { ...RATS, rewards: { oneOf: [{ class: "Apple" }, { class: "OrcTooth" }] } };
+    expect(generateFrom(sources([old]), WORLD).errors).toEqual(["cellar-rats.json: rewards.oneOf: gone; a fixed reward, or a choice the player makes (choice)"]);
+    const onStep = { ...RATS, steps: [{ ...RATS.steps[0], rewards: { choice: [{ class: "Apple" }, { class: "OrcTooth" }] } }] };
+    expect(generateFrom(sources([onStep]), WORLD).errors).toEqual(["cellar-rats.json: step 1: rewards.choice: only a quest's own rewards offer a choice"]);
+    const auto = { ...RATS, steps: [{ kind: "cast", spell: "Phase" }], rewards: { choice: [{ class: "Apple" }, { class: "OrcTooth" }] } };
+    expect(generateFrom(sources([auto]), WORLD).errors).toEqual(["cellar-rats.json: rewards.choice: the last step is done by itself, so there's no hand-in to choose at"]);
+  });
+
   it("scales xpPoints by the band and wants XP from a main quest", () => {
     const main = { ...RATS, tier: "main", band: { min: 20, max: 30 }, rewards: { xpPoints: 0.75, xp: 10 } };
     const g = generateFrom(sources([main]), WORLD);
@@ -358,6 +374,18 @@ describe("the quest generator", () => {
     ]);
   });
 
+  it("writes the eat kind: eating a food, or any (Food.NewApplied)", () => {
+    const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "eat", item: "Apple" }, { kind: "eat" }] }]), WORLD);
+    expect(g.errors).toEqual([]);
+    // QK_EAT 26, done by itself, the food as its class
+    expect(g.kod).toContain("[ 26, &Apple, 1, 0, &TosInnKeeper, 0, qd_1_s1, $, $, qd_1_t1,\r\n               1, $, $, $, 0 ]");
+    expect(g.kod).toContain("[ 26, $, 1, 0, &TosInnKeeper, 0, qd_1_s2, $, $, qd_1_t2,\r\n               1, $, $, $, 0 ]");
+    expect(g.catalog.quests[0]!.steps.map((s) => s.objective)).toEqual(["Eat apple", "Eat something"]);
+    expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "eat", item: "OrcTooth" }] }]), WORLD).errors).toEqual([
+      "cellar-rats.json: step 1: item: OrcTooth isn't a food class",
+    ]);
+  });
+
   it("writes the claim kind (claiming a flagpole, Flagpole.ClaimAttempt)", () => {
     const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "claim" }] }]), WORLD);
     expect(g.errors).toEqual([]);
@@ -374,18 +402,6 @@ describe("the quest generator", () => {
     expect(g.kod).toContain("1, $, $, $, 8 ]");
     expect(g.catalog.quests[0]!.steps[0]!.objective).toBe("Bond with the mana node");
     expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "node", node: "NODE_NOWHERE" }] }]), WORLD).errors.join()).toMatch(/no NODE_NOWHERE in blakston.khd/);
-  it("writes the eat kind: eating a food, or any (Food.NewApplied)", () => {
-    const g = generateFrom(sources([{ ...RATS, steps: [{ kind: "eat", item: "Apple" }, { kind: "eat" }] }]), WORLD);
-    expect(g.errors).toEqual([]);
-    // QK_EAT 26, done by itself, the food as its class
-    expect(g.kod).toContain("[ 26, &Apple, 1, 0, &TosInnKeeper, 0, qd_1_s1, $, $, qd_1_t1,\r\n               1, $, $, $, 0 ]");
-    expect(g.kod).toContain("[ 26, $, 1, 0, &TosInnKeeper, 0, qd_1_s2, $, $, qd_1_t2,\r\n               1, $, $, $, 0 ]");
-    expect(g.catalog.quests[0]!.steps.map((s) => s.objective)).toEqual(["Eat apple", "Eat something"]);
-    expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "eat", item: "OrcTooth" }] }]), WORLD).errors).toEqual([
-      "cellar-rats.json: step 1: item: OrcTooth isn't a food class",
-    ]);
-  });
-
     expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "node" }] }]), WORLD).errors.join()).toMatch(/node: a NODE_ constant/);
   });
 

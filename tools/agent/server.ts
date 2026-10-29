@@ -193,6 +193,7 @@ game("talk", "Activate an object: talk to an NPC (their quests come back), pull 
 game("quest", "Quests: accept or turnin (with the NPC you last talked to), abandon, offers (that NPC's again), or log (your quest log).", {
   action: z.enum(["accept", "turnin", "abandon", "offers", "log"]),
   id: z.number().int().optional().describe("The quest's id"),
+  choice: z.number().int().min(1).optional().describe("turnin, the last step of a quest whose reward is a choice: which one (1 for the first; quest_info lists them)"),
 });
 game("quest_info", "A quest from the catalogue: its giver, its story, each step and where.", { id: z.number().int() }, true);
 

@@ -5589,6 +5589,11 @@ canvas.server-wait {
   color: rgb(255, 210, 90);
 }
 
+/* A reward to choose at the hand-in (QuestDialog): a short list, one row per item */
+.quest-choice .mk-list {
+  max-height: 160px;
+}
+
 .mk-list li.quest-later {
   opacity: 0.6;
 }

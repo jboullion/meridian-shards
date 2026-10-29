@@ -116,7 +116,8 @@ export async function talk(body: Body, id: number): Promise<string> {
   return `Activated ${nameOf(body.view, o.info)}.${await after(body, seq, 300)}`;
 }
 
-export async function quest(body: Body, verb: "offers" | "accept" | "turnin" | "abandon" | "log", id?: number): Promise<string> {
+/** choice: on the last hand-in of a quest whose reward is a choice, which one (1 on) */
+export async function quest(body: Body, verb: "offers" | "accept" | "turnin" | "abandon" | "log", id?: number, choice?: number): Promise<string> {
   const session = body.live;
   const seq = body.journal.head;
   if (verb === "log") {
@@ -125,14 +126,15 @@ export async function quest(body: Body, verb: "offers" | "accept" | "turnin" | "
     await answer;
     return "";
   }
-  session.shardsCommand(`quest ${verb}${id !== undefined ? ` ${id}` : ""}`);
+  const words = `${verb}${id !== undefined ? ` ${id}` : ""}${verb === "turnin" && id !== undefined && choice !== undefined ? ` ${choice}` : ""}`;
+  session.shardsCommand(`quest ${words}`);
   if (verb !== "offers") {
     // The log comes again after a change
     const log = body.next("questLog", 3000);
     session.shardsCommand("quest log");
     await log;
   }
-  return `Sent quest ${verb}${id !== undefined ? ` ${id}` : ""}.${await after(body, seq, 500)}`;
+  return `Sent quest ${words}.${await after(body, seq, 500)}`;
 }
 
 /** Fights a creature: walks up, faces it, swings every second until it's gone, we're low, or time's up */
