@@ -302,12 +302,13 @@ export class SpellEffects {
     this.flash(at, color, 90, 0.4, eye);
   }
 
-  /** A pulse on the floor about a target: a blessing, a curse or a heal */
+  /**
+   * Motes about a target: a blessing, a curse or a heal. No ring on the floor (ours, 29 October):
+   * a ring means a reach (rangeRings.ts, Earthquake's dust), and these touch one target
+   */
   pulse(feet: FinePoint, color: number, kind: "buff" | "curse" | "heal", shape: SparkShape = SPARK_SHAPE.DOT): void {
     fxColorInto(color, this.c);
     this.shape = shape;
-    const dim = kind === "curse" ? 0.6 : 1;
-    this.ring(feet, this.c[0] * dim, this.c[1] * dim, this.c[2] * dim, 0.2, kind === "curse" ? 0.8 : 1.1, 0.7);
     const x = feet.x / FINENESS,
       y = feet.z / FINENESS,
       z = feet.y / FINENESS;

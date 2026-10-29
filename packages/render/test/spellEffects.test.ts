@@ -88,10 +88,20 @@ describe("SpellEffects", () => {
 
   it("reuses its rings", () => {
     const fx = new SpellEffects();
-    fx.pulse(at, FIRE, "buff");
+    fx.quake(at, FIRE);
     const meshes = fx.group.children.length;
-    for (let i = 0; i < 60; i++) fx.update(16);
-    fx.pulse(at, FIRE, "heal");
+    for (let i = 0; i < 90; i++) fx.update(16);
+    fx.quake(at, FIRE);
     expect(fx.group.children.length).toBe(meshes);
+  });
+
+  it("puts no ring on the floor for a blessing, a curse or a heal: one target has no reach to show", () => {
+    const fx = new SpellEffects();
+    const before = fx.group.children.length;
+    fx.pulse(at, FIRE, "buff");
+    fx.pulse(at, FIRE, "curse");
+    fx.pulse(at, FIRE, "heal");
+    expect(fx.group.children.length).toBe(before);
+    expect(fx.sparkCount).toBeGreaterThan(0);
   });
 });
