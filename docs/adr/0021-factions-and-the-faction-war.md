@@ -22,7 +22,7 @@ The game is becoming mostly single-player. So the factions are to drive the worl
 
 2. **Renown: 0 to 100 with your faction** (`Player.piFactionRenown`, `AddFactionRenown`).
    - **Ranks:** Recruit 0, Soldier 10, Sergeant 25, Lieutenant 45, Captain 70, Champion 100 (`GetRenownRank`, `RENOWN_RANK_*`).
-   - **Starting and decay:** it starts at 0 on joining or changing faction (`ClearFactionRenown`), and it never decays.
+   - **Starting and decay:** it starts at 0, and it never decays. Leaving a faction keeps it up to 40 (`KeepFactionRenown`, `RENOWN_KEPT`; 2026-10-29), which goes with the player to the next faction they join. Becoming eligible for a faction for the first time still clears it (`ClearFactionRenown`).
    - **Earned from:**
      - quests (`rewards.renown`): the soldier quests 10, the zone chains 3, the ground dailies 3, the favours and priestess pointers 2;
      - a flag claim, 3;

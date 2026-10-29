@@ -558,7 +558,7 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
 
 ## Renown (2026-10-21, the faction revamp)
 
-- Each player has a renown of 0 to 100 with their faction (`Player.AddFactionRenown`; the design page's D7-D10). It starts at 0 on joining and is cleared on leaving.
+- Each player has a renown of 0 to 100 with their faction (`Player.AddFactionRenown`; the design page's D7-D10). It starts at 0; leaving a faction keeps it up to 40, which carries to the next faction (ADR 0021).
 - **`rewards.renown`** (1 to 100) is a special reward, `[ 4, amount ]` (`QRW_RENOWN`). `AwardSpecial` posts it, so a quest that also joins a faction gives renown with the new one. Nothing for a neutral.
 - **`requires.renown`** (1 to 100) is a quest's 24th field (`QB_RENOWN_MIN`): offered only from that much renown, never to a neutral. It can't go with `requires.faction: "neutral"`.
 - The faction quests give it: the soldier quests 10, the zone chains 3 each, the faction ground dailies 3, the favours 2, the priestess pointers 2.
