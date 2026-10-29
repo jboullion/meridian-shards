@@ -1,37 +1,24 @@
 // Ours (docs/adr/0021-factions-and-the-faction-war.md, phase 5): the War window, from typing
-// "war", its key (J), or the War button (WarButton.tsx). Where we stand with our liege (renown, rank, our war
-// record), the battle called or being fought and the next one, the towns and who holds them, a
-// map of the realm's flagpoles, the last battles, and our liege's war ledger. All of it comes
-// from our server (factionwar.kod SendWar), asked for as the window opens and again as a battle
-// is called, opens or ends.
+// "war", its key (J), or the War button (WarButton.tsx). For now it is the map of the realm's
+// flagpoles alone (2026-10-29: the war, ledger and battles pages were taken out; git has them).
+// Lines join neighbouring poles, gold where a battle may be called, and a line under the map
+// counts down to the next battle, to the clash, or to the fight's end. It comes from our server
+// (factionwar.kod SendWar), asked for as the window opens and again as a battle is called, opens
+// or ends.
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  BATTLE_FLAG, BATTLE_HOW, FACTION, LIEGE_NAMES, LIEGE_SHORT, POLE_FLAG, SOLDIER_FLAG, WAR_STATE,
-  gridCell, gridName, warCommand,
+  BATTLE_FLAG, FACTION, LIEGE_NAMES, LIEGE_SHORT, POLE_FLAG, WAR_STATE, gridCell, gridName, warCommand,
   type GameSession, type WarBattle, type WarPole, type WarStatus,
 } from "@shards/world";
-import { Button, GroupBox, Tabs, Window } from "./kit.tsx";
+import { Button, Window } from "./kit.tsx";
 import { formatCountdown, useFactionWar, useSecondTick, type FactionWarStore } from "../factionWar.ts";
-
-const TABS = ["The war", "Map", "Ledger", "Battles"] as const;
-type Tab = (typeof TABS)[number];
-
-/** Renown each rank starts at (player.kod GetRenownRank) */
-const RANKS: { at: number; name: string }[] = [
-  { at: 0, name: "Recruit" },
-  { at: 10, name: "Soldier" },
-  { at: 25, name: "Sergeant" },
-  { at: 45, name: "Lieutenant" },
-  { at: 70, name: "Captain" },
-  { at: 100, name: "Champion" },
-];
 
 /** The towns' poles on the map (RID_TOS, RID_BAR_NORTH, RID_CORNOTH, RID_MARION, RID_RAZA, RID_JASWEST) */
 const TOWN_LETTERS: Readonly<Record<number, string>> = { 50: "T", 101: "B", 150: "C", 200: "M", 300: "R", 382: "J" };
 
 /** The lieges' colours, as their soldiers' shields (dukeshld.kod, prinshld.kod, reblshld.kod) */
-export const LIEGE_CLASS: Readonly<Record<number, string>> = {
+const LIEGE_CLASS: Readonly<Record<number, string>> = {
   [FACTION.NEUTRAL]: "liege-none",
   [FACTION.DUKE]: "liege-duke",
   [FACTION.PRINCESS]: "liege-princess",
@@ -39,13 +26,12 @@ export const LIEGE_CLASS: Readonly<Record<number, string>> = {
 };
 
 export function WarDialog({ store, session, onClose }: { store: FactionWarStore; session: GameSession; onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>("The war");
   useFactionWar(store);
   useSecondTick(true);
   useEffect(() => {
     session.shardsCommand(warCommand());
   }, [session]);
-  // A battle called, opened or ended: all of it again (the map and the ledger change too)
+  // A battle called, opened or ended: all of it again (the map changes too)
   const state = store.battle?.state ?? WAR_STATE.NONE;
   const last = useRef(state);
   useEffect(() => {
@@ -55,19 +41,7 @@ export function WarDialog({ store, session, onClose }: { store: FactionWarStore;
   const s = store.status;
   return (
     <Window title="The Faction War" onClose={onClose} className="game-dialog war-window">
-      <Tabs tabs={TABS} active={tab} onChange={setTab} />
-      <div className="war-page">
-        {!s ? (
-          <p>Asking the heralds...</p>
-        ) : (
-          <>
-            {tab === "The war" && <WarPage s={s} store={store} />}
-            {tab === "Map" && <MapPage s={s} />}
-            {tab === "Ledger" && <LedgerPage s={s} />}
-            {tab === "Battles" && <BattlesPage s={s} store={store} />}
-          </>
-        )}
-      </div>
+      <div className="war-page">{!s ? <p>Asking the heralds...</p> : <MapPage s={s} store={store} />}</div>
       <div className="mk-buttons">
         <Button isDefault onClick={onClose}>
           Close
@@ -81,199 +55,166 @@ function Liege({ faction, short }: { faction: number; short?: boolean }) {
   return <span className={`war-liege ${LIEGE_CLASS[faction] ?? ""}`}>{(short ? LIEGE_SHORT : LIEGE_NAMES)[faction] ?? "No liege"}</span>;
 }
 
-/** What the battle is, in a sentence */
-export function battleText(b: WarBattle, seconds: number): string {
-  const att = LIEGE_SHORT[b.attacker] ?? "Someone";
-  const def = LIEGE_SHORT[b.defender] ?? "someone";
-  const siege = !!(b.flags & BATTLE_FLAG.SIEGE);
+/** What the war is doing now, in a sentence with its countdown */
+function Countdown({ b, store }: { b: WarBattle; store: FactionWarStore }) {
   if (b.state === WAR_STATE.MUSTER) {
-    if (siege) return `${cap(att)}'s army lays siege to ${def} at ${b.room}. It gathers in ${formatCountdown(seconds)}.`;
-    if (b.flags & BATTLE_FLAG.OPEN_GROUND) return `${cap(att)} and ${def} both march on ${b.room}, which no liege holds. The armies meet in ${formatCountdown(seconds)}.`;
-    return `${cap(att)} marches on ${b.room}, held by ${def}. The armies meet in ${formatCountdown(seconds)}.`;
+    return (
+      <>
+        <Liege faction={b.attacker} short /> {b.flags & BATTLE_FLAG.SIEGE ? "lays siege to" : "marches on"} {b.room}
+        {b.flags & BATTLE_FLAG.OPEN_GROUND ? (
+          ", which no liege holds"
+        ) : (
+          <>
+            , held by <Liege faction={b.defender} short />
+          </>
+        )}
+        . The armies meet in <b>{formatCountdown(store.secondsLeft())}</b>.
+      </>
+    );
   }
   if (b.state === WAR_STATE.FIGHT) {
-    const field = b.flags & BATTLE_FLAG.SPAWNED ? `${cap(att)} ${b.attackersLeft} of ${b.attackersRaised}, ${def} ${b.defendersLeft} of ${b.defendersRaised}.` : "The armies wait for a soldier to take the field.";
-    return `${siege ? "The siege" : "The battle"} at ${b.room}: ${field} ${formatCountdown(seconds)} left.`;
+    return (
+      <>
+        <Liege faction={b.attacker} short /> and <Liege faction={b.defender} short /> fight at {b.room}: <b>{formatCountdown(store.secondsLeft())}</b> left.
+      </>
+    );
   }
-  return "";
-}
-
-function cap(s: string): string {
-  return s ? s[0]!.toUpperCase() + s.slice(1) : s;
-}
-
-function WarPage({ s, store }: { s: WarStatus; store: FactionWarStore }) {
-  const b = s.battle;
   const next = store.nextSeconds();
-  const ours = s.faction !== FACTION.NEUTRAL && (b.attacker === s.faction || b.defender === s.faction);
-  const rankAt = RANKS.filter((r) => r.at <= s.renown).pop() ?? RANKS[0]!;
-  const nextRank = RANKS.find((r) => r.at > s.renown);
-  const towns = s.towns;
-  const halfStaff = (rid: number) => s.poles.some((p) => p.rid === rid && p.flags & POLE_FLAG.HALF_STAFF);
+  if (next === null) return <>No battle is called yet.</>;
   return (
     <>
-      <GroupBox label="Your service">
-        {s.faction === FACTION.NEUTRAL ? (
-          <p>You serve no liege. Duke Akardius in Tos, Princess Kateriina in Barloque and Jonas D'Accor in Jasper take soldiers who have proved themselves.</p>
-        ) : (
-          <>
-            <p className="war-rank">
-              {s.rank || rankAt.name} of <Liege faction={s.faction} />
-            </p>
-            <div className="war-renown" style={{ "--renown": `${s.renown}%` } as CSSProperties} title={`${s.renown} renown of 100`}>
-              {s.renown} renown{nextRank ? `, ${nextRank.at - s.renown} to ${nextRank.name}` : ""}
-            </div>
-            <p className="war-note">
-              {s.flags & SOLDIER_FLAG.SHIELD ? "You wear your soldier's shield: you may join your liege's battles, and enemy soldiers may attack you." : "Your soldier's shield is put away: wear it to join your liege's battles."}
-              {s.flags & SOLDIER_FLAG.REGROUPING ? " You are regrouping after a defeat: enemy soldiers leave you be until you strike or join a battle." : ""}
-            </p>
-            <table className="war-record">
-              <tbody>
-                <tr>
-                  <th>Soldiers bested</th>
-                  <td>{s.kills}</td>
-                  <th>Fallen</th>
-                  <td>{s.deaths}</td>
-                </tr>
-                <tr>
-                  <th>Battles fought</th>
-                  <td>{s.fought}</td>
-                  <th>Won</th>
-                  <td>{s.won}</td>
-                </tr>
-              </tbody>
-            </table>
-          </>
-        )}
-      </GroupBox>
-      <GroupBox label="The battle">
-        {b.state === WAR_STATE.NONE ? (
-          <p>No battle now. {next !== null ? `The lieges call the next in ${formatCountdown(next)}.` : ""}</p>
-        ) : (
-          <>
-            <p className={`war-battle${ours ? " ours" : ""}`}>{battleText(b, store.secondsLeft())}</p>
-            {ours && <p className="war-note">Your liege fights here. Wear your shield and go to {b.room}.</p>}
-          </>
-        )}
-        <p className="war-note">
-          War effort for the next battle:{" "}
-          {[FACTION.DUKE, FACTION.PRINCESS, FACTION.REBEL].map((f, i) => (
-            <span key={f}>
-              {i > 0 && ", "}
-              <Liege faction={f} short /> {s.effort[i]}
-            </span>
-          ))}
-          .
-        </p>
-      </GroupBox>
-      <GroupBox label="The towns">
-        <ul className="war-towns">
-          {towns.map((t) => (
-            <li key={t.rid}>
-              <span className="war-town-name">{t.name}</span>
-              <Liege faction={t.owner} />
-              {t.celebrating !== FACTION.NEUTRAL && <span className="war-tag">celebrating</span>}
-              {halfStaff(t.rid) && <span className="war-tag sad">flags at half-staff</span>}
-            </li>
-          ))}
-        </ul>
-      </GroupBox>
+      The lieges call the next battle in <b>{formatCountdown(next)}</b>.
     </>
   );
 }
 
-function MapPage({ s }: { s: WarStatus }) {
-  const [hover, setHover] = useState<WarPole | null>(null);
+/** The pole the pointer is on, and where its tooltip goes in the map (px from the map's top left) */
+interface Tip {
+  pole: WarPole;
+  x: number;
+  top: number;
+  bottom: number;
+}
+
+/** Each pole's centre in the map, measured, for the lines between neighbours */
+interface Centres {
+  w: number;
+  h: number;
+  at: Map<number, { x: number; y: number }>;
+}
+
+function MapPage({ s, store }: { s: WarStatus; store: FactionWarStore }) {
+  const battle = store.battle ?? s.battle;
+  const [tip, setTip] = useState<Tip | null>(null);
+  const map = useRef<HTMLDivElement>(null);
+  const tipEl = useRef<HTMLDivElement>(null);
+  // Kept inside the map: at the edges it slides along rather than hang off the window
+  const [shift, setShift] = useState(0);
+  useLayoutEffect(() => {
+    const m = map.current?.getBoundingClientRect();
+    const r = tipEl.current?.getBoundingClientRect();
+    if (!tip || !m || !r) return setShift(0);
+    const half = r.width / 2;
+    setShift(Math.min(Math.max(tip.x, half + 2), m.width - half - 2) - tip.x);
+  }, [tip]);
+  const [centres, setCentres] = useState<Centres | null>(null);
+  useLayoutEffect(() => {
+    const el = map.current;
+    if (!el) return;
+    const measure = () => {
+      const m = el.getBoundingClientRect();
+      const at = new Map<number, { x: number; y: number }>();
+      for (const p of el.querySelectorAll<HTMLElement>("[data-rid]")) {
+        const r = p.getBoundingClientRect();
+        at.set(Number(p.dataset.rid), { x: r.left + r.width / 2 - m.left, y: r.top + r.height / 2 - m.top });
+      }
+      setCentres({ w: m.width, h: m.height, at });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [s.poles]);
   const cells = s.poles.map((p) => ({ p, at: gridCell(p.rid) })).filter((c) => c.at);
   const counts = [FACTION.DUKE, FACTION.PRINCESS, FACTION.REBEL, FACTION.NEUTRAL].map((f) => s.poles.filter((p) => p.owner === f).length);
+  // The fronts drawn last, over the plain links
+  const links = [...s.links].sort((x, y) => Number(x.front) - Number(y.front));
+  const onFront = (rid: number) => s.links.some((l) => l.front && (l.a === rid || l.b === rid));
+  const show = (p: WarPole, el: HTMLElement) => {
+    const m = map.current?.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    if (!m) return;
+    setTip({ pole: p, x: r.left + r.width / 2 - m.left, top: r.top - m.top, bottom: r.bottom - m.top });
+  };
+  // The tooltip's pole as the server last told us, so it follows a battle called under it
+  const tp = tip ? (s.poles.find((p) => p.rid === tip.pole.rid) ?? tip.pole) : null;
+  // Above the pole, or below it in the top rows where there's no room above
+  const below = tip !== null && tip.top < 60;
   return (
     <>
-      <div className="war-map" role="img" aria-label="The realm's flagpoles">
+      <div className="war-map" ref={map} role="img" aria-label="The realm's flagpoles" onMouseLeave={() => setTip(null)}>
+        {centres && (
+          <svg className="war-links" width={centres.w} height={centres.h} aria-hidden="true">
+            {links.map((l) => {
+              const a = centres.at.get(l.a);
+              const b = centres.at.get(l.b);
+              if (!a || !b) return null;
+              const lit = tip !== null && (tip.pole.rid === l.a || tip.pole.rid === l.b);
+              return <line key={`${l.a}-${l.b}`} className={`war-link${l.front ? " front" : ""}${lit ? " lit" : ""}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} />;
+            })}
+          </svg>
+        )}
         {cells.map(({ p, at }) => (
           <span
             key={p.rid}
-            className={`war-pole ${LIEGE_CLASS[p.owner] ?? ""}${p.flags & POLE_FLAG.TOWN ? " town" : ""}${p.flags & POLE_FLAG.BATTLE ? " battle" : ""}${p.flags & POLE_FLAG.HALF_STAFF ? " half" : ""}`}
+            data-rid={p.rid}
+            className={`war-pole ${LIEGE_CLASS[p.owner] ?? ""}${p.flags & POLE_FLAG.TOWN ? " town" : ""}${p.flags & POLE_FLAG.BATTLE ? " battle" : ""}${p.flags & POLE_FLAG.HALF_STAFF ? " half" : ""}${tip?.pole.rid === p.rid ? " hover" : ""}`}
             style={{ gridColumn: at!.col, gridRow: at!.row }}
-            title={`${p.name}${gridName(p.rid) ? ` (${gridName(p.rid)})` : ""}: ${LIEGE_NAMES[p.owner] ?? "no liege"}`}
-            onMouseEnter={() => setHover(p)}
-            onMouseLeave={() => setHover(null)}
+            onMouseEnter={(e) => show(p, e.currentTarget)}
+            onClick={(e) => (tip?.pole.rid === p.rid ? setTip(null) : show(p, e.currentTarget))}
           >
             {p.flags & POLE_FLAG.BATTLE ? "⚔" : p.flags & POLE_FLAG.TOWN ? (TOWN_LETTERS[p.rid] ?? p.name[0]) : ""}
           </span>
         ))}
-      </div>
-      <p className="war-map-caption">
-        {hover ? (
-          <>
-            {hover.name}
-            {gridName(hover.rid) ? ` (${gridName(hover.rid)})` : ""}: <Liege faction={hover.owner} />
-            {hover.flags & POLE_FLAG.BATTLE ? ", where the armies fight" : ""}
-          </>
-        ) : (
-          "The realm's flagpoles, north at the top. Large squares are the towns' own poles: Tos, Barloque, Cor Noth, Marion, Jasper and Raza."
+        {tip && tp && (
+          <div className={`war-tip${below ? " below" : ""}`} style={{ left: tip.x + shift, top: below ? tip.bottom : tip.top }} ref={tipEl} role="tooltip">
+            <div className="war-tip-name">
+              {tp.name}
+              {gridName(tp.rid) ? <span className="war-tip-grid"> {gridName(tp.rid)}</span> : null}
+            </div>
+            <div>
+              {tp.owner === FACTION.NEUTRAL ? (
+                "No liege holds it"
+              ) : (
+                <>
+                  Held by <Liege faction={tp.owner} />
+                </>
+              )}
+            </div>
+            {tp.flags & POLE_FLAG.TOWN ? <div className="war-tip-note">The town's own pole: it follows its capture points</div> : null}
+            {tp.flags & POLE_FLAG.BATTLE ? (
+              <div className="war-tip-note battle">
+                {battle.state === WAR_STATE.MUSTER
+                  ? `The armies meet here in ${formatCountdown(store.secondsLeft())}`
+                  : `The armies fight here: ${formatCountdown(store.secondsLeft())} left`}
+              </div>
+            ) : onFront(tp.rid) ? (
+              <div className="war-tip-note">On a front</div>
+            ) : null}
+            {tp.flags & POLE_FLAG.HALF_STAFF ? <div className="war-tip-note">Flags at half-staff</div> : null}
+          </div>
         )}
+      </div>
+      <p className={`war-countdown${battle.state !== WAR_STATE.NONE ? " on" : ""}`}>
+        <Countdown b={battle} store={store} />
+      </p>
+      <p className="war-map-caption">
+        The realm's flagpoles, north at the top. Large squares are the towns' own poles: Tos, Barloque, Cor Noth, Marion, Jasper and Raza. Lines join neighbours; the gold ones are fronts, where a
+        battle may be called.
       </p>
       <p className="war-legend">
         <Liege faction={FACTION.DUKE} short /> {counts[0]}, <Liege faction={FACTION.PRINCESS} short /> {counts[1]}, <Liege faction={FACTION.REBEL} short /> {counts[2]}, <Liege faction={FACTION.NEUTRAL} short /> {counts[3]}
       </p>
     </>
   );
-}
-
-function LedgerPage({ s }: { s: WarStatus }) {
-  if (s.faction === FACTION.NEUTRAL) return <p>Each liege keeps a ledger of their best soldiers. You serve no liege.</p>;
-  if (s.ledger.length === 0) return <p>None of {LIEGE_NAMES[s.faction]}'s soldiers have fought yet.</p>;
-  return (
-    <>
-      <p className="war-note">{LIEGE_NAMES[s.faction]}'s war ledger: the soldiers who have served best.</p>
-      <table className="war-ledger">
-        <thead>
-          <tr>
-            <th />
-            <th>Soldier</th>
-            <th>Rank</th>
-            <th>Bested</th>
-            <th>Battles won</th>
-          </tr>
-        </thead>
-        <tbody>
-          {s.ledger.map((e, i) => (
-            <tr key={i}>
-              <td>{i + 1}.</td>
-              <th>{e.name}</th>
-              <td>{e.rank}</td>
-              <td>{e.kills}</td>
-              <td>
-                {e.won} of {e.fought}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </>
-  );
-}
-
-function BattlesPage({ s, store }: { s: WarStatus; store: FactionWarStore }) {
-  if (s.history.length === 0) return <p>No battles have been fought yet.</p>;
-  const since = store.secondsSinceStatus();
-  return (
-    <ul className="war-history">
-      {s.history.map((h, i) => (
-        <li key={i}>
-          <span className="war-history-place">{h.name || gridName(h.rid) || "Somewhere"}</span>{" "}
-          <Liege faction={h.attacker} short /> against <Liege faction={h.defender} short />: <Liege faction={h.winner} short /> won
-          {h.how === BATTLE_HOW.UNWATCHED ? " (unwatched)" : h.how === BATTLE_HOW.TIME ? " (as the light failed)" : ""}
-          <span className="war-ago">{agoText(h.secondsAgo + since)}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function agoText(seconds: number): string {
-  if (seconds < 90) return "just now";
-  if (seconds < 90 * 60) return `${Math.round(seconds / 60)} minutes ago`;
-  if (seconds < 36 * 3600) return `${Math.round(seconds / 3600)} hours ago`;
-  return `${Math.round(seconds / 86400)} days ago`;
 }

@@ -61,6 +61,14 @@ export interface WarPole {
   flags: number;
 }
 
+/** Two neighbouring flag rooms (each in the other's yell zone) */
+export interface WarLink {
+  a: number;
+  b: number;
+  /** A front: a battle could be called for one of them (factionwar.kod PickFront) */
+  front: boolean;
+}
+
 export interface WarTown {
   rid: number;
   name: string;
@@ -103,6 +111,8 @@ export interface WarStatus {
   towns: WarTown[];
   history: WarHistoryEntry[];
   ledger: LedgerEntry[];
+  /** Neighbouring flag rooms, for the map's lines (none from a server before them) */
+  links: WarLink[];
 }
 
 export type FactionWarEvent = { type: "all"; status: WarStatus } | { type: "battle"; battle: WarBattle };
@@ -151,7 +161,9 @@ export function readFactionWar(r: ByteReader): FactionWarEvent | null {
   }
   const ledger: LedgerEntry[] = [];
   for (let n = r.u8(); n > 0; n--) ledger.push({ name: r.string(), rank: r.string(), kills: r.u16(), won: r.u16(), fought: r.u16() });
-  return { type: "all", status: { faction, renown, rank, kills, deaths, fought, won, flags, battle, effort, poles, towns, history, ledger } };
+  const links: WarLink[] = [];
+  if (r.remaining >= 2) for (let n = r.u16(); n > 0; n--) links.push({ a: r.u32(), b: r.u32(), front: (r.u8() & 1) !== 0 });
+  return { type: "all", status: { faction, renown, rank, kills, deaths, fought, won, flags, battle, effort, poles, towns, history, ledger, links } };
 }
 
 export function warCommand(): string {

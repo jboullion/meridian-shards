@@ -42,6 +42,7 @@ describe("UC_FACTION_WAR", () => {
     w.u8(1).u32(50).string("Tos").u8(1).u8(1);
     w.u8(1).u32(593).string("Outskirts of Barloque").u8(1).u8(2).u8(2).u8(3).u32(600);
     w.u8(1).string("Scout").string("Captain").u16(3).u16(2).u16(4);
+    w.u16(1).u32(544).u32(50).u8(1);
     const e = fixture(UC_FACTION_WAR, readFactionWar, new ByteReader(w.finish()));
     expect(e?.type).toBe("all");
     if (e?.type !== "all") return;
@@ -54,6 +55,7 @@ describe("UC_FACTION_WAR", () => {
     expect(e.status.towns).toEqual([{ rid: 50, name: "Tos", owner: 1, celebrating: 1 }]);
     expect(e.status.history).toEqual([{ rid: 593, name: "Outskirts of Barloque", attacker: 1, defender: 2, winner: 2, how: 3, secondsAgo: 600 }]);
     expect(e.status.ledger).toEqual([{ name: "Scout", rank: "Captain", kills: 3, won: 2, fought: 4 }]);
+    expect(e.status.links).toEqual([{ a: 544, b: 50, front: true }]);
   });
 
   it("places flag rooms on the grid", () => {

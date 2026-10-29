@@ -3926,94 +3926,9 @@ canvas.server-wait {
   line-height: 1.35;
 }
 
-.war-rank {
-  font: 18px var(--font-title);
-}
-
-.war-renown {
-  margin: 0 0 8px;
-  padding: 2px 6px;
-  background: linear-gradient(to right, rgb(150, 110, 30) var(--renown), rgb(40, 32, 24) var(--renown));
-  border: 1px solid #000;
-  color: #fff;
-  font-size: 12px;
-  text-align: center;
-  text-shadow: 1px 1px 0 #000;
-}
-
-.war-note {
-  font-style: italic;
-  opacity: 0.85;
-}
-
-.war-battle {
-  font-weight: bold;
-}
-
-.war-battle.ours {
-  color: rgb(240, 208, 25);
-}
-
-.war-record {
-  border-collapse: collapse;
-}
-
-.war-record th {
-  padding: 1px 6px 1px 0;
-  text-align: left;
-  font-weight: normal;
-}
-
-.war-record td {
-  padding: 1px 18px 1px 0;
-  font-weight: bold;
-}
-
-.war-towns,
-.war-history {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.war-towns li,
-.war-history li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
-  padding: 2px 0;
-}
-
-.war-town-name {
-  flex: 0 0 120px;
-}
-
-.war-history-place {
-  font-weight: bold;
-}
-
-.war-ago {
-  margin-left: auto;
-  font-style: italic;
-  opacity: 0.75;
-}
-
-.war-tag {
-  padding: 0 5px;
-  border: 1px solid rgb(240, 208, 25);
-  border-radius: 2px;
-  font-size: 11px;
-  color: rgb(240, 208, 25);
-}
-
-.war-tag.sad {
-  border-color: rgb(140, 140, 160);
-  color: rgb(170, 170, 190);
-}
-
 /* The realm's flag rooms on its grid (factionWar.ts gridCell): columns A to K, rows 1 to 9 */
 .war-map {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(11, 1fr);
   grid-template-rows: repeat(9, 1fr);
@@ -4039,9 +3954,43 @@ canvas.server-wait {
   cursor: default;
 }
 
+/* Lines between neighbouring poles, under them; gold dashes are the fronts */
+.war-links {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.war-link {
+  stroke: rgba(232, 220, 194, 0.22);
+  stroke-width: 1.5;
+}
+
+.war-link.front {
+  stroke: rgba(240, 208, 25, 0.75);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+
+.war-link.lit {
+  stroke: rgba(255, 255, 255, 0.8);
+}
+
+.war-link.front.lit {
+  stroke: rgb(255, 230, 90);
+}
+
+.war-pole {
+  position: relative;
+}
+
 .war-pole.town {
   margin: 0;
   border: 2px solid #e8dcc2;
+}
+
+.war-pole.hover {
+  box-shadow: 0 0 0 2px #fff;
 }
 
 .war-pole.half {
@@ -4062,23 +4011,59 @@ canvas.server-wait {
 }
 
 .war-map-caption,
-.war-legend {
+.war-legend,
+.war-countdown {
   text-align: center;
 }
 
-.war-ledger {
-  width: 100%;
-  border-collapse: collapse;
+/* One line, always there, so the map never moves as it changes */
+.war-countdown {
+  min-height: 1.35em;
 }
 
-.war-ledger th,
-.war-ledger td {
-  padding: 2px 6px;
-  text-align: left;
+.war-countdown.on b {
+  color: rgb(240, 208, 25);
 }
 
-.war-ledger tbody th {
+/* A pole's tooltip: over the map, above the pole (or below it in the top rows), so the page
+   below never moves */
+.war-tip {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, calc(-100% - 6px));
+  padding: 4px 8px;
+  border: 1px solid var(--panel-edge);
+  background: rgba(27, 22, 18, 0.97);
+  color: #e6dcc8;
+  font: 13px Georgia, "Times New Roman", serif;
+  line-height: 1.35;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.war-tip.below {
+  transform: translate(-50%, 6px);
+}
+
+.war-tip-name {
   font-weight: bold;
+  color: var(--hl);
+}
+
+.war-tip-grid {
+  font-weight: normal;
+  opacity: 0.7;
+}
+
+.war-tip-note {
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.war-tip-note.battle {
+  color: rgb(240, 208, 25);
+  opacity: 1;
 }
 
 .map-room-name {
