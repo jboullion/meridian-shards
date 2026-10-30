@@ -4,11 +4,11 @@
 
 import { ACTION_KINDS, ARENAS, checkGiverShape, checkQuestShape, INSIGNIA, SCHOOLS, type Faction, type Giver, type NpcRef, type Quest, type QuestRewards, type StepKind, type Tier } from "./schema.ts";
 import { xpForPoints } from "./xp.ts";
-import { classOf, iconOf, isFood, isItem, isMonster, isNpc, isNumberItem, isSkill, isSpell, nameOf, spawnRooms, type World } from "./world.ts";
+import { classOf, iconOf, isFood, isItem, isSabotageTarget, isMonster, isNpc, isNumberItem, isSkill, isSpell, nameOf, spawnRooms, type World } from "./world.ts";
 
 /** QuestBook's step kinds (questbook.kod QK_*) */
 export const KIND_NUM: Record<StepKind, number> = {
-  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17, arena: 18, train: 19, node: 20, claim: 21, battle: 22, siege: 23, fallen: 24, shrine: 25, eat: 26,
+  kill: 1, collect: 2, talk: 3, deliver: 4, visit: 5, cast: 6, deposit: 7, stash: 8, buy: 9, equip: 10, health: 11, hometown: 12, nodes: 13, companion: 14, convey: 15, learn: 16, attune: 17, arena: 18, train: 19, node: 20, claim: 21, battle: 22, siege: 23, fallen: 24, shrine: 25, eat: 26, sabotage: 27,
 };
 
 /** A school's god, for a shrine step's objective */
@@ -271,6 +271,10 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
         if (!cls || !isItem(w, cls)) errs.push(`${where}: item: ${s.item} isn't an item class`);
         else if (s.kind === "eat" && !isFood(w, cls)) errs.push(`${where}: item: ${s.item} isn't a food class`);
       }
+      if (s.kind === "sabotage") {
+        cls = classOf(w, s.target!);
+        if (!cls || !isSabotageTarget(w, cls)) errs.push(`${where}: target: ${s.target} isn't a SabotageTarget class`);
+      }
       if (s.kind === "cast") {
         cls = classOf(w, s.spell!);
         if (!cls || !isSpell(w, cls)) errs.push(`${where}: spell: ${s.spell} isn't a spell class`);
@@ -323,7 +327,7 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
                   ? (hallRid ?? 0)
                   : s.kind === "shrine"
                     ? (s.school ? SCHOOLS[s.school] : 0)
-                    : (s.amount ?? (s.kind === "nodes" ? 12 : s.kind === "deposit" ? 1 : 0));
+                    : (s.amount ?? (s.kind === "nodes" ? 12 : s.kind === "deposit" || s.kind === "sabotage" ? 1 : 0));
       const ridsOf = (list: (string | number)[] | undefined) =>
         (list ?? []).map((r) => {
           const n = typeof r === "number" ? r : w.rids.get(r);
@@ -389,6 +393,8 @@ export function checkAll(questFiles: { file: string; data: unknown }[], giversDa
                                                   ? `Make an offering${s.school ? ` to ${GOD_NAME[s.school]}` : ""} at a shrine`
                                                 : s.kind === "eat"
                                                   ? `Eat ${clsName ?? "something"}`
+                                                : s.kind === "sabotage"
+                                                  ? `Sabotage the ${clsName ?? s.target}`
                                         : arena
                                           ? `${s.win ? "Win" : "Fight"} a mock bout in ${arena.name}`
                                         : "Bond with every mana node");

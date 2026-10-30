@@ -31,11 +31,11 @@ export const ARENAS = {
 } as const;
 export type ArenaName = keyof typeof ARENAS;
 
-export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine", "eat"] as const;
+export const STEP_KINDS = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine", "eat", "sabotage"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
 /** Steps that happen by doing something, once (the guide chains' kinds): done by themselves unless `auto` is false */
-export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine", "eat"];
+export const ACTION_KINDS: readonly StepKind[] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine", "eat", "sabotage"];
 
 /** What kind of quest it is: the main and levelling chains, story quests, errands. The quest windows show it as a badge (the markers over NPCs are all gold) */
 export const TIERS = ["main", "story", "errand"] as const;
@@ -55,7 +55,9 @@ export type Tier = (typeof TIERS)[number];
  * `against`: saying "march" to one's liege on the step calls it; docs/adr/0021), or be there when a
  * Fallen Hall's boss falls, having struck it (`fallen`, `hall`; docs/adr/0022 decision 31), or make
  * an offering at a shrine (`shrine`, of `school`'s god or any; docs/adr/0027), or eat something
- * (`eat`: the food `item`, or any).
+ * (`eat`: the food `item`, or any), or sabotage a rival liege's stores (`sabotage`: the
+ * SabotageTarget `target`, with the kit `parcel` given as the step begins, in `rooms`; `amount` the war
+ * effort it brings, 1 to 4; docs/adr/0021 Behind the Lines).
  */
 export interface QuestStep {
   kind: StepKind;
@@ -67,7 +69,7 @@ export interface QuestStep {
   spell?: string;
   /** deposit, stash, buy: the NPC class it's done with (any of its kinds); left out, anyone */
   with?: string;
-  /** deposit: the least shillings; health: the base health to reach; nodes: how many (default 12) */
+  /** deposit: the least shillings; health: the base health to reach; nodes: how many (default 12); sabotage: the war effort (default 1) */
   amount?: number;
   /** equip: any one of these item classes */
   items?: string[];
@@ -93,7 +95,7 @@ export interface QuestStep {
   objective?: string;
   /** What the giver says as the step begins (the offer window, the log); the quest's offer for the first */
   brief?: string;
-  /** kill: the monster class (its subclasses count too, unless `exact`) */
+  /** kill: the monster class (its subclasses count too, unless `exact`). sabotage: the SabotageTarget class */
   target?: string;
   exact?: boolean;
   /** kill: only kills in `rooms` count (a region's own: the bone faction's chieftains) */
@@ -110,7 +112,7 @@ export interface QuestStep {
   rooms?: (string | number)[];
   /** kill: rooms to leave out of the area worked out from the spawn lists */
   exclude?: (string | number)[];
-  /** deliver: what the parcel is called ("a sealed letter") */
+  /** deliver: what the parcel is called ("a sealed letter"). sabotage: the kit ("a flask of lamp oil and a flint") */
   parcel?: string;
   /** Who it's handed in to; default the quest's giver. talk and deliver: who to go to */
   turnin?: NpcRef;
@@ -408,6 +410,12 @@ function checkStepShape(s: unknown, where: string): string[] {
       break;
     case "fallen":
       if (!(isText(s.hall) || isInt(s.hall, 1))) errs.push(`${where}: hall: the Fallen Hall's RID_ name or number`);
+      break;
+    case "sabotage":
+      if (!isText(s.target)) errs.push(`${where}: target: the SabotageTarget's class`);
+      if (!isText(s.parcel)) errs.push(`${where}: parcel: what the kit is called`);
+      if (!Array.isArray(s.rooms) || s.rooms.length === 0) errs.push(`${where}: rooms: where the target stands`);
+      if (s.amount !== undefined && !isInt(s.amount, 1, 4)) errs.push(`${where}: amount: the war effort, 1 to 4`);
       break;
   }
   return errs;

@@ -131,6 +131,8 @@ export const isItem = (w: World, cls: string): boolean => isA(w.classes, cls, "I
 
 export const isFood = (w: World, cls: string): boolean => isA(w.classes, cls, "Food");
 
+export const isSabotageTarget = (w: World, cls: string): boolean => isA(w.classes, cls, "SabotageTarget");
+
 export const isNumberItem = (w: World, cls: string): boolean => isA(w.classes, cls, "NumberItem");
 
 export const isSpell = (w: World, cls: string): boolean => isA(w.classes, cls, "Spell");

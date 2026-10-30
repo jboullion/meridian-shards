@@ -183,6 +183,21 @@ The game is becoming mostly single-player. So the factions are to drive the worl
     - **No world-wide announcements** (2026-10-25). Until then the server told every player in chat of each battle's muster, clash and result (`FactionWar.Announce`), and a battle banner (`BattleBanner.tsx`) sat across the top of the view for everyone. At the user's request both are gone, and the button and the window carry the news. Those taking part are still told what concerns them (the siege's caller, rallies, reinforcements, pay). FactionWorld's celebration and mourning messages still reach everyone.
     - **The lieges' colours** are their soldiers' shields': the Duke purple, the Princess orange, Jonas red.
 
+17. **Behind the Lines: sabotage runs** (built 2026-10-29). The first of three ways to give members more to do and more reason to join. Rank perks (daily pay, a quartermaster, "to the front", Captain escorts, Champion honours) and War Orders tied to the called battle are planned next.
+    - **The quests** (354-359): six daily runs (24-hour cooldown), two for each liege, each against a rival. Each needs Sergeant (25 renown) and the liege's soldier quest, and has 45 minutes from the moment it's taken.
+      - **Jonas:** Fire the Granary under Tos (`TosGrainSacks`, Tos's old storage room, through the Rat Caves) and Open the Sluice under Barloque (`BarloqueSluice`, sewer 3, across the Smuggler's Crossing).
+      - **The Princess:** Steal the Marching Orders (`TosOrdersChest`, the Smuggler's Way under Tos) and Burn the Rebel Stores (`JasperSmugglersCache`, Jasper sewer 3).
+      - **The Duke:** Foul the Oil Stores (`BarloqueOilCasks`, Barloque sewer 2) and Break the Smugglers' Ring (`JasperArmsCache`, Jasper sewer 2).
+    - **The run:** the liege hands over a kit (the step's parcel). The player uses the target with it, wearing the soldier's shield, then gets back to the liege before the time runs out.
+    - **Sabotage** (`SabotageTarget.TryActivate`, `object/passive/sabotage.kod` and its subclasses):
+      - the kit is used up and the step done (`QuestBook.Sabotaged`, step kind `sabotage`, `QK_SABOTAGE` 27);
+      - the player's liege gains the step's war effort at once: 2 for Jonas's runs, his character as the saboteur, 1 for the others. The target's liege loses 1 (floored at 0);
+      - a cry goes up: three of the target liege's troops spawn round the player and hunt them;
+      - the target liege's members online hear of it;
+      - nobody can set to that target again for ten minutes, so a group can't each spend a kit on one fire.
+    - **Placement:** `QuestBook.SabotageTargets` lists where each target stands. `PlaceTargets` places them as their room is built, and whenever a player comes in and one is missing, so a saved world gets them too.
+    - **Pay at the hand-in:** 3 renown, 750 shillings, 300 training points and XP.
+
 ## Consequences
 
 - **Dying is much softer.** No death drops your things and none costs skills or XP outside the newbie rules. The cost is broken gear and a smith's bill, which leans on the magic revamp's repairs. Players who used to fear the walk back to a corpse don't have that walk any more.
@@ -278,6 +293,13 @@ The game is becoming mostly single-player. So the factions are to drive the worl
   - mourning and the merchants' discounts;
   - a fight between two players' soldiers;
   - the War window's service, ledger and half-staff for a player with a liege.
+- **Behind the Lines (2026-10-29, decision 17).**
+  - **Tried over the maintenance port on the dev server, as Scout** (made one of Jonas's soldiers at 30 renown, with a rebel shield worn):
+    - Fire the Granary taken; the grain sacks were placed as Scout walked into a world that didn't have them;
+    - using them did the step; Jonas's war effort went from 0 to 2 and the Duke's from 2 to 1;
+    - three of the Duke's troops came;
+    - handing in to Jonas gave 3 renown.
+  - **Not yet tried:** the five other runs in the game, the routes walked through the sewers and caves, and a run timed out.
 - **Room PvP flags (2026-10-25, shards-server, not yet committed).** With no random PvP, the room flags were checked and trimmed:
   - **Kept, each still doing work:** `ROOM_NO_COMBAT` (safe rooms: inns, shops, banks, temples, the town squares), `ROOM_SAFE_DEATH` (the arenas: death without consequences), `ROOM_NO_PK` (non-PvP survival instances, the DM's "turn off pk") and `ROOM_KILL_ZONE` (set by a Frenzy).
   - **Deleted: `ROOM_GUILD_PK_ONLY`** (0x0008 left unused), from the 21 town-street rooms that had it, with `Room.AllowGuildAttack` and `SetGuildPKOnly` and every check that used them. `MayAttackPlayer` already covered its PvP rule; what was left only hurt PvE: in town streets a player with no guild or soldier shield couldn't cast Truce or a harmful room or radius spell. (Helping a player who attacked someone recently is still refused everywhere, as before: `Spell` `spell_cant_help`.) One difference remains, and is meant: a factioned attacker with no guild or shield may now attack a council token's bearer in a town street, as in the wild.

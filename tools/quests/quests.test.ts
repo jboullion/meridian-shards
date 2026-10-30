@@ -19,6 +19,8 @@ const WORLD = worldFrom(
     kod("numbitem.kod", "NumberItem is Item\n"),
     kod("food.kod", "Food is NumberItem\n"),
     kod("apple.kod", "Apple is Food\nresources:\n   apple_name_rsc = \"apple\"\nclassvars:\n   vrName = apple_name_rsc\n"),
+    kod("sabotage.kod", "SabotageTarget is PassiveObject\n"),
+    kod("tosgrain.kod", "TosGrainSacks is SabotageTarget\nresources:\n   tosgrain_name = \"sacks of grain\"\nclassvars:\n   vrName = tosgrain_name\n"),
     kod("orctooth.kod", "OrcTooth is NumberItem\nresources:\n   orctooth_name = \"orc tooth\"\nclassvars:\n   vrName = orctooth_name\n"),
     kod(
       "tosinn.kod",
@@ -383,6 +385,24 @@ describe("the quest generator", () => {
     expect(g.catalog.quests[0]!.steps.map((s) => s.objective)).toEqual(["Eat apple", "Eat something"]);
     expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "eat", item: "OrcTooth" }] }]), WORLD).errors).toEqual([
       "cellar-rats.json: step 1: item: OrcTooth isn't a food class",
+    ]);
+  });
+
+  it("writes the sabotage kind: a SabotageTarget, its kit and the war effort (ADR 0021)", () => {
+    const step = { kind: "sabotage", target: "TosGrainSacks", parcel: "a flask of lamp oil", rooms: ["RID_TOS_INN_CELLAR"], amount: 2 };
+    const g = generateFrom(sources([{ ...RATS, steps: [step] }]), WORLD);
+    expect(g.errors).toEqual([]);
+    // QK_SABOTAGE 27, done by itself, the target as its class, the kit as its parcel, the war effort as its amount
+    expect(g.kod).toContain("[ 27, &TosGrainSacks, 1, 0, &TosInnKeeper, 0, qd_1_s1, $, qd_1_p1, qd_1_t1,\r\n               1, $, $, $, 2 ]");
+    expect(g.catalog.quests[0]!.steps[0]!.objective).toBe("Sabotage the sacks of grain");
+    expect(g.catalog.quests[0]!.steps[0]!.rooms.map((r) => r.rid)).toEqual([53]);
+    expect(generateFrom(sources([{ ...RATS, steps: [{ ...step, target: "OrcTooth" }] }]), WORLD).errors).toEqual([
+      "cellar-rats.json: step 1: target: OrcTooth isn't a SabotageTarget class",
+    ]);
+    expect(generateFrom(sources([{ ...RATS, steps: [{ kind: "sabotage", target: "TosGrainSacks", amount: 5 }] }]), WORLD).errors).toEqual([
+      "cellar-rats.json: step 1: parcel: what the kit is called",
+      "cellar-rats.json: step 1: rooms: where the target stands",
+      "cellar-rats.json: step 1: amount: the war effort, 1 to 4",
     ]);
   });
 

@@ -520,6 +520,10 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
 - **Eating** (2026-10-28):
   - **The `eat` kind** (`QK_EAT` 26): eat the step's food `item` (its class, subclasses too), or any food when it is left out. `Food.NewApplied` (and `ChaosFood`'s) calls `QuestBook.FoodEaten`.
   - Gaining a hit point no longer refills vigor, so players need to know to eat. "A Full Belly" (353, `raza-a-full-belly.json`) is Eric d'Jorn's at the Raza bar: eat anything, come back. His lines explain that vigor drives health regeneration (about a second a point when well fed, four when starving).
+- **Sabotage** (2026-10-29, [ADR 0021](0021-factions-and-the-faction-war.md) decision 17):
+  - **The `sabotage` kind** (`QK_SABOTAGE` 27): use a `SabotageTarget` of the step's `target` class, carrying the kit the step gives as it begins (its `parcel`, a `QuestParcel` with `kit` set; `quest_kit_given`).
+  - `rooms` says where the target stands, for the tracker's map. `amount` (1-4, default 1) is the war effort it brings the player's liege.
+  - `SabotageTarget.TryActivate` asks `QuestBook.Sabotaged`, which uses up the kit and counts the step. The six "Behind the Lines" runs (354-359) use it.
 - **The Vale of Sorrows** (`feyforst.kod`, `feyforst/c2.kod`):
   - **The gate is back:** the fey node shows only while all eight rooms are very good or all very evil. The elhai (good) or dirhai (evil) node is the same `NODE_FAERIE`. Its karma check (`FeyNode.LashOut`) stays off, so anyone may bond either way.
   - **Locks** (`FeyForest.CastLock`): casting Detect Evil (Shal'ille) in a vale room locks it good, and Detect Good (Qor) locks it evil, for a Meridian day (`FEY_LOCK_TIME`, 2 real hours). Potions don't count.

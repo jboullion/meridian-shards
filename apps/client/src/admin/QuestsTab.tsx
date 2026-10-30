@@ -11,10 +11,10 @@ import {
 
 type Act = (what: string, fn: () => Promise<string | void>) => () => void;
 
-const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine", "eat"];
+const KINDS: QuestStepFile["kind"][] = ["kill", "collect", "talk", "deliver", "visit", "cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine", "eat", "sabotage"];
 
 /** The kinds that happen once by doing something: done by themselves unless Auto is unticked */
-const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine", "eat"];
+const ACTION_KINDS: QuestStepFile["kind"][] = ["cast", "deposit", "stash", "buy", "equip", "health", "hometown", "nodes", "companion", "convey", "learn", "attune", "arena", "train", "node", "claim", "battle", "siege", "fallen", "shrine", "eat", "sabotage"];
 
 const TIER_LABEL = { main: "Main", story: "Story", errand: "Errand" } as const;
 
@@ -398,6 +398,19 @@ function QuestForm({
               The parcel is called <input value={s.parcel ?? ""} placeholder="a sealed letter" onChange={(e) => setStep(i, { parcel: e.target.value })} />
             </label>
           )}
+          {s.kind === "sabotage" && (
+            <div className="row3">
+              <label>
+                Target (a SabotageTarget class) <input value={s.target ?? ""} placeholder="TosGrainSacks" onChange={(e) => setStep(i, { target: e.target.value })} />
+              </label>
+              <label>
+                The kit is called <input value={s.parcel ?? ""} placeholder="a flask of lamp oil and a flint" onChange={(e) => setStep(i, { parcel: e.target.value })} />
+              </label>
+              <label>
+                War effort <input type="number" min={1} max={4} value={s.amount ?? 1} onChange={(e) => setStep(i, { amount: num(e.target.value) ?? 1 })} />
+              </label>
+            </div>
+          )}
           {s.kind === "cast" && (
             <label>
               Spell <input list="quest-spells" value={s.spell ?? ""} onChange={(e) => setStep(i, { spell: e.target.value })} />
@@ -531,6 +544,7 @@ function QuestForm({
             </label>
           </div>
           {s.kind === "visit" && <RoomsInput label="Rooms (any one)" value={s.rooms} onChange={(rooms) => setStep(i, { rooms })} me={me} run={run} />}
+          {s.kind === "sabotage" && <RoomsInput label="Where the target stands" value={s.rooms} onChange={(rooms) => setStep(i, { rooms })} me={me} run={run} />}
           {(s.kind === "kill" || s.kind === "collect") && (
             <RoomsInput
               label="Where (for the map's area)"
@@ -745,6 +759,7 @@ function clean(q: QuestFile): QuestFile {
       if (s.kind === "kill") Object.assign(out, { target: s.target, count: s.count ?? 1 }, s.exact ? { exact: true } : {}, s.inRooms && s.rooms?.length ? { inRooms: true } : {});
       if (s.kind === "collect") Object.assign(out, { item: s.item, count: s.count ?? 1 });
       if (s.kind === "deliver") out.parcel = s.parcel;
+      if (s.kind === "sabotage") Object.assign(out, { target: s.target, parcel: s.parcel, rooms: s.rooms }, s.amount && s.amount !== 1 ? { amount: s.amount } : {});
       if (s.kind === "cast") out.spell = s.spell;
       if ((s.kind === "deposit" || s.kind === "stash" || s.kind === "buy") && s.with) out.with = s.with;
       if ((s.kind === "stash" || s.kind === "buy" || s.kind === "eat") && s.item) out.item = s.item;
