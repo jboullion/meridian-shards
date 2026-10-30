@@ -1,6 +1,6 @@
-# ADR 0029: Monster pathfinding (A* on the server)
+# ADR 0029: Monster pathfinding (A* on the server, one nav grid for everyone)
 
-- Status: proposed (2026-10-30). Not built.
+- Status: accepted (2026-10-30). Being built on the `monster-pathfinding` branch of both repos.
 - Builds on: the faction war's battles and seat assaults ([ADR 0021](0021-factions-and-the-faction-war.md) decisions 13 and 18), and the client's nav grid (`packages/world/src/navGrid.ts`; [ADR 0005](0005-friends.md), [ADR 0006](0006-pets.md), [ADR 0020](0020-ai-playtester.md)).
 
 ## Context
@@ -12,14 +12,20 @@ Monsters on the server don't plan a route. Watching the first seat assault at th
 Blakod picks what to do, and the server picks the step:
 
 - **Blakod** (`shards-server` `kod/object/active/holder/nomoveon/battler/monster.kod`, `kod/object/passive/brain.kod`):
-  - Each state has a timer (`MoveTimer`, `ChaseTimer`, ...), about `10000 / (viSpeed × 4)` ms a step (`GetMoveTime`).
-  - The brain (`GetMoveBehavior`, `GetChaseBehavior`) calls `DoRandomWalk`, `MoveTowards`, `MoveAway` or `MoveToMaster`.
-  - `MoveTowards` and `MoveAway` both end in `MoveTowardsCoords`, which calls the builtin `GetStepTowardsBSP` and moves the monster to the step it returns (`Room.SomethingMoved`).
+  - Each state has its own Kod timer (`MoveTimer`, `ChaseTimer`, `AttackTimer`), about `10000 / (viSpeed × 4)` ms a step (`GetMoveTime`). Troops and companions at speed 18 step about every 134 ms. There is no server tick: blakserv fires timers one at a time from a heap (`timer.c` `ServiceTimers`).
+  - The brain calls `DoRandomWalk`, `MoveTowards`, `MoveAway`, `MoveToMaster`, `DoGoTowardsLocation` or a patrol's `GotoCoords`.
+  - **One door to the step:** `Monster.MoveTowardsCoords` is the only Kod caller of the builtin `GetStepTowardsBSP`, and every mover but two reaches it:
+    - chasing (`MoveTowards`), the main case, battle troops and arena fighters included;
+    - following a master (`MoveToMaster`): companions, animated and seduced monsters, reflections, the dragonfly brood, the evil twin;
+    - going to a point (`DoGoTowardsLocation`) and patrols (`GotoCoords`);
+    - fleeing and keeping range (`MoveAway`), which aims at a mirrored point.
+  - The two that don't: `DoRandomWalk` (a random short step, checked by `Room.ReqSomethingMoved`), and the town wanderers, which teleport between rooms.
 - **The step** (`blakserv/roofile.c` `BSPGetStepTowards`):
   1. Aims straight at the target, 16 fine units (a sixteenth of a square). If `BSPCanMoveInRoom` allows it, takes it.
   2. Blocked, it picks a side (by the wall's angle, or at random against an object) and turns 22.5° at a time, up to 135°, then tries the other side.
   3. If every try fails, it stays put.
   - The only memory between steps is two bits in the monster's `piState`: whether it's dodging, and which way.
+- **Monsters only move in rooms with players.** When the last player leaves, a room's monsters stop (`Brain.LastUserLeft`) unless they have `AI_MOVE_WHEN_ALONE`.
 
 ### Why monsters get stuck
 
@@ -31,90 +37,128 @@ Blakod picks what to do, and the server picks the step:
 
 `packages/world/src/navGrid.ts` is a complete A*:
 
-- **Cells:** half a square (`NAV_CELL`), walkable where the floor is dry, there's headroom and it's clear of walls. Which walls block copies the original client's `move.c` (step height, ceiling, passable).
+- **Cells:** half a square (`NAV_CELL`), walkable where the floor is dry, there's headroom and it's clear of walls (`CELL_CLEARANCE`, 280). Which walls block copies the original client's `move.c` (step height, ceiling, passable).
 - **Links:** 8-way, kept where the floors are within a step and the way between is clear. Diagonals need both sides.
 - **Areas:** connected areas, flood-filled, numbered largest first.
 - **Search:** `findCells` is A* (binary heap, octile distance, a visit cap). `findPath` snaps both ends to the same area, searches, and pulls the path tight with line checks.
-- **Who uses it:** the ambient townsfolk, pets and friends, and the AI playtester. 79 town rooms have grids built ahead of time (`nav/<room>.nav`); the rest are built in the client a slice per frame.
+- **Who uses it, and where they run:**
 
-It's proven, but it's the client's idea of where one can walk, not the server's. ADR 0020 reports server snap-backs from it, and ADR 0011 found it marked Tos's open street as closed.
+  | User | Runs in | Does the server see it? |
+  |---|---|---|
+  | Ambient townsfolk, inn patrons, courtiers | each client, deterministic from a shared seed (`UC_AMBIENT`) | no |
+  | Critters | each client (walls only, no A*) | no |
+  | Pets | each client, from the owner's position | no |
+  | Arena fights | the gateway (`tools/gateway/arena.ts`), or the client's fallback | no |
+  | Friends' Follow | the client, steering the real player through `PlayerMover` | as ordinary moves |
+  | The AI playtester | `tools/agent`, stepping the real player with no `move.c` | as ordinary moves |
+
+- **Where the grids come from:** 79 town rooms have grids built ahead of time (`nav/<room>.nav`, by `tools/assets/build-assets.ts`); the rest are built in the client a slice per frame.
+
+It's proven, but it's the client's idea of where one can walk, not the server's. ADR 0020 reports server snap-backs from it, and ADR 0011 found it marked Tos's open street as closed. The rules are close: the server's move check (`BSPCanMoveInRoomTreeInternal`) has the same step height, headroom and passable tests, but it's a line test with no clearance, and it knows deep water only by sector depth.
 
 ## Decision
 
-Pathfinding goes in **blakserv, in C, as a builtin**. Kod uses it only when the straight step would fail.
+Pathfinding goes in **blakserv, in C, as a builtin**. Kod uses it only when the straight step would fail. The grid it searches is also **the one grid the client uses**: the server exports it as `.nav` files, and the client's own grid builder is deleted.
+
+The client-side movers (townsfolk, critters, pets, arena fights, Follow, the playtester) **keep running where they run**, with the client's A*. Moving their pathing onto the server would cost CPU and traffic for things the server never sees, and would break the shared, deterministic crowd. What they needed from the server was the map, not the search.
 
 ### 1. The grid: built by the server, from the server's own move rule
 
-- **When:** the first time a monster in a room asks for a path. It is kept with the room's data (`roomdata.c`) and freed with it (`BSPFreeRoom`).
-- **Cells:** half a square, as the client's. A large room (64 × 64 squares) is 128 × 128 cells: a byte of links each, about 16 KB.
-- **A cell is walkable** when `BSPGetLocationInfo` finds a floor there with headroom for a monster (`OBJECTHEIGHTROO`).
+- **When:** the first time a path is asked for in a room, or when the grids are exported (section 5).
+- **Where it's kept:** on the room's `room_node` (`roomdata.h`), freed with it (`UnloadRoom`, `ResetRooms`).
+  - Each loaded room object has its own geometry: `LoadRoom` makes a new `room_node` every time, so dynamic copies (survival rooms) get their own grid. Grids are never shared by resource, since a copy's sectors may have moved.
+- **Cells:** half a square, as the client's. A large room (64 × 64 squares) is 128 × 128 cells: a byte of links and a byte of flags each, about 32 KB.
+- **A cell is walkable** when:
+  - `BSPGetLocationInfo` finds a floor there with headroom (`OBJECTHEIGHTROO`);
+  - no wall that blocks is within the clearance (`CELL_CLEARANCE`, 280 fine ROO units, as the client's), so paths keep off walls and the same grid serves monsters and townsfolk.
+- **A cell's flags:** deep water (the sector has depth). The server's monsters may cross it; the client treats it as closed.
 - **A link exists** between neighbouring cells only when `BSPCanMoveInRoomTree` (walls only, not blockers) allows the step between their centres. Paths can then never lead where the server would refuse the step. That is the mismatch the client's grid has.
+  - `BSPCanMoveInRoomTree` needs a prototype in `roofile.h`; `BSPCanMoveInRoom` adds the blockers and isn't what the grid wants.
 - **Diagonals** need both side links, as the client's.
 - **Areas** are labelled once, as the client's, so a search between two areas fails at once instead of searching the whole room.
 - **Objects that block** (`BSPBlocker*`) aren't in the grid; the step itself still checks them. A monster blocked by another steps around it with today's dodge.
-- **Rooms that change shape** (`BSPMoveSector`: doors, lifts, moving floors): the grid is marked stale and rebuilt on the next request.
+- **Rooms that change shape:** `BSPMoveSector` (doors, lifts, moving floors) and `BSPChangeTexture` (the move rule checks whether a side's upper and lower textures are set) mark the grid stale, and it's rebuilt on the next request.
 - **Building cost:** about 16,000 cells × 8 move checks for a large room, built once. If that's too slow on the VM, it's built a slice of rows per request, falling back to the straight step until it's done.
 
 ### 2. The search: a new builtin
 
-`C_GetPathStepBSP(room, from row/col/fine, to row/col/fine, monster)` returns the next point to walk to: the farthest point on the path that can be reached in a straight line. If there's no path, it returns `$`.
+`GetPathStepBSP(room, from row/col/fine, to row/col/fine, *row, *col, *finerow, *finecol, monster)` sets the next point to walk to: the farthest point on the path that can be reached in a straight line. If there's no path, it returns `$`. Its outputs are written back the way `GetStepTowardsBSP`'s are.
 
 - **A\*** as the client's `findCells`: a binary heap, the octile heuristic, a visit cap (a few thousand cells), and both ends snapped to the nearest walkable cell in the same area.
 - **Smoothing** as the client's `findPath`: the returned point is pulled as far ahead as `BSPLineOfSight` and the move checks allow, so monsters walk lines, not zigzags.
-- **Registering it:** beside `GetStepTowardsBSP` in every place that knows the builtins:
+- **Registering it:** as number 81, beside `GetStepTowardsBSP` (80) in every place that knows the builtins:
   - its number in `include/bkod.h`;
   - the compiler's list, `blakcomp/function.c`, so Blakod can call it;
-  - the server's `blakserv/ccode.c` and `ccode.h`, and its dispatch in `sendmsg.c`;
+  - the server's `blakserv/ccode.c` and `ccode.h`, and its slot in `sendmsg.c`'s `ccall_table`;
   - the decompiler's name, `blakdeco/blakdeco.c`;
-  - the admin listing in `adminfn.c`, if `GetStepTowardsBSP` is there.
+  - the `show calls` names in `adminfn.c`, and `doc/kodccalls.md`.
 
   It's the first new C builtin in a while, and needs the compiler and the server rebuilt (README).
 
 ### 3. Kod: the path only where the straight step fails
 
-In `Monster.MoveTowardsCoords`:
+In `Monster.MoveTowardsCoords`, so every mover that goes through it can use it:
 
-1. **Direct first:** if the target is in line of sight (`Room.LineOfSight`) and today's step succeeds, take it as now. Most monsters in open ground never search.
+1. **Direct first:** if the way to the target is clear (`Room.CanWalkLine`, walls and blockers) and today's step succeeds, take it as now. Most monsters in open ground never search.
 2. **Otherwise, follow a path:** ask `GetPathStepBSP` for a waypoint and step toward it with today's `GetStepTowardsBSP`.
    - The waypoint is kept on the monster (`plPathWaypoint`, `piPathAt`) and reused until it's reached, the target has moved more than `PATH_REPLAN_SQUARES` (3) from where it was planned to, or `PATH_REPLAN_SECONDS` (2) have passed.
 3. **No path:** the target is unreachable (across water, behind a wall with no way round). Today's dodge, and the brain's existing give-up rules (losing interest, going back to wandering) decide.
 
 **What uses it, in order:**
 1. **Battle troops** (`FactionTroop` in a battle: `FactionWar.PickTarget` and `KeepTargets`). These are what started this.
-2. **Every chasing monster** (`ChaseTimer` → `MoveTowards`).
-3. **Later:** fleeing (`MoveAway`, toward a point found on the grid, not a mirrored vector), keeping range (`AI_MOVE_OPTIMAL_RANGE`), companions following (`MoveToMaster`) and the ambient wanderers.
+2. **Everything else through `MoveTowardsCoords`:** every chasing monster, arena fighters, companions and minions following a master (they lose their master at corners today), patrols and monsters going to a point.
+3. **Later:** fleeing and keeping range (`MoveAway`, `AI_MOVE_OPTIMAL_RANGE`), toward a cell found on the grid away from the threat, not a mirrored vector.
 
 ### 4. Limits, so a battle can't stall the server
 
-- **A budget per tick:** at most `PATH_SEARCHES_PER_TICK` searches (start at 8) and a visit cap per search. A monster refused a search this tick takes today's straight step and asks again next tick.
-- **Staggered re-plans:** each monster's re-plan time is offset by its object id, so 25 troops don't all re-plan on the same tick.
+There's no tick to count in, so the budget is over time:
+
+- **A budget per window:** at most `PATH_SEARCHES_PER_WINDOW` searches (start at 8) per 100 ms, counted in C with `GetMilliCount`, and a visit cap per search. A monster refused a search takes today's straight step and asks again on its next step.
+- **Staggered re-plans:** each monster's re-plan time is offset by its object id, so 25 troops don't all re-plan on the same step.
 - **A cache:** the last few searches per room are kept, keyed by from-cell and to-cell, so troops chasing the same captain share a result.
+- **Only rooms with players** pay at all, since monsters elsewhere don't move.
+- **Watching it:** the builtin's time shows in `show calls` (`ccall_total_time`) like every other.
+
+### 5. The client's grid comes from the server
+
+- **Export:** a maintenance command, `save navgrids`, builds the grid of every room the server has loaded (once per `.roo`) and writes `run/server/nav/<room>.nav`.
+- **Format:** `NAV_FORMAT` 3, the client's v2 plus a flags byte per cell: "NAVG", the version, the room's checksum (`room.security`), cols, rows, the walkable bitset, a byte of links per cell, a byte of flags per cell.
+- **Assets:** `build-assets` copies every exported `.nav` (every room, not only the 79 town rooms), checking each checksum against the `.roo` it ships.
+- **The client's builder goes:** `navGridBuilder` and `buildNavGrid`, and the per-frame building in the ambient life, Follow, the arena's fallback and the playtester. The client keeps `findCells`, `findPath`, `nearestCell`, `randomCell`, `navWalls` and `walkable`.
+- **Client-only preferences stay overlays** on the grid's `closed` cells, set when it's loaded: deep water, shallow water textures, and objects that block (`MOVEON_NO`).
+- **A room with no `.nav`** has no grid: pets walk straight, Follow stops, and the playtester reports it.
+- **Whenever the grid's rules change**, the files are exported again from the server (and `NAV_FORMAT` bumped if the layout changes).
 
 ### What stays as it is
 
-- **The client's nav grid:** townsfolk, pets and the playtester keep it. Making the client read the server's grid instead is left open.
+- **Where the client-side movers run:** each client, the gateway and the playtester keep simulating their own. Only their map changes.
 - **Walk-through-walls monsters** (`AI_MOVE_WALKTHROUGH_WALLS`) and anything with `MSTATE_MOVE_OUTSIDE_BSP` keep today's step, since walls don't stop them.
+- **Random walking** (`DoRandomWalk`) and the town wanderers' teleports.
 - **Line of sight for targeting and spells:** unchanged.
 
 ## Consequences
 
-- **Monsters find their way:** round walls, through doorways, over bridges. Battles at seats and fronts become fights instead of crowds at a wall, so the seats' starting squares could go back to the natural places: the castle door for attackers, the liege's door for defenders.
+- **Monsters find their way:** round walls, through doorways, over bridges. Battles at seats and fronts become fights instead of crowds at a wall, so the seats' starting squares could go back to the natural places: the castle door for attackers, the liege's door for defenders. Companions keep up with their masters.
 - **Harder monsters:** a monster that used to be shaken off behind a wall now follows. Some fights get harder, and kiting monsters around corners stops working. Monsters that should stay easy can be left on the direct step with a behaviour flag (`AI_NO_PATHING`).
-- **Server cost:** memory for the grids of rooms with monsters in them (about 16 KB for a large room), and CPU for searches, bounded by the budget. This needs watching on the e2-micro VM, where a 100-player load test already runs close to the limit (2026-10-24).
+- **One map:** townsfolk, pets, Follow and the playtester walk where the server's move rule says one can walk, so the playtester's snap-backs and the closed Tos street should go. Every room gets a grid, not just 79, and the client stops building grids at run time.
+- **A build step:** the nav files now come from a running server (`save navgrids`), so a change to rooms or to the rule needs a re-export before the asset build.
+- **Server cost:** memory for the grids of rooms with monsters in them (about 32 KB for a large room), and CPU for searches, bounded by the budget. This needs watching on the e2-micro VM, where a 100-player load test already runs close to the limit (2026-10-24).
 - **Server change:** the first change to blakserv's C in a while, so it needs a full rebuild and a new server binary in the deploy. The release is not just Kod.
 
 ## Building it
 
-1. **The grid in C**, with a maintenance command to dump a room's grid as text, to compare against the client's `nav/<room>.nav` for the same room.
-2. **The search builtin**, with a maintenance command to ask for a path between two squares and print it.
-3. **Kod: battle troops only**, behind a setting (`Settings.pbMonsterPathing`), so it can be turned off on the live server.
-4. **Try it:**
+1. **The grid in C**, with `show navgrid <roomdata>` to print a room's grid as text, and `save navgrids` to export them all.
+2. **Compare** the exported grids with the client's for the 79 town rooms, then look at Tos's street and the Bourgeois Castle's bridge. Differences should only be where the clearance and water rules differ.
+3. **The client on the exported grids:** `NAV_FORMAT` 3, `build-assets` from the export, the overlays, and the client's builder deleted.
+4. **The search builtin**, with `show path <roomdata> row col row col` to print a path.
+5. **Kod: battle troops only**, behind a setting (`Settings.pbMonsterPathing`), so it can be turned off on the live server.
+6. **Try it:**
    - **The Bourgeois Castle:** put the Duke's attackers back at the castle door, then across the bridge, and watch them reach the guard.
    - **The other seats:** the Courtyard of Blackstone Keep and the Temple of Kraanan.
    - **Elsewhere:** a front in the open lands.
    - **The cost:** with the playtester and a 25-troop battle, how long searches take.
-5. **Every chasing monster**, then the later users.
-6. **Record it:** this ADR's "As built", and ADR 0021 for the seats' squares.
+7. **Everything through `MoveTowardsCoords`**, then fleeing.
+8. **Record it:** this ADR's "As built", and ADR 0021 for the seats' squares.
 
 ## As built
 
