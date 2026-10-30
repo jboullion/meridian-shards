@@ -5,17 +5,17 @@
 //   Actions         merintr actions.c without the emotes: Who (msgfiltr.c IDD_WHO), groups
 //                   (groupdlg.c IDD_GROUP), hotkey and command aliases (alias.c IDD_ALIAS,
 //                   IDD_CMDALIAS), guild configuration
-// Options and Configuration edit a copy and apply it on OK, like the originals; Cancel
-// keeps what was there.
+// Ours: Preferences and Configuration apply each choice as it's made (the originals waited for
+// OK), so the HUD size, the sounds and the rest change as you watch; OK keeps them, and Cancel
+// or the close box puts back what was there when the window opened (useLiveSettings).
 
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { CF, STAT_GROUP, objId } from "@shards/protocol";
 import type { AmbientLevel, GameSession } from "@shards/world";
 import {
   ACTION_LABELS, ACTION_TABS, DEFAULT_SETTINGS, PRESETS, bindingLabel, mouseCode, presetSettings,
   type Action, type ActionTab, type HaloColor, type HotkeyAlias, type KeyBinding, type Settings,
 } from "../settings.ts";
-import type { AudioPreview } from "../audio.ts";
 import { MAX_PROFANE_TERM, trainCommand, trainableAmount } from "@shards/world";
 import { STAT_NUM } from "../statRows.ts";
 import { useWorld } from "./hooks.ts";
@@ -48,6 +48,41 @@ function DluDialog({
       </Window>
     </Modal>
   );
+}
+
+/** The settings that differ between two, as a patch; null when none do */
+function settingsDiff(from: Settings, to: Settings): Patch | null {
+  const patch: Record<string, unknown> = {};
+  let any = false;
+  for (const k of Object.keys(to) as (keyof Settings)[]) {
+    if (!Object.is(from[k], to[k])) {
+      patch[k] = to[k];
+      any = true;
+    }
+  }
+  return any ? (patch as Patch) : null;
+}
+
+/**
+ * A settings window's copy of the settings, each change applied as it's made (only what changed,
+ * so nothing else is overwritten). revert() puts back what was there when the window opened.
+ */
+function useLiveSettings(settings: Settings, apply: (patch: Patch) => void) {
+  const [d, setD] = useState<Settings>(settings);
+  const opened = useRef(settings);
+  const applied = useRef(settings);
+  useEffect(() => {
+    const patch = settingsDiff(applied.current, d);
+    applied.current = d;
+    if (patch) apply(patch);
+  }, [d, apply]);
+  const set = useCallback((patch: Patch) => setD((s) => ({ ...s, ...patch })), []);
+  const revert = () => {
+    const patch = settingsDiff(applied.current, opened.current);
+    applied.current = opened.current;
+    if (patch) apply(patch);
+  };
+  return { d, setD, set, revert };
 }
 
 /** The players logged on now (BP_ADD_PLAYER / BP_REMOVE_PLAYER), sorted by name. */
@@ -84,27 +119,31 @@ const NOT_YET = "Not in Meridian Shards yet; the setting is kept for when it is"
  * `serverFlags` is the server's CF_* preferences (null until UC_RECEIVE_PREFERENCES).
  */
 export function PreferencesDialog({
-  settings, serverFlags, onApply, onPreview, onClose,
+  settings, serverFlags, onApply, onClose,
 }: {
   settings: Settings;
   serverFlags: number | null;
+  /** A change: to our settings, and the server's flags when they changed (else null) */
   onApply: (patch: Patch, serverFlags: number | null) => void;
-  /** Hear the Audio Effects choices while the window is open; null when it closes */
-  onPreview?: (audio: AudioPreview | null) => void;
   onClose: () => void;
 }) {
-  const [d, setD] = useState<Settings>(settings);
-  // The music and sound change as you choose (the original waits for OK); Cancel undoes it
-  const { music, musicVolume, sound, soundVolume, loopSounds, randomSounds } = d;
-  useEffect(() => {
-    onPreview?.({ music, musicVolume, sound, soundVolume, loopSounds, randomSounds });
-  }, [onPreview, music, musicVolume, sound, soundVolume, loopSounds, randomSounds]);
-  useEffect(() => () => onPreview?.(null), [onPreview]);
+  const applySettings = useCallback((patch: Patch) => onApply(patch, null), [onApply]);
+  const { d, set, revert } = useLiveSettings(settings, applySettings);
+  // The server's options are sent as they change too; Cancel sends back the ones it had
   const [flags, setFlags] = useState(serverFlags ?? 0);
+  const openedFlags = useRef(serverFlags);
   const [profanityOpen, setProfanityOpen] = useState(false);
-  const set = (patch: Patch) => setD((s) => ({ ...s, ...patch }));
-  const flag = (f: number, on: boolean) => setFlags((v) => (on ? v | f : v & ~f));
   const known = serverFlags !== null;
+  const flag = (f: number, on: boolean) => {
+    const next = on ? flags | f : flags & ~f;
+    setFlags(next);
+    if (known && next !== flags) onApply({}, next);
+  };
+  const cancel = () => {
+    revert();
+    if (known && openedFlags.current !== null && flags !== openedFlags.current) onApply({}, openedFlags.current);
+    onClose();
+  };
   const check = (label: string, r: Rect, key: keyof Settings, notYet = false) => (
     <Check at={r} label={label} title={notYet ? NOT_YET : undefined} className={notYet ? "not-yet" : undefined} checked={d[key] as boolean} onChange={(v) => set({ [key]: v } as Patch)} />
   );
@@ -113,13 +152,12 @@ export function PreferencesDialog({
   );
   const ok = (e: FormEvent) => {
     e.preventDefault();
-    onApply(d, known && flags !== serverFlags ? flags : null);
     onClose();
   };
   return (
     <>
       {/* On a phone, 30% wider: its font crowded the template's labels into each other */}
-      <DluDialog title="Preferences" size={[375, 288]} wide={1.3} onClose={onClose}>
+      <DluDialog title="Preferences" size={[375, 288]} wide={1.3} onClose={cancel}>
         <form onSubmit={ok}>
           <GroupBox at={[6, 3, 91, 67]} label="Targeting" />
           {halo("Red Highlight", "red", [16, 16, 70, 10])}
@@ -184,7 +222,7 @@ export function PreferencesDialog({
           <Button at={[131, 272, 50, 12]} type="submit" isDefault>
             OK
           </Button>
-          <Button at={[193, 272, 50, 12]} onClick={onClose}>
+          <Button at={[193, 272, 50, 12]} onClick={cancel}>
             Cancel
           </Button>
         </form>
@@ -591,10 +629,13 @@ function useKeyListener(active: boolean, onKey: (b: KeyBinding | null) => void):
 
 /** The Configuration window: the original's Bind Editor (m59bind.exe) without Classic Key Binding and Software Renderer. */
 export function ConfigurationDialog({ settings, onApply, onClose }: { settings: Settings; onApply: (patch: Patch) => void; onClose: () => void }) {
-  const [d, setD] = useState<Settings>(settings);
+  const { d, setD, set, revert } = useLiveSettings(settings, onApply);
   const [tab, setTab] = useState<ConfigTab>("Options");
   const [listening, setListening] = useState<{ action: Action; index: number } | null>(null);
-  const set = (patch: Patch) => setD((s) => ({ ...s, ...patch }));
+  const cancel = () => {
+    revert();
+    onClose();
+  };
   const onKey = useMemo(
     () => (b: KeyBinding | null) => {
       setListening((l) => {
@@ -608,7 +649,7 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
         return null;
       });
     },
-    [],
+    [setD],
   );
   useKeyListener(listening !== null, onKey);
   const remove = (a: Action, i: number) => set({ keys: { ...d.keys, [a]: d.keys[a].filter((_, j) => j !== i) } });
@@ -621,7 +662,7 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
   );
   return (
     <Modal>
-      <Window title="Configuration" onClose={() => !listening && onClose()} className="options-dialog config-window">
+      <Window title="Configuration" onClose={() => !listening && cancel()} className="options-dialog config-window">
         <div className="bind-layout">
           <Tabs tabs={CONFIG_TABS} active={tab} onChange={setTab} />
           <div className="mk-page bind-page">
@@ -739,16 +780,10 @@ export function ConfigurationDialog({ settings, onApply, onClose }: { settings: 
           <div className="bind-footer">
             <Button onClick={() => set({ ...presetSettings("modern"), keys: PRESETS.modern })}>Restore Defaults</Button>
             <div className="bind-buttons">
-              <Button
-                isDefault
-                onClick={() => {
-                  onApply(d);
-                  onClose();
-                }}
-              >
+              <Button isDefault onClick={onClose}>
                 OK
               </Button>
-              <Button onClick={onClose}>Cancel</Button>
+              <Button onClick={cancel}>Cancel</Button>
             </div>
           </div>
         </div>
@@ -1103,11 +1138,14 @@ export function CommandAliasesDialog({ settings, onApply, onOpen, onClose }: { s
  * drag looks around, and the desktop Configuration's options that matter on a touch screen.
  */
 export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Settings; onApply: (patch: Patch) => void; onClose: () => void }) {
-  const [d, setD] = useState<Settings>(settings);
-  const set = (patch: Patch) => setD((s) => ({ ...s, ...patch }));
+  const { d, set, revert } = useLiveSettings(settings, onApply);
+  const cancel = () => {
+    revert();
+    onClose();
+  };
   return (
     <Modal>
-      <Window title="Configuration" onClose={onClose} className="options-dialog touch-config">
+      <Window title="Configuration" onClose={cancel} className="options-dialog touch-config">
         <label className="touch-config-scale">
           <span>Look Speed</span>
           <Trackbar min={1} max={30} value={d.touchLookScale} onChange={(v) => set({ touchLookScale: v })} label="Look Speed" />
@@ -1132,36 +1170,10 @@ export function TouchConfigDialog({ settings, onApply, onClose }: { settings: Se
         <Check label="Attack On Target" checked={d.attackOnTarget} onChange={(v) => set({ attackOnTarget: v })} />
         <div className="touch-config-buttons">
           <Button onClick={() => set({ touchLookScale: DEFAULT_SETTINGS.touchLookScale })}>Default Speed</Button>
-          <Button
-            isDefault
-            onClick={() => {
-              onApply({
-                touchLookScale: d.touchLookScale,
-                dynamicLighting: d.dynamicLighting,
-                enhanced: d.enhanced,
-                ambientLife: d.ambientLife,
-                ambientSounds: d.ambientSounds,
-                frameLimit: d.frameLimit,
-                ambientVolume: d.ambientVolume,
-                critters: d.critters,
-                flyers: d.flyers,
-                nature: d.nature,
-                groundDetail: d.groundDetail,
-                seasons: d.seasons,
-                enhancedWater: d.enhancedWater,
-                showPets: d.showPets,
-                showPetNames: d.showPetNames,
-                questMarkers: d.questMarkers,
-                showWay: d.showWay,
-                damageNumbers: d.damageNumbers,
-                attackOnTarget: d.attackOnTarget,
-              });
-              onClose();
-            }}
-          >
+          <Button isDefault onClick={onClose}>
             OK
           </Button>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={cancel}>Cancel</Button>
         </div>
       </Window>
     </Modal>

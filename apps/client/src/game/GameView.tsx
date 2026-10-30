@@ -32,7 +32,7 @@ import { QuestBox } from "./ui/QuestBox.tsx";
 import { WelcomeControls } from "./ui/WelcomeControls.tsx";
 import { QuestsPanel } from "./ui/QuestsPanel.tsx";
 import type { AssetStore } from "../assets.ts";
-import type { AudioPreview, GameAudio } from "./audio.ts";
+import type { GameAudio } from "./audio.ts";
 import { GameScene, type GameSceneStatus, type TouchMove, type ViewMode } from "./gameScene.ts";
 import { bareIcon, type IconRenderer } from "./icons.ts";
 import { ACTION_TABS, actionsFor, bindingLabel, getSettings, onSettings, touchUi, updateSettings, type Action, type ChatTab, type Settings } from "./settings.ts";
@@ -879,7 +879,6 @@ export function GameView({
   const hotkeyRef = useRef<(n: number) => void>(() => {});
   const lookRef = useRef<(id: number) => void>(() => {});
   /** The Preferences window's audio choices, heard before OK */
-  const previewAudio = useCallback((p: AudioPreview | null) => audio.preview(p), [audio]);
 
   useEffect(() => onSettings(setSettings), []);
 
@@ -2801,10 +2800,9 @@ export function GameView({
             serverFlags={serverPrefs}
             onApply={(patch, flags) => {
               updateSettings(patch);
-              // maindlg.c IDOK -> InterfaceConfigChanged: SendPreferences
+              // maindlg.c InterfaceConfigChanged: SendPreferences (ours: as each is changed)
               if (flags !== null) session.sendPreferences(flags);
             }}
-            onPreview={previewAudio}
             onClose={() => setModal(null)}
           />
         )}

@@ -23,8 +23,6 @@ import { getSettings, onSettings, type Settings } from "./settings.ts";
 
 const MAX_SOUNDS = 24;
 
-/** The Audio Effects settings, as the Preferences window has them before OK */
-export type AudioPreview = Partial<Pick<Settings, "music" | "musicVolume" | "sound" | "soundVolume" | "loopSounds" | "randomSounds">>;
 const ROLLOFF = 0.00016;
 const MAX_DIST = FINENESS * 32;
 /** Ours: at most this many ambient sounds at once */
@@ -171,10 +169,8 @@ export class GameAudio {
   /** Ours: the room's track while the dashboard previews another (previewMusic); "" none */
   private roomMusic: string | null = null;
   private listener = { x: 0, y: 0, angle: 0 };
-  /** What's playing by: the saved settings with the Preferences window's preview on top */
+  /** What's playing by: the settings (the Preferences window applies its choices as they're made) */
   private settings: Settings;
-  private saved: Settings;
-  private previewing: AudioPreview = {};
   private readonly assets: AssetStore;
   /** Where an object is, for sounds that come from one (GamePlaySound: obj->motion.x/y) */
   objectPosition: (id: number) => { x: number; y: number } | undefined = () => undefined;
@@ -188,11 +184,8 @@ export class GameAudio {
 
   constructor(assets: AssetStore) {
     this.assets = assets;
-    this.settings = this.saved = getSettings();
-    this.offSettings = onSettings((s) => {
-      this.saved = s;
-      this.setSettings({ ...s, ...this.previewing });
-    });
+    this.settings = getSettings();
+    this.offSettings = onSettings((s) => this.setSettings(s));
     for (const type of UNLOCK_EVENTS) window.addEventListener(type, this.unlock, true);
   }
 
@@ -525,15 +518,6 @@ export class GameAudio {
     this.listener = { x, y, angle };
     for (const v of this.voices) if (v.pos) this.place(v);
     for (const v of this.ambientVoices) if (v.at) this.placeAmbient(v, 60);
-  }
-
-  /**
-   * The Preferences window's audio choices, heard while it's open (the original applies them
-   * on OK); null goes back to the saved settings (Cancel, or after OK has saved them).
-   */
-  preview(p: AudioPreview | null): void {
-    this.previewing = p ?? {};
-    this.setSettings({ ...this.saved, ...this.previewing });
   }
 
   private setSettings(s: Settings): void {
