@@ -34,6 +34,10 @@ The game is becoming mostly single-player. So the factions are to drive the worl
      - attacking your own faction, 10, at most once a minute (expelled only at 0);
      - a Champion's Gift left unfed for 12 hours, 10.
    - **The soldier shield's rank is renown / 10** (`SoldierShield.RenownChanged`), so its stat and spell powers follow renown. The old 60-day rank loss, the kill-based rank changes and the shield's deletion at low rank are gone.
+   - **The shields' powers** (rebalanced 2026-10-30), while worn:
+     - **Health, not stats:** every soldier's shield adds 5 maximum health a rank while worn (`SoldierShield.UpdateRankPowers`, `HEALTH_PER_RANK`, `GainMaxHealth` as a circlet does; `NamedRank`: Recruit 5 to Champion 30), and takes it back off when put away. Shields used to raise three stats each (the Duke's agility, stamina and intellect, the Princess's intellect, mysticism and aim, Jonas's might, aim and agility: nothing below 30 renown, +3 to 69, +5 from 70); stats were too hard to balance between the lieges. A shield worn from before takes its old stats back off (`RemoveOldStats`).
+     - **The Duke's and the Princess's:** spellpower to all spells, 1.5 a shield rank (renown / 10): 1 to 15. The Princess's used to cut spells' mana by up to 2 and add 20 defence a shield rank instead.
+     - **Jonas's:** absorbs damage, one more than the rank (2 Recruit, as the other lieges' shields, to 7 Champion) as the shield's damage reduction: a third to all of that many hit points off each hit, less against spells. (It was 1 to 6 by renown / 20.) The guild shield matches it by prestige ([ADR 0022](0022-guilds.md) decision 35).
    - **Quests can require it:** `requires.renown` (QuestBook's `QB_RENOWN_MIN`, a quest's 24th field) and reward it (`QRW_RENOWN`). See ADR 0009.
 
 3. **The Faction War: the worn soldier shield is the opt-in.** Two players can fight in it when both wear shields of rival lieges (`SoldierShield.IsEnemyAttack`).

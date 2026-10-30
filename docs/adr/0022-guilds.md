@@ -312,6 +312,15 @@ Nothing pointed players at the Fallen Halls: they sit behind their old doors, an
     - **It ends** when the member leaves the guild (`Player.ResetGuildStuff`), gives it up, the prism is taken up, or the guild loses its hall or ends: then the prism goes back to the Leader's pack (`Guild.ReturnPrism`). At logon the attunement is put right against the guild's list (`Guild.CheckPrismAttunement`).
     - **Where prisms come from** is unchanged: the golem dungeon's and the Marion crypt's chests, the Dragon Valley crates, and quests 62 and 63.
 
+35. **The guild shield matches the soldier's shield** (2026-10-30, `GuildShield`, `guilshld.kod`). A guild's members get much the same from it as a liege's soldiers do from theirs, by the guild's prestige instead of their renown, a little less at the top, and without making them targets in the Faction War:
+    - **Weightless and never breaks** (`piIndestructible`, so war deaths and Shatter spare it too). A shield from before is mended to full and made unbreakable as it's worn (`Mended`).
+    - **No Block check:** it absorbs damage on every hit, as the soldier's shield does: 2 at prestige tier 0 to 6 at tier 4 (`GuildRank` + 1).
+    - **Health:** 5 a step while worn, tier 0 to tier 4 giving 5 to 25 (`UpdateGuildPowers`, `GainMaxHealth` as a circlet does). It follows the guild's tier as it rises (`Guild.AddPrestige`) and the wearer joining or leaving a guild (`Player.SetGuild`). Outside a guild it gives none.
+    - **Insignias:** a god's sign gives its school 15 spellpower (was 10). A liege's seal gives the liege's two schools 10 (was 6 to three, and Jonas's to Kraanan alone): the Duke's Qor and Riija, the Princess's Faren and Shal'ille, Jonas's Kraanan and Jala. Each liege already offers its seal (quests 94-96).
+    - **Gone:** its 20% piercing resistance and its weight (200).
+    - **Any member gets one:** "A Mining Expedition" (97) is Frular's now, for anyone in a guild (`requires.inGuild`; it was the Tos blacksmith's, for guild masters only, who made the members' shields). The ore still goes to the smith of Tos, who forges it. Asked about a shield, Frular says so, and that the temples mark it with their god's sign and the lieges with their seal (`GuildCreator.SomeoneSaid`).
+    - **The grey shield fixed:** "A Mining Expedition" (97) made the shield as a QuestBook reward, which passes the player as `quester`; the old quest engine passed `guildMember`, which is what colours it. It takes either now, so it comes in the guild's colours, and a grey one from before takes them on as it's worn.
+
 ## Order to build
 
 0. **Cleanup:** 5, 6, 3, 2 and 1 (rank names and the moved powers). Also two bugs: `RID_GUILDH_MAX` is 716, so the foyer check in `user.kod` skips halls 17, 19 and 20; and Berg's globes.
