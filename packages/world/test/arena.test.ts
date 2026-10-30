@@ -5,7 +5,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { FINENESS, parseRoo } from "@shards/formats";
-import { buildNavGrid, cellAt, type NavGrid } from "../src/navGrid.ts";
+import { cellAt, type NavGrid } from "../src/navGrid.ts";
+import { navGridOf } from "./navFixture.ts";
 import { localResName } from "../src/ambient/ambientIds.ts";
 import { seededRandom } from "../src/ambient/ambientLife.ts";
 import { fighterAppearance } from "../src/ambient/townsfolk.ts";
@@ -21,7 +22,7 @@ const SQ = FINENESS;
 const ASSETS = join(import.meta.dirname, "../../../dist/assets");
 const have = existsSync(join(ASSETS, "tosarena.roo"));
 let gridCache: NavGrid | null = null;
-const grid = () => (gridCache ??= buildNavGrid(parseRoo(new Uint8Array(readFileSync(join(ASSETS, "tosarena.roo"))))));
+const grid = () => (gridCache ??= navGridOf(parseRoo(new Uint8Array(readFileSync(join(ASSETS, "tosarena.roo"))))));
 
 const SERVER = "ws://test/ws";
 
@@ -381,7 +382,7 @@ describe("the arena as drawn (ArenaView)", () => {
 
 const haveDeath = existsSync(join(ASSETS, "tosarena_death.roo"));
 let deathCache: NavGrid | null = null;
-const deathGrid = () => (deathCache ??= buildNavGrid(parseRoo(new Uint8Array(readFileSync(join(ASSETS, "tosarena_death.roo"))))));
+const deathGrid = () => (deathCache ??= navGridOf(parseRoo(new Uint8Array(readFileSync(join(ASSETS, "tosarena_death.roo"))))));
 
 function deathSim(seed: number, config: ArenaConfig = DEATH_ARENA_CONFIG) {
   const g = deathGrid();

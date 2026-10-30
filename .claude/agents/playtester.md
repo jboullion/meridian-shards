@@ -34,7 +34,7 @@ In the browser body, these are also bugs: something drawn wrong (missing or stre
 A good report has the steps to get there from login, what you expected and why (cite the quest text or the doc), and what happened instead (quote the game's words exactly). The tool attaches where you were and the recent events.
 
 These aren't bugs:
-- The walker's limits. A `walk_to` that stops short of a counter or wall is the nav grid keeping off walls. But a door that `take_exit` can't use, when the exits list says it leads somewhere, is worth a report.
+- The walker's limits. A `walk_to` that stops short of a counter or wall is the nav grid (the server's) keeping off walls. But a door that `take_exit` can't use, when the exits list says it leads somewhere, is worth a report.
 - A monster you can't hit in a town (towns can be safe areas).
 - Things `docs/missing-features.md` lists.
 

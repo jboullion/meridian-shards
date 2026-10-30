@@ -206,7 +206,7 @@ export class AssetStore {
     return new Map(Object.entries(raw).map(([t, [kind, r, g, b, cobbled]]) => [Number(t), { kind, color: [r / 255, g / 255, b / 255], cobbled: cobbled === 1 }]));
   }
 
-  /** A room's nav grid as the asset build made it (nav/<room>.nav, navGrid.ts encodeNavGrid), or null without one */
+  /** A room's nav grid, the server's as the asset build ships it (nav/<room>.nav, blakserv navgrid.c), or null without one */
   async navGrid(roomFile: string): Promise<Uint8Array | null> {
     const name = `nav/${roomFile.toLowerCase().replace(/\.roo$/, "")}.nav`;
     return this.has(name) ? this.download(name) : null;

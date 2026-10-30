@@ -1,7 +1,7 @@
 // Ours: the townsfolk, inn patrons, courtiers and arena fighters of the room you're in, seen by
 // this client only.
 //
-// One AmbientLife per room visit. It builds the room's nav grid a little each frame, then keeps
+// One AmbientLife per room visit, on the room's nav grid (the server's), keeps
 // a crowd going:
 // - In towns, people come out of a doorway and walk to another door (or out of sight) and go
 //   in. Some run an errand on the way: they stop at a shop's door a while, as if trading. Guards
@@ -17,7 +17,7 @@
 // whoever is out. Nothing here is sent to the server.
 
 import { FINENESS, kodToClient, type Room } from "@shards/formats";
-import { NAV_CELL, cellAt, cellCentre, findPath, isOpen, navGridBuilder, nearestCell, randomCell, walkable, type NavGrid, type NavPoint } from "../navGrid.ts";
+import { NAV_CELL, cellAt, cellCentre, findPath, isOpen, nearestCell, randomCell, walkable, type NavGrid, type NavPoint } from "../navGrid.ts";
 import type { WorldObject } from "../state.ts";
 import type { ArenaFighterInfo } from "../arena/arenaView.ts";
 import { busyAt, isErrandRoom, torchHours, weatherScale, type AmbientRoomSpec } from "./ambientRooms.ts";
@@ -114,8 +114,6 @@ const BEAT_MIN = 5 * SQ,
 /** Cells this close to a blocking object are closed */
 const OBSTACLE_RADIUS = 0.55 * SQ;
 const OBSTACLE_REFRESH_MS = 1500;
-/** Time per frame for building the nav grid */
-const BUILD_BUDGET_MS = 3;
 
 type Mode = "walk" | "idle";
 
@@ -223,8 +221,7 @@ export class AmbientLife {
   private readonly exits: AmbientExits | undefined;
   private readonly rand: () => number;
   private readonly nameRand: () => number;
-  private builder: Generator<void, NavGrid> | null;
-  private grid: NavGrid | null = null;
+  private readonly grid: NavGrid;
   private points: ExitPoint[] = [];
   /** Towns: areas with somewhere to come from and go to, and how likely each is */
   private areas: { area: number; weight: number }[] = [];
@@ -254,29 +251,23 @@ export class AmbientLife {
   private weather: Weather = null;
 
   /**
-   * @param grid the room's nav grid if it's already built (the asset build's, or one kept from
-   *   an earlier visit); without one, it's built here a little each frame
+   * @param grid the room's nav grid (the server's, from the asset build: nav/<room>.nav)
    */
-  constructor(
-    room: Room, spec: AmbientRoomSpec, exits: AmbientExits | undefined, seed = Math.floor(Math.random() * 2 ** 32), grid?: NavGrid,
-    waterTextures?: ReadonlySet<number>,
-  ) {
+  constructor(_room: Room, spec: AmbientRoomSpec, exits: AmbientExits | undefined, seed: number | undefined, grid: NavGrid) {
+    seed ??= Math.floor(Math.random() * 2 ** 32);
     this.spec = spec;
     this.exits = exits;
     this.rand = seededRandom(seed);
     // Names from a stream of their own: naming somebody changes nothing the crowd does
     this.nameRand = seededRandom((seed ^ 0x5bd1e995) >>> 0);
-    if (grid) {
-      grid.closed.fill(0);
-      this.grid = grid;
-      this.builder = null;
-      this.pointsPending = true;
-    } else this.builder = navGridBuilder(room, 2, waterTextures);
+    grid.closed.fill(0);
+    this.grid = grid;
+    this.pointsPending = true;
   }
 
-  /** Whether the grid is built and the crowd is out */
+  /** Whether the crowd is out */
   get ready(): boolean {
-    return this.grid !== null && !this.pointsPending;
+    return !this.pointsPending;
   }
 
   /** The figures to draw */
@@ -335,8 +326,8 @@ export class AmbientLife {
     return { object: w.obj, name: w.name, female: w.look.female, role, doing, mood, from: w.fromRoom, to: w.toRoom, errand: w.errandRoom };
   }
 
-  /** The nav grid, once built (for the dev tools) */
-  get nav(): NavGrid | null {
+  /** The nav grid (for the dev tools) */
+  get nav(): NavGrid {
     return this.grid;
   }
 
@@ -394,19 +385,6 @@ export class AmbientLife {
   }
 
   update(dt: number, frame: AmbientFrame): void {
-    if (this.builder) {
-      const start = performance.now();
-      while (performance.now() - start < BUILD_BUDGET_MS) {
-        const r = this.builder.next();
-        if (r.done) {
-          this.grid = r.value;
-          this.builder = null;
-          this.pointsPending = true;
-          break;
-        }
-      }
-      return;
-    }
     if (this.pointsPending) {
       // The next frame: where the doors are, and on we go
       this.pointsPending = false;

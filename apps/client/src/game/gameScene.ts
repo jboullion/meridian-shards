@@ -20,8 +20,8 @@ import {
 import {
   AMBIENT_ROOMS, AMBIENT_SCALE, type AmbientRoomSpec, AmbientLife, LiveRoom, MOVEON, PlayerMover, REMOTE_VIEW, animStep, isAmbientId, localRes, localResName, townsfolkArt,
   Critters, batsOf, critterArt, decodeNavGrid, habitatOf, hourFromSun, isImpressiveBody, type AmbientExits, type DamageDealt, type NavGrid, type NavPoint, type RemoteView, type GameSession, type WorldObject,
-  FollowPlanner, navGridBuilder, AmbientStepper, type AmbientFrame, type AmbientSeed, Pets, petArt, type PetChoice, type PetOwner,
-  ARENA_SEND_EVERY, ARENA_TICK_MS, ARENA_ROOM_DEFS, ArenaSim, ArenaView, arenaArt, arenaFloorArea, arenaHourAt, arenaOpenAt, buildNavGrid, hashText, makeRoster, readArenaConfigs, seasonAt,
+  FollowPlanner, AmbientStepper, type AmbientFrame, type AmbientSeed, Pets, petArt, type PetChoice, type PetOwner,
+  ARENA_SEND_EVERY, ARENA_TICK_MS, ARENA_ROOM_DEFS, ArenaSim, ArenaView, arenaArt, arenaFloorArea, arenaHourAt, arenaOpenAt, hashText, makeRoster, readArenaConfigs, seasonAt,
   type AmbientPersonInfo, type ArenaEvent, type ArenaMessage, SPELL_FX, type SpellFx,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
@@ -76,8 +76,6 @@ const MAX_PETS = 12;
 const MIN_PLAYER_OVERLAYS = 7;
 /** Pets' names show within this many squares of the eye */
 const PET_NAME_RANGE = 10;
-/** Ours (following a friend): building a room's nav grid takes at most this long a frame (ms) */
-const FOLLOW_BUILD_MS = 3;
 /** Ours (following): don't turn towards a spot this close (fine units); we'd spin on it */
 const FOLLOW_TURN_SLOP = 96;
 /** Ours (health bars over friends): the bar's width a square away, and the least it shrinks to (px) */
@@ -297,10 +295,11 @@ export class GameScene {
   /** roomexits.json, once loaded (empty without one) */
   private ambientExits: Record<string, AmbientExits> | null = null;
   /**
-   * Nav grids by room file, kept for the session so each room's is read or built once: the asset
-   * build's (nav/*.nav), else built here ("build" until the ambient life has made it)
+   * Nav grids by room file, kept for the session so each room's is read once: the server's, from
+   * the asset build (nav/*.nav), or "none" for a room without one (no crowd, pets go straight,
+   * Follow can't plan)
    */
-  private navGrids = new Map<string, NavGrid | "loading" | "build">();
+  private navGrids = new Map<string, NavGrid | "loading" | "none">();
   /** Development overrides of the current room's terrain and crowd (setTestRoom) */
   private testTerrain: string[] | null = null;
   private testCrowd: AmbientRoomSpec | null | undefined = undefined;
@@ -523,8 +522,6 @@ export class GameScene {
   private petLastAt: { x: number; y: number } | null = null;
   /** Following a friend: the plan, and whose object to walk after (their key; ids change) */
   private follow: { planner: FollowPlanner; key: string } | null = null;
-  /** A room's nav grid being built for following, a slice a frame */
-  private followBuild: { file: string; gen: Generator<void, NavGrid> } | null = null;
   /** Following stopped of itself (we moved, the way was lost): why, for GameView to tell the friend and the chat */
   onFollowStop?: (why: string) => void;
 
@@ -1344,12 +1341,12 @@ export class GameScene {
       this.ambientStep = null;
       const grid = this.navGrids.get(file);
       if (grid === undefined) return this.loadNavGrid(file, this.loaded.room);
-      if (grid === "loading") return;
+      if (grid === "loading" || grid === "none") return;
       // The room's crowd, the same for everyone in it (our server keeps its seed and start)
       const seed = this.crowdSeed(file);
       if (seed === "pending") return;
       this.ambientRoom = file;
-      const life = new AmbientLife(this.loaded.room, spec, this.ambientExits[file], seed?.seed, grid === "build" ? undefined : grid, this.waterTextures);
+      const life = new AmbientLife(this.loaded.room, spec, this.ambientExits[file], seed?.seed, grid);
       this.ambientStep = new AmbientStepper(life, seed);
       for (const f of townsfolkArt()) void this.loadBgf(localRes(f));
     }
@@ -1375,8 +1372,6 @@ export class GameScene {
     this.ambient = step.catchingUp ? null : step.life;
     if (!this.ambient) return;
     this.scatterAmbient();
-    // Built here: keep it for the next visit
-    if (this.navGrids.get(file) === "build" && this.ambient.nav) this.keepNavGrid(file, this.ambient.nav);
   }
 
   /**
@@ -1442,13 +1437,12 @@ export class GameScene {
     const file = this.arenaRoom;
     const grid = this.navGrids.get(file);
     if (grid === undefined) return void this.loadNavGrid(file, this.loaded.room);
-    if (grid === "loading") return;
+    if (grid === "loading" || grid === "none") return;
     const config = this.arenaConfigs[file] ?? this.arenaConfigs["tosarena.roo"]!;
     // Its season's roster as the gateway keeps it: the server's name, and the arena's own key
     const server = gameSocketUrl() + (ARENA_ROOM_DEFS[file]?.seasonKey ?? "");
     const season = seasonAt(Date.now());
-    const nav = grid === "build" ? buildNavGrid(this.loaded.room, this.waterTextures) : grid;
-    if (grid === "build") this.keepNavGrid(file, nav);
+    const nav = grid;
     const now = Date.now();
     const sim = new ArenaSim(nav, {
       config, roster: makeRoster(server, season, config), records: {}, champions: [], season, seed: hashText(`${server}|${now}`), now,
@@ -1566,18 +1560,18 @@ export class GameScene {
     for (let i = n; i < this.speechPool.length; i++) this.speechPool[i].style.display = "none";
   }
 
-  /** The asset build's nav grid for a room, or "build" when there's none (or it's for another version of the room) */
+  /** The server's nav grid for a room from the asset build, or "none" when there's none (or it's for another version of the room) */
   private loadNavGrid(file: string, room: Room): void {
     this.navGrids.set(file, "loading");
     const done = (bytes: Uint8Array | null) => {
-      const grid = bytes ? decodeNavGrid(bytes, room) : null;
-      this.keepNavGrid(file, grid ?? "build");
+      const grid = bytes ? decodeNavGrid(bytes, room, this.waterTextures) : null;
+      this.keepNavGrid(file, grid ?? "none");
     };
     this.assets.navGrid(file).then(done, () => done(null));
   }
 
   /** At most a few rooms' grids are kept (a city's is a few hundred KB), the oldest dropped */
-  private keepNavGrid(file: string, grid: NavGrid | "build"): void {
+  private keepNavGrid(file: string, grid: NavGrid | "none"): void {
     this.navGrids.delete(file);
     this.navGrids.set(file, grid);
     while (this.navGrids.size > NAV_GRIDS_KEPT) this.navGrids.delete(this.navGrids.keys().next().value!);
@@ -2604,7 +2598,8 @@ export class GameScene {
       this.petLastAt = null;
     }
     const grid = this.navGrids.get(this.roomFile);
-    this.pets.setGrid(grid && typeof grid === "object" ? grid : this.ambientRoom === this.roomFile ? (this.ambient?.nav ?? null) : null);
+    if (grid === undefined) this.loadNavGrid(this.roomFile, loaded.room);
+    this.pets.setGrid(grid && typeof grid === "object" ? grid : null);
     const owners: (PetOwner & { d: number })[] = [];
     // Ours, at the pace we go (squares per 10 s, as the server's speeds)
     const at = { x: this.mover.x, y: this.mover.y };
@@ -2693,32 +2688,14 @@ export class GameScene {
     if (why) this.stopFollowing(why);
   }
 
-  /** The room's nav grid for following: the asset build's or the ambient life's, else built here a slice a frame */
+  /** The room's nav grid for following, or null while it loads or when the room has none */
   private followGrid(): NavGrid | null {
     const file = this.roomFile;
     const loaded = this.loaded;
     if (!file || !loaded) return null;
     const grid = this.navGrids.get(file);
-    if (grid && typeof grid === "object") return grid;
-    if (this.ambientRoom === file && this.ambient?.nav) return this.ambient.nav;
-    if (grid === undefined) {
-      this.loadNavGrid(file, loaded.room);
-      return null;
-    }
-    if (grid === "loading") return null;
-    // "build": the ambient life builds its own; otherwise we do
-    if (this.ambientRoom === file && this.ambient) return null;
-    if (this.followBuild?.file !== file) this.followBuild = { file, gen: navGridBuilder(loaded.room, 2, this.waterTextures) };
-    const end = performance.now() + FOLLOW_BUILD_MS;
-    while (performance.now() < end) {
-      const r = this.followBuild.gen.next();
-      if (r.done) {
-        this.followBuild = null;
-        this.keepNavGrid(file, r.value);
-        return r.value;
-      }
-    }
-    return null;
+    if (grid === undefined) this.loadNavGrid(file, loaded.room);
+    return grid && typeof grid === "object" ? grid : null;
   }
 
   /** This frame of following: whether to walk (we turn to face the way here), or null to stand */

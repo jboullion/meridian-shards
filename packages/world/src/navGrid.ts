@@ -1,15 +1,15 @@
-// Ours: where people can walk in a room, for the ambient townsfolk (ambient/). The original
-// client never walks anything itself, and blakserv has no path finding to port (roofile.c is
-// BSP only), so this is our own: a grid of half squares over the room, a cell walkable when it
-// stands on a dry floor with headroom, clear of walls a person can't pass, and linked to its eight
-// neighbours when no such wall lies between them. A* finds a path over it, and the path is pulled
-// tight so walkers go straight where they can.
+// Ours: where people can walk in a room, for the ambient townsfolk (ambient/), pets, Follow, the
+// arena's fighters and the AI playtester. The grid is blakserv's (navgrid.c, ADR 0029): half
+// squares over the room, a cell walkable where a monster could stand by the server's own move
+// rule, and linked to its eight neighbours where it could walk between them. The server exports
+// it (`save navgrids`) and the asset build ships it as nav/<room>.nav; nothing builds one here.
+// A* finds a path over it, and the path is pulled tight so walkers go straight where they can.
 //
-// Walls block the way move.c IntersectNode decides (a high step, a low ceiling, or a wall not
-// WF_PASSABLE), judged once per wall and side here, so a query is a few segment tests against
-// the walls bucketed near it instead of a walk down the BSP tree.
+// The room's blocking walls are indexed here too, for `walkable`: walls block the way move.c
+// IntersectNode decides (a high step, a low ceiling, or a wall not WF_PASSABLE), judged once per
+// wall and side, so a query is a few segment tests against the walls bucketed near it.
 
-import { FINENESS, SF, WF, ceilingHeightAt, floorHeightAt, leafAt, type Room, type Wall } from "@shards/formats";
+import { FINENESS, SF, WF, floorHeightAt, leafAt, type Room, type Wall } from "@shards/formats";
 
 /**
  * Cell size in fine units: half a square. Cell centres are on the squares' corners and centres
@@ -17,9 +17,9 @@ import { FINENESS, SF, WF, ceilingHeightAt, floorHeightAt, leafAt, type Room, ty
  * middle.
  */
 export const NAV_CELL = FINENESS / 2;
-/** How far a cell's centre keeps from a blocking wall, and a path from one (fine units): about
- * move.c's half a player's width, so a player could walk every path too */
+/** How far the walls are indexed around (fine units): blakserv's NAV_CLEARANCE */
 const CELL_CLEARANCE = 280;
+/** How far a straight walk keeps from a blocking wall: about move.c's half a player's width */
 const PATH_CLEARANCE = 260;
 /** From a point off the grid's centres (a door) to the cell next to it: just no wall between */
 const REACH_CLEARANCE = 64;
@@ -169,10 +169,6 @@ export function cellAt(g: NavGrid, x: number, y: number): number {
 }
 
 /**
- * Build the grid a few rows at a time: each `next()` does some work, and the last returns the
- * grid. `buildNavGrid` runs it to the end at once.
- */
-/**
  * A room's grid with no cells walkable yet, and its blocking walls indexed: enough for
  * `walkable` (ambient critters, which go straight and need no paths)
  */
@@ -203,122 +199,50 @@ export function navWalls(room: Room): NavGrid {
 }
 
 /**
- * @param waterTextures floor textures that are water though their sector has no depth (Raza's
- *   pool): no one walks there either
+ * The server's grid as it writes it (navgrid.c NavWriteFile): "NAVG", the format version, the
+ * room file's checksum (Room.security), columns and rows (u16), then the walkable cells (a bit
+ * each), each cell's links and each cell's flags (a byte each).
  */
-export function* navGridBuilder(room: Room, rowsPerStep = 8, waterTextures: ReadonlySet<number> = new Set()): Generator<void, NavGrid> {
-  const g = navWalls(room);
-  const { cols, rows, blockers } = g;
-  /** The floor height at each cell's centre */
-  const floors = new Float32Array(cols * rows);
-
-  // Cells: on a dry floor with headroom, clear of walls
-  const near = new Set<number>();
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const i = r * cols + c;
-      const { x, y } = cellCentre(g, i);
-      const leaf = leafAt(room, x, y);
-      if (!leaf?.sector) continue;
-      const s = room.sectors[leaf.sector - 1];
-      if (s.flags & SF.DEPTH_MASK || waterTextures.has(s.floorType)) continue;
-      const floor = floorHeightAt(s, x, y);
-      if (ceilingHeightAt(s, x, y) - floor < PLAYER_HEIGHT) continue;
-      near.clear();
-      blockersNear(g, x, y, x, y, CELL_CLEARANCE, near);
-      let clear = true;
-      for (const bi of near)
-        if (pointSegment2(x, y, blockers[bi]) < CELL_CLEARANCE * CELL_CLEARANCE) {
-          clear = false;
-          break;
-        }
-      if (!clear) continue;
-      g.walk[i] = 1;
-      floors[i] = floor;
-    }
-    if (r % rowsPerStep === rowsPerStep - 1) yield;
-  }
-
-  // Links, each way checked once (E, SE, S, SW) and mirrored
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const i = r * cols + c;
-      if (!g.walk[i]) continue;
-      const a = cellCentre(g, i);
-      for (let d = 0; d < 4; d++) {
-        const [dc, dr] = DIRS[d];
-        const nc = c + dc,
-          nr = r + dr;
-        if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
-        const j = nr * cols + nc;
-        if (!g.walk[j] || Math.abs(floors[i] - floors[j]) > MAX_STEP_HEIGHT) continue;
-        const b = cellCentre(g, j);
-        const there = walkable(g, a.x, a.y, b.x, b.y);
-        const back = walkable(g, b.x, b.y, a.x, a.y);
-        if (there) g.links[i] |= 1 << d;
-        if (back) g.links[j] |= 1 << (d + 4);
-      }
-    }
-    if (r % rowsPerStep === rowsPerStep - 1) yield;
-  }
-  yield;
-  // No cutting corners: a diagonal needs both sides open
-  for (let i = 0; i < cols * rows; i++) {
-    const l = g.links[i];
-    if (!l) continue;
-    let out = l;
-    for (const d of [1, 3, 5, 7]) if (l & (1 << d) && (!(l & (1 << (d - 1))) || !(l & (1 << ((d + 1) & 7))))) out &= ~(1 << d);
-    g.links[i] = out;
-  }
-  yield;
-  labelAreas(g);
-  return g;
-}
-
-export function buildNavGrid(room: Room, waterTextures?: ReadonlySet<number>): NavGrid {
-  const it = navGridBuilder(room, 1 << 30, waterTextures);
-  for (;;) {
-    const r = it.next();
-    if (r.done) return r.value;
-  }
-}
-
-/**
- * A built grid as bytes, so the asset build can make it once for everyone (nav/<room>.nav):
- * "NAVG", the format version, the room file's checksum (Room.security), columns and rows (u16),
- * then the walkable cells (a bit each) and each cell's links (a byte each). The walls are indexed
- * again from the room when it's read.
- */
-export const NAV_FORMAT = 2;
+export const NAV_FORMAT = 3;
 const NAV_MAGIC = [0x4e, 0x41, 0x56, 0x47];
-
-export function encodeNavGrid(g: NavGrid, room: Room): Uint8Array {
-  const n = g.cols * g.rows;
-  const out = new Uint8Array(16 + Math.ceil(n / 8) + n);
-  const dv = new DataView(out.buffer);
-  out.set(NAV_MAGIC, 0);
-  dv.setUint32(4, NAV_FORMAT, true);
-  dv.setUint32(8, room.security >>> 0, true);
-  dv.setUint16(12, g.cols, true);
-  dv.setUint16(14, g.rows, true);
-  for (let i = 0; i < n; i++) if (g.walk[i]) out[16 + (i >> 3)] |= 1 << (i & 7);
-  out.set(g.links, 16 + Math.ceil(n / 8));
-  return out;
-}
+/** Cell flags: the sector has depth (monsters wade; people here keep out) */
+const NAVF_WATER = 1;
 
 /**
- * A grid from `encodeNavGrid`'s bytes, or null when they're for another room, another version of
- * this one (its checksum differs) or an older format: then build it instead.
+ * A grid from the server's bytes, or null when they're for another room, another version of
+ * this one (its checksum differs) or another format. Water is closed: cells in sectors with
+ * depth, and on `waterTextures` (floors painted as water though the sector has none: Raza's pool).
  */
-export function decodeNavGrid(bytes: Uint8Array, room: Room): NavGrid | null {
+export function decodeNavGrid(bytes: Uint8Array, room: Room, waterTextures: ReadonlySet<number> = new Set()): NavGrid | null {
   if (bytes.length < 16 || NAV_MAGIC.some((m, k) => bytes[k] !== m)) return null;
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (dv.getUint32(4, true) !== NAV_FORMAT || dv.getUint32(8, true) !== room.security >>> 0) return null;
   const g = navWalls(room);
   const n = g.cols * g.rows;
-  if (dv.getUint16(12, true) !== g.cols || dv.getUint16(14, true) !== g.rows || bytes.length !== 16 + Math.ceil(n / 8) + n) return null;
+  const bits = Math.ceil(n / 8);
+  if (dv.getUint16(12, true) !== g.cols || dv.getUint16(14, true) !== g.rows || bytes.length !== 16 + bits + 2 * n) return null;
   for (let i = 0; i < n; i++) g.walk[i] = (bytes[16 + (i >> 3)] >> (i & 7)) & 1;
-  g.links.set(bytes.subarray(16 + Math.ceil(n / 8)));
+  g.links.set(bytes.subarray(16 + bits, 16 + bits + n));
+  const flags = bytes.subarray(16 + bits + n);
+  for (let i = 0; i < n; i++) {
+    if (!g.walk[i]) continue;
+    if (flags[i] & NAVF_WATER) g.walk[i] = 0;
+    else if (waterTextures.size) {
+      const { x, y } = cellCentre(g, i);
+      const leaf = leafAt(room, x, y);
+      if (leaf?.sector && waterTextures.has(room.sectors[leaf.sector - 1].floorType)) g.walk[i] = 0;
+    }
+  }
+  // No ways into or out of a closed cell
+  for (let i = 0; i < n; i++) {
+    if (!g.walk[i]) {
+      g.links[i] = 0;
+      continue;
+    }
+    let l = g.links[i];
+    for (let d = 0; d < 8; d++) if (l & (1 << d) && !g.walk[i + DIRS[d][1] * g.cols + DIRS[d][0]]) l &= ~(1 << d);
+    g.links[i] = l;
+  }
   labelAreas(g);
   return g;
 }

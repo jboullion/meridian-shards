@@ -18,7 +18,7 @@ import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseRoo } from "@shards/formats";
 import {
-  ARENA_ROOM_DEFS, ARENA_ROOM_FILES, ARENA_SEND_EVERY, ARENA_TICK_MS, ArenaSim, arenaFloorArea, arenaHourAt, buildNavGrid, championOf, decodeNavGrid,
+  ARENA_ROOM_DEFS, ARENA_ROOM_FILES, ARENA_SEND_EVERY, ARENA_TICK_MS, ArenaSim, arenaFloorArea, arenaHourAt, championOf, decodeNavGrid,
   hashText, makeRoster, seasonAt, type ArenaChampion, type ArenaConfig, type ArenaRecord, type NavGrid, type RosterEntry,
 } from "@shards/world";
 
@@ -118,7 +118,8 @@ export class ArenaHost {
     }
     const parsed = parseRoo(new Uint8Array(readFileSync(roo)));
     const nav = join(this.opts.assetsDir, "nav", room.replace(/\.roo$/, ".nav"));
-    const grid = (existsSync(nav) ? decodeNavGrid(new Uint8Array(readFileSync(nav)), parsed) : null) ?? buildNavGrid(parsed);
+    const grid = existsSync(nav) ? decodeNavGrid(new Uint8Array(readFileSync(nav)), parsed) : null;
+    if (!grid) this.log(`arena: no current ${nav}, so no arena there on the gateway`);
     this.grids.set(room, grid);
     return grid;
   }

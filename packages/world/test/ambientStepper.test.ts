@@ -2,7 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { parseRoo } from "@shards/formats";
-import { AMBIENT_ROOMS, AMBIENT_SLOT_MS, AMBIENT_TICK_MS, AmbientLife, AmbientStepper, buildNavGrid, slotSeed, type AmbientExits } from "../src/index.ts";
+import { AMBIENT_ROOMS, AMBIENT_SLOT_MS, AMBIENT_TICK_MS, AmbientLife, AmbientStepper, slotSeed, type AmbientExits } from "../src/index.ts";
+import { navGridOf } from "./navFixture.ts";
 
 const ASSETS = join(import.meta.dirname, "../../../dist/assets");
 const have = existsSync(join(ASSETS, "tosinn.roo")) && existsSync(join(ASSETS, "roomexits.json"));
@@ -23,7 +24,7 @@ describe.skipIf(!have)("the same crowd for friends (ADR 0005 section 6)", () => 
   test("someone arriving late catches up to the crowd someone there all along sees", () => {
     const room = parseRoo(new Uint8Array(readFileSync(join(ASSETS, "tosinn.roo"))));
     const exits = JSON.parse(readFileSync(join(ASSETS, "roomexits.json"), "utf8")) as Record<string, AmbientExits>;
-    const grid = buildNavGrid(room);
+    const grid = navGridOf(room);
     const shared = { seed: 99, since: 1_000_000 };
     const make = () => new AmbientStepper(new AmbientLife(room, AMBIENT_ROOMS["tosinn.roo"], exits["tosinn.roo"], shared.seed, grid), shared);
     const frame = { player: null, scale: 1, hour: 14 };

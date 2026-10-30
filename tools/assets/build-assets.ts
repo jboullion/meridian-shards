@@ -24,7 +24,8 @@
 // And roomlinks.json, which rooms connect to which, from the Kod source (roomLinks.ts), so
 // the client can load the rooms next to yours ahead of time, and roomexits.json, where each
 // room's doors are, for the ambient townsfolk (ours) to walk between, and nav/<room>.nav, where
-// they can walk in each room that has them (navGrid.ts), and roomterrain.json, each room's
+// people can walk in each room (the server's nav grids: blakserv `save navgrids` writes
+// run/server/nav, ADR 0029), and roomterrain.json, each room's
 // terrain (viTerrain_type), for what critters scurry about there, and watertextures.json, floor
 // textures that are water even where the sector has no depth (waterTextures.ts), and
 // floortextures.json, which floors are grass, earth or rock, for Ground Detail (floorTextures.ts),
@@ -52,11 +53,9 @@ import { generateFrom, readSources } from "../quests/generate.ts";
 import { worldFrom } from "../quests/world.ts";
 import { buildRoomExits, buildRoomLinks, buildRoomList, buildRoomTerrain } from "./roomLinks.ts";
 import { parseRoo } from "../../packages/formats/src/index.ts";
-import { buildNavGrid, encodeNavGrid } from "../../packages/world/src/navGrid.ts";
 import { findWaterTextures } from "./waterTextures.ts";
 import { averageColor, classifyFloor, isCobbled } from "./floorTextures.ts";
 import { gridTextureName, parseBgf } from "../../packages/formats/src/index.ts";
-import { AMBIENT_ROOMS } from "../../packages/world/src/ambient/ambientRooms.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const { values: opt } = parseArgs({
@@ -318,20 +317,39 @@ console.log("foliage.json, windows.json: copied");
   console.log(`${names.join(", ")}: copied`);
 }
 
-// Where townsfolk can walk in the rooms that have them (ours: navGrid.ts), built once here for
-// every player instead of in each client on entering
+// Where people can walk in each room (ours, ADR 0029): the server's nav grids, as blakserv
+// exports them (`save navgrids` on the maintenance port writes run/server/nav/<room>.nav). Only
+// those for the room files shipped here: one for another version of a room (its checksum
+// differs) is left out, and the export is wanted again.
 mkdirSync(join(OUT, "nav"), { recursive: true });
 let navRooms = 0;
-for (const roo of Object.keys(AMBIENT_ROOMS)) {
-  if (!existsSync(join(OUT, roo))) continue;
-  const room = parseRoo(new Uint8Array(readFileSync(join(OUT, roo))));
-  const nav = encodeNavGrid(buildNavGrid(room, new Set(waterTextures)), room);
+const navStale: string[] = [];
+const navMissing: string[] = [];
+for (const roo of readdirSync(OUT).filter((f) => f.endsWith(".roo"))) {
   const name = `nav/${basename(roo, ".roo")}.nav`;
+  const from = join(RUN, name);
+  if (!existsSync(from)) {
+    // (a room file left here from a room the server no longer has needs none)
+    if (existsSync(join(RUN, "rooms", roo))) navMissing.push(roo);
+    continue;
+  }
+  const nav = readFileSync(from);
+  const security = new DataView(nav.buffer, nav.byteOffset, nav.byteLength).getUint32(8, true);
+  if (nav.length < 16 || security !== parseRoo(new Uint8Array(readFileSync(join(OUT, roo)))).security >>> 0) {
+    navStale.push(roo);
+    continue;
+  }
   writeFileSync(join(OUT, name), nav);
   files[name] = { size: nav.length, hash: createHash("sha1").update(nav).digest("hex").slice(0, 16), mtime: 0 };
   navRooms++;
 }
-console.log(`nav/*.nav: ${navRooms} rooms`);
+console.log(`nav/*.nav: ${navRooms} rooms from the server's export`);
+if (navMissing.length || navStale.length)
+  console.warn(
+    `nav/*.nav: ${navMissing.length} rooms have no export, ${navStale.length} have one for another version of the room` +
+      ` (${[...navStale, ...navMissing].slice(0, 6).join(", ")}${navStale.length + navMissing.length > 6 ? ", ..." : ""}).` +
+      ` With the server running: npm run maint -- "save navgrids" in shards-server (node tools/server.mjs maint "save navgrids"), then build the assets again.`,
+  );
 
 // The login screen's backgrounds (ours): the web copies of the screenshot tour's pictures
 // (tools/screenshots/backgrounds.json, npm run shots:backgrounds), as login/<id>.<layout>.webp,

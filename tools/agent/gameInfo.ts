@@ -4,7 +4,7 @@
 // body from the page's /assets (webData.ts WebGameData).
 
 import { parseRoo, type Room } from "../../packages/formats/src/index.ts";
-import { buildNavGrid, decodeNavGrid, type AmbientExits, type NavGrid, type QuestCatalog } from "../../packages/world/src/index.ts";
+import { decodeNavGrid, type AmbientExits, type NavGrid, type QuestCatalog } from "../../packages/world/src/index.ts";
 
 export interface RoomInfo {
   rid: number;
@@ -15,7 +15,8 @@ export interface RoomInfo {
 export interface LoadedRoom {
   file: string;
   room: Room;
-  grid: NavGrid;
+  /** The server's nav grid (nav/<room>.nav), or null when the asset build has none for it */
+  grid: NavGrid | null;
 }
 
 export interface GameInfo {
@@ -53,7 +54,7 @@ export abstract class GameIndex implements GameInfo {
     return this.rooms.find((r) => r.roo === file) ?? this.rooms.find((r) => r.name.toLowerCase() === w) ?? this.rooms.find((r) => r.name.toLowerCase().includes(w));
   }
 
-  /** As tools/gateway/arena.ts floor: the .nav when it's there and current, else built here */
+  /** As tools/gateway/arena.ts floor: the server's .nav when it's there and current */
   room(file: string): Promise<LoadedRoom | null> {
     let known = this.loaded.get(file);
     if (!known) {
@@ -62,7 +63,7 @@ export abstract class GameIndex implements GameInfo {
         if (!roo) return null;
         const room = parseRoo(roo);
         const nav = await this.read(`nav/${file.replace(/\.roo$/, ".nav")}`);
-        const grid = (nav ? decodeNavGrid(nav, room) : null) ?? buildNavGrid(room);
+        const grid = nav ? decodeNavGrid(nav, room) : null;
         return { file, room, grid };
       })();
       this.loaded.set(file, known);

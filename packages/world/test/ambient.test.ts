@@ -4,7 +4,8 @@ import { describe, expect, test } from "vitest";
 import { ANIMATE } from "@shards/protocol";
 import { kodToClient, parseRoo } from "@shards/formats";
 import { PlayerMover } from "../src/movement.ts";
-import { buildNavGrid, cellAt, decodeNavGrid, encodeNavGrid, findCells, findPath, isOpen } from "../src/navGrid.ts";
+import { cellAt, decodeNavGrid, findCells, findPath, isOpen } from "../src/navGrid.ts";
+import { navBytesOf, navGridOf } from "./navFixture.ts";
 import { AMBIENT_ID_BASE, isAmbientId, localRes, localResName } from "../src/ambient/ambientIds.ts";
 import { AmbientLife, seededRandom, type AmbientExits } from "../src/ambient/ambientLife.ts";
 import { AMBIENT_ROOMS, busyAt, hourFromSun, isErrandRoom, torchHours, weatherScale } from "../src/ambient/ambientRooms.ts";
@@ -204,9 +205,9 @@ describe("the time of day", () => {
 });
 
 describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
-  test("paths between Tos's doors are ones move.c lets a player walk", () => {
+  test("paths between Tos's doors on the server's grid are ones move.c lets a player walk", () => {
     const tos = room("tos.roo");
-    const g = buildNavGrid(tos);
+    const g = navGridOf(tos);
     const pts = exits()["tos.roo"].arrivals.map(([r, c]) => kodToClient(r, c));
     let walked = 0,
       arrived = 0;
@@ -237,40 +238,38 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
   }, 30000);
 
   test("no path between areas that don't connect", () => {
-    const g = buildNavGrid(room("tos.roo"));
+    const g = navGridOf(room("tos.roo"));
     const a = g.area.indexOf(1),
       b = g.area.indexOf(2);
     expect(findCells(g, a, b)).toBeNull();
     expect(findCells(g, a, g.area.lastIndexOf(1))).not.toBeNull();
   });
 
-  test("a grid built once (the asset build's nav/*.nav) reads back the same, for its own room only", () => {
+  test("the server's grid (nav/*.nav) reads for its own room only, with water closed", () => {
     const tos = room("tos.roo");
-    const g = buildNavGrid(tos);
-    const back = decodeNavGrid(encodeNavGrid(g, tos), tos)!;
-    expect(back).not.toBeNull();
-    expect(back.walk).toEqual(g.walk);
-    expect(back.links).toEqual(g.links);
-    expect(back.area).toEqual(g.area);
-    expect(back.blockers).toHaveLength(g.blockers.length);
-    // Another room, or another version of this one: build it instead
-    expect(decodeNavGrid(encodeNavGrid(g, tos), room("raza.roo"))).toBeNull();
-    expect(decodeNavGrid(encodeNavGrid(g, { ...tos, security: tos.security + 1 }), tos)).toBeNull();
+    const bytes = navBytesOf(tos)!;
+    const g = decodeNavGrid(bytes, tos)!;
+    expect(g).not.toBeNull();
+    expect(g.walk.some((w) => w)).toBe(true);
+    // No link leads into a closed cell
+    for (let i = 0; i < g.walk.length; i++) if (!g.walk[i]) expect(g.links[i]).toBe(0);
+    // Another room, or another version of this one: none
+    expect(decodeNavGrid(bytes, room("raza.roo"))).toBeNull();
+    expect(decodeNavGrid(bytes, { ...tos, security: tos.security + 1 })).toBeNull();
   });
 
-  test("a crowd on a grid built beforehand starts at once", () => {
+  test("a crowd starts at once on the room's grid", () => {
     const inn = room("razainn.roo");
-    const life = new AmbientLife(inn, AMBIENT_ROOMS["razainn.roo"], exits()["razainn.roo"], 3, buildNavGrid(inn));
+    const life = new AmbientLife(inn, AMBIENT_ROOMS["razainn.roo"], exits()["razainn.roo"], 3, navGridOf(inn));
     life.update(16, { player: null, scale: 1 });
     life.update(16, { player: null, scale: 1 });
     expect(life.ready).toBe(true);
     expect(life.objects().length).toBeGreaterThan(0);
   });
 
-  /** `prebuilt`: hand it its grid, so nothing depends on how fast the machine builds one */
-  function run(name: string, seconds: number, seed: number, prebuilt = false) {
+  function run(name: string, seconds: number, seed: number) {
     const r = room(name);
-    const life = new AmbientLife(r, AMBIENT_ROOMS[name], exits()[name], seed, prebuilt ? buildNavGrid(r) : undefined);
+    const life = new AmbientLife(r, AMBIENT_ROOMS[name], exits()[name], seed, navGridOf(r));
     const seen = new Set<number>();
     const counts: number[] = [];
     let offGrid = 0;
@@ -302,14 +301,14 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
   }, 30000);
 
   test("the same seed makes the same crowd", () => {
-    const a = run("razainn.roo", 20, 42, true).life.objects().map((o) => [o.x, o.y, o.info.iconRes]);
-    const b = run("razainn.roo", 20, 42, true).life.objects().map((o) => [o.x, o.y, o.info.iconRes]);
+    const a = run("razainn.roo", 20, 42).life.objects().map((o) => [o.x, o.y, o.info.iconRes]);
+    const b = run("razainn.roo", 20, 42).life.objects().map((o) => [o.x, o.y, o.info.iconRes]);
     expect(a).toEqual(b);
   }, 30000);
 
   test("at night the streets thin out and townsfolk carry torches; inn patrons don't", () => {
     const night = (name: string) => {
-      const life = new AmbientLife(room(name), AMBIENT_ROOMS[name], exits()[name], 4, buildNavGrid(room(name)));
+      const life = new AmbientLife(room(name), AMBIENT_ROOMS[name], exits()[name], 4, navGridOf(room(name)));
       for (let t = 0; t < 30000; t += 33) life.update(33, { player: null, scale: 1, hour: 2 });
       return life.objects();
     };
@@ -325,7 +324,7 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
 
   test("townsfolk go in at the middle of a door, not beside it", () => {
     const r = room("tos.roo");
-    const life = new AmbientLife(r, AMBIENT_ROOMS["tos.roo"], exits()["tos.roo"], 12, buildNavGrid(r));
+    const life = new AmbientLife(r, AMBIENT_ROOMS["tos.roo"], exits()["tos.roo"], 12, navGridOf(r));
     const gone = new Set<number>();
     let checked = 0;
     for (let t = 0; t < 120000; t += 33) {
@@ -343,7 +342,7 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
 
   test("guards pace a beat; the castles' knights carry their army's shield", () => {
     const keep = room("duke1.roo");
-    const life = new AmbientLife(keep, AMBIENT_ROOMS["duke1.roo"], exits()["duke1.roo"], 6, buildNavGrid(keep));
+    const life = new AmbientLife(keep, AMBIENT_ROOMS["duke1.roo"], exits()["duke1.roo"], 6, navGridOf(keep));
     const start = { x: 50 * 1024, y: 52 * 1024 };
     for (let t = 0; t < 20000; t += 33) life.update(33, { player: start, scale: 1, hour: 12 });
     const ws = inside(life).walkers;
@@ -358,7 +357,7 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
 
   test("a spell sends them running; rain thins the streets", () => {
     const r = room("tos.roo");
-    const grid = buildNavGrid(r);
+    const grid = navGridOf(r);
     const life = new AmbientLife(r, AMBIENT_ROOMS["tos.roo"], exits()["tos.roo"], 8, grid);
     for (let t = 0; t < 10000; t += 33) life.update(33, { player: null, scale: 1, hour: 12 });
     const folk = inside(life).walkers.find((w) => w.role === "folk" && w.fadeDir >= 0)!;
@@ -386,7 +385,7 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
   test("ghosts walk about see-through and say nothing, waved at, running or at night", () => {
     for (const name of ["ojas.roo", "ocornoth.roo"]) {
       const r = room(name);
-      const life = new AmbientLife(r, AMBIENT_ROOMS[name], exits()[name], 7, buildNavGrid(r));
+      const life = new AmbientLife(r, AMBIENT_ROOMS[name], exits()[name], 7, navGridOf(r));
       const seen = new Set<number>();
       let player: { x: number; y: number } | null = null;
       for (let t = 0; t < 60000; t += 33) {
@@ -413,7 +412,8 @@ describe.skipIf(!have)("nav grid and ambient life on real rooms", () => {
   }, 60000);
 
   test("nobody when the setting is off", () => {
-    const life = new AmbientLife(room("razainn.roo"), AMBIENT_ROOMS["razainn.roo"], exits()["razainn.roo"], 1);
+    const inn = room("razainn.roo");
+    const life = new AmbientLife(inn, AMBIENT_ROOMS["razainn.roo"], exits()["razainn.roo"], 1, navGridOf(inn));
     for (let t = 0; t < 5000; t += 33) life.update(33, { player: null, scale: 0 });
     expect(life.objects()).toHaveLength(0);
   });

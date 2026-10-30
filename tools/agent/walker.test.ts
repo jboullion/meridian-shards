@@ -66,7 +66,7 @@ describe.skipIf(!have)("walking real rooms", () => {
   it("walks across Raza in steps that never go through a wall", async () => {
     vi.useFakeTimers();
     const data = gameData();
-    const grid = (await data.room("raza.roo"))!.grid;
+    const grid = (await data.room("raza.roo"))!.grid!;
     // From outside the inn's door to outside the smithy's
     const { body, world, moves } = inRaza(data, 8, 27);
     const walking = walkTo(body, 18, 46);
