@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { ByteReader, ByteWriter, buildSay, decodePlayerText, utf8ToBytes, bytesToLatin1, SAY } from "@shards/protocol";
 import { chatLinkLabel, chatLinkToken, splitChatLinks } from "../src/chatLinks.ts";
-import { MAGIC_FLAGS_MASK, magicColour, magicShow } from "../src/magic.ts";
+import { MAGIC_FLAGS_MASK, magicColour, magicGlyph, magicShow } from "../src/magic.ts";
 import { formatServerMessage, parseMarkup } from "../src/text.ts";
 
 describe("player text as UTF-8 (ADR 0024)", () => {
@@ -54,6 +54,19 @@ describe("item links in chat (ADR 0024)", () => {
     expect(magicShow(item.flags)).toBe(6);
     expect(magicColour(item.flags)).toBe(3);
     expect(spans[1].color).toBe("white");
+  });
+
+  test("a token carries which magic of its colour, and one from before glyphs reads as the first", () => {
+    const glyphed = flags | (3 * 0x00004000);
+    const token = chatLinkToken("longswrd.bgf", 12, glyphed, "Ceremonial Longsword")!;
+    expect(token).toBe(`{i:longswrd:12:${(((flags & MAGIC_FLAGS_MASK) >>> 20) | (3 << 7)).toString(16)}|Ceremonial Longsword}`);
+    const item = splitChatLinks(parseMarkup(token, "white"))[0].item!;
+    expect(magicGlyph(item.flags)).toBe(3);
+    expect(magicColour(item.flags)).toBe(3);
+    expect(magicShow(item.flags)).toBe(6);
+    const old = splitChatLinks(parseMarkup(`{i:longswrd:12:${((flags & MAGIC_FLAGS_MASK) >>> 20).toString(16)}|Old Link}`, "white"))[0].item!;
+    expect(magicGlyph(old.flags)).toBe(0);
+    expect(magicColour(old.flags)).toBe(magicColour(flags));
   });
 
   test("malformed tokens stay text", () => {

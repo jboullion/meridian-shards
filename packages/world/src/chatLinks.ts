@@ -6,10 +6,13 @@
 import { MAGIC_FLAGS_MASK } from "./magic.ts";
 import type { ChatItemLink, TextSpan } from "./text.ts";
 
-const LINK = /\{i:([A-Za-z0-9_-]{1,32}):(\d{1,3}):([0-9a-f]{1,2})\|([^{}|]{1,80})\}/g;
+const LINK = /\{i:([A-Za-z0-9_-]{1,32}):(\d{1,3}):([0-9a-f]{1,3})\|([^{}|]{1,80})\}/g;
 
-/** The magic flag bits start here; the token carries them shifted down, in hex */
+/** The magic show and colour bits start here; the token carries them shifted down, in hex */
 const MAGIC_SHIFT = 20;
+/** ...and the glyph bits (14-15) above them, from bit 7 of the token's number */
+const GLYPH_SHIFT = 14;
+const GLYPH_BITS = 0x0000c000;
 
 /** Characters a linked name can't carry: the token's own, and the ~/` style codes */
 const NAME_UNSAFE = /[{}|~`]/g;
@@ -20,9 +23,14 @@ export function chatLinkToken(icon: string, translation: number, flags: number, 
   if (!m) return null;
   const clean = name.replace(NAME_UNSAFE, "").trim().slice(0, 80);
   if (!clean) return null;
-  const magic = ((flags & MAGIC_FLAGS_MASK) >>> MAGIC_SHIFT).toString(16);
+  const magic = ((((flags & MAGIC_FLAGS_MASK) & ~GLYPH_BITS) >>> MAGIC_SHIFT)
+    | (((flags & GLYPH_BITS) >>> GLYPH_SHIFT) << 7)).toString(16);
   return `{i:${m[1].toLowerCase()}:${translation & 0xff}:${magic}|${clean}}`;
 }
+
+/** A token's magic number back into flag bits (a token from before glyphs has none) */
+const linkFlags = (n: number): number =>
+  (((n & 0x7f) << MAGIC_SHIFT) | (((n >> 7) & 3) << GLYPH_SHIFT)) & MAGIC_FLAGS_MASK;
 
 /** What a link shows as text, in the chat input and anywhere icons aren't drawn */
 export const chatLinkLabel = (name: string): string => `[${name.replace(NAME_UNSAFE, "").trim().slice(0, 80)}]`;
@@ -43,7 +51,7 @@ export function splitChatLinks(spans: TextSpan[]): TextSpan[] {
       const item: ChatItemLink = {
         file: m[1].toLowerCase(),
         translation: Number(m[2]) & 0xff,
-        flags: (parseInt(m[3], 16) << MAGIC_SHIFT) & MAGIC_FLAGS_MASK,
+        flags: linkFlags(parseInt(m[3], 16)),
         name: m[4].trim(),
       };
       out.push({ ...span, text: `[${item.name}]`, item });

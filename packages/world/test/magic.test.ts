@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ByteReader, UC } from "@shards/protocol";
-import { MAGIC_SHOW, magicColour, magicShow, magicTier, readMagicName } from "../src/magic.ts";
+import { MAGIC_SHOW, magicColour, magicGlyph, magicShow, magicTier, readMagicName } from "../src/magic.ts";
 import { fixture, userCommand } from "../../protocol/test/fixture.ts";
 
 const UC_MAGIC_NAME = userCommand(UC.MAGIC_NAME, "packages/world/src/magic.ts");
@@ -26,6 +26,15 @@ describe("magic item flags", () => {
   it("reads the necromancers' colour, the highest bits used", () => {
     expect(magicColour(flags(0, MAGIC_SHOW.ENORMOUS, 15))).toBe(15);
     expect(magicTier(flags(0, MAGIC_SHOW.ENORMOUS, 15))).toBe(3);
+  });
+
+  it("reads which magic of its colour it is from bits 14-15, apart from the rest", () => {
+    // blakston.khd OF_MAGIC_GLYPH_MUL 0x00004000: storm resistance, the third yellow magic
+    const f = flags(0x2000 | 2 * 0x00004000, MAGIC_SHOW.REVEALED, 3);
+    expect(magicGlyph(f)).toBe(2);
+    expect(magicColour(f)).toBe(3);
+    expect(magicShow(f)).toBe(MAGIC_SHOW.REVEALED);
+    expect(magicGlyph(flags(0x10000, MAGIC_SHOW.ENORMOUS, 15))).toBe(0);
   });
 
   it("has no tier for hidden magic or revealed magic without one", () => {

@@ -18,7 +18,7 @@ import type { Settings } from "../settings.ts";
 import { MiniMap } from "./MiniMap.tsx";
 import type { MapWay } from "../questWays.ts";
 import type { MapAnnotation } from "../annotations.ts";
-import { magicRing } from "./magicRing.ts";
+import { MagicMarkBadge, magicMark } from "./magicMark.tsx";
 import { statRows } from "../statRows.ts";
 import { Button } from "./kit.tsx";
 import { AbilitiesList } from "./AbilitiesList.tsx";
@@ -80,17 +80,17 @@ export function ObjIcon({
 }) {
   const key = object ? icons.key(object, opts) : "";
   const url = useAsyncImage(key, () => (object ? icons.object(object, opts) : null));
-  const ring = magicRing(object);
+  const mark = magicMark(object);
   return (
     <span
-      className={`obj-icon ${ring?.className ?? ""} ${className ?? ""}`}
-      style={ring?.style}
+      className={`obj-icon ${mark ? "magic" : ""} ${className ?? ""}`}
       title={title}
       onContextMenu={onContextMenu}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
     >
       {url && <img src={url} alt="" draggable={false} />}
+      {mark && <MagicMarkBadge mark={mark} />}
     </span>
   );
 }

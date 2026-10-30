@@ -10,9 +10,11 @@ const SHOW_MUL = 0x00100000;
 const SHOW_MASK = 0x00700000;
 const COLOUR_MUL = 0x00800000;
 const COLOUR_MASK = 0x07800000;
+const GLYPH_MUL = 0x00004000;
+const GLYPH_MASK = 0x0000c000;
 
-/** Every flag bit the magic ring reads (show and colour) */
-export const MAGIC_FLAGS_MASK = SHOW_MASK | COLOUR_MASK;
+/** Every flag bit an item's magic mark reads (show, colour and glyph) */
+export const MAGIC_FLAGS_MASK = SHOW_MASK | COLOUR_MASK | GLYPH_MASK;
 
 /** blakston.khd MAGIC_SHOW_*: nothing, hidden magic, revealed magic with no tier, or a weapon's tier */
 export const MAGIC_SHOW = { NONE: 0, UNREVEALED: 1, REVEALED: 2, SLIGHT: 3, MODERATE: 4, POTENT: 5, ENORMOUS: 6 } as const;
@@ -20,8 +22,11 @@ export const MAGIC_SHOW = { NONE: 0, UNREVEALED: 1, REVEALED: 2, SLIGHT: 3, MODE
 /** What an item's icon shows (MAGIC_SHOW) */
 export const magicShow = (flags: number): number => (flags & SHOW_MASK) / SHOW_MUL;
 
-/** The ring's colour, blakston.khd MAGIC_COLOUR_* (0 for none) */
+/** The mark's colour, blakston.khd MAGIC_COLOUR_* (0 for none) */
 export const magicColour = (flags: number): number => (flags & COLOUR_MASK) / COLOUR_MUL;
+
+/** Which magic of its colour an item has, blakston.khd MAGIC_GLYPH_* (0 to 3): its glyph */
+export const magicGlyph = (flags: number): number => (flags & GLYPH_MASK) / GLYPH_MUL;
 
 /** A weapon's tier, 0 (slight) to 3 (enormous), or null when it shows none */
 export function magicTier(flags: number): number | null {

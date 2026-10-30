@@ -1,5 +1,5 @@
-// Ours (the magic item revamp): a magic item's colour, the same everywhere it's drawn: the ring
-// round its icon (apps/client ui/magicRing.ts) and, phase 4, the ring round a wielded magic
+// Ours (the magic item revamp): a magic item's colour, the same everywhere it's drawn: the disc
+// of its mark on its icon (apps/client ui/magicMark.tsx) and, phase 4, the ring round a wielded magic
 // weapon (sprites.ts on figures in the world, apps/client screenOverlays.ts in your own hand).
 // The server packs the item's magic into object-flag bits (shards-server blakston.khd
 // OF_MAGIC_*): what shows in bits 20-22, the colour in 23-26 (@shards/world magic.ts reads them
