@@ -116,6 +116,10 @@ const sources: Source[] = [
 const ROOMS_SOURCE = "server rooms";
 const REMOVED_ROOMS = new Set(["newroom.roo", "oc07.roo", "ocw1.roo", "toscrypt2.roo", "toseast_old.roo"]);
 
+// Ours: game files we ship under a truer name. thunderclap.ogg is a hammer ringing on an anvil,
+// not thunder (2026-10-29: taken out of the ambient thunder).
+const RENAMED: Readonly<Record<string, string>> = { "thunderclap.ogg": "anvil-strike.ogg" };
+
 function* walk(dir: string, recursive: boolean): Generator<string> {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
@@ -133,7 +137,8 @@ for (const s of sources) {
   }
   let n = 0;
   for (const p of walk(s.dir, s.recursive)) {
-    const base = (s.prefix ?? "") + basename(p).toLowerCase();
+    const raw = (s.prefix ?? "") + basename(p).toLowerCase();
+    const base = RENAMED[raw] ?? raw;
     if (!(s.exts ?? EXTS).has(extname(base))) continue;
     if (s.filter && !s.filter(base)) continue;
     if (extname(base) === ".roo" && (s.label !== ROOMS_SOURCE || REMOVED_ROOMS.has(base))) continue;

@@ -122,7 +122,7 @@ const FRYING = "frying.ogg";
 /** poisfogc.kod PoisonFogCloud_poison_snd */
 const COUGH = "psncough.ogg";
 const ZAP = ["zaphit1.ogg", "zaphit2.ogg", "zaphit3.ogg"];
-const THUNDER = ["thunderclap.ogg", "amb_thunder1.ogg", "amb_thunder2.ogg", "amb_thunder3.ogg", "amb_thunder4.ogg"];
+const THUNDER = ["amb_thunder1.ogg", "amb_thunder2.ogg", "amb_thunder3.ogg", "amb_thunder4.ogg"];
 
 export class AmbientSounds {
   private readonly audio: GameAudio;

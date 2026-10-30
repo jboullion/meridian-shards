@@ -29,7 +29,7 @@ To hear one cue by itself in dev: `window.shards.gameScene.ambientSoundBoard.aud
 | Death cry (`death`) | An arena fighter is beaten | `pdeath.ogg`, `pdeathf.ogg` (player.kod's) | 0.5 | |
 | Running from a spell | Townsfolk scatter | `ouchm1`-`4`, `ouchf1`-`4.ogg` | 0.35 | Pitched up a little |
 | Dice, drink (`dice`, `drink`) | An inn patron, now and then | `dice.ogg`, `drink.ogg` | 0.45, 0.175 | |
-| Thunder (`thunder`) | After each lightning strike | `thunderclap.ogg`, `amb_thunder1`-`4.ogg` | 0.45-0.95 | 1.5-2.7 s after the flash, quieter and duller the further off, panned toward it |
+| Thunder (`thunder`) | After each lightning strike | `amb_thunder1`-`4.ogg` | 0.45-0.95 | 1.5-2.7 s after the flash, quieter and duller the further off, panned toward it |
 | Critters (`critter`) | A critter within 8 squares, every 5-14 s; never a rat (they only squeal dying) | its Kod "aware" sound (`bsp_awr`, `cnt_awr`, `ant_awr`, `scp_awr`, `bunny_awr`) | 0.28 | Pitched up, as they're small |
 | Fish (`splash`) | A fish leaps and lands | `splash.ogg` | 0.25 / 0.45 | |
 | Puddle steps (`step`) | Walking or running through a puddle | `weatstp1.ogg` (Raza's wading sound) | 0.3 | Every 430 ms walking, 300 ms running |
