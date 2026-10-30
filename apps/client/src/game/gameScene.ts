@@ -266,6 +266,11 @@ export class GameScene {
    * is null while the crowd catches up (docs/adr/0005-friends.md 6); `ambientStep` steps it
    */
   private ambient: AmbientLife | null = null;
+  /**
+   * Ours (2026-10-30): the faction war's battle (GameView sets it from its FactionWarStore): while
+   * one is called or fought in this room, its townsfolk, and so their chatter, are gone
+   */
+  warBattle: () => { room: string; state: number } | null = () => null;
   private ambientStep: AmbientStepper | null = null;
   private ambientRoom = "";
   /** The crowd to make for a room: asked of the friends feature, "pending" until it says */
@@ -1327,7 +1332,7 @@ export class GameScene {
     const config = spec?.arena ? this.arenaConfigs[this.roomFile] : undefined;
     const arenaNow = !!spec?.arena && level !== "off" && (!config || arenaOpenAt(config.open, this.gameHour()));
     this.updateArena(dt, arenaNow ? this.roomFile : null);
-    if (!spec || arenaNow || !spec.count || level === "off" || !this.ambientExits || !this.loaded) {
+    if (!spec || arenaNow || !spec.count || level === "off" || !this.ambientExits || !this.loaded || this.battleHere()) {
       this.ambient = null;
       this.ambientStep = null;
       this.ambientRoom = "";
@@ -1805,6 +1810,14 @@ export class GameScene {
   /** Ours: the ambient sounds (dev tools: window.shards.gameScene.ambientSounds.audition("thunder")) */
   get ambientSoundBoard(): AmbientSounds {
     return (this.ambientSounds ??= new AmbientSounds(this.audio));
+  }
+
+  /** Ours: a faction war battle is called or fought in this room (warBattle; by the room's name) */
+  private battleHere(): boolean {
+    const b = this.warBattle();
+    const p = this.session.world.player;
+    if (!b || !b.state || !p) return false;
+    return b.room === (this.session.resource(p.roomNameRes) ?? "");
   }
 
   /** The room's ambient life (dev tools: window.shards.gameScene.ambientLife) */

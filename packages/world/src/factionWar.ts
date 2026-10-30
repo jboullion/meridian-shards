@@ -25,8 +25,8 @@ export const LIEGE_SHORT: Readonly<Record<number, string>> = {
 export const WAR_STATE = { NONE: 0, MUSTER: 1, FIGHT: 2 } as const;
 export type WarState = (typeof WAR_STATE)[keyof typeof WAR_STATE];
 
-/** The battle's flags */
-export const BATTLE_FLAG = { SIEGE: 1, SPAWNED: 2, OPEN_GROUND: 4 } as const;
+/** The battle's flags (ASSAULT: the storming of the defender's seat, after they lost their capital) */
+export const BATTLE_FLAG = { SIEGE: 1, SPAWNED: 2, OPEN_GROUND: 4, ASSAULT: 8 } as const;
 
 /** How a battle was decided (HOW_* in factionwar.kod) */
 export const BATTLE_HOW = { FIELD: 1, TIME: 2, UNWATCHED: 3 } as const;

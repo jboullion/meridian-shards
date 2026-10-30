@@ -19,7 +19,7 @@ export function WarButton({ store, onOpen, className, tooltips = true }: {
   const active = !!b && b.state !== WAR_STATE.NONE;
   const mine = store.status?.faction ?? FACTION.NEUTRAL;
   const ours = active && mine !== FACTION.NEUTRAL && (b.attacker === mine || b.defender === mine);
-  const label = active ? `The Faction War (J): ${b.flags & BATTLE_FLAG.SIEGE ? "a siege" : "a battle"} at ${b.room}` : "The Faction War (J)";
+  const label = active ? `The Faction War (J): ${b.flags & BATTLE_FLAG.ASSAULT ? "an assault" : b.flags & BATTLE_FLAG.SIEGE ? "a siege" : "a battle"} at ${b.room}` : "The Faction War (J)";
   return (
     <button
       type="button"

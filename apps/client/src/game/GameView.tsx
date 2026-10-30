@@ -305,6 +305,11 @@ export function GameView({
   const inputRef = useRef<HTMLInputElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<GameScene | null>(null);
+  // The war's store for the scene (warBattle), read through a ref so the scene isn't remade for it
+  const warRef = useRef(factionWar);
+  useEffect(() => {
+    warRef.current = factionWar;
+  }, [factionWar]);
   const [status, setStatus] = useState<GameSceneStatus | null>(null);
   /** The description dialog (dialog.c DisplayDescription) and its DESC_* buttons */
   const [desc, setDesc] = useState<{ look: LookResult; buttons: number } | null>(null);
@@ -894,6 +899,8 @@ export function GameView({
   useEffect(() => {
     const scene = new GameScene(canvasRef.current!, labelsRef.current!, session, assets, audio);
     sceneRef.current = scene;
+    // Ours: no townsfolk where the lieges' armies fight (GameScene.warBattle)
+    scene.warBattle = () => warRef.current.battle;
     scene.onStatus = setStatus;
     scene.onChatKey = () => inputRef.current?.focus();
     scene.onViewMode = (mode) => setViewNote({ mode, at: performance.now() });

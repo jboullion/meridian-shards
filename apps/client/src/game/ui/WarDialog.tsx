@@ -57,6 +57,14 @@ function Liege({ faction, short }: { faction: number; short?: boolean }) {
 
 /** What the war is doing now, in a sentence with its countdown */
 function Countdown({ b, store }: { b: WarBattle; store: FactionWarStore }) {
+  if (b.state === WAR_STATE.MUSTER && b.flags & BATTLE_FLAG.ASSAULT) {
+    return (
+      <>
+        <Liege faction={b.attacker} short /> has taken the capital and storms <Liege faction={b.defender} short />'s seat at {b.room}. The armies meet in{" "}
+        <b>{formatCountdown(store.secondsLeft())}</b>.
+      </>
+    );
+  }
   if (b.state === WAR_STATE.MUSTER) {
     return (
       <>
@@ -75,7 +83,8 @@ function Countdown({ b, store }: { b: WarBattle; store: FactionWarStore }) {
   if (b.state === WAR_STATE.FIGHT) {
     return (
       <>
-        <Liege faction={b.attacker} short /> and <Liege faction={b.defender} short /> fight at {b.room}: <b>{formatCountdown(store.secondsLeft())}</b> left.
+        <Liege faction={b.attacker} short /> and <Liege faction={b.defender} short /> fight {b.flags & BATTLE_FLAG.ASSAULT ? "for the seat" : ""} at {b.room}:{" "}
+        <b>{formatCountdown(store.secondsLeft())}</b> left.
       </>
     );
   }

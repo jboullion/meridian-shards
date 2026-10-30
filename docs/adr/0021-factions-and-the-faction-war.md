@@ -79,7 +79,7 @@ The game is becoming mostly single-player. So the factions are to drive the worl
 
     The red and orange that marked murderers and outlaws are reused.
 
-11. **Champion's Gifts.** At renown 70 and 100 base health, say "champion" to your liege (`util/championgifts.kod`). One gift is held at a time:
+11. **Champion's Gifts.** At renown 100 (Champion; it was 70, Captain, until 2026-10-30) and 100 base health, say "champion" to your liege (`util/championgifts.kod`). One gift is held at a time:
     - **The Princess:** the Sword of the Hunt.
     - **The Duke:** the Amulet of the Three.
     - **Jonas:** the Fist of Kraanan, gold gauntlets.
@@ -176,7 +176,7 @@ The game is becoming mostly single-player. So the factions are to drive the worl
       - **When the leader never comes,** it fails.
       - **Won:** it counts for the step (`SiegeDone`), the winner's capital celebrates (`fw_siege_won`), and the soldiers who fought are paid as for any battle. It takes no pole.
       - **Refused** while another battle is under way. The regular two-hour schedule isn't disturbed.
-    - **The Champion's Gift** now waits on the fourth act as well (`ChampionGifts.CampaignAct4`, `champion_need_campaign`).
+    - **The Champion's Gift** waits on the fifth act, the siege, as well (`ChampionGifts.CampaignAct5`, `champion_need_campaign`; it was the fourth until 2026-10-30, when the gift moved from Captain to Champion so the top rank has something of its own). Act IV's hand-in now promises the gift at Champion, and Act V's tells you to ask for it.
     - **The schools:** `Parliament.IsFactionSchool` gives the spell-power and learning bonuses to the same schools as the battle mages: the Duke Qor and Riija, the Princess Shal'ille and Faren, Jonas Kraanan and Jala. Before, the Duke had Kraanan too, the Princess had Jala too, and Jonas had none. Jonas keeps the learning bonus for skills.
     - **Left out:** separate rank-milestone quests. The acts mark the ranks.
 
@@ -202,6 +202,16 @@ The game is becoming mostly single-player. So the factions are to drive the worl
       - nobody can set to that target again for ten minutes, so a group can't each spend a kit on one fire.
     - **Placement:** `QuestBook.SabotageTargets` lists where each target stands. `PlaceTargets` places them as their room is built, and whenever a player comes in and one is missing, so a saved world gets them too.
     - **Pay at the hand-in:** 3 renown, 750 shillings, 300 training points and XP.
+
+18. **The assault on a liege's seat** (built 2026-10-30, `FactionWar.StartAssault`). The war's end game: taking a liege's capital is answered straight away by a battle at the liege's own seat.
+    - **When:** the moment a rival liege takes a liege's own capital (all three capture points, so the city's pole flips; `TownChanged` → `CapitalTaken`). Unfactioned players tearing a city down call none. An assault called while a battle is on waits for it (`plAssaultsWaiting`).
+    - **Announced to everyone** in chat, the one battle that is (`fw_assault_called`: "Jonas D'Accor has taken Tos and storms Duke Akardius's seat!"), and on the War button and window (battle flag 8). The armies meet after 10 minutes (`ASSAULT_MUSTER_MINUTES`). The regular schedule carries on around it.
+    - **The seats** (`SeatOf`, the squares checked against each room's map): the Duke's Courtyard of Blackstone Keep (950), the Princess's Bourgeois Castle (851), Jonas's Temple of Kraanan (801). Each army forms up on its own square; there's no pole.
+    - **The battle:** as any, but the seat is held by its liege's guard, a quarter as many again (`ASSAULT_GUARD_PERCENT`, 125; it was half as many again, too strong), and an assault nobody fought is held.
+    - **Won:** the attackers are paid 15 renown and 3000 shillings (`ASSAULT_WIN_*`), everyone hears the seat stormed and its banner carried off, the attackers' capital celebrates, and the beaten liege mourns for four hours (`ASSAULT_MOURN_MINUTES`; `FactionWorld.Mourn` takes a duration now). The guard who stood are still paid as a battle's winners (`fw_paid_held`).
+    - **Held:** the defenders are paid so and their capital celebrates.
+    - **Placing the troops** (`PlaceTroop`, every battle): a troop is put within three squares of its army's square, only on a floor within a step of the square's (`PLACE_STEP_HEIGHT`, 24; `Room.FloorHeightAt`), so none lands on a ledge it can't come down from.
+    - **Either way the capital goes back to its liege** (`ReturnCapital`): the city's pole first, quietly (`SystemSetFaction`), then the capture points, so nobody mourns or celebrates the city twice. Both sides' war effort is spent, as after any battle. Nobody is wiped out, and the cycle begins again.
 
 ## Consequences
 
@@ -305,6 +315,22 @@ The game is becoming mostly single-player. So the factions are to drive the worl
     - three of the Duke's troops came;
     - handing in to Jonas gave 3 renown.
   - **Not yet tried:** the five other runs in the game, the routes walked through the sewers and caves, and a run timed out.
+- **The assault (2026-10-30, decision 18).**
+  - **Tried over the maintenance port on the dev server**, with the Duke taking Barloque:
+    - taken while a battle was on, the assault waited and was called when it ended, at the Bourgeois Castle;
+    - with a Duke soldier there the armies came out 10 against 15, each on its square;
+    - won: 15 renown paid, the Duke's capital celebrating, Barloque's flags at half-staff, Barloque and its three capture points the Princess's again, and no second celebration for her;
+    - held: the Princess celebrating and the attacker paid 2 renown;
+    - unfought: held, and the regular schedule's timer still running.
+  - **Found on the way:** the local world had lost the poles of Tos, West Jasper and I6, so `TerritoryGame.RecalcTownFlags` stopped at Tos and no town could change hands; `send object <territory game> Recreate` put them back. Worth checking on the live world.
+  - **Watched by the user** (2026-10-30) at all three seats, which moved each army's square to where they stood, and found:
+    - soldiers placed on a ledge in the Courtyard: troops are now placed only within a step of their square's floor;
+    - **the horn** (the troops' cry on taking a target) sounding all through a battle: it sounds as the armies take the field, then at most every 45 seconds for the whole battle (`FactionWar.MayHorn`, `BATTLE_HORN_SECONDS`; `Monster.PlayAwareSound`, which `FactionTroop` overrides);
+    - **the guard too strong** at half as many again: now a quarter (10 against 12);
+    - **mages bouncing between foes:** a battle mage keeps its foe until it falls or leaves, nearer foes and its own attackers notwithstanding (`FactionTroop.TargetSwitch`), and the battle's re-picks (`KeepTargets #all`) leave it be;
+    - **townsfolk and their sounds** in a city or seat at war: our client keeps no ambient life in the battle's room while a battle is on there (`GameScene.battleHere`).
+  - **Tried after those** at the Temple of Kraanan: the armies 10 against 12, the horn once at the start and then 45 seconds later, the mage on one foe throughout, nothing in `error.txt`. The townsfolk change needs to be seen in the client.
+  - **Not yet tried:** an assault fought by players, and seats whose armies must find a way round (pathfinding is [ADR 0029](0029-monster-pathfinding.md)).
 - **Room PvP flags (2026-10-25, shards-server, not yet committed).** With no random PvP, the room flags were checked and trimmed:
   - **Kept, each still doing work:** `ROOM_NO_COMBAT` (safe rooms: inns, shops, banks, temples, the town squares), `ROOM_SAFE_DEATH` (the arenas: death without consequences), `ROOM_NO_PK` (non-PvP survival instances, the DM's "turn off pk") and `ROOM_KILL_ZONE` (set by a Frenzy).
   - **Deleted: `ROOM_GUILD_PK_ONLY`** (0x0008 left unused), from the 21 town-street rooms that had it, with `Room.AllowGuildAttack` and `SetGuildPKOnly` and every check that used them. `MayAttackPlayer` already covered its PvP rule; what was left only hurt PvE: in town streets a player with no guild or soldier shield couldn't cast Truce or a harmful room or radius spell. (Helping a player who attacked someone recently is still refused everywhere, as before: `Spell` `spell_cant_help`.) One difference remains, and is meant: a factioned attacker with no guild or shield may now attack a council token's bearer in a town street, as in the wild.
