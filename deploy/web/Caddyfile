@@ -35,6 +35,14 @@
 		}
 	}
 
+	# The account service (docs/adr/0030-account-recovery.md): linking an email, password resets.
+	# It runs in blakserv's network (docker-compose.yml), so it's reached by blakserv's name.
+	handle /api/account/* {
+		reverse_proxy blakserv:8060 {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+
 	# The original game files. Files are requested with ?v=<content hash>, so they can be
 	# cached for good; the manifest that holds the hashes must always be fresh.
 	handle /assets/manifest.json {

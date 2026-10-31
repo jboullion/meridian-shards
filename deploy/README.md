@@ -223,4 +223,5 @@ blakserv saves every 30 minutes (`[Auto] SavePeriod`). Run "save game" before st
 
 - **The Linux build** needed two compiler flags and the `-i` (console) option; see the comments in `blakserv/Dockerfile`. Kod names a few room files in a different case than the files on disk, which Linux minds, so `stage.ts` lists those spellings and the image links them.
 - **blakserv.cfg** here is the Linux copy of `server/config/blakserv.cfg`. Keep them in step (the SecretKey above all: the client build reads it from `server/config/blakserv.cfg`).
-- The maintenance port (9998) never leaves the container.
+- The maintenance port (9998) never leaves the container. The account service (`accounts`) runs inside blakserv's network namespace to reach it.
+- **Account recovery** ([ADR 0030](../docs/adr/0030-account-recovery.md)): set `ACCOUNTS_SECRET` (`openssl rand -hex 32`) and `RESEND_API_KEY` in `.env` (see `.env.example`), and verify `m59-shards.com` in Resend by adding its DNS records in Cloudflare. Without the key, emails only go to `docker compose logs accounts`. It lives in blakserv's network namespace, so after blakserv is recreated on its own, run `docker compose up -d accounts` too (a full `up -d --build` does both).

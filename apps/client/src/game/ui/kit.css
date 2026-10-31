@@ -96,6 +96,16 @@
   color: var(--ui-text);
 }
 
+/* The login dialog's "Forgot your password?" (docs/adr/0030-account-recovery.md), level with Log In */
+.login-forgot {
+  display: flex;
+  align-items: center;
+  margin-left: 15px;
+}
+.login-forgot a {
+  color: var(--ui-text);
+}
+
 /* An update waiting to install: the title gold, so it's noticed */
 .mk-footnote .update {
   color: var(--hl);

@@ -16,6 +16,10 @@ import logoUrl from "../icons/logo.webp";
 import { desktop, devPagesEnabled, isAndroid, type DesktopBridge, type DesktopUpdate, type RequiredUpdate } from "../host.ts";
 import { Backdrop, Button, GroupBox, MessageBox, Select, Text, TextField, Window, at, type Rect } from "./ui/kit.tsx";
 
+/** Password resets and linking an email (docs/adr/0030-account-recovery.md) are on the website: the
+ * page's own in a browser, the live site's in the apps (their page isn't on the site) */
+const FORGOT_URL = "https://m59-shards.com/account/forgot/";
+
 /** Control rectangles: client.rc IDD_LOGIN (251 x 175, a little roomier) for the desktop, the same less the Server row for the browser. */
 const LAYOUT = desktop
   ? {
@@ -32,6 +36,7 @@ const LAYOUT = desktop
       serverLabel: [43, 148, 48, 10] as Rect,
       server: [93, 146, 143, 13] as Rect,
       ok: [137, 164, 100, 14] as Rect,
+      forgot: [37, 167, 95, 10] as Rect,
     }
   : {
       size: [251, 160] as const,
@@ -46,6 +51,7 @@ const LAYOUT = desktop
       serverLabel: null,
       server: null,
       ok: [137, 136, 100, 14] as Rect,
+      forgot: [37, 139, 95, 10] as Rect,
     };
 
 /** The login names used before, newest first (localStorage `shards.usernames`) */
@@ -155,6 +161,11 @@ export function LoginScreen({
               {desktop && LAYOUT.serverLabel && LAYOUT.server && (
                 <ServerField desktop={desktop} label={LAYOUT.serverLabel} field={LAYOUT.server} />
               )}
+              <Text at={LAYOUT.forgot} className="login-forgot">
+                <a href={FORGOT_URL} target="_blank" rel="noopener">
+                  Forgot your password?
+                </a>
+              </Text>
               <Button at={LAYOUT.ok} type="submit" isDefault disabled={!username.trim() || !password || !!required}>
                 Log In
               </Button>

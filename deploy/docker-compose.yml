@@ -41,6 +41,24 @@ services:
     depends_on:
       - blakserv
 
+  # The account service (docs/adr/0030-account-recovery.md). It shares blakserv's network so it
+  # reaches the maintenance port on 127.0.0.1, which stays closed to everything else; Caddy
+  # reaches it at blakserv:8060.
+  accounts:
+    build:
+      context: .stage
+      dockerfile: ../accounts/Dockerfile
+    restart: unless-stopped
+    network_mode: "service:blakserv"
+    environment:
+      ACCOUNTS_SECRET: "${ACCOUNTS_SECRET:-}"
+      SITE_URL: "${SITE_URL:-https://m59-shards.com}"
+      RESEND_API_KEY: "${RESEND_API_KEY:-}"
+      MAIL_FROM: "${MAIL_FROM:-Meridian Shards <noreply@m59-shards.com>}"
+      TURNSTILE_SECRET: "${TURNSTILE_SECRET:-}"
+    depends_on:
+      - blakserv
+
   web:
     image: caddy:2
     restart: unless-stopped
@@ -59,6 +77,7 @@ services:
       - caddy-config:/config
     depends_on:
       - gateway
+      - accounts
 
 volumes:
   savegame:

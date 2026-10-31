@@ -9,6 +9,7 @@
 //   deploy/.stage/site/           the website (landing page, downloads, wiki) from the
 //                                 meridian-shards-website repository next to this one
 //   deploy/.stage/assets/         the asset build (dist/assets)
+//   deploy/.stage/accounts/       the account service (tools/accounts) and the maintenance client
 //   deploy/.stage/gateway/        the gateway script, the arena and its feed, their one
 //                                 dependency (ws), our packages the arena runs on, and the arena's
 //                                 room from the asset build (arena-assets/)
@@ -97,6 +98,7 @@ need(join(ROOT, "dist", "assets", "manifest.json"), "build the assets first: npm
 rmSync(join(STAGE, "blakserv-src"), { recursive: true, force: true });
 rmSync(join(STAGE, "gamedata"), { recursive: true, force: true });
 rmSync(join(STAGE, "gateway"), { recursive: true, force: true });
+rmSync(join(STAGE, "accounts"), { recursive: true, force: true });
 
 // Sources for the Linux build (no Windows build output)
 const noObjects = (p: string) => !/[\\/](debug|release)([\\/]|$)/i.test(p) && !/\.(obj|pdb|exe|ilk|lib)$/i.test(p);
@@ -165,6 +167,12 @@ for (const room of ["tosarena", "tosarena_death"]) {
   copy(join(ROOT, "dist", "assets", `${room}.roo`), join(STAGE, "gateway", "arena-assets", `${room}.roo`));
   copy(join(ROOT, "dist", "assets", "nav", `${room}.nav`), join(STAGE, "gateway", "arena-assets", "nav", `${room}.nav`));
 }
+
+// The account service: its sources and the maintenance client it imports (../maint), kept in the
+// same layout so the relative import holds
+for (const f of ["accounts.ts", "service.ts", "blakserv.ts", "tokens.ts", "mail.ts"])
+  copy(join(ROOT, "tools", "accounts", f), join(STAGE, "accounts", "accounts", f));
+copy(join(ROOT, "tools", "maint", "maintClient.ts"), join(STAGE, "accounts", "maint", "maintClient.ts"));
 
 if (!opt["skip-client"]) stageClient();
 if (!opt["skip-site"]) stageSite();

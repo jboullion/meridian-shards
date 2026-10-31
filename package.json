@@ -34,6 +34,7 @@
     "sounds": "node tools/assets/fetch-sounds.ts",
     "music": "node tools/music/build.ts",
     "gateway": "node tools/gateway/gateway.ts",
+    "accounts": "node tools/accounts/accounts.ts",
     "headless": "node tools/headless/client.ts",
     "smoke": "node tools/headless/client.ts --user shardbot --pass shardbot --stay 10",
     "soak": "node tools/headless/client.ts --user shardbot --pass shardbot --walk \"8.5,7.5 9.05,6.5\" --loop --stay 300",
