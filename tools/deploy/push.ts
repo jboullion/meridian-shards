@@ -3,7 +3,8 @@
 //   2. pack deploy/ into a tarball (without the local .env; --skip-assets leaves out the
 //      417 MB of game assets for code-only updates)
 //   3. scp it to the host, unpack into ~/meridian-shards/deploy (the remote .env stays)
-//   4. docker compose up -d --build on the host
+//   4. docker compose build, then swap in what Caddy serves and up -d, so the site stays up
+//      while the images build
 //
 //   node tools/deploy/push.ts --host <user>@<ip> [--key ~/.ssh/id_ed25519] [--skip-stage] [--skip-assets] [--web-only]
 //
@@ -58,21 +59,28 @@ console.log(`${(statSync(join(ROOT, tarball)).size / 2 ** 20).toFixed(0)} MB; up
 
 run("scp", [...sshArgs, tarball, `${opt.host}:meridian-shards-deploy.tgz`]);
 
-// Unpack over the old copy. Assets are replaced only when they were sent.
+// Unpack into .incoming first. Caddy bind-mounts .stage/client, .stage/site and .stage/assets,
+// so they stay as they are while the images build (minutes on the VM); deleting them first
+// left the site empty that long, and every page went to /play/. They're swapped in by rename
+// only just before Caddy restarts: a running container keeps serving the renamed .old folders
+// until then. Each is replaced only when it was sent (assets not with --skip-assets).
 const compose = "sudo docker compose -f deploy/docker-compose.yml";
+const served = "client site assets";
 const remote = [
   "set -e",
-  "mkdir -p ~/meridian-shards && cd ~/meridian-shards",
-  webOnly || opt["skip-assets"] ? "" : "rm -rf deploy/.stage/assets",
-  webOnly ? "rm -rf deploy/.stage/client deploy/.stage/site" : "rm -rf deploy/.stage/blakserv-src deploy/.stage/gamedata deploy/.stage/client deploy/.stage/site deploy/.stage/gateway",
-  "tar -xzf ~/meridian-shards-deploy.tgz",
-  "rm ~/meridian-shards-deploy.tgz",
+  "mkdir -p ~/meridian-shards/deploy && cd ~/meridian-shards",
   "test -f deploy/.env || { echo 'deploy/.env is missing on the server: copy deploy/.env.example and set SITE_ADDRESS'; exit 1; }",
-  webOnly ? `${compose} up -d --no-deps web` : `${compose} up -d --build`,
-  // Caddy bind-mounts .stage/client, .stage/site and .stage/assets, which were just deleted and
-  // unpacked again; a running container keeps serving the old (now empty) directories until it
-  // restarts
+  "rm -rf .incoming && mkdir .incoming",
+  "tar -xzf ~/meridian-shards-deploy.tgz -C .incoming",
+  "rm ~/meridian-shards-deploy.tgz",
+  `for d in ${served}; do if [ -d .incoming/deploy/.stage/$d ]; then mv .incoming/deploy/.stage/$d .incoming/$d; fi; done`,
+  webOnly ? "" : "rm -rf deploy/.stage/blakserv-src deploy/.stage/gamedata deploy/.stage/gateway deploy/.stage/accounts",
+  "cp -a .incoming/deploy/. deploy/",
+  webOnly ? "" : `${compose} build`,
+  `for d in ${served}; do if [ -d .incoming/$d ]; then rm -rf deploy/.stage/$d.old; if [ -d deploy/.stage/$d ]; then mv deploy/.stage/$d deploy/.stage/$d.old; fi; mv .incoming/$d deploy/.stage/$d; fi; done`,
+  webOnly ? `${compose} up -d --no-deps web` : `${compose} up -d`,
   `${compose} restart web`,
+  `rm -rf .incoming ${served.split(" ").map((d) => `deploy/.stage/${d}.old`).join(" ")}`,
   `${compose} ps`,
 ]
   .filter(Boolean)
