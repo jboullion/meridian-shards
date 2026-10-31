@@ -129,6 +129,15 @@ There's no tick to count in, so the budget is over time:
 - **A room with no `.nav`** has no grid: pets walk straight, Follow stops, and the playtester reports it.
 - **Whenever the grid's rules change**, the files are exported again from the server (and `NAV_FORMAT` bumped if the layout changes).
 
+### 6. Aggro and the leash (added 2026-10-30)
+
+Watching an ant stuck behind a corner in the Flatlands showed where most stuck monsters come from: a monster took a player as its target when they moved anywhere within its vision (10 squares), measured through walls, so monsters on the far side of a wall gave chase. And with pathing, a monster that never loses its way never gives up either: a player could pull a whole room and drag it about. So, in the style of today's games:
+
+- **Aggro:** a monster notices a player moving about only within `Settings.piAggroRadius` squares (6) and in its sight (`Monster.NoticesPasserby`, in `Brain.AttemptTargetSwitch` for `TS_MOVE`). Anyone may pull every monster in a room by running past them. Being struck still turns a monster on its attacker, seen or not.
+- **The leash:** a chase begins where the monster stands when it takes a target. It ends when the monster is more than `piLeashSquares` (20) from there, or hasn't seen its target for `piLeashLostSeconds` (6); sight is looked at once a second (`Monster.LeashBreaks`, from `Brain.GetChaseBehavior`). The monster then heals, walks back, and notices nobody for 10 seconds (`Monster.Evade`). This also bounds what pathing costs.
+- **Not for** battle troops, arena fighters or anyone's minion (`Monster.UsesLeash`): they're told their targets and keep the old rules.
+- **Pathing for every monster** (`MONSTER_PATHING_ALL`, now the default): with the leash, pulls end, and a crowd chasing one running player shares searches: a kept search serves any goal within `NAV_GOAL_SHARE` (2) cells of its own.
+
 ### What stays as it is
 
 - **Where the client-side movers run:** each client, the gateway and the playtester keep simulating their own. Only their map changes.
@@ -182,6 +191,11 @@ On the `monster-pathfinding` branches (2026-10-30). Steps 1 to 5 of "Building it
 - `show path` across the Bourgeois Castle (`castle2b`) from the attackers' square (28, 9), the room's south edge (61, 47) and its north-west (6, 5) to the defenders' (29, 51): 6, 11 and 9 waypoints, round the walls.
 - A troll with `AI_MOVE_WHEN_ALONE` sent from (28, 9) to (29, 51) with `GotoCoords`: with pathing off it stuck at (33, 33) for 50 s; with `MONSTER_PATHING_ALL` it reached (30, 50) in 37 s. Nothing in `error.txt`.
 - The client: all 685 tests pass on the exported grids, `ambient.test.ts`'s `PlayerMover` walks along Tos's paths among them; typecheck and lint clean.
+
+**Aggro and the leash** (decision 6, built 2026-10-30 on the same branches):
+- Also fixed: the first waypoint is never within `PATH_REACHED` of the monster (`NAV_MIN_STEP`). An ant at a Flatlands corner was given its own cell's middle, "reached" it at once and never moved.
+- Also fixed: `GetPathStepBSP` now answers a straight line before building the grid or searching, as section 2 said; before, every plan searched.
+- Tried headlessly: the ant from that corner reaches the player's square in 9 s; paths across the Bourgeois Castle unchanged. Aggro and the leash need a player: not yet tried in play.
 
 **Not yet tried:**
 - A seat assault with players and both armies, its cost in `show calls` and on the e2-micro VM, and with the playtester (fewer snap-backs?).
