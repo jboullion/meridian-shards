@@ -129,7 +129,9 @@ There's no tick to count in, so the budget is over time:
 - **A room with no `.nav`** has no grid: pets walk straight, Follow stops, and the playtester reports it.
 - **Whenever the grid's rules change**, the files are exported again from the server (and `NAV_FORMAT` bumped if the layout changes).
 
-### 6. Aggro and the leash (added 2026-10-30)
+### 6. Aggro and the leash (added 2026-10-30, tried and reverted the same day)
+
+**Reverted:** played by the user, the monsters were less fun than the original's, so they act as they always did: the old aggro, the old give-up at vision + 5 squares, the chaser penalty, no leash, and the straight step alone. Pathing is for NPCs only (`MONSTER_PATHING_NPCS`, the default: battle troops and companions, `Monster.IsPathingNPC`). What follows is kept as the record of what was tried.
 
 Watching an ant stuck behind a corner in the Flatlands showed where most stuck monsters come from: a monster took a player as its target when they moved anywhere within its vision (10 squares), measured through walls, so monsters on the far side of a wall gave chase. And with pathing, a monster that never loses its way never gives up either: a player could pull a whole room and drag it about. So, in the style of today's games:
 
