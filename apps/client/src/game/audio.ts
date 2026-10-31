@@ -178,7 +178,6 @@ export class GameAudio {
   objectName: (id: number) => string | undefined = () => undefined;
   /** Log of what plays, for the dev console (window.shards.audio.log) */
   readonly log: string[] = [];
-  private readonly listeners = new Set<(line: string) => void>();
 
   private readonly offSettings: () => void;
 
@@ -553,13 +552,6 @@ export class GameAudio {
   private note(line: string): void {
     this.log.push(line);
     if (this.log.length > 200) this.log.shift();
-    for (const fn of this.listeners) fn(line);
-  }
-
-  /** Each line of the log as it's written (the admins' Debug tab) */
-  onLog(fn: (line: string) => void): () => void {
-    this.listeners.add(fn);
-    return () => this.listeners.delete(fn);
   }
 
   dispose(): void {

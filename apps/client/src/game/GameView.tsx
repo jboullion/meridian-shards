@@ -94,8 +94,6 @@ const CHAT_TABS: { tab: ChatTab; label: string }[] = [
   { tab: "server", label: "Server" },
   { tab: "debug", label: "Debug" },
 ];
-/** The Debug tab (admins only) keeps this many lines */
-const MAX_DEBUG_LINES = 300;
 /** The camera views' names (gameScene.ts ViewMode), shown for VIEW_NOTE_MS when one is chosen */
 const VIEW_NAMES: Record<ViewMode, string> = { first: "First person", chase: "Chase camera", behind: "Behind", front: "Front" };
 const VIEW_NOTE_MS = 1500;
@@ -566,7 +564,8 @@ export function GameView({
     return () => window.removeEventListener("keydown", esc);
   }, [emoteMenu]);
   /** The Debug tab's lines (admins only) */
-  const [debugLines, setDebugLines] = useState<ChatLine[]>([]);
+  /** The Debug tab (admins only): nothing writes to it for now */
+  const [debugLines] = useState<ChatLine[]>([]);
   /** The chess module's window (module/chess), while the server has it loaded */
   const [chess, setChess] = useState<ChessState | null>(null);
   /** The same, for the toolbar's Rest/Stand toggle */
@@ -1094,13 +1093,6 @@ export function GameView({
   useEffect(() => admin((text) => setAdminConsole((a) => (a ? { ...a, text: appendAdminText(a.text, text) } : a))), [admin]);
   // admin.c admin_key_table: Shift+4 opens the console (in the game, not while typing)
   const adminLoaded = adminConsole !== null;
-  // Ours: the Debug tab, the admins' console.log: every sound played (to find one), and the like
-  useEffect(() => {
-    if (!adminLoaded) return;
-    return audio.onLog((text) =>
-      setDebugLines((d) => [...d.slice(-(MAX_DEBUG_LINES - 1)), { kind: "system", channel: "debug", spans: [{ text }], time: Date.now() }]),
-    );
-  }, [adminLoaded, audio]);
   useEffect(() => {
     if (!adminLoaded) return;
     const onKey = (e: KeyboardEvent) => {
