@@ -33,6 +33,8 @@ export async function loadBackgrounds(root: HTMLElement): Promise<Map<string, HT
   await Promise.all(
     [...urls].map(async (u) => {
       const img = new Image();
+      // Drawn on a canvas that is read back: from another site (itch.io) the files are our server's (CORS)
+      img.crossOrigin = "anonymous";
       img.src = u;
       try {
         await img.decode();

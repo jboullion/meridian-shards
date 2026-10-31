@@ -44,15 +44,18 @@
 	}
 
 	# The original game files. Files are requested with ?v=<content hash>, so they can be
-	# cached for good; the manifest that holds the hashes must always be fresh.
+	# cached for good; the manifest that holds the hashes must always be fresh. Any site may
+	# read them (CORS): the client hosted elsewhere (itch.io, tools/itch/build.ts) loads them from here.
 	handle /assets/manifest.json {
 		root * /srv
 		header Cache-Control "no-cache"
+		header Access-Control-Allow-Origin *
 		file_server
 	}
 	handle /assets/* {
 		root * /srv
 		header Cache-Control "public, max-age=31536000, immutable"
+		header Access-Control-Allow-Origin *
 		file_server
 	}
 

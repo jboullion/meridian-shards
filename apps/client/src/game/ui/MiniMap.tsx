@@ -106,11 +106,14 @@ export function MiniMap({
     const ctx = canvas.getContext("2d")!;
     let pattern: CanvasPattern | null = null;
     const img = new Image();
+    // Drawn on a canvas that is read back: from another site (itch.io) the files are our server's (CORS)
+    img.crossOrigin = "anonymous";
     img.onload = () => (pattern = ctx.createPattern(img, "repeat"));
     img.src = paper;
     let icon: HTMLImageElement | null = null;
     if (annotationIcon) {
       const i = new Image();
+      i.crossOrigin = "anonymous";
       i.onload = () => (icon = i);
       i.src = annotationIcon;
     }

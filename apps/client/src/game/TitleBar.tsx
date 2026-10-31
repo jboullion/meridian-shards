@@ -6,7 +6,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { AssetStore } from "../assets.ts";
-import { browserDownload, desktop, isAndroid, type DesktopWindowState, type DownloadLink } from "../host.ts";
+import { browserDownload, desktop, DOWNLOAD_PAGE, isAndroid, type DesktopWindowState, type DownloadLink } from "../host.ts";
 import type { Platform } from "../updates.ts";
 
 export interface TitleBarMenuItem {
@@ -218,7 +218,7 @@ function DownloadButton({ tooltip }: { tooltip: boolean }) {
   return (
     <a
       className="title-tool"
-      href={link?.url ?? "/download/"}
+      href={link?.url ?? DOWNLOAD_PAGE}
       target="_blank"
       rel="noopener"
       aria-label={label}

@@ -10,6 +10,8 @@ const halvesCache = new Map<string, Promise<[string, string] | null>>();
 function loadKeyed(url: string): Promise<HTMLCanvasElement | null> {
   return new Promise((resolve) => {
     const img = new Image();
+    // Drawn on a canvas that is read back: from another site (itch.io) the files are our server's (CORS)
+    img.crossOrigin = "anonymous";
     img.onload = () => {
       const c = document.createElement("canvas");
       c.width = img.width;

@@ -9,6 +9,9 @@ const cfg = readFileSync(new URL("../../server/config/blakserv.cfg", import.meta
 const secretKey = /^SecretKey\s+(\S+)/m.exec(cfg)?.[1] ?? "";
 // The release version (the desktop app's), for the About box
 const appVersion = (JSON.parse(readFileSync(new URL("../desktop/package.json", import.meta.url), "utf8")) as { version: string }).version;
+// The game server's origin, for a page served from somewhere else (itch.io: tools/itch/build.ts).
+// Empty, the usual: the page's own host serves /ws and /assets/.
+const serverOrigin = (process.env.SHARDS_SERVER_ORIGIN ?? "").replace(/\/+$/, "");
 
 // The original game files (dist/assets, built by `npm run assets`) are served at
 // /assets/* in development. Production serves them separately (Caddy), so they
@@ -20,6 +23,7 @@ export default defineConfig({
   define: {
     __SECRET_KEY__: JSON.stringify(secretKey),
     __APP_VERSION__: JSON.stringify(appVersion),
+    __SERVER_ORIGIN__: JSON.stringify(serverOrigin),
   },
   server: {
     // IPv4 loopback rather than "localhost" (::1 only on this machine): `adb reverse`, which

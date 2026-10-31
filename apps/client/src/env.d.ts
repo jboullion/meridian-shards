@@ -2,3 +2,5 @@
 declare const __SECRET_KEY__: string;
 /** The release version (apps/desktop/package.json), for the About box. */
 declare const __APP_VERSION__: string;
+/** The game server's origin when the page is served elsewhere (itch.io), else "" (vite.config.ts). */
+declare const __SERVER_ORIGIN__: string;

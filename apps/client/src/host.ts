@@ -10,6 +10,18 @@ import { apkOf, detectPlatform, installerOf, parseRelease, webBundleOf, type Pla
 
 // Vite's (vite.config.ts; env.d.ts), declared here too because the desktop app type-checks this file
 declare const __APP_VERSION__: string;
+declare const __SERVER_ORIGIN__: string;
+
+/**
+ * The game server's origin when this page is served from somewhere else (the itch.io build:
+ * tools/itch/build.ts), e.g. https://m59-shards.com; null when the page's own host is the server.
+ */
+export const hostedServer: string | null = typeof __SERVER_ORIGIN__ === "string" && __SERVER_ORIGIN__ ? __SERVER_ORIGIN__ : null;
+
+/** Where the game files are: the page's /assets/, or the server's when the page is served elsewhere. */
+export function assetBase(): string {
+  return !desktop && hostedServer ? `${hostedServer}/assets/` : "/assets/";
+}
 
 export interface DesktopServer {
   name: string;
@@ -357,7 +369,7 @@ export const devPagesEnabled = (import.meta as unknown as { env?: { DEV?: boolea
 
 /** The selected server's display name on the desktop. */
 export function serverName(): string {
-  if (!desktop) return location.host;
+  if (!desktop) return hostedServer ? new URL(hostedServer).host : location.host;
   return desktop.servers.find((s) => s.origin === desktop.server)?.name ?? desktop.server;
 }
 
@@ -370,7 +382,7 @@ export function unreachableMessage(): string {
 
 /** The gateway's WebSocket URL. */
 export function gameSocketUrl(): string {
-  const base = desktop ? new URL(desktop.server) : new URL(location.href);
+  const base = new URL(desktop ? desktop.server : (hostedServer ?? location.href));
   return `${base.protocol === "https:" ? "wss" : "ws"}://${base.host}/ws`;
 }
 
@@ -412,7 +424,8 @@ export function requiredUpdate(): Promise<RequiredUpdate | null> {
       const file = platform ? installerOf(release, platform) : null;
       return { version: release.version, download: file?.browser_download_url ?? null, reload: false };
     }
-    if (devPagesEnabled) return null;
+    // Served from somewhere else (itch.io), the page there is updated by uploading it again
+    if (devPagesEnabled || hostedServer) return null;
     // The browser: the page the server serves now, against the one running (Vite names its entry by content hash)
     try {
       const ours = document.querySelector<HTMLScriptElement>("script[type=module][src]")?.getAttribute("src");
@@ -438,7 +451,7 @@ export interface DownloadLink {
 }
 
 /** The website's download page, beside the game on our server (deploy/web/Caddyfile) */
-const DOWNLOAD_PAGE = "/download/";
+export const DOWNLOAD_PAGE = `${hostedServer ?? ""}/download/`;
 let download: Promise<DownloadLink> | null = null;
 
 /**

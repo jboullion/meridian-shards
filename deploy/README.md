@@ -80,12 +80,12 @@ Put this in `.env`. The live server uses its own domain, `m59-shards.com` (behin
 
 ```
 SITE_ADDRESS=m59-shards.com
-GATEWAY_ORIGINS=https://m59-shards.com,app://shards,https://localhost,app://unreal-meridian
+GATEWAY_ORIGINS=https://m59-shards.com,app://shards,https://localhost,app://unreal-meridian,https://html-classic.itch.zone,https://html.itch.zone
 ```
 
 Without a domain, use **your** static IP with dashes instead (34.123.45.67 becomes `34-123-45-67.sslip.io`), which gets a certificate with no DNS setup. The desktop and Android apps still list the old sslip.io address of the live server too (ADR 0004), so while that is so, `SITE_ADDRESS` and `GATEWAY_ORIGINS` carry both names.
 
-The first entry is the site itself, for the browser client; without it the gateway turns browser players away. `app://shards` is the desktop app's page origin; without it the gateway turns the desktop app away. `app://unreal-meridian` is the Unreal remaster (`meridian-unreal`, its ADR 0010), which plays on this server too. After changing `.env`, restart the gateway: `docker compose up -d gateway`.
+The first entry is the site itself, for the browser client; without it the gateway turns browser players away. `app://shards` is the desktop app's page origin; without it the gateway turns the desktop app away. `app://unreal-meridian` is the Unreal remaster (`meridian-unreal`, its ADR 0010), which plays on this server too. The two itch.io hosts are the browser client uploaded to itch.io (`npm run itch`, `tools/itch/build.ts`), which loads the game files from `/assets/` here (Caddy allows that with CORS). After changing `.env`, restart the gateway: `docker compose up -d gateway`.
 
 ## 5. Deploy (and redeploy)
 

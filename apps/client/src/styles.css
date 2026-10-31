@@ -2618,6 +2618,35 @@ canvas.server-wait {
   image-rendering: pixelated;
 }
 
+/* Ours: the login screen's sound on/off (LoginScreen.tsx AudioToggle), at its top right */
+.mk-backdrop.login {
+  position: relative;
+}
+
+.mk-backdrop.login > button.login-audio {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fedf01;
+  cursor: pointer;
+}
+
+.mk-backdrop.login > button.login-audio:hover,
+.mk-backdrop.login > button.login-audio:focus-visible {
+  border-color: #fedf01;
+  background: rgba(0, 0, 0, 0.7);
+  outline: none;
+}
+
 /* The splash picture behind the login dialog (Intro.tsx SplashPicture, kit.tsx Backdrop behind):
    filling the screen (cropped to keep its shape) and a little darker, so the dialog stands out;
    it fades in once drawn */

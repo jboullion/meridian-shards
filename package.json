@@ -22,6 +22,7 @@
     "android:run": "node tools/android/run.ts",
     "android:sync": "npm run build && npm run sync -w @shards/android",
     "android:web-bundle": "node tools/android/web-bundle.ts",
+    "itch": "node tools/itch/build.ts",
     "assets:fetch": "node tools/assets/fetch-assets.ts",
     "release": "node tools/deploy/release.ts",
     "ship": "node tools/deploy/ship.ts",

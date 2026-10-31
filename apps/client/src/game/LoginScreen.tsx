@@ -14,6 +14,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { AssetStore } from "../assets.ts";
 import logoUrl from "../icons/logo.webp";
 import { desktop, devPagesEnabled, isAndroid, type DesktopBridge, type DesktopUpdate, type RequiredUpdate } from "../host.ts";
+import { getSettings, onSettings, updateSettings } from "./settings.ts";
 import { Backdrop, Button, GroupBox, MessageBox, Select, Text, TextField, Window, at, type Rect } from "./ui/kit.tsx";
 
 /** Password resets and linking an email (docs/adr/0030-account-recovery.md) are on the website: the
@@ -89,6 +90,43 @@ function forgetName(name: string): string[] {
   const names = savedNames().filter((n) => n !== name);
   storeNames(names);
   return names;
+}
+
+/**
+ * Ours: the login screen's sound on and off, at its top right: the music and the sounds together
+ * (the Options' Music and Sound), so the choice holds in the game too.
+ */
+function AudioToggle() {
+  const audible = () => {
+    const s = getSettings();
+    return s.music || s.sound;
+  };
+  const [on, setOn] = useState(audible);
+  useEffect(() => onSettings(() => setOn(audible())), []);
+  const label = on ? "Turn the sound off" : "Turn the sound on";
+  return (
+    <button
+      type="button"
+      className="login-audio"
+      aria-label={label}
+      aria-pressed={!on}
+      title={label}
+      onClick={(e) => {
+        updateSettings({ music: !on, sound: !on });
+        // Don't keep the focus: Enter goes on opening the login
+        e.currentTarget.blur();
+      }}
+    >
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+        <path d="M3 9h4l5-4v14l-5-4H3z" fill="currentColor" />
+        {on ? (
+          <path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        ) : (
+          <path d="M16 9l6 6M22 9l-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        )}
+      </svg>
+    </button>
+  );
 }
 
 export function LoginScreen({
@@ -185,6 +223,7 @@ export function LoginScreen({
           {desktop && update && <UpdateNotice update={update} install={() => desktop?.installUpdate()} />}
         </p>
       </div>
+      <AudioToggle />
       {error && !required && <MessageBox text={error} onResult={onClearError} />}
       {required && <UpdateRequired required={required} update={update} />}
     </Backdrop>

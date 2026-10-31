@@ -39,6 +39,7 @@ Thumbs.db
 # --- Deployment staging (holds the original game data and art)
 /deploy/.stage/
 /apps/client/dist/
+/apps/client/dist-itch/
 /apps/desktop/out/
 /apps/desktop/dist/
 /.deploy.tgz

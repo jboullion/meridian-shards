@@ -4,7 +4,7 @@ import { AssetStore } from "./assets.ts";
 import { Game } from "./game/Game.tsx";
 import { LoginScreen } from "./game/LoginScreen.tsx";
 import { Framed } from "./game/TitleBar.tsx";
-import { devPagesEnabled, serverName, unreachableMessage } from "./host.ts";
+import { assetBase, devPagesEnabled, serverName, unreachableMessage } from "./host.ts";
 import { installUiTheme } from "./game/ui/kit.tsx";
 import { loadClientTables } from "./game/clientTables.ts";
 
@@ -34,7 +34,7 @@ export function App() {
   const [crash, setCrash] = useState<{ message: string; attempt: number } | null>(null);
 
   const load = useCallback(() => {
-    const store = new AssetStore();
+    const store = new AssetStore(assetBase());
     store
       .init()
       .then(async () => {
