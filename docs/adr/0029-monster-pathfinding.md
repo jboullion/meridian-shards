@@ -1,6 +1,6 @@
 # ADR 0029: Monster pathfinding (A* on the server, one nav grid for everyone)
 
-- Status: accepted (2026-10-30). Being built on the `monster-pathfinding` branch of both repos.
+- Status: accepted (2026-10-30). Steps 1-5 built on the `monster-pathfinding` branch of both repos; see "As built".
 - Builds on: the faction war's battles and seat assaults ([ADR 0021](0021-factions-and-the-faction-war.md) decisions 13 and 18), and the client's nav grid (`packages/world/src/navGrid.ts`; [ADR 0005](0005-friends.md), [ADR 0006](0006-pets.md), [ADR 0020](0020-ai-playtester.md)).
 
 ## Context
@@ -162,4 +162,31 @@ There's no tick to count in, so the budget is over time:
 
 ## As built
 
-Not built yet.
+On the `monster-pathfinding` branches (2026-10-30). Steps 1 to 5 of "Building it" are built; 6 is tried headlessly only; 7 and 8 are still to do.
+
+**Where it differs from the decision above:**
+- **The grid hangs off `room_type`** (`roofile.h` `Nav`), not `room_node`: `BSPMoveSector`, `BSPChangeTexture` and `BSPFreeRoom` all take a `room_type`. `BSPChangeTexture` drops it only when a side's upper or lower texture comes or goes.
+- **The clearance is the move check's own.** The step check already refuses a step ending within `WALLMINDISTANCE` (248) of a wall that blocks, so a cell is open when eight short steps out from its centre (32 units each, to make 280) pass. A first try with 280-unit rays came out about 528 clear.
+- **Links are walked in 128-unit sub-steps** through `BSPCanMoveInRoomTree` (`NavCanWalkLine`), since a monster's real steps check the clearance at every step's end.
+- **The search is one per goal, not per pair:** a Dijkstra out from the goal cell over the reversed links gives every cell its next step toward it (`NavSearchField`). A room keeps four, by goal cell, for a second (`NAV_FIELDS`, `NAV_FIELD_MS`), so troops chasing one foe share one search. No visit cap: a search is bounded by the room (13,000 open cells in the Bourgeois Castle: about 3-4 ms in the debug build).
+- **A straight line is answered first**, before the grid or the budget: `GetPathStepBSP` returns the goal itself when `NavCanWalkLine` reaches it, so Kod needs no separate direct check.
+- **The budget:** 8 searches per 100 ms over all rooms (`NAV_SEARCHES`, `NAV_WINDOW_MS`). `GetPathStepBSP` returns `FALSE` past it (step straight, ask again next step) and `$` when there's no way.
+- **Kod** (`Monster.MoveTowardsCoords`): the plan is kept in `poPathRoom`, `piPathAt`, `piPathRow/Col/FineRow/FineCol`, `piPathGoalRow/Col` and `pbPathDirect`, and dropped after 2 to 3 s (`PATH_REPLAN_MS` plus a random half, which staggers a crowd), when its goal moves 3 squares, the room changes, the waypoint is reached (`PATH_REACHED`, 24 fine units) or a step fails. `Monster.UsesPathing` asks `Settings.piMonsterPathing` (`MONSTER_PATHING_OFF`, `_BATTLES`, `_ALL`; `_BATTLES` to start) and skips `AI_MOVE_WALKTHROUGH_WALLS` and the new `AI_NO_PATHING`. `FactionTroop.IsBattleTroop` is true in an army.
+- **The export reads every room file** (`PATH_ROOMS` `*.roo`), not the loaded rooms: 359 rooms in 11.5 s. `build-assets` copies them from `run/server/nav` and warns about rooms the server has with none current.
+
+**Maintenance commands:** `show navgrid <roomdata>` (the grid as text, with counts and its build time), `show path <roomdata> <row> <col> <to row> <to col>` (the waypoints, ignoring the budget), `save navgrids`. Room data ids change between boots: look them up with `show roomtable`.
+
+**Compared with the client's grids** (the 79 town rooms, before the client's builder went): the client's walkable cells were all but 108 of 250,000 a subset of the server's. The server allows about 3.5% more, in two places: the tops of ledges (the client kept off any wall that blocks from either side, the server only off one that blocks from where the monster stands, so it may stand at an edge and step down), and cells right at the 248-280 boundary. Painted water is the client's overlay, as decided.
+
+**Tried** (testbench sandbox, no players, 2026-10-30):
+- `show path` across the Bourgeois Castle (`castle2b`) from the attackers' square (28, 9), the room's south edge (61, 47) and its north-west (6, 5) to the defenders' (29, 51): 6, 11 and 9 waypoints, round the walls.
+- A troll with `AI_MOVE_WHEN_ALONE` sent from (28, 9) to (29, 51) with `GotoCoords`: with pathing off it stuck at (33, 33) for 50 s; with `MONSTER_PATHING_ALL` it reached (30, 50) in 37 s. Nothing in `error.txt`.
+- The client: all 685 tests pass on the exported grids, `ambient.test.ts`'s `PlayerMover` walks along Tos's paths among them; typecheck and lint clean.
+
+**Not yet tried:**
+- A seat assault with players and both armies, its cost in `show calls` and on the e2-micro VM, and with the playtester (fewer snap-backs?).
+- The seats' squares back at their natural places (decision 18 of ADR 0021): which squares is the user's call; the castle's entrances now have paths to the guard.
+- `MONSTER_PATHING_ALL` in ordinary play, and fleeing (step 7).
+- The live server needs a blakserv built from this branch and a fresh `save navgrids` for the asset build.
+
+**Traps found:** blakserv's makefile has no header dependencies (a grown `room_type` corrupted memory until `blakserv/debug/*.obj` were deleted), and adding properties to `Monster` needs every subclass recompiled (a full Kod build). Both are in shards-server's AGENTS.md (the second was already a known Kod rule).
