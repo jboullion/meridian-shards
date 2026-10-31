@@ -1,20 +1,21 @@
 // Signed links for the account service (docs/adr/0030-account-recovery.md): nothing is stored.
 // A token is base64url(JSON).base64url(HMAC-SHA256) and carries the account's password stamp
 // (an MD5 of its digest, from blakserv's `account byid`), so a reset link stops working once the
-// password changes, including by its own use.
+// password changes, including by its own use. A session (the account page's cookie) is a token
+// too: an account's (id and stamp), or an email's (every account linked to it).
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-export type Purpose = "link" | "reset";
+export type Purpose = "link" | "reset" | "signin" | "session";
 
 export interface TokenData {
   /** What the link does */
   p: Purpose;
-  /** Account id */
+  /** Account id (0 for a sign-in link or an email's session) */
   id: number;
-  /** The email it was sent to */
+  /** The email it was sent to ("" for an account's session) */
   e: string;
-  /** The account's password stamp when it was sent */
+  /** The account's password stamp when it was made ("" when no one account) */
   s: string;
   /** Expiry, ms since the epoch */
   x: number;

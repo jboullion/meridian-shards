@@ -10,7 +10,24 @@ export interface Account {
   stamp: string;
   /** "" when none is linked */
   email: string;
+  /** Unix seconds; 0 if never */
+  lastLogin: number;
   name: string;
+}
+
+export interface Character {
+  id: number;
+  name: string;
+  online: boolean;
+  /** Maximum hit points */
+  hp: number;
+  /** FACTION_*: 0 none, 1 the Duke, 2 the Princess, 3 the rebels */
+  faction: number;
+  renown: number;
+  /** "" when none */
+  guild: string;
+  /** The renown rank's name */
+  rank: string;
 }
 
 /** Runs one maintenance command and returns its output */
@@ -21,7 +38,7 @@ export function parseAccounts(output: string): Account[] {
   const out: Account[] = [];
   for (const line of output.split("\n")) {
     const m =
-      /^ACCOUNT id=(\d+) stamp=([0-9a-f]{32}) email=(\S+) name=(.+)$/.exec(
+      /^ACCOUNT id=(\d+) stamp=([0-9a-f]{32}) email=(\S+)(?: login=(-?\d+))? name=(.+)$/.exec(
         line.trim(),
       );
     if (m)
@@ -29,7 +46,32 @@ export function parseAccounts(output: string): Account[] {
         id: Number(m[1]),
         stamp: m[2]!,
         email: m[3] === "-" ? "" : m[3]!,
-        name: m[4]!,
+        lastLogin: Number(m[4] ?? 0),
+        name: m[5]!,
+      });
+  }
+  return out;
+}
+
+/** Every character in an `account characters` reply */
+export function parseCharacters(output: string): Character[] {
+  const out: Character[] = [];
+  const text = (s: string) => (s === "-" ? "" : s);
+  for (const line of output.split("\n")) {
+    const m =
+      /^CHAR id=(\d+) online=([01]) hp=(-?\d+) faction=(-?\d+) renown=(-?\d+) \| (.*?) \| (.*?) \| (.*)$/.exec(
+        line.trim(),
+      );
+    if (m)
+      out.push({
+        id: Number(m[1]),
+        online: m[2] === "1",
+        hp: Number(m[3]),
+        faction: Math.max(0, Number(m[4])),
+        renown: Math.max(0, Number(m[5])),
+        name: text(m[6]!),
+        guild: text(m[7]!),
+        rank: text(m[8]!),
       });
   }
   return out;
@@ -67,6 +109,10 @@ export class Blakserv {
 
   async byId(id: number): Promise<Account | null> {
     return parseAccounts(await this.cmd(`account byid ${id | 0}`))[0] ?? null;
+  }
+
+  async characters(id: number): Promise<Character[]> {
+    return parseCharacters(await this.cmd(`account characters ${id | 0}`));
   }
 
   async byEmail(email: string): Promise<Account[]> {

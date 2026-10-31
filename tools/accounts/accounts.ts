@@ -17,7 +17,7 @@ import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage } from "node:http";
 import { Blakserv, maintRunner } from "./blakserv.ts";
 import { consoleMailer, resendMailer } from "./mail.ts";
-import { createService } from "./service.ts";
+import { createService, SESSION_LIFE } from "./service.ts";
 
 const PORT = Number(process.env.ACCOUNTS_PORT ?? 8060);
 const PROD = process.env.NODE_ENV === "production";
@@ -85,6 +85,27 @@ function clientIp(req: IncomingMessage): string {
   return req.socket.remoteAddress ?? "?";
 }
 
+/** The account page's session (service.ts): HttpOnly, so the page's scripts never see it, and
+ * sent only to the account service */
+const COOKIE = "shards_session";
+
+function sessionCookie(req: IncomingMessage): string | undefined {
+  for (const part of (req.headers.cookie ?? "").split(";")) {
+    const [k, v] = part.trim().split("=");
+    if (k === COOKIE && v) return v;
+  }
+  return undefined;
+}
+
+/** Sets the session cookie, or clears it with null */
+function cookieHeader(token: string | null): string {
+  const life = token ? Math.floor(SESSION_LIFE / 1000) : 0;
+  return (
+    `${COOKIE}=${token ?? ""}; Path=/api/account; Max-Age=${life}; HttpOnly; SameSite=Strict` +
+    (PROD ? "; Secure" : "")
+  );
+}
+
 function readBody(req: IncomingMessage): Promise<string | null> {
   return new Promise((done) => {
     let size = 0;
@@ -134,8 +155,9 @@ const http = createServer(async (req, res) => {
   }
   const ip = clientIp(req);
   try {
-    const r = await service.handle(m[1]!, body, ip);
-    if (r.status !== 200) log(ip, m[1], r.status);
+    const r = await service.handle(m[1]!, body, ip, sessionCookie(req));
+    if (r.status !== 200 && m[1] !== "me") log(ip, m[1], r.status);
+    if (r.cookie !== undefined) headers["set-cookie"] = cookieHeader(r.cookie);
     send(r.status, r.body);
   } catch (e) {
     log(ip, m[1], "failed:", (e as Error).message);

@@ -36,6 +36,23 @@ Logging in with a name nobody has used creates the account (shards-server `blaks
    - Changing, removing or resetting sends a notice to the address that was linked.
 9. **Mail goes through Resend's HTTP API** from `noreply@m59-shards.com`. The domain is verified with DNS records in Cloudflare. Without `RESEND_API_KEY` the emails are only logged, which is how it runs locally.
 
+### Sessions and the account page (2026-11-01)
+
+10. **`/account` remembers who signed in**, so it shows accounts and characters instead of a form on every visit. There are two ways to sign in:
+    - `login`: account name and password. The session covers that one account and ends when its password changes, because it carries the stamp.
+    - `signin`: emails a sign-in link that works for 15 minutes. `session` swaps the link for a session that covers every account linked to that email.
+11. **The session is a signed token in an HttpOnly cookie**:
+    - The cookie is `shards_session`, with `Path=/api/account; SameSite=Strict`, plus `Secure` in production, and lasts 30 days.
+    - Page scripts never see it, and the service still stores nothing.
+    - `logout` clears it.
+    - `link` and `unlink` now act on a session's account (`{accountId}`) instead of taking the password each time.
+12. **`me` shows each account's last login and its characters**, from two blakserv sources:
+    - `account byid/byname/byemail` records now carry `login=` (unix seconds).
+    - **`account characters <id>`** lists each character that has been played: id, online, max hit points, faction and renown, then name, guild and renown rank, separated by `|`.
+    - Characters read the Kod properties by name (`GetPropertyIDByName`). A slot where `IsFirstTime` is still true has no character in it, so it isn't listed.
+    - `me` doesn't count towards the per-address limit, since the page asks it on every visit.
+13. **The website's header** has an account button in place of the Discord and GitHub icons, which stay in the footer.
+
 ## Consequences
 
 - Players who never link an email are no better off. The login screen's "Forgot your password?" link leads to the page that explains linking. An in-game reminder for unlinked accounts is not built: Kod can't see the email.

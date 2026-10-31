@@ -3,15 +3,37 @@
 // HTTP is accounts.ts's; this takes parsed JSON bodies and returns a status and a reply.
 //
 // Passwords arrive as the digest the game client sends at login (packages/protocol md5.ts,
-// as hex), never in plain text. Replies to forgot/names never say whether anything matched.
+// as hex), never in plain text. Replies to forgot/names/signin never say whether anything matched.
+//
+// The account page signs in with a session (a signed token in an HttpOnly cookie, which
+// accounts.ts reads and writes): an account's, by name and password, or an email's, through an
+// emailed sign-in link, which covers every account linked to that email.
 
-import type { Blakserv } from "./blakserv.ts";
+import type { Account, Blakserv, Character } from "./blakserv.ts";
 import type { Mailer } from "./mail.ts";
 import { readToken, signToken } from "./tokens.ts";
 
 export interface Reply {
   status: number;
-  body: { ok: boolean; message?: string; email?: string; name?: string };
+  body: { ok: boolean; message?: string } & Record<string, unknown>;
+  /** A session token to set as the cookie, or null to clear it */
+  cookie?: string | null;
+}
+
+/** What the account page shows for one account */
+export interface AccountView {
+  id: number;
+  name: string;
+  email: string;
+  lastLogin: number;
+  characters: Character[];
+}
+
+/** Who a session is: one account, or every account linked to an email */
+interface Session {
+  kind: "account" | "email";
+  email: string;
+  accounts: Account[];
 }
 
 export interface ServiceOptions {
@@ -29,6 +51,10 @@ export interface ServiceOptions {
 const HOUR = 60 * 60 * 1000;
 const LINK_LIFE = 24 * HOUR;
 const RESET_LIFE = HOUR;
+const SIGNIN_LIFE = HOUR / 4;
+export const SESSION_LIFE = 30 * 24 * HOUR;
+/** The most accounts an email's session shows */
+const MAX_ACCOUNTS = 10;
 /** Requests per address per 10 minutes, and emails per account or address per hour */
 const PER_IP = 20;
 const MAILS_PER_TARGET = 3;
@@ -109,20 +135,122 @@ export function createService(o: ServiceOptions) {
     return acc ?? reply(401, false, "Wrong account name or password.");
   }
 
+  /** Who the cookie's token signs in, or null: an account's session ends when its password changes */
+  async function resolve(token: string | undefined): Promise<Session | null> {
+    const data = token ? readToken(o.secret, token, "session", now()) : null;
+    if (!data) return null;
+    if (data.id > 0) {
+      const acc = await o.blakserv.byId(data.id);
+      return acc && acc.stamp === data.s
+        ? { kind: "account", email: acc.email, accounts: [acc] }
+        : null;
+    }
+    if (!validEmail(data.e)) return null;
+    const accounts = (await o.blakserv.byEmail(data.e)).slice(0, MAX_ACCOUNTS);
+    return { kind: "email", email: data.e, accounts };
+  }
+
+  const sessionFor = (acc: Account | null, email = "") =>
+    signToken(o.secret, {
+      p: "session",
+      id: acc?.id ?? 0,
+      e: email,
+      s: acc?.stamp ?? "",
+      x: now() + SESSION_LIFE,
+    });
+
+  const signedOut = (): Reply => ({
+    ...reply(401, false, "You're signed out. Sign in again."),
+    cookie: null,
+  });
+
+  /** The session's account the body names ({accountId}), or a reply refusing */
+  async function sessionAccount(body: Record<string, unknown>, token?: string) {
+    const session = await resolve(token);
+    if (!session) return signedOut();
+    const acc = session.accounts.find((a) => a.id === body.accountId);
+    return acc ?? reply(403, false, "That account isn't yours to change.");
+  }
+
   const routes: Record<
     string,
-    (body: Record<string, unknown>, ip: string) => Promise<Reply>
+    (
+      body: Record<string, unknown>,
+      ip: string,
+      token?: string,
+    ) => Promise<Reply>
   > = {
-    async status(body) {
+    async login(body) {
       const acc = await signIn(body);
       if ("status" in acc) return acc;
-      return reply(200, true, undefined, { name: acc.name, email: acc.email });
+      return { ...reply(200, true), cookie: sessionFor(acc) };
     },
 
-    async link(body, ip) {
+    async signin(body, ip) {
       if (!(await human(body, ip)))
         return reply(403, false, "Please complete the check and try again.");
-      const acc = await signIn(body);
+      if (!validEmail(body.email))
+        return reply(400, false, "That doesn't look like an email address.");
+      const email = body.email.toLowerCase();
+      const found = await o.blakserv.byEmail(email);
+      if (found.length > 0 && perTarget.take(`signin:${email}`, now())) {
+        const t = signToken(o.secret, {
+          p: "signin",
+          id: 0,
+          e: email,
+          s: "",
+          x: now() + SIGNIN_LIFE,
+        });
+        await o.mail({
+          to: email,
+          subject: "Sign in to Meridian Shards",
+          text:
+            `To sign in to your Meridian Shards account page, open this link within 15 minutes:\n` +
+            `${o.siteUrl}/account/signin/?t=${t}\n\n` +
+            `It shows every account linked to this address.\nIf this wasn't you, ignore this email.`,
+        });
+      }
+      return reply(
+        200,
+        true,
+        "If that email is linked to an account, we've sent a sign-in link to it. It works for 15 minutes.",
+      );
+    },
+
+    async session(body) {
+      const data = readToken(o.secret, String(body.t ?? ""), "signin", now());
+      if (!data || !validEmail(data.e))
+        return reply(400, false, "This link has expired. Ask for a new one.");
+      return { ...reply(200, true), cookie: sessionFor(null, data.e) };
+    },
+
+    async me(_body, _ip, token) {
+      const session = await resolve(token);
+      if (!session) return token ? signedOut() : reply(401, false);
+      const accounts: AccountView[] = [];
+      for (const a of session.accounts)
+        accounts.push({
+          id: a.id,
+          name: a.name,
+          email: a.email,
+          lastLogin: a.lastLogin,
+          characters: await o.blakserv.characters(a.id),
+        });
+      return reply(200, true, undefined, {
+        kind: session.kind,
+        email: session.email,
+        accounts,
+      });
+    },
+
+    async logout() {
+      return { ...reply(200, true), cookie: null };
+    },
+
+    async link(body, ip, token) {
+      if (!(await human(body, ip)))
+        return reply(403, false, "Please complete the check and try again.");
+      const acc = await sessionAccount(body, token);
       if ("status" in acc) return acc;
       if (!validEmail(body.email))
         return reply(400, false, "That doesn't look like an email address.");
@@ -182,8 +310,8 @@ export function createService(o: ServiceOptions) {
       });
     },
 
-    async unlink(body) {
-      const acc = await signIn(body);
+    async unlink(body, _ip, token) {
+      const acc = await sessionAccount(body, token);
       if ("status" in acc) return acc;
       if (!acc.email) return reply(200, true, "No email is linked.");
       if (!(await o.blakserv.setEmail(acc.id, "")))
@@ -295,10 +423,17 @@ export function createService(o: ServiceOptions) {
 
   return {
     routes: Object.keys(routes),
-    async handle(route: string, body: unknown, ip: string): Promise<Reply> {
+    /** `token` is the session cookie's value, if the request carried one */
+    async handle(
+      route: string,
+      body: unknown,
+      ip: string,
+      token?: string,
+    ): Promise<Reply> {
       const fn = routes[route];
       if (!fn) return reply(404, false, "No such request.");
-      if (!perIp.take(ip, now()))
+      // The account page asks `me` on every visit: only the rest count towards the limit
+      if (route !== "me" && route !== "logout" && !perIp.take(ip, now()))
         return reply(
           429,
           false,
@@ -306,7 +441,7 @@ export function createService(o: ServiceOptions) {
         );
       if (typeof body !== "object" || body === null || Array.isArray(body))
         return reply(400, false, "Bad request.");
-      return fn(body as Record<string, unknown>, ip);
+      return fn(body as Record<string, unknown>, ip, token);
     },
   };
 }
