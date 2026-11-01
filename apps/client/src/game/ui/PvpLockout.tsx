@@ -11,11 +11,22 @@ const clock = (s: number): string => {
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 };
 
+/** A new end (each portal's list, each blow) starts a new clock: one kept from before would
+ * still hold the time it last ticked, and a list saying "0 seconds" (an end of now) would show
+ * the minutes since then as a lockout that never counts down. */
 export function PvpLockout({ until }: { until: number }) {
+  return <Countdown key={until} until={until} />;
+}
+
+function Countdown({ until }: { until: number }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (until <= Date.now()) return;
-    const t = window.setInterval(() => setNow(Date.now()), 500);
+    const t = window.setInterval(() => {
+      const at = Date.now();
+      setNow(at);
+      if (at >= until) window.clearInterval(t);
+    }, 500);
     return () => window.clearInterval(t);
   }, [until]);
   const left = Math.ceil((until - now) / 1000);
