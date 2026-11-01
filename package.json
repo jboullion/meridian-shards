@@ -32,6 +32,7 @@
     "server:build": "node tools/server/build.ts",
     "console:status": "node tools/console/live-status.ts",
     "console:visits": "node tools/console/analytics.ts",
+    "console:cache": "node tools/console/cache-stats.ts",
     "assets": "node tools/assets/build-assets.ts",
     "quests": "node tools/quests/generate.ts",
     "quests:bands": "node tools/quests/bands.ts",

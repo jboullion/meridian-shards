@@ -8,13 +8,15 @@
 // button near the bottom; the dialog fades in over it all from the button (or Enter), moving
 // nothing, and closes back to it, so the pictures can be seen. And the login names used before in a list under the name field (▾),
 // newest first, each with × to forget it. Only names: never passwords (the browser's own
-// password manager can keep those).
+// password manager can keep those). In Chrome and Edge, an Install link under it while the
+// browser offers to install the game as an app (webApp.ts, docs/adr/0032-installable-web-client.md).
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { AssetStore } from "../assets.ts";
 import logoUrl from "../icons/logo.webp";
 import { desktop, devPagesEnabled, isAndroid, type DesktopBridge, type DesktopUpdate, type RequiredUpdate } from "../host.ts";
 import { getSettings, onSettings, updateSettings } from "./settings.ts";
+import { useInstallOffer } from "../webApp.ts";
 import { Backdrop, Button, GroupBox, MessageBox, Select, Text, TextField, Window, at, type Rect } from "./ui/kit.tsx";
 
 /** Password resets and linking an email (docs/adr/0030-account-recovery.md) are on the website: the
@@ -149,6 +151,7 @@ export function LoginScreen({
   const [password, setPassword] = useState(initialPassword ?? "");
   const [update, setUpdate] = useState<DesktopUpdate | null>(null);
   useEffect(() => desktop?.onUpdate(setUpdate), []);
+  const install = useInstallOffer();
   // Ours: the dialog waits behind the Log in button, so the backgrounds show; open at once after
   // a failed login (to try again) or with the desktop app's /U and /W (to log on)
   const [open, setOpen] = useState(() => !!error || (!!initialUsername && !!initialPassword));
@@ -219,6 +222,20 @@ export function LoginScreen({
         )}
         <p className="mk-footnote">
           {devPagesEnabled && <a href="?viewer">Room viewer</a>}
+          {install && (
+            <a
+              href="#"
+              title="Install Meridian Shards as an app, in a window of its own"
+              onClick={(e) => {
+                e.preventDefault();
+                // Don't keep the focus: Enter goes on opening the login
+                e.currentTarget.blur();
+                install();
+              }}
+            >
+              Install
+            </a>
+          )}
           {desktop && !update && <span>Version {desktop.version}</span>}
           {desktop && update && <UpdateNotice update={update} install={() => desktop?.installUpdate()} />}
         </p>

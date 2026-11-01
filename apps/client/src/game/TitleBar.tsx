@@ -1,13 +1,14 @@
 // Our title bar. On the desktop it replaces the system's (the window has no frame), so it
 // moves the window when dragged, maximizes on a double click, and has the minimize,
 // maximize and close buttons (macOS keeps its own traffic lights on the left instead).
-// In the game it also has the ☰ menu, the room's name (the original's "Meridian 59 ---
+// The installed web app with the window controls overlay (webApp.ts) gets the same bar, up to
+// the system's buttons, which stay the system's. In the game it also has the ☰ menu, the room's name (the original's "Meridian 59 ---
 // The Inn of Raza" title) and the latency meter (lagbox.c).
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { AssetStore } from "../assets.ts";
-import { browserDownload, desktop, DOWNLOAD_PAGE, isAndroid, type DesktopWindowState, type DownloadLink } from "../host.ts";
-import type { Platform } from "../updates.ts";
+import { desktop, isAndroid, type DesktopWindowState } from "../host.ts";
+import { useTitleBarOverlay } from "../webApp.ts";
 
 export interface TitleBarMenuItem {
   label: string;
@@ -136,11 +137,13 @@ export function TitleBar({
       window.removeEventListener("keydown", esc);
     };
   }, [open]);
-  const frameless = !!desktop && !isAndroid;
-  const ownButtons = frameless && desktop?.platform !== "darwin";
+  // The installed web app's window controls overlay: the bar drags the window, the system's buttons over its end
+  const overlay = useTitleBarOverlay();
+  const frameless = (!!desktop && !isAndroid) || overlay;
+  const ownButtons = !!desktop && !isAndroid && desktop.platform !== "darwin";
   return (
     <header
-      className={`title-bar${frameless ? " frameless" : ""}${desktop?.platform === "darwin" ? " mac" : ""} ${className ?? ""}`}
+      className={`title-bar${frameless ? " frameless" : ""}${overlay ? " overlay" : ""}${desktop?.platform === "darwin" ? " mac" : ""} ${className ?? ""}`}
     >
       {assets && <img className="title-icon" src={assets.url("ui/icon1.ico")} alt="" draggable={false} />}
       {menu && (
@@ -152,8 +155,7 @@ export function TitleBar({
       <span className="title-spacer" />
       {fps !== undefined && <FpsReadout fps={fps} />}
       {latency !== undefined && <LatencyMeter ms={latency} tooltip={tooltips} />}
-      {/* Ours: in a browser, the app for this system, and full screen without the address bar and tabs (the apps have their own windows) */}
-      {!desktop && <DownloadButton tooltip={tooltips} />}
+      {/* Ours: in a browser, full screen without the address bar and tabs (the apps have their own windows) */}
       {!desktop && !isAndroid && typeof document !== "undefined" && document.fullscreenEnabled && <FullscreenButton tooltip={tooltips} />}
       {ownButtons && <WindowButtons />}
       {open && menu && <MenuList items={menu} onDone={() => setOpen(false)} className="title-menu" />}
@@ -197,42 +199,6 @@ function FullscreenButton({ tooltip }: { tooltip: boolean }) {
   );
 }
 
-const PLATFORM_NAMES: Record<Platform, string> = { windows: "Windows", mac: "macOS", linux: "Linux", android: "Android" };
-
-/**
- * Download in a browser (ours): the latest release's installer for this system, or the download
- * page when there's no telling (host.ts browserDownload). It opens in a new tab, so the game
- * keeps running; an installer just downloads.
- */
-function DownloadButton({ tooltip }: { tooltip: boolean }) {
-  const [link, setLink] = useState<DownloadLink | null>(null);
-  useEffect(() => {
-    let live = true;
-    void browserDownload().then((l) => live && setLink(l));
-    return () => {
-      live = false;
-    };
-  }, []);
-  const size = link?.size ? ` (${Math.round(link.size / 1_000_000)} MB)` : "";
-  const label = link?.platform ? `Download Meridian Shards for ${PLATFORM_NAMES[link.platform]}${size}` : "Download Meridian Shards";
-  return (
-    <a
-      className="title-tool"
-      href={link?.url ?? DOWNLOAD_PAGE}
-      target="_blank"
-      rel="noopener"
-      aria-label={label}
-      title={tooltip ? label : undefined}
-      // Don't leave the keyboard focus on the link: the game's keys go on working
-      onClick={(e) => e.currentTarget.blur()}
-    >
-      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>
-        <path d="M8 1v9M4 6.5 8 10.5l4-4M2 12v3h12v-3" fill="none" stroke="currentColor" strokeWidth="2" />
-      </svg>
-    </a>
-  );
-}
-
 /** Show FPS: frames a second, beside the latency meter (the title bar, or the Classic toolbar) */
 export function FpsReadout({ fps }: { fps: number }) {
   return (
@@ -256,9 +222,13 @@ export function LatencyMeter({ ms, tooltip }: { ms: number | null; tooltip: bool
   );
 }
 
-/** A page under the title bar on the desktop (the login, character and loading screens); just the page in a browser or on Android. */
+/**
+ * A page under the title bar on the desktop and in the installed web app with the window controls
+ * overlay (the login, character and loading screens); just the page in a browser or on Android.
+ */
 export function Framed({ assets, children }: { assets?: AssetStore | null; children: ReactNode }) {
-  if (!desktop || isAndroid) return <>{children}</>;
+  const overlay = useTitleBarOverlay();
+  if (isAndroid || (!desktop && !overlay)) return <>{children}</>;
   return (
     <div className="app-frame">
       <TitleBar assets={assets} title="Meridian Shards" />

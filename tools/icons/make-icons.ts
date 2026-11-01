@@ -9,8 +9,10 @@
 //     also the Android 12+ splash icon), and drawable-*/ic_notification (the shard alone, white)
 //   - the Android splash, drawable-*/splash.png: the emblem on plain stone
 //   - the browser's favicons in apps/client/src/icons (index.html): favicon.ico (16, 32, 48),
-//     apple-touch-icon.png (on stone: iOS fills transparency with black), and icon-192.png and
-//     icon-512.png (transparent, for the website and a web manifest)
+//     apple-touch-icon.png (on stone: iOS fills transparency with black), icon-192.png and
+//     icon-512.png (transparent, for the website and the web manifest), and icon-maskable-192.png
+//     and icon-maskable-512.png (the web manifest's "maskable" icons: full-bleed stone, the emblem
+//     inside the middle 80% circle every mask keeps; docs/adr/0032-installable-web-client.md)
 //
 //   node tools/icons/make-icons.ts
 
@@ -336,5 +338,8 @@ for (const [dir, w, h] of SPLASHES) write(join(RES, dir, "splash.png"), png(cent
 // The browser's favicons: the emblem alone, filling the square (it has a 3% margin of its own)
 write(join(FAVICONS, "favicon.ico"), ico([16, 32, 48].map((s) => emblemAt(s))));
 for (const s of [192, 512]) write(join(FAVICONS, `icon-${s}.png`), png(emblemAt(s)));
+// The installed web app's maskable icons: the system cuts them to its own shape, keeping at least the
+// middle 80% circle, so the emblem fills 70% (as the Android adaptive icon's 58 dp of its 66 dp circle)
+for (const s of [192, 512]) write(join(FAVICONS, `icon-maskable-${s}.png`), png(centred(render(s, s, s / N, 0, 0, stone), Math.round(s * 0.7)), false));
 // iOS rounds the corners itself and fills transparency with black, so this one is on stone
 write(join(FAVICONS, "apple-touch-icon.png"), png(centred(render(180, 180, 180 / N, 0, 0, stone), 152), false));

@@ -50,8 +50,9 @@ export function parseRelease(json: unknown): Release | null {
   return { version: r.tag_name.replace(/^v/, ""), files };
 }
 
-// ---- the browser's Download button (ours, TitleBar.tsx): the same rules as the website's
-// download page (meridian-shards-website app/lib/releases.ts), so both offer the same file
+// ---- the installer for this system, for an app too old to update itself (host.ts requiredUpdate):
+// the same rules as the website's download page (meridian-shards-website app/lib/releases.ts), so
+// both offer the same file
 
 export type Platform = "windows" | "mac" | "linux" | "android";
 

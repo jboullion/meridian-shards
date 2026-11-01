@@ -153,7 +153,7 @@ copy(join(ROOT, "deploy", "blakserv", "blakserv.cfg"), join(STAGE, "blakserv.cfg
 copy(join(ROOT, "deploy", "blakserv", "maint.sh"), join(STAGE, "maint.sh"));
 
 // Gateway: the script plus ws (pure JS, no dependencies of its own)
-for (const f of ["gateway.ts", "arenaFeed.ts", "arena.ts"]) copy(join(ROOT, "tools", "gateway", f), join(STAGE, "gateway", f));
+for (const f of ["gateway.ts", "arenaFeed.ts", "arena.ts", "cacheStats.ts"]) copy(join(ROOT, "tools", "gateway", f), join(STAGE, "gateway", f));
 copy(join(ROOT, "node_modules", "ws"), join(STAGE, "gateway", "node_modules", "ws"));
 // The arena (docs/adr/0007-arena.md) runs on our packages: their sources beside it, found through
 // register.mjs (Node won't run TypeScript from node_modules), and the arenas' rooms and nav grids

@@ -2,6 +2,7 @@ import react from "@vitejs/plugin-react";
 import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import { devTools } from "../../tools/dev/devTools.ts";
+import { webApp } from "./pwa/plugin.ts";
 
 // The login SecretKey must match the server's [Login] SecretKey. It isn't a real
 // secret (it ships in the JS); server/config/blakserv.cfg is the one source of truth.
@@ -17,8 +18,9 @@ const serverOrigin = (process.env.SHARDS_SERVER_ORIGIN ?? "").replace(/\/+$/, ""
 // /assets/* in development. Production serves them separately (Caddy), so they
 // are never copied into the client build.
 export default defineConfig({
-  // devTools: development-only endpoints (opening a room in the room editor)
-  plugins: [react(), devTools()],
+  // devTools: development-only endpoints (opening a room in the room editor); webApp: the web app
+  // manifest and service worker that make the browser client installable (docs/adr/0032-installable-web-client.md)
+  plugins: [react(), devTools(), webApp()],
   publicDir: "../../dist",
   define: {
     __SECRET_KEY__: JSON.stringify(secretKey),
@@ -36,6 +38,8 @@ export default defineConfig({
       "/ws": { target: "ws://127.0.0.1:8059", ws: true, rewrite: () => "/" },
       // The arena's feed, in the gateway's process (docs/adr/0007-arena.md)
       "/arena": { target: "ws://127.0.0.1:8059", ws: true },
+      // The game file cache reports (src/cacheStats.ts), summed by the gateway
+      "/api/stats": { target: "http://127.0.0.1:8059" },
     },
   },
   build: {

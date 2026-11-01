@@ -440,33 +440,3 @@ export function requiredUpdate(): Promise<RequiredUpdate | null> {
   requiredCheck = { at: performance.now(), result };
   return result;
 }
-
-/** Where the browser's Download button goes (TitleBar.tsx) */
-export interface DownloadLink {
-  url: string;
-  /** The system the installer is for; null for the download page */
-  platform: Platform | null;
-  /** The installer's size in bytes, when known */
-  size: number | null;
-}
-
-/** The website's download page, beside the game on our server (deploy/web/Caddyfile) */
-export const DOWNLOAD_PAGE = `${hostedServer ?? ""}/download/`;
-let download: Promise<DownloadLink> | null = null;
-
-/**
- * In a browser: the latest release's installer for this system (as the download page picks it),
- * else the download page: on an iPhone, an unknown system, or when GitHub can't be asked. Asked
- * once per page load (GitHub allows 60 unauthenticated requests an hour per address).
- */
-export function browserDownload(): Promise<DownloadLink> {
-  download ??= (async () => {
-    const page: DownloadLink = { url: DOWNLOAD_PAGE, platform: null, size: null };
-    const platform = detectPlatform(navigator.userAgent);
-    if (!platform) return page;
-    const release = await latestRelease(LATEST_RELEASE);
-    const file = release && installerOf(release, platform);
-    return file ? { url: file.browser_download_url, platform, size: file.size ?? null } : page;
-  })();
-  return download;
-}

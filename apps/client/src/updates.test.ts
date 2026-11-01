@@ -32,7 +32,7 @@ describe("android updates", () => {
   });
 });
 
-describe("the browser's download button", () => {
+describe("the installer for this system", () => {
   const release = parseRelease({
     tag_name: "v0.7.0",
     assets: [

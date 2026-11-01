@@ -43,6 +43,14 @@
 		}
 	}
 
+	# The browser client's reports on how well the game files stay cached (docs/adr/0032-installable-web-client.md
+	# decision 7), summed by the gateway, which limits them per address.
+	handle /api/stats/* {
+		reverse_proxy gateway:8059 {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+
 	# The original game files. Files are requested with ?v=<content hash>, so they can be
 	# cached for good; the manifest that holds the hashes must always be fresh. Any site may
 	# read them (CORS): the client hosted elsewhere (itch.io, tools/itch/build.ts) loads them from here.
@@ -60,16 +68,24 @@
 	}
 
 	# The browser client (a single-page app, built with --base /play/ by tools/deploy/stage.ts).
-	# Hashed bundles cache forever; index.html never.
+	# Hashed bundles cache forever; index.html never, nor the installable app's manifest and
+	# service worker (docs/adr/0032-installable-web-client.md), which browsers must see change.
 	redir /play /play/
 	handle_path /play/* {
 		root * /srv/client
 		@bundles path /assets-client/*
 		header @bundles Cache-Control "public, max-age=31536000, immutable"
-		@index path / /index.html
+		@index path / /index.html /manifest.webmanifest /sw.js
 		header @index Cache-Control "no-cache"
-		try_files {path} /index.html
-		file_server
+		header /manifest.webmanifest Content-Type "application/manifest+json"
+		# The service worker is never answered with index.html: without one it's a 404
+		handle /sw.js {
+			file_server
+		}
+		handle {
+			try_files {path} /index.html
+			file_server
+		}
 	}
 
 	# Everything else is the website (the landing page, /download/ and the wiki: the

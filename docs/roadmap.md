@@ -355,6 +355,7 @@ Since 2026-10-15 the server is our own fork, [shards-server](https://github.com/
 - [x] **Account recovery** ([ADR 0030](adr/0030-account-recovery.md), 2026-10-31): link an email on the website's account page, reset a password or find an account name through it; the account page keeps you signed in and lists the account's characters.
 - [x] **Releases 0.13.0** (2026-10-24), **0.14.0** (2026-10-26) and **0.14.1** (2026-10-31), with the one-button `npm run ship` / `release:patch` / `release:minor` / `release:major` scripts; the public site is m59-shards.com ([ADR 0004](adr/0004-own-domain.md)).
 - [x] **The Shards Console** ([ADR 0031](adr/0031-shards-console.md), 2026-10-31): a Claude Code mod with the live server, visits, the local server and the release buttons, and `tools/server/build.ts`, which fails a build on a Kod compile error. Tried 2026-10-31 against the live VM and Cloudflare.
+- [x] **The installable web client, step 1** ([ADR 0032](adr/0032-installable-web-client.md), 2026-11-01, proposed until tried in Chrome): a web app manifest and a service worker that caches nothing, an Install link on the login screen, and in the installed window a close confirmation mid-game and our title bar beside the system's buttons. Step 2, the game files in Cache Storage, is next.
 - [ ] **Still proposed:** player homes ([0008](adr/0008-player-homes.md)), fast travel ([0011](adr/0011-fast-travel.md)), races ([0013](adr/0013-races.md)), inn games ([0014](adr/0014-inn-games.md)), and the AI playtester's phase 3.
 
 ## What the slice must prove

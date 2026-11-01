@@ -14,6 +14,7 @@ import { AssetDownload } from "./AssetDownload.tsx";
 import { CharacterSelect } from "./CharacterSelect.tsx";
 import { GameView, appendChatLine } from "./GameView.tsx";
 import { Framed } from "./TitleBar.tsx";
+import { askBeforeClosing } from "../webApp.ts";
 import { getSettings } from "./settings.ts";
 import { filterIncoming, loadProfanity } from "./profanity.ts";
 import { IconRenderer } from "./icons.ts";
@@ -157,8 +158,9 @@ export function Game({
     };
   }, [onLoginScreen]);
 
-  // The desktop app asks before closing the window mid-game
+  // The desktop app asks before closing the window mid-game, and so does the installed web app
   useEffect(() => desktop?.setPhase(phase), [phase]);
+  useEffect(() => askBeforeClosing(phase === "game"), [phase]);
   // On a phone, the screens before the game may turn upright (easier for typing); the game is landscape
   const upright = phase !== "entering" && phase !== "game";
   useEffect(() => allowPortrait(upright), [upright]);

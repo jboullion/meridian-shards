@@ -49,7 +49,7 @@ Android's System WebView is Chromium, the engine we test in. Most of the client 
 1. **Capacitor, as `apps/android`. Not a PWA/TWA, and not React Native.**
    - Capacitor wraps `apps/client/dist` in the System WebView, as Electron wraps it on the desktop.
    - We get a native project for the pieces a web page can't do: serving the asset cache, fullscreen, keeping the screen on, the back button.
-   - A PWA or Trusted Web Activity can't bundle 418 MB of files or intercept `/assets/`. It would also depend on the VM for every install.
+   - A PWA or Trusted Web Activity can't bundle 418 MB of files, so every install would download them from the VM. (It can intercept `/assets/`: a same-origin service worker answers every request its pages make, from Cache Storage. Corrected 2026-11-01; [ADR 0032](0032-installable-web-client.md) makes the browser client installable and plans that cache.) Nor can it keep the game connection in the background (phase 3's `ConnectionService`).
    - React Native would mean a second renderer.
    - Settings in `capacitor.config.ts`:
      - `appId: net.meridianshards.client`, the same as the desktop;

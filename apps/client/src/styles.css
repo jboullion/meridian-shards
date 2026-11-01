@@ -1395,9 +1395,19 @@ button.link {
 }
 
 .title-bar.frameless button,
+.title-bar.frameless a,
 .title-bar.frameless .latency,
 .title-bar.frameless .title-menu {
   -webkit-app-region: no-drag;
+}
+
+/* The installed web app with the window controls overlay (webApp.ts, docs/adr/0032-installable-web-client.md):
+   the bar fills the title bar area's height and keeps clear of the system's buttons, which are at
+   the right on Windows and Linux and at the left on macOS */
+.title-bar.overlay {
+  height: max(32px, env(titlebar-area-height, 32px));
+  padding-left: calc(env(titlebar-area-x, 0px) + 8px);
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
 }
 
 /* macOS draws its traffic lights over the bar's left end */
@@ -1446,7 +1456,7 @@ button.link {
   outline: none;
 }
 
-/* Download and full screen, in a browser (TitleBar.tsx DownloadButton, FullscreenButton): beside the latency meter, like the menu button */
+/* Full screen, in a browser (TitleBar.tsx FullscreenButton): beside the latency meter, like the menu button */
 .title-tool {
   display: grid;
   place-items: center;

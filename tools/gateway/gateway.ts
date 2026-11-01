@@ -17,15 +17,20 @@
 // ARENA_ASSETS (the asset build with tosarena.roo, default dist/assets), ARENA_STATE (the season
 // file, default dist/arena-state.json; "none" keeps nothing) and ARENA_CONFIG (an arena.json to
 // change the fights, read at start).
+//
+// POST /api/stats/cache takes the browser client's reports on how well the browser keeps the game
+// files cached (cacheStats.ts, docs/adr/0032-installable-web-client.md decision 7), summed per day
+// into CACHE_STATS (default dist/cache-stats.json; "none" keeps nothing).
 
 import { existsSync, readFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { connect } from "node:net";
 import { parseArgs } from "node:util";
 import { WebSocketServer } from "ws";
 import { readArenaConfigs } from "@shards/world";
 import { ArenaHost } from "./arena.ts";
 import { ArenaFeed, FEED_MAX_MESSAGE } from "./arenaFeed.ts";
+import { CacheStatsBook, parseReport } from "./cacheStats.ts";
 
 const { values: args } = parseArgs({
   options: {
@@ -49,7 +54,54 @@ let nextId = 1;
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
 
-const http = createServer((_req, res) => {
+/** The player's address: the first X-Forwarded-For entry behind Caddy, else the connection's */
+function clientIp(req: IncomingMessage): string {
+  const fwd = String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim();
+  return (TRUST_PROXY && fwd) || req.socket.remoteAddress || "?";
+}
+
+/** Only pages from the allowed origins (GATEWAY_ORIGINS), as for the sockets; all when none are set */
+const allowedOrigin = (req: IncomingMessage) => {
+  const origins = req.headersDistinct.origin ?? [];
+  return !ORIGINS.length || origins.some((o) => ORIGINS.includes(o));
+};
+
+const cacheStatsPath = process.env.CACHE_STATS ?? "dist/cache-stats.json";
+const cacheStats = new CacheStatsBook(cacheStatsPath === "none" ? null : cacheStatsPath, log);
+/** A page reports when it's hidden or closed: a few a minute from one address is plenty */
+const STATS_PER_MINUTE = 20;
+const statsPerIp = new Map<string, number>();
+setInterval(() => statsPerIp.clear(), 60_000).unref();
+
+/** POST /api/stats/cache: one report, at most 4 KB; always answered 204 unless refused outright */
+function cacheReport(req: IncomingMessage, res: ServerResponse): void {
+  const ip = clientIp(req);
+  const n = statsPerIp.get(ip) ?? 0;
+  if (!allowedOrigin(req) || n >= STATS_PER_MINUTE) {
+    res.writeHead(n >= STATS_PER_MINUTE ? 429 : 403).end();
+    req.resume();
+    return;
+  }
+  statsPerIp.set(ip, n + 1);
+  const chunks: Buffer[] = [];
+  let size = 0;
+  req.on("data", (c: Buffer) => {
+    size += c.length;
+    if (size <= 4096) return void chunks.push(c);
+    if (!res.headersSent) res.writeHead(413, { connection: "close" }).end();
+    req.destroy();
+  });
+  req.on("end", () => {
+    if (res.headersSent) return;
+    const report = parseReport(Buffer.concat(chunks).toString("utf8"));
+    if (report) cacheStats.add(report);
+    res.writeHead(204).end();
+  });
+  req.on("error", () => {});
+}
+
+const http = createServer((req, res) => {
+  if (req.method === "POST" && (req.url ?? "").split("?")[0] === "/api/stats/cache") return cacheReport(req, res);
   res.writeHead(200, { "content-type": "text/plain" });
   res.end("Meridian Shards gateway. Connect with a WebSocket.\n");
 });
@@ -97,14 +149,12 @@ const release = (counts: Map<string, number>, ip: string) => {
 };
 
 http.on("upgrade", (req, socket, head) => {
-  const fwd = String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim();
-  const ip = (TRUST_PROXY && fwd) || req.socket.remoteAddress || "?";
+  const ip = clientIp(req);
   // Unreal Meridian's WebSocket client (the engine's libwebsockets) sends its own Origin, the host,
   // before the one the game sets, so a request may carry two. A browser always sends exactly one,
   // so letting any allowed one through admits no page the list doesn't.
-  const origins = req.headersDistinct.origin ?? [];
-  if (ORIGINS.length && !origins.some((o) => ORIGINS.includes(o))) {
-    log(`reject ${ip}: origin ${origins.join(" + ") || "(none)"}`);
+  if (!allowedOrigin(req)) {
+    log(`reject ${ip}: origin ${(req.headersDistinct.origin ?? []).join(" + ") || "(none)"}`);
     socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
     return;
   }
@@ -191,8 +241,9 @@ http.listen(PORT, () => {
   log(`gateway listening on ws://localhost:${PORT} -> ${SERVER_HOST}:${SERVER_PORT} (max ${MAX_PER_IP}/IP), the arena's feed on /arena`);
 });
 
-// The arena's season is saved before going (docker stop sends SIGTERM)
+// The arena's season and the cache stats are saved before going (docker stop sends SIGTERM)
 for (const sig of ["SIGINT", "SIGTERM"] as const)
   process.once(sig, () => {
+    cacheStats.save();
     void arena.stop().finally(() => process.exit(0));
   });
