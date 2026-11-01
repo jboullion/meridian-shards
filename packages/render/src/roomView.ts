@@ -77,6 +77,13 @@ const ALL_LIGHTS = 0xffff;
 /** Ours (moods' sun shadows): a wall texture more see-through than this casts none */
 const SEE_THROUGH = 0.45;
 
+/** Whether two builds of a batch put the same triangles in the same places */
+function samePositions(a: Batch, b: Batch): boolean {
+  if (a.positions.length !== b.positions.length) return false;
+  for (let i = 0; i < a.positions.length; i++) if (a.positions[i] !== b.positions[i]) return false;
+  return true;
+}
+
 export class RoomView {
   readonly group = new THREE.Group();
   geometry!: RoomGeometry;
@@ -147,6 +154,13 @@ export class RoomView {
    * scrolling). Textures and the lighting carry over.
    */
   rebuild(room: Room): void {
+    // Ours (2026-11-01): when nothing moved (a wall's picture, a texture: Guild Hall 8's doors),
+    // what each light sees of a batch that's the same stays known, and only the batches that
+    // changed are worked out again. Working out the whole room took a frame of ~75 ms. When
+    // heights changed (a lift stopped) a wall may hide or show anything: all of it again.
+    const keep = room === this.room && this.builtHeights === this.heightsKey();
+    const oldBatches = new Map(this.meshBatches.map(({ batch }) => [batch.key, batch]));
+    const oldVisibility = keep ? new Map(this.visibility) : null;
     this.visibility.clear();
     this.maskKey = "";
     for (const m of this.meshes) {
@@ -161,9 +175,71 @@ export class RoomView {
     this.meshBatches = [];
     this.build(room, old);
     for (const m of old.values()) m.dispose();
+    if (oldVisibility)
+      for (const [key, v] of oldVisibility) {
+        const kept = new Map<Batch, Uint8Array>();
+        for (const batch of this.geometry.batches.values()) {
+          const was = oldBatches.get(batch.key);
+          const seen = was && v.get(was);
+          if (seen && samePositions(was, batch)) kept.set(batch, seen);
+        }
+        this.visibility.set(key, kept);
+      }
     if (this.lighting) this.setLighting(this.lighting);
     this.setLights(this.lights);
     this.update(this.time);
+  }
+
+  /**
+   * Ours (2026-11-01): a lift in motion (a door, a lift: roomanim.c ANIMATE_FLOOR_LIFT and
+   * CEILING_LIFT), drawn without building the room again. Only the vertices move, written into
+   * the meshes there are. The lights' occlusion, the shaded corners and the sun's maps stay as
+   * they were until the lift stops and rebuild() brings them up to date. Rebuilding every step
+   * of a door took the frame rate from 60 to 13. False when the room's batches changed shape (a
+   * wall gone to nothing or come back): rebuild() then.
+   */
+  moveHeights(room: Room): boolean {
+    const geometry = buildRoomGeometry(room, (id) => {
+      const b = this.textures.get(id);
+      if (!b) return null;
+      const bmp = b.bitmaps[0];
+      return { width: bmp.width, height: bmp.height, shrink: b.shrink };
+    });
+    if (geometry.batches.size !== this.meshBatches.length) return false;
+    for (const { batch } of this.meshBatches) {
+      const next = geometry.batches.get(batch.key);
+      if (!next || next.positions.length !== batch.positions.length) return false;
+    }
+    for (const { mesh, batch } of this.meshBatches) {
+      const next = geometry.batches.get(batch.key)!;
+      // The same batch objects, so what's keyed by them (the lights' visibility) carries over
+      batch.positions = next.positions;
+      batch.uvs = next.uvs;
+      batch.lights = next.lights;
+      batch.shade = next.shade;
+      const g = mesh.geometry;
+      const pos = g.getAttribute("position") as THREE.BufferAttribute;
+      const uv = g.getAttribute("uv") as THREE.BufferAttribute;
+      const light = g.getAttribute("aLight") as THREE.BufferAttribute;
+      const shade = g.getAttribute("aShade") as THREE.BufferAttribute;
+      const n = batch.positions.length / 3;
+      for (let i = 0; i < n; i++) {
+        // as build(): each triangle reversed (mirror) and the axes swapped
+        const src = i - (i % 3) + [0, 2, 1][i % 3];
+        pos.setXYZ(i, batch.positions[src * 3] / FINENESS, batch.positions[src * 3 + 2] / FINENESS, batch.positions[src * 3 + 1] / FINENESS);
+        uv.setXY(i, batch.uvs[src * 2], batch.uvs[src * 2 + 1]);
+        light.setX(i, batch.lights[src]);
+        shade.setXYZ(i, batch.shade[src * 3], batch.shade[src * 3 + 1], batch.shade[src * 3 + 2]);
+      }
+      pos.needsUpdate = true;
+      uv.needsUpdate = true;
+      light.needsUpdate = true;
+      shade.needsUpdate = true;
+      g.computeBoundingSphere();
+    }
+    this.geometry.skySectors = geometry.skySectors;
+    this.room = room;
+    return true;
   }
 
   private indexTexture(id: number, bgf: Bgf, bitmap: number): THREE.DataTexture {
@@ -619,7 +695,8 @@ export class RoomView {
   /** Which triangles a still light sees, kept by its place. */
   private lightVisibility(key: string, l: LightSource): Map<Batch, Uint8Array> {
     let v = this.visibility.get(key);
-    if (v) return v;
+    // (after a rebuild that kept some, only the batches that changed are missing)
+    if (v && v.size === this.geometry.batches.size) return v;
     // Kept inside its sector: a tall sprite's light can be above a low ceiling
     let z = l.z;
     const leaf = leafAt(this.room, l.x, l.y);
@@ -629,8 +706,8 @@ export class RoomView {
     }
     const light = { x: l.x, y: l.y, z, reach: l.scale / 2 };
     const walls = wallsNear(this.room, light.x, light.y, light.reach);
-    v = new Map();
-    for (const batch of this.geometry.batches.values()) v.set(batch, triangleVisibility(this.room, batch, light, walls));
+    v ??= new Map();
+    for (const batch of this.geometry.batches.values()) if (!v.has(batch)) v.set(batch, triangleVisibility(this.room, batch, light, walls));
     this.visibility.set(key, v);
     return v;
   }

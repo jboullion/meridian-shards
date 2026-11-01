@@ -35,6 +35,26 @@ describe.skipIf(!have)("room changes (roomanim.c)", () => {
     expect(base.sectors[door].ceilingHeight).toBe(84 * 16);
   });
 
+  test("a lift on its way changes only heights (otherVersion stays); its end and other changes don't", () => {
+    const live = new LiveRoom(load("razacrypt.roo"));
+    live.apply({ type: "sectorMove", animation: ANIMATE.CEILING_LIFT, sector: DOOR, height: 172, speed: 16 });
+    expect(live.lifting).toBe(true);
+    const other = live.otherVersion;
+    const before = live.version;
+    live.tick(1000);
+    live.tick(1000);
+    expect(live.version).toBeGreaterThan(before);
+    expect(live.otherVersion).toBe(other);
+    // its last step: no longer lifting, so the room is built again
+    live.tick(10_000);
+    expect(live.lifting).toBe(false);
+    // at once (speed 0), and a texture change: changes of shape
+    live.apply({ type: "sectorMove", animation: ANIMATE.CEILING_LIFT, sector: DOOR, height: 84, speed: 0 });
+    expect(live.otherVersion).toBe(other + 1);
+    live.apply({ type: "changeTexture", id: DOOR, texture: 1, flags: CTF.CEILING });
+    expect(live.otherVersion).toBe(other + 2);
+  });
+
   test("speed 0 is at once (what the server sends on entering)", () => {
     const live = new LiveRoom(load("razacrypt.roo"));
     live.apply({ type: "sectorMove", animation: ANIMATE.FLOOR_LIFT, sector: 4, height: 105, speed: 0 });

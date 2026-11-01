@@ -351,6 +351,8 @@ export class GameScene {
   private liveApplied = 0;
   /** The live room's version `roomView` shows */
   private liveDrawn = 0;
+  /** Its changes other than lifts' heights (LiveRoom.otherVersion) that `roomView` shows */
+  private liveShapeDrawn = 0;
   /** Our own view of the changed room (the cache's view stays as the file has it) */
   private ownView: RoomView | null = null;
   /** Rain, snow, sand and fireworks (d3dparticle.c) */
@@ -964,6 +966,7 @@ export class GameScene {
     this.live.numGroups = (id) => this.roomBgf(id)?.groups.length ?? 0;
     this.liveApplied = 0;
     this.liveDrawn = 0;
+    this.liveShapeDrawn = 0;
     this.room = this.live.room;
     this.roomView = loaded.view;
     this.scene.add(loaded.view.group);
@@ -1015,6 +1018,10 @@ export class GameScene {
     live.tick(dt);
     if (live.version === this.liveDrawn) return;
     this.liveDrawn = live.version;
+    // Ours: a door or lift on its way moves the vertices we have; the room is built again once
+    // it stops (its last step is a change too) or anything else changes
+    if (this.ownView && live.lifting && live.otherVersion === this.liveShapeDrawn && this.ownView.moveHeights(live.room)) return;
+    this.liveShapeDrawn = live.otherVersion;
     if (!this.ownView) {
       const textures = new Map(this.loaded.bgfs);
       for (const [id, b] of this.ownViewTextures) textures.set(id, b);

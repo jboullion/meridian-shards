@@ -40,9 +40,20 @@ export class LiveRoom {
   private readonly sectorAnims = new Map<number, BitmapAnim>();
   /** Bumped whenever something the renderer draws changed. */
   version = 0;
+  /**
+   * Ours: bumped with `version` for every change but a lift's heights (textures, wall and sector
+   * animations, scrolling). While only lifts move, the renderer moves the vertices it has rather
+   * than building the room again (RoomView.moveHeights).
+   */
+  otherVersion = 0;
 
   constructor(base: Room) {
     this.room = cloneRoom(base);
+  }
+
+  /** Ours: whether a lift (a door) is moving */
+  get lifting(): boolean {
+    return this.lifts.size > 0;
   }
 
   /** Whether anything is still moving (lifts, bitmap animations). */
@@ -104,6 +115,8 @@ export class LiveRoom {
         return;
     }
     this.version++;
+    // A lift that moves at once (speed 0) is a change of shape like any other
+    if (c.type !== "sectorMove" || !this.lifting) this.otherVersion++;
   }
 
   /**
@@ -113,6 +126,7 @@ export class LiveRoom {
    */
   tick(dt: number): boolean {
     let changed = false;
+    let other = false;
     for (const [i, lift] of this.lifts) {
       // RoomAnimateSingle ANIMATE_FLOOR_LIFT / ANIMATE_CEILING_LIFT
       lift.progress += lift.increment * dt;
@@ -131,16 +145,17 @@ export class LiveRoom {
         this.sidedefDone(s, a);
         this.sidedefAnims.delete(i);
       }
-      changed = true;
+      changed = other = true;
     }
     for (const [i, a] of this.sectorAnims) {
       const s = this.room.sectors[i];
       if (!animStep(a.anim, this.numGroups(s.floorType || s.ceilingType), dt)) continue;
       s.group = a.anim.group;
       if (a.anim.type === ANIMATE.NONE) this.sectorAnims.delete(i);
-      changed = true;
+      changed = other = true;
     }
     if (changed) this.version++;
+    if (other) this.otherVersion++;
     return changed;
   }
 
