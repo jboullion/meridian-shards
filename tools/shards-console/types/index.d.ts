@@ -17,6 +17,8 @@ export type LiveSnapshot = {
   error?: string
   container: { state: string; startedAt: string; restarts: number; ageSec: number } | null
   skipped?: 'starting' | 'not running'
+  /** blakserv answered show status; false: its main loop may be hung */
+  answering?: boolean
   server: ServerStatus | null
   players: Player[]
   errors: { lines: number; tail: string[] } | null

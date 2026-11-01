@@ -28,7 +28,7 @@ Claude Code runs mods: plugins of hooks written in TypeScript. They can draw a p
    It loads in the desktop app's sessions through `CLAUDE_CODE_PLUGIN_DIRS` in the user's settings (with `CLAUDE_CODE_PLUGIN_DIR_WATCH=1`, so edits reload it). Its `README.md` says how.
 2. **Live data comes over ssh, one round trip per poll, with no new endpoint.** `tools/console/live-status.ts` uses `ship.ts`'s ssh helper (moved to `tools/deploy/remote.ts`) and `.env`'s `SHARDS_DEPLOY_HOST` and `SHARDS_DEPLOY_KEY`. It runs one small script on the VM that reads:
    - the blakserv container's state, start time and restart count (`docker inspect`);
-   - maint `show status` and `who`;
+   - maint `who`, and whether it answers at all. Not `show status`: on Linux it hung blakserv until the 2026-11-01 fix, and the console's polls with it caused the outage of 2026-10-31 to 11-01 (deploy/README.md);
    - the line count and tail of `channel/error.txt`.
 
    It prints one JSON object. A failure (no route, container down) is a field, not a crash.

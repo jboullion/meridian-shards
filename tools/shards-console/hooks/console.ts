@@ -75,7 +75,7 @@ async function script<T>($: Dollar, file: string, timeoutMs: number): Promise<Fe
   }
 }
 
-const isUp = (s: LiveSnapshot | null | undefined) => !!s?.reachable && s.container?.state === 'running'
+const isUp = (s: LiveSnapshot | null | undefined) => !!s?.reachable && s.container?.state === 'running' && s.answering !== false
 
 export async function refreshLive($: Dollar) {
   if (busy.has('live')) return
@@ -86,7 +86,7 @@ export async function refreshLive($: Dollar) {
     await update($, live, () => next)
     const now = next.data
     if (was && isUp(was) && !isUp(now)) {
-      const why = now?.error ?? (now?.container ? `container ${now.container.state}` : 'no container')
+      const why = now?.error ?? (now?.answering === false ? "blakserv isn't answering (hung?)" : now?.container ? `container ${now.container.state}` : 'no container')
       $.ui.toast(`Live server down: ${why}`)
       void $.ui.notify(`The live server looks down: ${why}`, { title: 'Meridian Shards' })
     }

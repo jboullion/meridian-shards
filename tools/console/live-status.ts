@@ -1,5 +1,5 @@
 // The live server at a glance, for the Shards Console (ADR 0031 decision 2): one ssh round trip
-// to the VM reads the blakserv container (state, start, restarts), `show status` and `who`
+// to the VM reads the blakserv container (state, start, restarts), `who`
 // through its maintenance port, and the tail of channel/error.txt. Prints one JSON object;
 // a failure is a field in it, never a crash.
 //
@@ -28,6 +28,9 @@ export interface LiveStatus {
   container: { state: string; startedAt: string; restarts: number; ageSec: number } | null;
   /** Why the maintenance commands weren't sent, when they weren't */
   skipped?: "starting" | "not running";
+  /** blakserv answered show status on its maintenance port. False: the port took the commands and
+   *  nothing came back, so its main loop may be hung (logins and the account service fail too) */
+  answering?: boolean;
   server: ServerStatus | null;
   /** Characters in the game */
   players: { account: string; room: string; rid: number }[];
@@ -57,7 +60,7 @@ echo "@@errors"
 $C exec -T blakserv sh -c 'wc -l < channel/error.txt 2>/dev/null || echo 0; tail -n ${ERROR_TAIL} channel/error.txt 2>/dev/null' </dev/null
 [ "$age" -lt ${SETTLE_SEC} ] && exit 0
 echo "@@maint"
-$C exec -T blakserv maint "show status" "who" </dev/null
+$C exec -T blakserv maint "who" </dev/null
 `;
 
 function sections(output: string): Record<string, string> {
@@ -114,6 +117,7 @@ export function readLive(output: string): Omit<LiveStatus, "at" | "reachable" | 
   }
   if (s.maint === undefined) return { ...live, skipped: "starting" };
   live.server = parseStatus(s.maint);
+  live.answering = /^Name\s+Act\s+Ver/m.test(s.maint);
   live.sessions = parseWho(s.maint);
   live.players = inGame(live.sessions).map((p) => ({ account: p.account, room: p.room!, rid: p.rid! }));
   return live;

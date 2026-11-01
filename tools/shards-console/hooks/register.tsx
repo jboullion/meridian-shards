@@ -131,7 +131,7 @@ export const register: Register = on => {
 
     // Live
     const ld = l?.data
-    const liveUp = ld ? ld.reachable && ld.container?.state === 'running' : null
+    const liveUp = ld ? ld.reachable && ld.container?.state === 'running' && ld.answering !== false : null
     const liveLine = !l
       ? 'fetching...'
       : !ld
@@ -142,7 +142,9 @@ export const register: Register = on => {
             ? 'no blakserv container'
             : ld.skipped === 'not running'
               ? `container ${ld.container.state} (restarts ${ld.container.restarts})`
-              : ld.skipped === 'starting'
+              : ld.answering === false
+                ? "not answering: blakserv's maintenance port gave no answer, so it may be hung (logins and the account page fail too)"
+                : ld.skipped === 'starting'
                 ? `starting (up ${duration(ld.container.ageSec)}): no maintenance commands in the first minute and a half`
                 : `up ${duration(ld.server?.uptimeSec ?? ld.container.ageSec)} · ${ld.players.length} online · restarts ${ld.container.restarts}`
     const newLive = ld?.errors ? Math.max(0, ld.errors.lines - s.live) : 0
@@ -301,7 +303,7 @@ export const register: Register = on => {
     const { Box, Text, Button } = $.ui.resolve(e)
     const now = await $.clock.now()
     const ld = l?.data
-    const up = ld ? ld.reachable && ld.container?.state === 'running' && ld.skipped !== 'starting' : null
+    const up = ld ? ld.reachable && ld.container?.state === 'running' && ld.skipped !== 'starting' && ld.answering !== false : null
     const newErrors = ld?.errors ? Math.max(0, ld.errors.lines - s.live) : 0
     const ports = lo?.data?.ports
     const localUp = ports ? ports.game && ports.maintenance : null
@@ -310,7 +312,7 @@ export const register: Register = on => {
       <Box gap={1}>
         <Text color={up === null ? 'subtle' : up ? 'success' : ld?.skipped === 'starting' ? 'warning' : 'error'}>●</Text>
         <Text dimColor>
-          live{ld?.reachable && ld.container ? ` · ${ld.players.length} online · up ${duration(ld.server?.uptimeSec ?? ld.container.ageSec)}` : ld ? ` · ${ld.error ?? ld.skipped ?? 'down'}` : ''}
+          live{ld?.answering === false ? ' · not answering' : ld?.reachable && ld.container ? ` · ${ld.players.length} online · up ${duration(ld.server?.uptimeSec ?? ld.container.ageSec)}` : ld ? ` · ${ld.error ?? ld.skipped ?? 'down'}` : ''}
         </Text>
         {newErrors ? <Text color="warning">{newErrors} new errors</Text> : null}
         <Text dimColor>│ local</Text>

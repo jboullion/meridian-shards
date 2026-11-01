@@ -33,6 +33,13 @@ describe("readLive", () => {
     expect(readLive("@@container\nmissing\n").logs).toEqual([]);
   });
 
+  it("says when blakserv takes the maintenance commands and answers nothing", () => {
+    const hung = readLive("@@container\nrunning|2026-10-31T16:46:15Z|0\n@@age\n36350\n@@errors\n10421\n@@maint\n\n");
+    expect(hung.answering).toBe(false);
+    expect(hung.players).toEqual([]);
+    expect(readLive(`@@container\nrunning|2026-10-28T10:00:00Z|0\n@@age\n260000\n@@maint\n${MAINT}\n`).answering).toBe(true);
+  });
+
   it("sends no maintenance commands while blakserv starts", () => {
     const live = readLive("@@container\nrunning|2026-10-31T10:00:00Z|0\n@@age\n30\n@@errors\n0\n");
     expect(live.skipped).toBe("starting");
