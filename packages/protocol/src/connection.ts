@@ -37,6 +37,11 @@ export interface ConnectionEvents {
   error?: (err: Error) => void;
   /** The round trip of a BP_PING to its BP_ECHO_PING, in milliseconds (lagbox.c's latency) */
   latency?: (ms: number) => void;
+  /**
+   * Ours: a sound game message that `message` threw on (a reader or handler out of step with the
+   * server). The message is skipped and the game goes on; without this, it's logged
+   */
+  handlerError?: (type: number, err: Error) => void;
 }
 
 export class Connection {
@@ -223,7 +228,7 @@ export class Connection {
         r.pos = 1;
       } else if (type === BP.RESYNC) {
         // server.c HandleGameResync: the server lost track of our frames
-        this.events.message?.(type, r, stateAtReceive);
+        this.handle(type, r, stateAtReceive);
         this.resyncGame(false);
         return;
       } else if (type === BP.QUIT) {
@@ -232,6 +237,23 @@ export class Connection {
         this.setState("login");
       }
     }
-    this.events.message?.(type, r, stateAtReceive);
+    this.handle(type, r, stateAtReceive);
+  }
+
+  /**
+   * Ours: hands a message on. In the game, one we can't read is skipped: the frame was sound (its
+   * security word and epoch already taken), so it's no transmission error, and a resync over it
+   * (receive's catch) went unanswered and dropped the game (2026-11-01: a spell list cut short by
+   * a spell the server had removed). Logging in, it fails as before.
+   */
+  private handle(type: number, r: ByteReader, state: ConnState): void {
+    if (state !== "game") return void this.events.message?.(type, r, state);
+    try {
+      this.events.message?.(type, r, state);
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err));
+      if (this.events.handlerError) this.events.handlerError(type, e);
+      else console.error(`message ${type} couldn't be handled:`, e);
+    }
   }
 }

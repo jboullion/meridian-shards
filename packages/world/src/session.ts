@@ -365,6 +365,8 @@ export class GameSession {
           }
         },
         latency: (ms) => this.events.latency?.(ms),
+        // Ours: a message we couldn't read is skipped (Connection.handle), and said
+        handlerError: (type, e) => console.error(`${bpName(type)} couldn't be read:`, e),
       },
       { pingIntervalMs: opts.pingIntervalMs },
     );

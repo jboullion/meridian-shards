@@ -159,6 +159,38 @@ test("connection: a bad frame in the game tells the server (BP_RESYNC) and resyn
   conn.close();
 });
 
+test("connection: a sound game message we can't read is skipped, not resynchronized over", () => {
+  const sent: Uint8Array[] = [];
+  const got: number[] = [];
+  const failed: number[] = [];
+  const conn = new Connection(
+    (b) => sent.push(b),
+    {
+      message: (type, _r, state) => {
+        if (state !== "game") return;
+        if (type === 141) throw new RangeError("read past end");
+        got.push(type);
+      },
+      handlerError: (type) => failed.push(type),
+    },
+    { pingIntervalMs: 0 },
+  );
+  conn.start();
+  const seeds = new Uint8Array(21);
+  seeds[0] = 22;
+  conn.receive(encodeFrame(seeds, 0, 9));
+  conn.receive(encodeFrame(Uint8Array.of(25), 0, 9));
+  const before = sent.length;
+  // BP_SPELLS cut short, then the next message
+  conn.receive(new Uint8Array([...encodeFrame(Uint8Array.of(141, 1, 0), 0, 9), ...encodeFrame(Uint8Array.of(142), 0, 9)]));
+  assert.equal(conn.state, "game");
+  assert.deepEqual(failed, [141]);
+  assert.deepEqual(got, [142]);
+  // no BP_RESYNC, no beacon
+  assert.equal(sent.length, before);
+  conn.close();
+});
+
 test("UC_SHARDS_OBJECT: the object without its number tag, then the line", () => {
   const b = buildShardsObjectCommand(0x10000000 | 6461, "train 2");
   assert.deepEqual([...b.slice(0, 2)], [BP.USERCOMMAND, UC.SHARDS_OBJECT]);
