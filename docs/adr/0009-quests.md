@@ -264,7 +264,7 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
 - **Talking to an NPC is activating it.** Kod can't turn a number in a text command back into an object, so `Monster.TryActivate` (for `AI_NPC`) calls `NpcActivated`: within 4 squares, the player gets `UC_QUEST_OFFERS` and the NPC is remembered. `quest accept <id>` and `quest turnin <id> [n]` act on it (n: the reward chosen, below), checked again (still in the room, still near).
 - **Steps:** kill (from `Monster.Killed`, outside arenas, for the killer and everyone in the room's builder group with them; `IsClass` unless exact), collect (counted from what's carried, bags too; on pickup from `User.NewHold`; taken at the hand-in), talk, deliver (a `QuestParcel` named by the quest, given at the step's start, taken at the hand-in), visit (from `Player.NewOwner`). Each count sends a line ("Small rats slain: 7/20") and `UC_QUEST_PROGRESS`.
 - **Rewards:** `AddXP`, shillings and items, into the pack or at the player's feet.
-- **The cap** is 10 active quests. A deadline is checked on each command and at logon; a quest whose id is gone (retired) is dropped at logon.
+- **The cap** is 20 active quests (10 until 2026-10-31). A deadline is checked on each command and at logon; a quest whose id is gone (retired) is dropped at logon.
 - **Admin messages** for the dashboard: `AdminGrant`, `AdminSetStep`, `AdminFinishStep`, `AdminComplete`, `AdminReset`, `AdminState`.
 
 **Placed givers:** `QuestGiver is Towns` (`monster/towns/questgiver.kod`), one per row of `givers.json`, placed by `room.kod Constructed` (`PlaceGivers`), with its own name and description and a picture borrowed from another NPC class.

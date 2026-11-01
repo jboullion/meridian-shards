@@ -247,7 +247,7 @@ export const ANGLES = [
 export const KOD_INT_MAX = 2 ** 27 - 1;
 
 /** The most quests a player has going at once (QuestBook's MAX_ACTIVE) */
-export const MAX_ACTIVE = 10;
+export const MAX_ACTIVE = 20;
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const isInt = (v: unknown, min = 0, max = KOD_INT_MAX): v is number => typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
