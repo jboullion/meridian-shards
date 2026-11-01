@@ -79,8 +79,8 @@ export type ArenaEvent =
   | { type: "swing"; x: number; y: number; hit: "metal" | "leather" | "flesh" | null; ouch: number; female: boolean }
   /** A spell cast (its key) */
   | { type: "cast"; x: number; y: number; spell: string }
-  /** A spell landing (its key), and whether it struck someone, and their cry */
-  | { type: "impact"; x: number; y: number; spell: string; ouch: number; female: boolean }
+  /** A spell landing (its key), and their cry if it struck someone; hit (ours, 2026-11-01; absent from older gateways) whether it did */
+  | { type: "impact"; x: number; y: number; spell: string; ouch: number; female: boolean; hit?: boolean }
   /** Stuck in a web, scratched by brambles, burned by a wall of fire, poisoned by the fog */
   | { type: "stuck" | "scratch" | "burn" | "poisoned"; x: number; y: number; ouch: number; female: boolean }
   /** A bramble cut down */

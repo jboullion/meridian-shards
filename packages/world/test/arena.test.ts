@@ -16,6 +16,8 @@ import { arenaFloorArea, readArenaConfigs } from "../src/arena/arenaRooms.ts";
 import { SEASON_EPOCH, SEASON_MS, championOf, makeRoster, seasonAt, seasonStart, type ArenaRecord } from "../src/arena/arenaRoster.ts";
 import { ARENA_BUSY_MAX_MS, ArenaSim, arenaHourAt } from "../src/arena/arenaSim.ts";
 import { ArenaView } from "../src/arena/arenaView.ts";
+import { arenaSpellFx } from "../src/arena/arenaFx.ts";
+import { SPELL_FX, SPELL_FX_LOOK } from "../src/spellFx.ts";
 import { ARENA_STATUS, type ArenaPersonWire, type ArenaState, type ArenaTick } from "../src/arena/arenaWire.ts";
 
 const SQ = FINENESS;
@@ -283,9 +285,15 @@ describe.skipIf(!have)("the arena's fights on the real room", () => {
     const { config } = readArenaConfig({ mix: only({ qor: 1, shalille: 1, warrior: 1 }) });
     const last = new Map<number, ArenaPersonWire>();
     let blindTicks = 0,
-      stumbles = 0;
+      stumbles = 0,
+      cursesLanded = 0;
     const s = sim(8, config);
-    run(s, 6 * 60_000, () => {
+    run(s, 6 * 60_000, (m) => {
+      // Each curse landing says whether it struck (arenaFx.ts draws the pulse only then)
+      for (const e of m.ev ?? []) if (e.type === "impact" && ARENA_SPELLS[e.spell as keyof typeof ARENA_SPELLS]?.kind === "curse") {
+        expect(typeof e.hit).toBe("boolean");
+        if (e.hit) cursesLanded++;
+      }
       for (const p of s.everyone) {
         const before = last.get(p.id);
         const blind = p.st & (ARENA_STATUS.BLIND | ARENA_STATUS.DAZZLED);
@@ -298,6 +306,7 @@ describe.skipIf(!have)("the arena's fights on the real room", () => {
       }
     });
     expect(blindTicks).toBeGreaterThan(20);
+    expect(cursesLanded).toBeGreaterThan(0);
     expect(stumbles).toBeGreaterThan(0);
   }, 60_000);
 });
@@ -326,13 +335,31 @@ describe("the arena as drawn (ArenaView)", () => {
     expect(files(o.moving.overlays)).not.toContain("swordov.bgf");
   });
 
-  test("webs on the legs of the stuck, the blinding ring on the blind", () => {
+  test("webs on the legs of the stuck; nothing over the head of the blind (a curse's pulse shows it)", () => {
     const v = new ArenaView();
     v.receive(state([person({ st: ARENA_STATUS.WEBBED }), person({ id: 2, rid: -1, role: "spectator", st: ARENA_STATUS.BLIND })]));
     v.update(0, 16);
     const [a, b] = v.objects();
     expect(files(a.normal.overlays)).toContain("webov.bgf");
-    expect(files(b.normal.overlays)).toContain("blindring.bgf");
+    expect(files(b.normal.overlays)).not.toContain("blindring.bgf");
+    expect(files(b.normal.overlays)).not.toContain("webov.bgf");
+  });
+
+  test("its spells drawn as a player's: the caster's glow, Lightning Bolt's flash, a curse's pulse where it lands", () => {
+    const at = { x: 3 * SQ, y: 4 * SQ };
+    expect(arenaSpellFx({ type: "cast", ...at, spell: "fireball" }, ARENA_SPELLS)).toEqual({ kind: SPELL_FX.CAST, ...at, color: 0x7e40, look: SPELL_FX_LOOK.FIRE, flash: false });
+    expect(arenaSpellFx({ type: "cast", ...at, spell: "lightning" }, ARENA_SPELLS)?.flash).toBe(true);
+    expect(arenaSpellFx({ type: "cast", ...at, spell: "blind" }, ARENA_SPELLS)).toMatchObject({ kind: SPELL_FX.CAST, color: 0x03e0, look: SPELL_FX_LOOK.QOR });
+    expect(arenaSpellFx({ type: "cast", ...at, spell: "dazzle" }, ARENA_SPELLS)).toMatchObject({ color: 0x7fe0, look: SPELL_FX_LOOK.SHALILLE });
+    const landed = { type: "impact" as const, ...at, ouch: 0, female: false };
+    expect(arenaSpellFx({ ...landed, spell: "hold", hit: true }, ARENA_SPELLS)).toMatchObject({ kind: SPELL_FX.CURSE, color: 0x03e0 });
+    // From an older gateway, which doesn't say
+    expect(arenaSpellFx({ ...landed, spell: "blind" }, ARENA_SPELLS)?.kind).toBe(SPELL_FX.CURSE);
+    expect(arenaSpellFx({ ...landed, spell: "blind", hit: false }, ARENA_SPELLS)).toBeNull();
+    // A bolt's landing is its light's burst, an arrow nothing, a swing nothing
+    expect(arenaSpellFx({ ...landed, spell: "fireball", hit: true }, ARENA_SPELLS)).toBeNull();
+    expect(arenaSpellFx({ type: "cast", ...at, spell: "arrow" }, ARENA_SPELLS)).toBeNull();
+    expect(arenaSpellFx({ type: "swing", ...at, hit: "metal", ouch: 1, female: false }, ARENA_SPELLS)).toBeNull();
   });
 
   test("ticks play back a little behind, figures gliding between them", () => {

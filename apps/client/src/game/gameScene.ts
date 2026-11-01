@@ -21,7 +21,7 @@ import {
   AMBIENT_ROOMS, AMBIENT_SCALE, type AmbientRoomSpec, AmbientLife, LiveRoom, MOVEON, PlayerMover, REMOTE_VIEW, animStep, isAmbientId, localRes, localResName, townsfolkArt,
   Critters, batsOf, critterArt, decodeNavGrid, habitatOf, hourFromSun, isImpressiveBody, type AmbientExits, type DamageDealt, type NavGrid, type NavPoint, type RemoteView, type GameSession, type WorldObject,
   FollowPlanner, AmbientStepper, type AmbientFrame, type AmbientSeed, Pets, petArt, type PetChoice, type PetOwner,
-  ARENA_SEND_EVERY, ARENA_TICK_MS, ARENA_ROOM_DEFS, ArenaSim, ArenaView, arenaArt, arenaFloorArea, arenaHourAt, arenaOpenAt, hashText, makeRoster, readArenaConfigs, seasonAt,
+  ARENA_SEND_EVERY, ARENA_SPELLS, ARENA_TICK_MS, ARENA_ROOM_DEFS, ArenaSim, ArenaView, arenaArt, arenaSpellFx, arenaFloorArea, arenaHourAt, arenaOpenAt, hashText, makeRoster, readArenaConfigs, seasonAt,
   type AmbientPersonInfo, type ArenaEvent, type ArenaMessage, SPELL_FX, type SpellFx,
 } from "@shards/world";
 import type { AssetStore } from "../assets.ts";
@@ -1991,6 +1991,7 @@ export class GameScene {
   private updateAmbientSounds(dt: number): void {
     const events = this.ambient?.takeEvents() ?? [];
     const arenaEvents = [...(this.arena?.takeEvents() ?? []), ...this.boutCheers.splice(0)];
+    if (this.settings.enhanced && arenaEvents.length) this.showArenaFx(arenaEvents);
     const strike = this.lightning?.takeStrike() ?? null;
     const splashes = this.nature?.takeSplashes() ?? [];
     const sounds = (this.ambientSounds ??= new AmbientSounds(this.audio));
@@ -2315,6 +2316,29 @@ export class GameScene {
         if (feet) sfx.quake(feet, fx.color);
         break;
       }
+    }
+  }
+
+  /**
+   * Ours (2026-11-01; @shards/world arenaFx.ts): the arena's spells with a player's effects, from
+   * its events (its fighters aren't the server's, so no UC_SPELL_FX names them): a caster's glow at
+   * the middle of them, a curse's pulse at the victim's feet, and Lightning Bolt's flash
+   */
+  private showArenaFx(events: readonly ArenaEvent[]): void {
+    const sfx = this.spellFx;
+    const room = this.room;
+    if (!sfx || !room) return;
+    const eye = { x: this.mover.x, y: this.mover.y, z: this.mover.z };
+    for (const e of events) {
+      const fx = arenaSpellFx(e, ARENA_SPELLS);
+      if (!fx) continue;
+      const leaf = leafAt(room, fx.x, fx.y);
+      if (!leaf?.sector) continue;
+      const floor = floorHeightAt(room.sectors[leaf.sector - 1], fx.x, fx.y);
+      const shape = shapeForLook(fx.look);
+      if (fx.kind === SPELL_FX.CAST) sfx.cast({ x: fx.x, y: fx.y, z: floor + EYE_HEIGHT * 0.55 }, fx.color, eye, shape);
+      else sfx.pulse({ x: fx.x, y: fx.y, z: floor }, fx.color, "curse", shape);
+      if (fx.flash) sfx.flashRoom();
     }
   }
 

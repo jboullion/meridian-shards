@@ -6,6 +6,7 @@
 // "Spell power" is the caster's, 0-99, as Kod's iSpellPower.
 
 import { ANIMATE, type Animation } from "@shards/protocol";
+import { SPELL_FX_LOOK } from "../spellFx.ts";
 
 /** The spells, by key */
 export type ArenaSpellKey = "fireball" | "lightning" | "firewall" | "bramble" | "poisonfog" | "web" | "blind" | "dazzle" | "hold" | "arrow";
@@ -46,6 +47,13 @@ export interface ArenaSpellDef {
   curse?: { status: CurseKind; base: number; perPower: number; extra?: [number, number]; deviation: number; min: number; max: number };
   /** A wall: its elements, laid in a line across the way or a square ahead, `ahead` squares in front */
   wall?: { field: FieldKind; count: number; layout: "line" | "square"; ahead: number; spacing: number };
+  /**
+   * Ours (2026-11-01): the effects a player's cast of it makes (the spell revamp's, phase 9): its
+   * school's colour (spell.kod GetSchoolFxColor, 5:5:5) and look (GetFxLook, SPELL_FX_LOOK) for
+   * the caster's glow and a curse's pulse, and whether the room flashes (lightnin.kod). None: no
+   * effects (an arrow)
+   */
+  fx?: { color: number; look: number; flash: boolean };
 }
 
 const proj = (file: string, period: number, lo: number, hi: number, speed: number, light: number): ProjectileDef => ({
@@ -58,43 +66,51 @@ const ARROW: ProjectileDef = { file: "arrowner.bgf", animation: { type: ANIMATE.
 /** blakston.khd LIGHT_BORANGE, LIGHT_LIGHTNING */
 const LIGHT_BORANGE = 0x7e40;
 const LIGHT_LIGHTNING = 0x3dff;
+/** blakston.khd LIGHT_BGREEN, LIGHT_BYELLOW: Qor's and Shal'ille's colours (GetSchoolFxColor) */
+const LIGHT_BGREEN = 0x03e0;
+const LIGHT_BYELLOW = 0x7fe0;
+
+/** The effects of a school's casts (spell.kod GetSchoolFxColor, GetFxLook) */
+const FAREN_FX = { color: LIGHT_BORANGE, look: SPELL_FX_LOOK.FIRE, flash: false };
+const QOR_FX = { color: LIGHT_BGREEN, look: SPELL_FX_LOOK.QOR, flash: false };
+const SHALILLE_FX = { color: LIGHT_BYELLOW, look: SPELL_FX_LOOK.SHALILLE, flash: false };
 
 export const ARENA_SPELLS: Record<ArenaSpellKey, ArenaSpellDef> = {
   // passive/spell/atakspel/boltspel/fireball.kod: 7 mana (:42), 9-15 damage (:59), speed 10, ffirebal.ogg (:29)
   fireball: {
     label: "Fireball", kind: "bolt", mana: 7, postCast: 2, range: 9, sound: "ffirebal.ogg", damage: [9, 15],
-    projectile: proj("fireball.bgf", 40, 1, 2, 10, LIGHT_BORANGE),
+    projectile: proj("fireball.bgf", 40, 1, 2, 10, LIGHT_BORANGE), fx: FAREN_FX,
   },
   // boltspel/lightnin.kod: 10 mana (:40), 13-18 damage (:60), speed 12, fbolt.ogg (:28)
   lightning: {
     label: "Lightning Bolt", kind: "bolt", mana: 10, postCast: 2, range: 9, sound: "fbolt.ogg", damage: [13, 18],
-    projectile: proj("lightnin.bgf", 40, 2, 3, 12, LIGHT_LIGHTNING),
+    projectile: proj("lightnin.bgf", 40, 2, 3, 12, LIGHT_LIGHTNING), fx: { ...FAREN_FX, flash: true },
   },
   // walspell/firewall.kod: 15 mana (:41), 9 elements (:50) across the way, farenwala822m.ogg (:30)
-  firewall: { label: "Wall of Fire", kind: "wall", mana: 15, postCast: 3, range: 7, sound: "farenwala822m.ogg", wall: { field: "fire", count: 9, layout: "line", ahead: 1, spacing: 0.5 } },
+  firewall: { label: "Wall of Fire", kind: "wall", mana: 15, postCast: 3, range: 7, sound: "farenwala822m.ogg", wall: { field: "fire", count: 9, layout: "line", ahead: 1, spacing: 0.5 }, fx: FAREN_FX },
   // walspell/brmblwll.kod: 10 mana, 5 brambles (viNumElements) in a line a square ahead (PlaceWallElements)
-  bramble: { label: "Bramble Wall", kind: "wall", mana: 10, postCast: 3, range: 6, sound: "faren.ogg", wall: { field: "bramble", count: 5, layout: "line", ahead: 1, spacing: 1 } },
+  bramble: { label: "Bramble Wall", kind: "wall", mana: 10, postCast: 3, range: 6, sound: "faren.ogg", wall: { field: "bramble", count: 5, layout: "line", ahead: 1, spacing: 1 }, fx: FAREN_FX },
   // walspell/summpfog.kod: 20 mana (:43), a square of clouds two squares ahead, qor.ogg
-  poisonfog: { label: "Poison Fog", kind: "wall", mana: 20, postCast: 3, range: 6, sound: "qor.ogg", wall: { field: "fog", count: 9, layout: "square", ahead: 2, spacing: 1 } },
+  poisonfog: { label: "Poison Fog", kind: "wall", mana: 20, postCast: 3, range: 6, sound: "qor.ogg", wall: { field: "fog", count: 9, layout: "square", ahead: 2, spacing: 1 }, fx: QOR_FX },
   // walspell/summweb.kod: 15 mana, 9 webs (viNumElements) in a square two squares ahead (PlaceWallElements), farenwala822m.ogg
-  web: { label: "Spider Web", kind: "wall", mana: 15, postCast: 3, range: 6, sound: "farenwala822m.ogg", wall: { field: "web", count: 9, layout: "square", ahead: 2, spacing: 1 } },
+  web: { label: "Spider Web", kind: "wall", mana: 15, postCast: 3, range: 6, sound: "farenwala822m.ogg", wall: { field: "web", count: 9, layout: "square", ahead: 2, spacing: 1 }, fx: FAREN_FX },
   // debuff/blind.kod: 15 mana (:52), 4000 + power * 60 ms less up to 10% (:63-65, :164-165), 4-18 s (:68-69), qblind.ogg, blindring.bgf at speed 10
   blind: {
     label: "Blind", kind: "curse", mana: 15, postCast: 2, range: 8, sound: "qblind.ogg",
     curse: { status: "blind", base: 4000, perPower: 60, deviation: 10, min: 4000, max: 18000 },
-    projectile: proj("blindring.bgf", 80, 1, 6, 10, 0),
+    projectile: proj("blindring.bgf", 80, 1, 6, 10, 0), fx: QOR_FX,
   },
   // debuff/dazzle.kod: 12 mana (:48), 3000 + power * 40 + 1-10 s, clamped 4-18 s, less up to 10% (:151-157), sDazzle.ogg, dazzlestar.bgf
   dazzle: {
     label: "Dazzle", kind: "curse", mana: 12, postCast: 2, range: 8, sound: "sdazzle.ogg",
     curse: { status: "dazzle", base: 3000, perPower: 40, extra: [1000, 10000], deviation: 10, min: 4000, max: 18000 },
-    projectile: proj("dazzlestar.bgf", 80, 1, 6, 10, 0),
+    projectile: proj("dazzlestar.bgf", 80, 1, 6, 10, 0), fx: SHALILLE_FX,
   },
   // debuff/hold.kod: 15 mana (:34), post-cast 1 s (:42), 2000 + power * 30 ms less up to 10%
   // (:49-50, :170-180), 0.5-10 s (:126); no projectile: it takes hold at once
   hold: {
     label: "Hold", kind: "curse", mana: 15, postCast: 1, range: 7, sound: "qor.ogg",
-    curse: { status: "hold", base: 2000, perPower: 30, deviation: 10, min: 500, max: 10000 },
+    curse: { status: "hold", base: 2000, perPower: 30, deviation: 10, min: 500, max: 10000 }, fx: QOR_FX,
   },
   // A bow's arrow (ours: a "spell" so it flies like one): neruarow.kod 2-6 and the bow's own
   // weight behind it; no mana, the bow's draw is its wait

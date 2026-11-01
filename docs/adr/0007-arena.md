@@ -35,7 +35,7 @@ The numbers come from the Kod, cited in `arenaData.ts`. The arena itself is ours
 | Poison fog | Clouds two squares ahead. Odds of 50 + power/2 of poison: 0.5 health a second for the rest of the fight |
 | Spider web | 9 webs in a square two squares ahead. Stepping into a new square in one holds you random(max-2, max) s, max = 3 + power/33, up to 5. You can't move while held. The webs' overlay (`webov.bgf`) goes on the legs |
 | Bramble wall | 5 brambles in a line a square ahead. They bar the way (`CanPlayerAdvanceOnMe` FALSE: their cells are closed to paths), scratch whoever moves past for random(0, power/15), and have power/2 health (10-50), shown as their frame. Fighters cut through when the way round is long |
-| Blind, dazzle | Projectiles (`blindring.bgf`, `dazzlestar.bgf`). The victim stumbles about and can neither fight nor cast (monsters' `AI_MOVE_RANDOM \| AI_NOFIGHT`) for the Kod's durations, 4-18 s. The spell's art circles their head |
+| Blind, dazzle | Projectiles (`blindring.bgf`, `dazzlestar.bgf`). The victim stumbles about and can neither fight nor cast (monsters' `AI_MOVE_RANDOM \| AI_NOFIGHT`) for the Kod's durations, 4-18 s. The spell's art circled their head until 2026-11-01; now a curse's pulse marks it, as on a player (below) |
 | Weapons | Damage by kind (thrust 3-8, bludgeon 4-8, slash 7-13), ±1 for quality, plus the arm behind it, less the armour's soak |
 
 Walls last their Kod duration times `fieldLife` (0.15 by default). The server's 20 s to over 4 minutes would choke the floor.
@@ -143,3 +143,7 @@ Note that the roster is made when a season starts and kept, so a changed `mix` o
   - `packages/world/test/arena.test.ts`: settings, seasons, the roster, determinism, rounds and records, closing at night, web holds, brambles barring the way and being cut down, the blind not fighting, and the view's playback, overlays and inspect info
   - `tools/gateway/arena.test.ts`: two watchers see the same ticks, it stops when unwatched, the season file and its turnover with a champion, and watching through a real relay
 - **Tried live** on our server: Shardbot in the arena saw the relay's fights (`arenaSource` "relay"), and a second relay client under another name, not a friend, saw the same fighters. Webs, dazzle stars, bramble walls and the sounds were all there.
+
+## Spell effects as a player's (2026-11-01)
+
+The arena's spells are drawn with the spell revamp's effects (phase 9, `UC_SPELL_FX` for a player's casts), under Enhanced Visuals: a glow about the caster in the school's colour and look (`spell.kod GetSchoolFxColor`, `GetFxLook`), the room's flash for Lightning Bolt, and a curse's pulse about whoever Blind, Dazzle or Hold lands on. A bolt's trail and landing burst already came from its light. The fighters aren't the server's, so nothing sends `UC_SPELL_FX` for them: `arenaFx.ts arenaSpellFx` reads the arena's own `cast` and `impact` events (an `impact` now says whether it struck: `hit`) and each spell's `fx` (`arenaData.ts`), and `gameScene.showArenaFx` draws it with `SpellEffects`. The blind and dazzled no longer wear the spell's art over the head; the projectile still flies, as a player's Blind's does.

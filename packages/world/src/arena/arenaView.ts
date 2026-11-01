@@ -26,8 +26,7 @@ const PLAYBACK_DELAY_MS = 220;
 const TICK_SPAN_MS = 100;
 /** proto.h DRAWFX_TRANSLUCENT75/50/25: fading in and out */
 const FADE_FX = [1, 2, 3, 0];
-/** blakston.khd HS_HEAD, HS_LEGS */
-const HS_HEAD = 1;
+/** blakston.khd HS_LEGS */
 const HS_LEGS = 41;
 /** The walls' last moment, more see-through (DRAWFX_TRANSLUCENT25) */
 const FIELD_FADE_MS = 700;
@@ -252,8 +251,8 @@ export class ArenaView {
 
   /**
    * The figure's looks for its pose and state: the winner's weapon put away (it cheers with empty
-   * hands), the webs on the legs of whoever's stuck, and the blinding ring or dazzling star about
-   * the head of whoever can't see (the spells' own projectile art)
+   * hands) and the webs on the legs of whoever's stuck. The blind and dazzled wear nothing over the
+   * head (ours, 2026-11-01): as a player's curse, the spell's pulse shows it (arenaSpellFx)
    */
   private dress(f: Figure): void {
     const w = f.wire;
@@ -270,8 +269,6 @@ export class ArenaView {
     if (w.st & ARENA_STATUS.WINNER && look.gear?.weapon) look = { ...look, gear: { ...look.gear, weapon: undefined } };
     const extra: OverlayState[] = [];
     if (w.st & ARENA_STATUS.WEBBED) extra.push(overlay(WEB_OVERLAY, HS_LEGS, { type: ANIMATE.NONE, group: 1 }));
-    const curse = w.st & ARENA_STATUS.BLIND ? this.spells.blind : w.st & ARENA_STATUS.DAZZLED ? this.spells.dazzle : null;
-    if (curse?.projectile) extra.push(overlay(curse.projectile.file, HS_HEAD, curse.projectile.animation));
     const build = (pose: Pose): Look => {
       const l = lookFor(look, pose, false, w.cf);
       return extra.length ? { ...l, overlays: [...l.overlays, ...extra] } : l;

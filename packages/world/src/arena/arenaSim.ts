@@ -1102,7 +1102,7 @@ export class ArenaSim {
       const hit = !!def && this.contestant(t) && dist(t, { x: s.dx, y: s.dy }) < BOLT_REACH;
       if (hit && def.kind === "bolt" && def.damage) this.hurt(t, this.int(def.damage[0], def.damage[1]), s.from);
       if (hit && def.curse) this.curse(t, def, this.archetype(s.from.arch).power);
-      this.event({ type: "impact", x: s.dx, y: s.dy, spell: s.spell, ouch: hit && def.kind === "bolt" ? this.ouch(t) : 0, female: t.look.female });
+      this.event({ type: "impact", x: s.dx, y: s.dy, spell: s.spell, ouch: hit && def.kind === "bolt" ? this.ouch(t) : 0, female: t.look.female, hit });
     }
   }
 
