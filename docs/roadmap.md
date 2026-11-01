@@ -335,7 +335,7 @@ An AI agent plays a character and writes up what's broken ([ADR 0020](adr/0020-a
 - [x] **Phase 2, eyes** (2026-10-20): `connect` with body `browser` plays in the real dev client (Playwright), the agent's logic running in the page on its own session. `screenshot` shows what a player sees, and bug reports attach one.
 - [ ] **Phase 3, players' own AI characters:** any player may run one AI agent at a time, marked "AI" by the server. It ships and installs with the game, explains itself to any MCP client (Claude Code, Codex...), and might be started from a Launch AI Bot button in the game. To be designed and tried ([ADR 0020](adr/0020-ai-playtester.md), "Later phases").
 
-### 18. Our server's game systems (ours, 2026-10-15 to 2026-10-25)
+### 18. Our server's game systems (ours, 2026-10-15 to 2026-10-31)
 
 Since 2026-10-15 the server is our own fork, [shards-server](https://github.com/jboullion/shards-server), and the game is being reworked on both sides of the wire. Each system has an ADR with its phases and what is still unplayed; this is the list.
 
@@ -348,7 +348,13 @@ Since 2026-10-15 the server is our own fork, [shards-server](https://github.com/
 - [x] **The spell revamp** ([ADR 0023](adr/0023-spells.md), phases 0 to 9, 2026-10-24): level grids per school, the Jala songs, monster-targetable spells, spell effects and sounds.
 - [x] **Chat emoji and item links** ([ADR 0024](adr/0024-chat-emoji-and-item-links.md)) and **achievements** ([ADR 0025](adr/0025-achievements.md)), 2026-10-24 and 25.
 - [x] **The Office of the Justicar** ([ADR 0026](adr/0026-the-office-of-the-justicar.md), 2026-10-25): the Barloque Assizes, Caramo's daily bounties and name changes.
-- [x] **Release 0.13.0** (2026-10-24) and the one-button `npm run ship` / `release:patch` scripts; the public site is m59-shards.com ([ADR 0004](adr/0004-own-domain.md)).
+- [x] **Offerings and shrines** ([ADR 0027](adr/0027-offerings-and-shrines.md), 2026-10-26): an offering dedicates a shrine to its god for a real day (+6 spell power for everyone), the market shrine takes offerings, a daily shrine quest for every school, the Death Realm quest, and the quest step `shrine`.
+- [x] **The Abilities tab** ([ADR 0028](adr/0028-abilities-tab.md), 2026-10-28): spells and skills by school, with how far each next level is, reckoned by the server with the trainers' own rule (`UC_SCHOOLS`).
+- [x] **Monster pathfinding** ([ADR 0029](adr/0029-monster-pathfinding.md), 2026-10-30): blakserv builds each room's nav grid and battle troops and companions find their way round walls (`GetPathStepBSP`); townsfolk, pets, Follow, the arena and the playtester walk the server's exported grids. Decision 6 (monsters noticing, chasing together and leashed) was tried and reverted the same day: monsters move as the original's.
+- [x] **The Faction War, continued** ([ADR 0021](adr/0021-factions-and-the-faction-war.md), 2026-10-29 and 30): taking a liege's capital calls an assault on their seat, Behind the Lines' six daily sabotage runs, the War window as a map with its fronts, renown kept up to 40 when leaving a faction, soldier and guild shields rebalanced.
+- [x] **Account recovery** ([ADR 0030](adr/0030-account-recovery.md), 2026-10-31): link an email on the website's account page, reset a password or find an account name through it; the account page keeps you signed in and lists the account's characters.
+- [x] **Releases 0.13.0** (2026-10-24), **0.14.0** (2026-10-26) and **0.14.1** (2026-10-31), with the one-button `npm run ship` / `release:patch` / `release:minor` / `release:major` scripts; the public site is m59-shards.com ([ADR 0004](adr/0004-own-domain.md)).
+- [x] **The Shards Console** ([ADR 0031](adr/0031-shards-console.md), 2026-10-31): a Claude Code mod with the live server, visits, the local server and the release buttons, and `tools/server/build.ts`, which fails a build on a Kod compile error. Tried 2026-10-31 against the live VM and Cloudflare.
 - [ ] **Still proposed:** player homes ([0008](adr/0008-player-homes.md)), fast travel ([0011](adr/0011-fast-travel.md)), races ([0013](adr/0013-races.md)), inn games ([0014](adr/0014-inn-games.md)), and the AI playtester's phase 3.
 
 ## What the slice must prove
@@ -414,3 +420,10 @@ Since 2026-10-15 the server is our own fork, [shards-server](https://github.com/
   - The server fork became ours (2026-10-15): crafting, curses and the Necromancer/Hunter scenario removed, a fresh world.
   - Quests, companions, pets, friends, cosmetics, abilities, lighting moods, seasons and water, arena bouts, the AI playtester, the magic item revamp, factions and the Faction War, guilds, the spell revamp, emoji and item links, achievements and the Justicar's office were built (ADRs 0005 to 0026).
   - The hosted server moved to https://m59-shards.com (Cloudflare), with a load test of 100 clients; release 0.13.0 shipped on 2026-10-24.
+- **2026-10-26 to 2026-10-31** (likewise kept in the ADRs and commit history; see milestone 18):
+  - Offerings and shrines, the Abilities tab, monster pathfinding for NPCs, account recovery with the website's account page, and the Shards Console were built (ADRs 0027 to 0031).
+  - The Faction War gained seat assaults, the Behind the Lines sabotage runs and the War window's map; prisms became guild artifacts (ADR 0022 decision 34); soldier and guild shields were rebalanced.
+  - Spells and items: spell power past 99, up to 150 for some spells (ADR 0023 D44); Qor's Blade replaced Blood Inheritance; a magic item's icon shows its magic's colour and glyph.
+  - Quests: fixed or chosen rewards (never random), eat and sabotage steps, the Quests tab's Current, Done and Suggested tabs, and gold markers badged by kind.
+  - Survival and training: food tiers, and a new hit point no longer gives 200 vigor (only a floor of 100); weapon skills learn at half the pace again; training points stop at 2,000.
+  - Releases 0.14.0 (2026-10-26) and 0.14.1 (2026-10-31); deploys keep the website up while the images build; the browser client was packaged for itch.io.

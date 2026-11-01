@@ -6,7 +6,7 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
 
 **Meridian Shards** is a faithful browser port of the Meridian 59 client. It talks to **our own** server, built from our fork of the Server 104 source (`shards-server`, which `server/src` links to), through a WebSocket-to-TCP gateway. Only our client and our server have to work: original Windows clients and other servers aren't supported, though the original's source and behaviour stay our reference (ADR 0001 decisions 3 and 4, changed 2026-10-15). It's the third experiment beside the UE remaster (`E:\2026_Experiments\meridian-unreal`) and the Roblox spin-off "Fantasy Blocks".
 
-- Decisions (ADRs in `docs/adr/`; read the one for a system before reworking it). Status as of 2026-10-25:
+- Decisions (ADRs in `docs/adr/`; read the one for a system before reworking it). Status as of 2026-10-31:
   - [0001 direction](docs/adr/0001-direction.md), [0002 the desktop app](docs/adr/0002-desktop-shell.md), [0003 the Android app](docs/adr/0003-android.md), [0004 our own domain](docs/adr/0004-own-domain.md) (m59-shards.com behind Cloudflare).
   - [0005 friends and shared ambient life](docs/adr/0005-friends.md), [0006 pets](docs/adr/0006-pets.md), [0007 the arena run by the gateway](docs/adr/0007-arena.md), [0019 arena bouts and the Arena of Death's show](docs/adr/0019-arena-bouts.md) (built).
   - [0008 player homes and rented inn rooms](docs/adr/0008-player-homes.md), [0011 fast travel](docs/adr/0011-fast-travel.md), [0013 races](docs/adr/0013-races.md), [0014 inn games](docs/adr/0014-inn-games.md) (proposed; check each file for how far it got).
@@ -19,6 +19,11 @@ Guidance for AI coding agents (and humans who like the detail) working in this r
   - [0023 the spell revamp](docs/adr/0023-spells.md) (built, phases 0 to 9; the Jala songs, spell effects and sounds).
   - [0024 emoji and item links in chat](docs/adr/0024-chat-emoji-and-item-links.md), [0025 achievements](docs/adr/0025-achievements.md) (built 2026-10-24 and 25).
   - [0026 the Office of the Justicar](docs/adr/0026-the-office-of-the-justicar.md) (built 2026-10-25: the Barloque Assizes, Caramo's bounties and name changes).
+  - [0027 offerings and shrines](docs/adr/0027-offerings-and-shrines.md) (built 2026-10-26: a day of spell power from a shrine, temple dailies, the `shrine` quest step, the Death Realm quest).
+  - [0028 the Abilities tab](docs/adr/0028-abilities-tab.md) (built 2026-10-28: spells and skills by school, with how far the next level is, from the server's `UC_SCHOOLS`).
+  - [0029 monster pathfinding](docs/adr/0029-monster-pathfinding.md) (built 2026-10-30: the server's nav grid and `GetPathStepBSP` for battle troops and companions; the client ships the server's `.nav` grids; decision 6, monsters' aggro and leash, was reverted).
+  - [0030 account recovery](docs/adr/0030-account-recovery.md) (built 2026-10-31: blakserv's `account` commands, the account service, email links and resets, the website's account page).
+  - [0031 Shards Console](docs/adr/0031-shards-console.md) (accepted 2026-10-31: a Claude Code mod with the live server, visits, the local server and release buttons; the build-trap checks in `tools/server/build.ts`).
 - Milestones and progress: [docs/roadmap.md](docs/roadmap.md)
 - Protocol notes: [docs/research/protocol.md](docs/research/protocol.md)
 - What the original has that we don't yet: [docs/missing-features.md](docs/missing-features.md). Add to it whenever something is skipped.
