@@ -25,6 +25,9 @@ node_modules/
 .env.*
 !.env.example
 
+# --- The logo's full-size PNG, kept out of git: the client uses icons/logo.webp
+/apps/client/src/icons/logo.png
+
 # --- Editors / OS
 .vscode/*
 !.vscode/settings.json
