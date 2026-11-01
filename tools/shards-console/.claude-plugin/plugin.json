@@ -1,0 +1,6 @@
+{
+  "name": "shards-console",
+  "version": "0.1.0",
+  "description": "Meridian Shards at a glance: the live server, visits, the local server and release buttons (meridian-browser ADR 0031)",
+  "types": "./types/index.d.ts"
+}

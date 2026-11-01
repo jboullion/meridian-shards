@@ -1,6 +1,7 @@
 // Ships everything in one go: builds, checks, commits and pushes both repositories, deploys to
 // the VM, and rebuilds the rooms whose maps changed since the last ship:
-//   1. server\build.cmd (the quests, the Kod, the server) and the asset build
+//   1. tools/server/build.ts (server\build.cmd: the quests, the Kod, the server) and the asset
+//      build
 //   2. npm run check (typecheck, lint, tests)
 //   3. commit whatever is changed in meridian-browser and shards-server (server/src), and push
 //      both
@@ -14,8 +15,8 @@
 //   npm run ship -- -m "What changed"
 //   npm run ship -- --message-file msg.txt [--skip-build] [--skip-checks] [--no-deploy] [--dry-run]
 //
-// The VM comes from .env: SHARDS_DEPLOY_HOST (user@ip) and SHARDS_DEPLOY_KEY (an ssh key;
-// %USERPROFILE% and ~ are expanded). Releases (tools/deploy/bump.ts) run this first.
+// The VM comes from .env (tools/deploy/remote.ts). Releases (tools/deploy/bump.ts) run this
+// first.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -24,13 +25,13 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { COMPOSE, deployTarget } from "./remote.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const SERVER = realpathSync(join(ROOT, "server", "src"));
 const ASSETS = join(ROOT, "dist", "assets");
 const STATE_DIR = join(homedir(), ".meridian-shards");
 const STATE = join(STATE_DIR, "last-ship.json");
-const COMPOSE = "sudo docker compose -f deploy/docker-compose.yml";
 const READY_TIMEOUT_MS = 6 * 60_000;
 
 const { values: opt } = parseArgs({
@@ -68,17 +69,6 @@ function run(cmd: string, args: string[], cwd = ROOT) {
 }
 const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 
-function readEnv(): Record<string, string> {
-  const path = join(ROOT, ".env");
-  if (!existsSync(path)) return {};
-  const out: Record<string, string> = {};
-  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
-    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
-    if (m) out[m[1]!] = m[2]!.replace(/^["']|["']$/g, "");
-  }
-  return out;
-}
-const expandHome = (p: string) => p.replace(/%USERPROFILE%/gi, homedir()).replace(/^~(?=[\\/])/, homedir());
 
 function readState(): ShipState | null {
   try {
@@ -155,7 +145,8 @@ const state = readState();
 
 if (!opt["skip-build"]) {
   step("Build the server (quests, Kod, blakserv) and the game files");
-  run("cmd", ["/c", join("server", "build.cmd")]);
+  // build.ts fails on a Kod compile error, which build.cmd's nmake lets through
+  run(process.execPath, ["tools/server/build.ts"]);
   run(process.execPath, ["tools/assets/build-assets.ts"]);
 }
 
@@ -176,11 +167,9 @@ if (opt["no-deploy"]) {
 }
 
 step("Deploy to the VM");
-const env = { ...readEnv(), ...process.env } as Record<string, string | undefined>;
-const host = env.SHARDS_DEPLOY_HOST;
-if (!host) fail("SHARDS_DEPLOY_HOST isn't set (.env)");
-const key = env.SHARDS_DEPLOY_KEY ? expandHome(env.SHARDS_DEPLOY_KEY) : undefined;
-const sshArgs = key ? ["-i", key] : [];
+const target = deployTarget();
+if (!target) fail("SHARDS_DEPLOY_HOST isn't set (.env)");
+const { host, key, sshArgs } = target;
 
 const rooms = changedRooms(lastShippedServer(state));
 const assets = assetsHash();

@@ -12,5 +12,7 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["packages/*/src", "packages/*/test", "tools"]
+  "include": ["packages/*/src", "packages/*/test", "tools"],
+  // A Claude Code mod: typed and tested by `claude plugin validate` and `claude plugin test`
+  "exclude": ["tools/shards-console"]
 }

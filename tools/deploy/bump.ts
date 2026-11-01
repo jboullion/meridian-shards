@@ -4,7 +4,7 @@
 //
 //   npm run release:patch -- -m "What changed"   0.12.0 -> 0.12.1 (an incremental release)
 //   npm run release:minor -- -m "What changed"   0.12.0 -> 0.13.0
-//   node tools/deploy/bump.ts major              0.12.0 -> 1.0.0
+//   npm run release:major -- -m "What changed"   0.12.0 -> 1.0.0
 //
 // --skip-ship releases what's already deployed and pushed. --no-wait pushes the tag and leaves.
 // ship.ts's options pass through: -m/--message, --message-file, --skip-build, --skip-checks,

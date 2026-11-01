@@ -204,6 +204,11 @@ blakserv saves every 30 minutes (`[Auto] SavePeriod`). Run "save game" before st
 - `sudo DRY_RUN=1 sh deploy/prune-saves.sh` says what it would remove; `KEEP_RECENT` and `KEEP_DAYS` change how much stays. `/var/log/meridian-shards-saves.log` has a line per run.
 - To go further back than 14 days, back the game up (above) and keep the copy off the VM.
 
+**blakserv's logs are rotated weekly.** blakserv appends to `channel/*.txt` on the `channel` volume (`admin.txt` takes every maintenance command's output, the account service's and the Shards Console's included) and never trims them. `deploy/logrotate.conf` rotates each one weekly, or once it passes 20 MB, and keeps four compressed old copies (`error.txt.1`, `error.txt.2.gz`, ...). It uses `copytruncate`, which is safe because blakserv appends.
+- Set it up once (not done yet as of 2026-10-31), and again after changing the file: `sudo install -o root -g root -m 644 deploy/logrotate.conf /etc/logrotate.d/meridian-shards`. logrotate wants its configs owned by root, so a deploy doesn't update the installed copy.
+- `sudo logrotate -d /etc/logrotate.d/meridian-shards` says what it would do; `-f` rotates now.
+- The Shards Console's Live section shows each log's size ([ADR 0031](../docs/adr/0031-shards-console.md)).
+
 **A save the new Kod can't load starts a new world.** If any saved object's class is gone from the Kod, blakserv's `LoadGame` fails. It then starts a fresh world with the old accounts but no characters (`blakserv/loadall.c`), and its next save overwrites the old world.
 - **After Kod changes that remove classes,** try the VM's save on a copy first. Copy the latest `accounts`, `dynarscs`, `gameuser` and `striings` files and `lastsave.txt` into the `savegame/` of a copy of the local run folder. Change its ports, start it, and look for `LoadObject can't find class name` in `channel/error.txt`.
 - **After a fresh start,** give each account its character slots again: four `create user <account>` each, by account number. `maint` takes many commands in one call, which is much faster than one `exec` per command (for accounts 1 to 118):

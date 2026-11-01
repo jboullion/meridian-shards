@@ -87,8 +87,9 @@ function staleness(): { server: string[]; assets: boolean } {
 }
 
 function buildServer(): void {
-  console.log("[dev] building the server's Kod and resources (server\\build.cmd Bresource Bkod)");
-  const r = spawnSync("cmd", ["/c", join(ROOT, "server", "build.cmd"), "Bresource", "Bkod"], { stdio: "inherit" });
+  console.log("[dev] building the server's Kod and resources (tools/server/build.ts Bresource Bkod)");
+  // build.ts fails on a Kod compile error, which build.cmd's nmake lets through
+  const r = spawnSync(process.execPath, [join(ROOT, "tools", "server", "build.ts"), "Bresource", "Bkod"], { stdio: "inherit" });
   if (r.status !== 0) {
     console.error("[dev] the server build failed");
     process.exit(1);
