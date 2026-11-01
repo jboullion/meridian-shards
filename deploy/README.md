@@ -205,7 +205,7 @@ blakserv saves every 30 minutes (`[Auto] SavePeriod`). Run "save game" before st
 - To go further back than 14 days, back the game up (above) and keep the copy off the VM.
 
 **blakserv's logs are rotated weekly.** blakserv appends to `channel/*.txt` on the `channel` volume (`admin.txt` takes every maintenance command's output, the account service's and the Shards Console's included) and never trims them. `deploy/logrotate.conf` rotates each one weekly, or once it passes 20 MB, and keeps four compressed old copies (`error.txt.1`, `error.txt.2.gz`, ...). It uses `copytruncate`, which is safe because blakserv appends.
-- Set it up once (not done yet as of 2026-10-31), and again after changing the file: `sudo install -o root -g root -m 644 deploy/logrotate.conf /etc/logrotate.d/meridian-shards`. logrotate wants its configs owned by root, so a deploy doesn't update the installed copy.
+- Set it up once (done on 2026-11-01), and again after changing the file: `sudo install -o root -g root -m 644 deploy/logrotate.conf /etc/logrotate.d/meridian-shards`. logrotate wants its configs owned by root, so a deploy doesn't update the installed copy.
 - `sudo logrotate -d /etc/logrotate.d/meridian-shards` says what it would do; `-f` rotates now.
 - The Shards Console's Live section shows each log's size ([ADR 0031](../docs/adr/0031-shards-console.md)).
 
