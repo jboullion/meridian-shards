@@ -60,7 +60,7 @@ The game is becoming mostly single-player. So the factions are to drive the worl
 
    Everything else is refused with `player_no_random_pvp`. Minions and spells go through the same check. (2026-10-25: the room flag `ROOM_GUILD_PK_ONLY` is gone, so the rule is the same in town streets as in the wild; see "Room PvP flags" at the end.)
 
-7. **No death drops anything,** except in an arena that drops loot (the Arena of Death). A death to a monster or in a guild war breaks the worn gear as a war death does, and costs no skill, spell or XP. Newbie and Frenzy deaths cost nothing, as before.
+7. **No death drops anything,** except in an arena that drops loot (none does: the Arena of Death keeps `pbDropLoot` off). A death to a monster or in a guild war breaks the worn gear as a war death does, and costs no skill, spell or XP. Newbie and Frenzy deaths cost nothing, as before.
 
 8. **The PvP machinery is gone** (the cleanup):
    - **Outlaws and murderers:** the flags, kill counts, kill karma, the murderer penalties, the town NPCs that snubbed them and the "murdered" broadcasts.

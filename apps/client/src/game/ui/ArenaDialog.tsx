@@ -15,9 +15,9 @@ type Tab = (typeof TABS)[number];
 
 const RULES: Record<number, string> = {
   [ARENA.KRAANAN]:
-    "A melee: you and three arena fighters, everyone against everyone, matched to your health. Nobody dies in a mock bout: lose, and you wake in the stands with a tenth of your health. Win, and you leave as you came in. Four minutes on the sand.",
+    "A melee: you and three arena fighters, everyone against everyone. Each fights as well as you do, with a little less health, and they turn on each other too. Nobody dies in a mock bout: lose, and you wake in the stands with a tenth of your health. Win, and you leave as you came in. Four minutes on the sand.",
   [ARENA.DEATH]:
-    "A duel against one of Johlan Tulca's elites: a gladiator in heavy armour, or a battle mage of Qor, Faren or Riija who will hold, web and blind you. They have about your health, and never less than 100. A mock bout here is still not a death: lose, and you're carried out of the cage. Three minutes.",
+    "A duel against one of Johlan Tulca's elites: a gladiator in heavy armour, or a battle mage of Qor, Faren or Riija who will hold, web and blind you. The elite is your mirror and a little more: your skill at arms, your weapon's bite, your armour and your spellpower, with an eighth more health and damage. A mock bout here is still not a death: lose, and you're carried out of the cage. Three minutes.",
 };
 
 const STYLES: { word: ArenaPvpWord; label: string; title: string }[] = [
@@ -117,7 +117,7 @@ function PlayersPage({ status, send }: { status: ArenaStatus | null; send: (line
     <>
       <p className="arena-rules">
         Fights between players, as the arena's watcher runs them: choose a style, then say Champion to wait in the cage for a challenger. Others Challenge the champion, and the champion Accepts. Renege backs out.
-        {status.arena === ARENA.DEATH ? " In the Arena of Death a match of players is a real death: the Underworld, and lost experience, though you keep your things." : " In the Arena of Kraanan nobody dies: the loser is put in the stands."}
+        {status.arena === ARENA.DEATH ? " In the Arena of Death a match of players is a real death: the Underworld, and maybe a point lost in some spells and skills, though you keep your things and your experience. Fleeing or logging off mid-match is a death too. The newest, and those without player combat, pay nothing." : " In the Arena of Kraanan nobody dies: the loser is put in the stands."}
       </p>
       {busy && <p className="arena-note">A mock bout holds the floor. Wait until it's over.</p>}
       <GroupBox label="Style">

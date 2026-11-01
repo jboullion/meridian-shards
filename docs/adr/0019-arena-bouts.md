@@ -1,6 +1,6 @@
 # ADR 0019: Arena bouts, and the Arena of Death's show
 
-- Status: built (2026-10-18)
+- Status: built (2026-10-18); fighters revised 2026-11-01 (see the end)
 - Builds on: [ADR 0007](0007-arena.md), the arena show on the relay; [ADR 0009](0009-quests.md), quests; [ADR 0015](0015-social-on-our-server.md), `UC_SHARDS`
 
 ## Context
@@ -21,8 +21,8 @@ The Arena of Kraanan's NPC fights were only to watch: the relay runs them, and r
 1. **A player's bout is fought on our server, with real monsters.** The relay can't touch a player's health, place or death, doesn't know who a connection is, and has none of the game's combat: spells, skills, weapons, hit messages, the hands, damage numbers. Kod has all of it, and the arenas' cages, safe deaths and watchers too. `Human` monsters wear real items, so the elites' kit is the game's own. The relay keeps the show of NPCs alone, as ADR 0007 has it.
 
 2. **The bouts: `util/arenabouts.kod` (`ArenaBouts`, `SYS@GetArenaBouts`).** One slot per arena:
-   - **The Arena of Kraanan: a melee** of the player and three fighters, everyone against everyone. Any level: the fighters have four fifths of the player's health and a weaker attack; adepts (mages) only face players with 60 health or more, as a bolt is too much for the newest.
-   - **The Arena of Death: a duel** against one elite with the player's health, at least 100.
+   - **The Arena of Kraanan: a melee** of the player and three fighters, everyone against everyone. Any level: the fighters have four fifths of the player's health and a weaker attack (since 2026-11-01, the player's mirror with four fifths of their health: see the end); adepts (mages) only face players with 60 health or more, as a bolt is too much for the newest.
+   - **The Arena of Death: a duel** against one elite with the player's health, at least 100 (since 2026-11-01, the player's mirror with an edge, and no floor).
    - **The flow:** a line (`arena join`), then a 10 s countdown on the open floor with the fighters still (not the watchers' cages or start boxes: monsters walk straight at their foes and can't find their way out of them), then the fight: 4 minutes for a melee, 3 for a duel. The player is healed to full as they go in.
    - **Winning:** every fighter down. The player leaves with the health, mana and vigor they came in with.
    - **Losing:** beaten, out of time, leaving the floor, logging off, or `arena leave`. The player wakes in the stands with a tenth of their health and the mana and vigor they came in with, and the bout's curses and poisons go (one left running in the Arena of Death's stands would be a real death).
@@ -70,3 +70,23 @@ The Arena of Kraanan's NPC fights were only to watch: the relay runs them, and r
 - Our client: `packages/world/src/arenaBouts.ts` (`readArena`), `apps/client/src/game/arenaBouts.ts` (`ArenaStore`), `ui/ArenaDialog.tsx`, the buttons (`ModernHud.tsx MapCluster`, `TouchControls.tsx`, the Classic toolbar in `GameView.tsx`), `gameScene.ts` (`arenaHp`, `arenaFloorBusy`, the Death arena's hours, cheers), the quest kind in `tools/quests` and the dashboard's Quests tab.
 - The relay: `tools/gateway/arena.ts` (per room), `relay.ts` (`arenaBusy`), `arena/arenaRooms.ts`, the elites in `arenaData.ts`, Hold and bows in `arenaSim.ts`, `townsfolk.ts battleMageAppearance`, `gladiatorAppearance`; `stage.ts` ships `tosarena_death.roo` and its nav grid.
 - Tried: `tools/headless/arena.ts` on the dev server (a melee won, lost by time and by logging off; a duel lost to a forced loss in the Arena of Death, waking in its stands; a duel won; the quest taken, counted and handed in; a champion refused a bout), and in the browser (the window and the buttons in Modern, Classic and the phone layout; the gladiator's bow and the battle mages' kits on the server; the relay's night duel giving way when a player joined).
+
+## Revised (2026-11-01): the fighters are their player's mirror
+
+Playtests found the fighters far too weak. Monster damage is a flat number that a player's armour mostly cancels; an `ArenaFighter`'s worn armour and weapon are only for show (`Monster.GetDefense` and `ArmorCheck` don't read them); it swung every 1.35 to 2 s to a player's 1 s; and monsters' attack spells ignore their spellpower. A 100-health player dealt about 8 health a second to an elite's 1. Hits also sounded like misses: `Monster.AssessHit` plays `vrSound_miss`, the swing, and for a `Human` that's a swish. And beaten fighters left bodies, in a fight that kills nobody.
+
+- **A mirror.** `ArenaBouts.MakeFighter` builds each fighter from its player, against the fighter itself:
+  - offense and defense: the player's own `GetOffense` and `GetDefense`, asked once both are on the floor (`MirrorCombat`: a ranged weapon's offense halves without a line of sight);
+  - damage: the player's blow, from `BOUT_DAMAGE_SAMPLES` tries of the weapon's base damage and magic tier through the stroke's `DamageFactors` (not `Weapon.GetDamage`, whose attributes can blind, hold or drain); a mage's blows are half;
+  - armour: `Player.SumDamageReduction` as `piArmor`, so the player's blows lose what the fighter's do;
+  - health, and mana (no less than a mage needs);
+  - a swing a second (`ArenaFighter.GetAttackTime`), slowed by chills and songs as a monster's;
+  - attack spells as strong as the player's: `AttackSpell.CastSpell` asks `ArenaFighter.ScaleSpellDamage`, which is the spell's `ScaleDamage` for the player at their spellpower for it (at least full power), times the edge;
+  - players' damage caps on its blows (a third of the victim's health, 30 a hit: `Player.AssessDamage`).
+- **The edges** (constants at the top of `arenabouts.kod`): the Arena of Death's elite has 112% of the player's health and damage, offense and defense equal, so the player lasts about 1/1.25 as long as it does; +25% on every number would compound to about 2.4 times. The Arena of Kraanan's three have 80% of the health and equal everything else: they fight each other too. The 100-health floor is gone; a newcomer meets a newcomer-sized duellist.
+- **Draughts and drains.** An elite carries two healing draughts and a melee fighter one, drunk below 35% health (a quarter of its health back, 8 s apart). `ArenaFighter.GainHealth` lets a Qor mage's Vampiric Drain heal it, which it never did.
+- **Sounds as a player's.** `vrSound_miss` is `$` on `ArenaFighter`; its own `AssessHit` plays a hit by weight (flesh, leather, metal) and the victim's cry, `AssessMiss` a swish, and `Player.DoHitMessageSound` makes a fighter cry out when hit (`ArenaFighter.GetOuchSound`, by gender and health).
+- **Carried off.** A beaten fighter gives its death cry and goes, with no body; the watcher says "%s is beaten, and carried from the floor." (the last one's fall is the win's line instead).
+- **A voice.** An elite says a line as the bout begins, one when below half health and one over a beaten player; a melee fighter sometimes.
+- **The Arena of Death's text** now says what a death there costs. A watcher's match of players there is a real death: the Underworld (its rip in space leads back to the arena), no items dropped and no experience lost, a chance at a point in each spell and skill (`ApplyDeathPenalties`, less for the hardy), and fleeing or logging off mid-match is a death too; the newest and those without player combat pay nothing. The sign, Johlan's welcome (and his own lines for the parent watcher's "Champion of Kraanan" ones), the guardian angel's death mail (only Arena of Death deaths send it now), the Arena window and the help.
+- Tried: in the testbench sandbox (the mirror's numbers against a character, draughts, the spell scale in and out of the room, the damage cap, no bodies, no new errors). A bout in play, its balance and its sounds are for a playtest.
