@@ -65,6 +65,8 @@ const TAB_ART: Partial<Record<Tab, string>> = {
 };
 /** Art wider than it's tall: drawn across the whole tab, not in the glyph's square */
 const WIDE_ART = new Set<Tab>(["quests"]);
+/** Art as tall as the tab otherwise: drawn smaller, inside its edges */
+const SMALL_ART = new Set<Tab>(["friends", "pets", "companion"]);
 
 export function ObjIcon({
   icons, object, opts, className, title, onContextMenu, onClick, onDoubleClick,
@@ -124,7 +126,10 @@ export function StatTab({
   return (
     <button className={`stat-tab${active ? " active" : ""}${icon ? " drawn" : ""}`} title={tooltip ? label : undefined} aria-label={label} onClick={onClick}>
       <span className="mid" style={half(mid)} />
-      <span className={icon ? `glyph drawn${tab && WIDE_ART.has(tab) ? " wide" : ""}` : "glyph"} style={half(left)}>
+      <span
+        className={icon ? `glyph drawn${tab && WIDE_ART.has(tab) ? " wide" : ""}${tab && SMALL_ART.has(tab) ? " small" : ""}` : "glyph"}
+        style={half(left)}
+      >
         {icon}
       </span>
       <span className="cap" style={half(right)} />

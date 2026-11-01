@@ -3719,7 +3719,7 @@ canvas.server-wait {
 .map-ring .arena-button {
   top: 50%;
   bottom: auto;
-  left: -14px;
+  left: -38px;
   width: 30px;
   height: 30px;
   transform: translateY(-50%);
@@ -4359,16 +4359,16 @@ canvas.server-wait {
   margin-bottom: 8px;
 }
 
-/* The character window's tabs 30 px tall, not statbtn.c's 20: its pieces drawn 1.5 times and
-   smoothed. Eight tabs share the window's width (48 px each): a glyph and right piece fit up to
-   about 1.6 times */
+/* The character window's tabs 34 px tall, not statbtn.c's 20: its pieces drawn 1.5 times (and
+   4 px more) and smoothed. Eight tabs share the window's width (48 px each): a glyph and right
+   piece fit up to about 1.6 times */
 .cw-tabs {
   --tab-k: 1.5;
 }
 
 .cw-tabs .stat-tab,
 .cw-tabs .stat-tab span {
-  height: calc(20px * var(--tab-k));
+  height: calc(20px * var(--tab-k) + 4px);
 }
 
 .cw-tabs .stat-tab span {
@@ -4880,9 +4880,15 @@ canvas.server-wait {
   height: calc(100% - 6px);
 }
 
-/* Wide art (Sidebar.tsx WIDE_ART: the Quests tab's scroll) across the whole tab */
+/* Wide art (Sidebar.tsx WIDE_ART: the Quests tab's scroll) across the middle of the tab */
 .stat-tab .glyph.drawn.wide {
-  width: 100%;
+  left: 15%;
+  width: 70%;
+}
+
+/* Tall art (Sidebar.tsx SMALL_ART: the ale mug, the baby spider, the herald shield) clear of the tab's top and bottom */
+.stat-tab .glyph.drawn.small .obj-icon {
+  height: calc(100% - 12px);
 }
 
 /* Our tabs: the middle piece the whole width, our icon over it (the phone's drawer too, whose

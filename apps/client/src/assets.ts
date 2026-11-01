@@ -35,9 +35,16 @@ export class AssetStore {
   private bytes = new Map<string, Promise<Uint8Array>>();
   private bgfs = new Map<string, Promise<Bgf | null>>();
   private readonly base: string;
+  /**
+   * Ours: added to every file's query from another site's page (itch.io: host.ts hostedServer).
+   * Files cached before /assets/* allowed other sites (CORS) were kept "immutable" by browsers and
+   * Cloudflare without the header, so a page elsewhere asks for them under URLs of their own.
+   */
+  private readonly vary: string;
 
   constructor(base = "/assets/") {
     this.base = base;
+    this.vary = /^https?:/.test(base) ? "&cors=1" : "";
   }
 
   /**
@@ -100,7 +107,7 @@ export class AssetStore {
   url(name: string): string {
     const key = name.toLowerCase();
     const entry = this.manifest?.files[key];
-    return entry ? `${this.base}${key}?v=${entry.hash}` : `${this.base}${key}`;
+    return entry ? `${this.base}${key}?v=${entry.hash}${this.vary}` : `${this.base}${key}`;
   }
 
   /** A file's bytes, fetched once and kept. */
@@ -118,7 +125,7 @@ export class AssetStore {
   private download(key: string): Promise<Uint8Array> {
     const entry = this.manifest?.files[key];
     if (!entry) return Promise.reject(new Error(`asset not found: ${key}`));
-    return fetch(`${this.base}${key}?v=${entry.hash}`).then(async (r) => {
+    return fetch(`${this.base}${key}?v=${entry.hash}${this.vary}`).then(async (r) => {
       if (!r.ok) throw new Error(`${key}: HTTP ${r.status}`);
       return new Uint8Array(await r.arrayBuffer());
     });
