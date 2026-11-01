@@ -6,7 +6,8 @@
 // schools are open is kept for each character. The rows behave as the old lists' did: a click
 // selects, a double click casts a spell (or looks at a skill), a right click looks, spells drag
 // to the quick slots and show their range ring, and every spell has its own Cast. (Study mode is
-// under the ☰ menu's Actions.)
+// under the ☰ menu's Actions.) Training points are at the top, with Train beside them (they were
+// on the Stats tab until 2026-11-01).
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { STAT_GROUP, type Statistic } from "@shards/protocol";
@@ -14,8 +15,9 @@ import { SCHOOL_STATE, SCHOOL_WEAPONCRAFT, schoolsCommand, type GameSession, typ
 import { gameSocketUrl } from "../../host.ts";
 import { bareIcon, type IconRenderer } from "../icons.ts";
 import { DRAG_SPELL } from "../quickSlots.ts";
+import { trainingStat } from "../statRows.ts";
 import { useWorld } from "./hooks.ts";
-import { ObjIcon } from "./Sidebar.tsx";
+import { ObjIcon, TrainingRow } from "./Sidebar.tsx";
 
 /** blakston.khd SS_* and SKS_*: the schools' names, in the order the tab shows them */
 const SCHOOL_NAMES: [number, string][] = [
@@ -84,15 +86,18 @@ function progressText(name: string, p: SchoolProgress, spells: boolean): { label
 }
 
 export function AbilitiesList({
-  session, icons, onLook, onCast,
+  session, icons, onLook, onCast, onTrain,
 }: {
   session: GameSession;
   icons: IconRenderer;
   onLook: (id: number) => void;
   onCast: (spell: number, numTargets: number) => void;
+  /** The Train window (docs/adr/0016-abilities.md), beside the training points at the top */
+  onTrain?: () => void;
 }) {
   const world = session.world;
   useWorld(world, ["stats", "spells", "skills", "schools"]);
+  const training = trainingStat(world.stats.get(STAT_GROUP.STATS) ?? []);
   const [selected, setSelected] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const rs = (id: number) => session.resource(id) ?? "";
@@ -227,6 +232,11 @@ export function AbilitiesList({
 
   return (
     <div className="stat-list abilities-list">
+      {training && (
+        <div className="abilities-training">
+          <TrainingRow stat={training} rs={rs} onTrain={onTrain} />
+        </div>
+      )}
       <div className="spell-search">
         <span className="mk-edit">
           <input

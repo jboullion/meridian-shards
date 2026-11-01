@@ -1613,7 +1613,7 @@ export function GameView({
   const studySpell = (key: string) => session.world.spells.find((sp) => englishName(sp.object.nameRes) === key);
 
   /** The Study window, on `spell` (an English name) or the last one studied */
-  /** Ours: the Train window (the Stats tab's Train button, typed train), with the prices asked for afresh */
+  /** Ours: the Train window (the Abilities tab's Train button, typed train), with the prices asked for afresh */
   const openTrain = (search = "") => {
     session.shardsCommand("train list");
     setModal({ type: "train", search });

@@ -1022,6 +1022,11 @@ button.link {
   box-shadow: none;
 }
 
+/* Ours: training points with Train, above the search (Sidebar.tsx TrainingRow) */
+.abilities-training {
+  padding: 1px 0 5px;
+}
+
 .ability-footer {
   margin: 6px 2px 2px;
   font-size: 11px;

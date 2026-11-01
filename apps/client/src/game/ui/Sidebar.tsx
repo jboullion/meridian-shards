@@ -301,7 +301,7 @@ export function Sidebar({
 }: {
   /** Ours: a click on our face, when not picking a target, shows the Quick Emotes (Q) */
   onEmotes?: () => void;
-  /** Ours: the Stats tab's Train button (docs/adr/0016-abilities.md) */
+  /** Ours: the Abilities tab's Train button (docs/adr/0016-abilities.md) */
   onTrain?: () => void;
   /** Ours: the Friends and Pets tabs' pages (GameView makes them) */
   friendsPanel: ReactNode;
@@ -451,7 +451,7 @@ export function Sidebar({
             tooltips={settings.tooltips}
           />
         ) : tab === "stats" ? (
-          <NumericStats stats={world.stats.get(STAT_GROUP.STATS) ?? []} rs={rs} english={(id) => session.englishResource(id)} onTrain={onTrain} />
+          <NumericStats stats={world.stats.get(STAT_GROUP.STATS) ?? []} rs={rs} english={(id) => session.englishResource(id)} />
         ) : tab === "friends" ? (
           friendsPanel
         ) : tab === "pets" ? (
@@ -461,7 +461,7 @@ export function Sidebar({
         ) : tab === "quests" ? (
           questsPanel
         ) : (
-          <AbilitiesList session={session} icons={icons} onLook={onLook} onCast={onCast} />
+          <AbilitiesList session={session} icons={icons} onLook={onLook} onCast={onCast} onTrain={onTrain} />
         )}
       </div>
       </div>
@@ -667,18 +667,16 @@ export function Inventory({
 
 /**
  * statnum.c: name on the left; a bar with the number, or a resource string, on the right. Ours
- * (statRows.ts): training points first with Train beside them, a divider after Aim, and no
- * Karma, Unbound Energy, Weight or Bulk.
+ * (statRows.ts): a divider after Aim, and no training points (the Abilities tab has them,
+ * TrainingRow), Karma, Unbound Energy, Weight or Bulk.
  */
 export function NumericStats({
-  stats, rs, english, onTrain,
+  stats, rs, english,
 }: {
   stats: Statistic[];
   rs: (id: number) => string;
   /** A stat's name in English, for the rows matched by name */
   english?: (id: number) => string | null | undefined;
-  /** Ours: the Train window (docs/adr/0016-abilities.md) */
-  onTrain?: () => void;
 }) {
   return (
     <div className="stat-rows">
@@ -686,18 +684,13 @@ export function NumericStats({
         row.kind === "divider" ? (
           <div className="stat-divider" role="separator" key={`divider-${i}`} />
         ) : (
-          <div className={row.training && onTrain ? "stat-row training" : "stat-row"} key={row.stat.num}>
+          <div className="stat-row" key={row.stat.num}>
             <span className="stat-name">{rs(row.stat.nameRes)}</span>
             {row.stat.numeric?.tag === STAT_TAG.RES ? (
               <span className="stat-value">{rs(row.stat.numeric.value)}</span>
             ) : row.stat.numeric ? (
               <StatBar stat={row.stat} />
             ) : null}
-            {row.training && onTrain && (
-              <Button className="stat-train" title="Spend training points on a spell or skill" onClick={onTrain}>
-                Train
-              </Button>
-            )}
           </div>
         ),
       )}
@@ -706,13 +699,32 @@ export function NumericStats({
 }
 
 /**
+ * Ours: training points, with Train beside them (docs/adr/0016-abilities.md), at the top of the
+ * Abilities tab (AbilitiesList.tsx). They come in the Stats group (requestTabStats asks for it).
+ */
+export function TrainingRow({ stat, rs, onTrain }: { stat: Statistic; rs: (id: number) => string; onTrain?: () => void }) {
+  return (
+    <div className={onTrain ? "stat-row training" : "stat-row"}>
+      <span className="stat-name">{rs(stat.nameRes)}</span>
+      {stat.numeric ? <StatBar stat={stat} /> : null}
+      {onTrain && (
+        <Button className="stat-train" title="Spend training points on a spell or skill" onClick={onTrain}>
+          Train
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
  * stats.c: a tab's stat groups, asked for when it's shown. Ours: the Abilities tab shows the
- * Spells and Skills groups together (AbilitiesList.tsx).
+ * Spells and Skills groups together (AbilitiesList.tsx), and training points from the Stats group.
  */
 export function requestTabStats(session: GameSession, tab: Tab): void {
   if (tab === "abilities") {
     session.requestStats(STAT_GROUP.SPELLS);
     session.requestStats(STAT_GROUP.SKILLS);
+    session.requestStats(STAT_GROUP.STATS);
     return;
   }
   const group = TABS.find((t) => t.tab === tab)?.group;

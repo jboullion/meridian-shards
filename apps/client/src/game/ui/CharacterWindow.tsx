@@ -111,7 +111,7 @@ export function CharacterWindow({
   session, icons, assets, settings, itemSlots, tab, onTab, onClose, onLookItem, onLinkItem, onLook, onDropItem, onApplyItem, onPut, onTabOut, selecting, onSelectObject, onCast,
   friendsPanel, petsPanel, questsPanel, companionPanel, onTrain,
 }: {
-  /** Ours: the Stats tab's Train button (docs/adr/0016-abilities.md) */
+  /** Ours: the Abilities tab's Train button (docs/adr/0016-abilities.md) */
   onTrain?: () => void;
   /** Ours: the Friends and Pets tabs' pages (GameView makes them) */
   friendsPanel: ReactNode;
@@ -306,7 +306,7 @@ export function CharacterWindow({
         ) : (
           <div className="cw-page stat-area">
             {tab === "stats" ? (
-              <NumericStats stats={world.stats.get(STAT_GROUP.STATS) ?? []} rs={rs} english={(id) => session.englishResource(id)} onTrain={onTrain} />
+              <NumericStats stats={world.stats.get(STAT_GROUP.STATS) ?? []} rs={rs} english={(id) => session.englishResource(id)} />
             ) : tab === "friends" ? (
               friendsPanel
             ) : tab === "pets" ? (
@@ -316,7 +316,7 @@ export function CharacterWindow({
             ) : tab === "quests" ? (
           questsPanel
         ) : (
-              <AbilitiesList session={session} icons={icons} onLook={onLook} onCast={onCast} />
+              <AbilitiesList session={session} icons={icons} onLook={onLook} onCast={onCast} onTrain={onTrain} />
             )}
           </div>
         )}

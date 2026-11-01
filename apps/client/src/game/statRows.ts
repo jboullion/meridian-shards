@@ -1,7 +1,8 @@
-// Ours: the Stats tab's rows (Sidebar.tsx NumericStats). Training points first (with Train beside
-// them, docs/adr/0016-abilities.md), a divider, then the six attributes down to Aim, a divider,
-// and the rest. Karma (always 0 now), Unbound Energy (gone) and Weight and Bulk Carried (the inventory
-// shows them) aren't listed, whichever of them the server still sends.
+// Ours: the Stats tab's rows (Sidebar.tsx NumericStats): the six attributes down to Aim, a divider,
+// and the rest. Training points aren't among them: they're at the top of the Abilities tab, with
+// Train beside them (trainingStat, Sidebar.tsx TrainingRow; docs/adr/0016-abilities.md). Karma
+// (always 0 now), Unbound Energy (gone) and Weight and Bulk Carried (the inventory shows them)
+// aren't listed either, whichever of them the server still sends.
 
 import type { Statistic } from "@shards/protocol";
 
@@ -12,23 +13,25 @@ export const STAT_NUM = {
 
 /** The attributes, in the server's order, which the divider follows */
 const ATTRIBUTES: readonly number[] = [STAT_NUM.MIGHT, STAT_NUM.INTELLECT, STAT_NUM.STAMINA, STAT_NUM.AGILITY, STAT_NUM.MYSTICISM, STAT_NUM.AIM];
-const HIDDEN_NUMS: readonly number[] = [STAT_NUM.KARMA, STAT_NUM.WEIGHT, STAT_NUM.BULK, STAT_NUM.UNBOUND];
+const HIDDEN_NUMS: readonly number[] = [STAT_NUM.KARMA, STAT_NUM.TRAINING, STAT_NUM.WEIGHT, STAT_NUM.BULK, STAT_NUM.UNBOUND];
 /** The same by English name, should the numbers move */
-const HIDDEN_NAMES = new Set(["karma", "weight carried", "bulk carried", "unbound energy"]);
+const HIDDEN_NAMES = new Set(["karma", "training points", "weight carried", "bulk carried", "unbound energy"]);
 
-export type StatRow = { kind: "stat"; stat: Statistic; training: boolean } | { kind: "divider" };
+export type StatRow = { kind: "stat"; stat: Statistic } | { kind: "divider" };
 
 /** The rows to show, in order; `english` names a stat in English (lower case doesn't matter) */
 export function statRows(stats: readonly Statistic[], english: (nameRes: number) => string | null | undefined = () => null): StatRow[] {
   const shown = stats.filter((s) => !HIDDEN_NUMS.includes(s.num) && !HIDDEN_NAMES.has((english(s.nameRes) ?? "").toLowerCase()));
   const byNum = [...shown].sort((a, b) => a.num - b.num);
-  const training = byNum.filter((s) => s.num === STAT_NUM.TRAINING);
   const attributes = byNum.filter((s) => ATTRIBUTES.includes(s.num));
-  const rest = byNum.filter((s) => s.num !== STAT_NUM.TRAINING && !ATTRIBUTES.includes(s.num));
-  const rows: StatRow[] = training.map((stat) => ({ kind: "stat", stat, training: true }));
-  if (training.length && attributes.length + rest.length) rows.push({ kind: "divider" });
-  for (const stat of attributes) rows.push({ kind: "stat", stat, training: false });
+  const rest = byNum.filter((s) => !ATTRIBUTES.includes(s.num));
+  const rows: StatRow[] = attributes.map((stat) => ({ kind: "stat", stat }));
   if (attributes.length && rest.length) rows.push({ kind: "divider" });
-  for (const stat of rest) rows.push({ kind: "stat", stat, training: false });
+  for (const stat of rest) rows.push({ kind: "stat", stat });
   return rows;
+}
+
+/** Training points, from the Stats group, for the Abilities tab (null before the group comes) */
+export function trainingStat(stats: readonly Statistic[]): Statistic | null {
+  return stats.find((s) => s.num === STAT_NUM.TRAINING) ?? null;
 }
