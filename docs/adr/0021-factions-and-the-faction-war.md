@@ -290,7 +290,7 @@ The game is becoming mostly single-player. So the factions are to drive the worl
   - A town taken by neutrals made a garbled mourning line: `LiegeName` names no liege "the unfactioned".
   - A liege's capital could celebrate under half-staff flags: losing a town now ends its celebrations.
   - The banner stayed unlit for a player who joined a liege while playing: `NameColorsChanged` sends the war again.
-  - A soldier who came to a battle after the first fell in seconds, alone: one who comes once the armies are out brings three of their liege's soldiers (`Reinforce`), as well as the grace.
+  - A soldier who came to a battle after the first fell in seconds, alone: one who comes once the armies are out brings three of their liege's soldiers (`Reinforce`), as well as the grace. **Only for a quest (2026-11-01):** the three come only with a soldier on a battle or siege step not yet done (`QuestBook.OnBattleStep`: the act 3 and act 5 campaign quests); anyone else who just turns up comes alone, with the grace. The first comer still has their whole army formed round them.
   - The Princess's Act IV says Cital ko'Manca keeps the East Tower by day (`koctower.kod` swaps the captains at the eighth and twentieth hours).
   - The town rooms' status line said "Murderer, Guild and Faction Combat Only": now "Guild and Faction Combat Only".
   - Our quest window shows a later step's own brief before the quest's progress text, which tells its start.
