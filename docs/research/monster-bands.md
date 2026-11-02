@@ -70,10 +70,10 @@ One point at 20 costs 441; at 50, 2,601; at 100, 10,201.
 |---|---|---|
 | Main gate to Cor Noth (574) | 1 | SpiderBaby 25, Centipede 30 |
 | Outskirts of Cor Noth (575) | 1 | SpiderBaby 25, GiantRat 30 |
-| Source of the River Ille (563) | 2 | FungusBeast 50, Ant 40 |
+| Source of the River Ille (563) | 2 | FungusBeast 50, Ant 45 |
 | East Merchant Way (564) | 2 | Spider 50, Centipede 30 |
 | The King's Way (576) | 2 | Frogman 85 |
-| The Flatlands (584) | 2 | Spider 50, Ant 40 |
+| The Flatlands (584) | 2 | Spider 50, Ant 45 |
 | Off the beaten path (566) | 3 | GroundWormLarva 35, Centipede 30 |
 
 ### Tos (mid (the Duke))
@@ -87,7 +87,7 @@ One point at 20 costs 441; at 50, 2,601; at 100, 10,201.
 | The Smuggler's Way (78) | 2 | DuskRat 90, Frogman 85 |
 | The border of the Badlands (585) | 2 | Troll 90, GroundWorm 100, RedAnt 65 |
 | Western border of the Twisted Wood (587) | 2 | Spider 50, Centipede 30 |
-| Outskirts of Tos (596) | 2 | Ant 40, GroundWormLarva 35 |
+| Outskirts of Tos (596) | 2 | Ant 45, GroundWormLarva 35 |
 | The forlorn path to Jixa (2900) | 2 | Chupacabra 100, Wendigo 120 |
 | Eastern gate to the city of Tos (2950) | 2 | Spider 50 |
 | A Deep, Dark, Spooky, Icky Cave (27) | 3 | Orc 50, OrcWizard 80 |
@@ -95,7 +95,7 @@ One point at 20 costs 441; at 50, 2,601; at 100, 10,201.
 | Dark Caves (858) | 3 | GiantRatSoldier 60 |
 | Chupacabra Territory (2901) | 3 | Chupacabra 100, Wendigo 120 |
 | The Duke's Way (2951) | 3 | Spider 50, Slime 35 |
-| The Forests of Meridian (26) | 4 | Ant 40, Spider 50 |
+| The Forests of Meridian (26) | 4 | Ant 45, Spider 50 |
 | The Spider Nest (35) | 4 | SpiderBaby 25, Spider 50 |
 | The Cragged Mountains (598) | 4 | Troll 90, DeathSpider 75, RedAnt 65 |
 | Abandoned Outpost (859) | 4 | GiantRatSoldier 60 |
@@ -103,13 +103,13 @@ One point at 20 costs 441; at 50, 2,601; at 100, 10,201.
 | Archaic Obelisk (2902) | 4 | Chupacabra 100, Wendigo 120 |
 | Eastern Duke's Way (2952) | 4 | Spider 50, Slime 35 |
 | The Marsh (2953) | 4 | Ranuculus 110, EvilEnt 60, Slime 35, Frogman 85 |
-| The Forests of Meridian (28) | 5 | Ant 40, Spider 50 |
+| The Forests of Meridian (28) | 5 | Ant 45, Spider 50 |
 | Ukgoth, Holy Land of Trolls (599) | 5 | Troll 90, RedAnt 65 |
 | An Enigmatic Chamber (2501) | 5 | Orc 50, OrcWizard 80, CaveOrc 80 |
 | The desolate Mire (2954) | 5 | Ranuculus 110, EvilEnt 60, GiantEye 120 |
-| The Deep Dark Woods of Tos (4) | 6 | Ant 40, Spider 50 |
+| The Deep Dark Woods of Tos (4) | 6 | Ant 45, Spider 50 |
 | The Berdonne Canyons (32) | 6 | RedAnt 65, Orc 50 |
-| The Deep Dark Woods of Marion (6) | 7 | Ant 40, Spider 50 |
+| The Deep Dark Woods of Marion (6) | 7 | Ant 45, Spider 50 |
 | Castle Victoria (38) | 7 | Skeleton 75 |
 | Martyr's Battleground (47) | 7 | StoneTroll 140, GroundWormQueen 130 |
 | Far'Nohl's Chambers (37) | 8 | KnightA 125, HalfKnight 100, CaptainKnight 125 |
@@ -338,8 +338,8 @@ One point at 20 costs 441; at 50, 2,601; at 100, 10,201.
 | mummy | MummyNoTreasure | 30 | 1 | 20-29 | Raza (1) |
 | groundworm larva | GroundWormLarva | 35 | 3 | 20-34 | Jasper (2), Cor Noth (1), Tos (1) |
 | slime | Slime | 35 | 4 | 20-34 | Marion (1), Barloque (2), Tos (3) |
-| ant | Ant | 40 | 4 | 20-39 | Tos (5), Cor Noth (2) |
 | spectral mummy | SpectralMummy | 40 | 5 | 20-39 | Marion (1) |
+| ant | Ant | 45 | 4 | 20-44 | Tos (5), Cor Noth (2) |
 | cow | Cow | 50 | 5 | 20-49 | Marion (1) |
 | fungus beast | FungusBeast | 50 | 3 | 20-49 | Marion (2), Barloque (1), Cor Noth (1) |
 | giant beetle | Beetle | 50 | 5 | 20-49 | Bergholt (4), Barloque (1) |

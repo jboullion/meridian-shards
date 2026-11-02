@@ -600,3 +600,82 @@ Build steps 1-4 (10): the data and the generator, the engine, the markers, the c
 
 - **The markers over NPCs and on the minimap are all gold.** Silver (story) and bronze (errands) confused more than they told. The server still sends `MM_QUEST_SILVER` and `MM_QUEST_BRONZE`; our client ignores them (`markers.ts`), so the colours could come back without a server change. A grey mark is still a quest not ready yet.
 - **The quest windows show a badge** before the health line: Main quest, Story or Errand (`QUEST_TIER_LABEL`), tinted gold, silver and bronze, in both the window at the giver and the one away from it. The tier still orders the Suggested list and the dashboard edits it as before.
+
+## Cor Noth play-test changes (2026-11-01)
+
+Players who skip the tutorial should be able to go out into the world from Cor Noth at once.
+
+- **Rook (`CorNothSergeant`):**
+  - A Lesson from Rook (252) is optional. It pays 150 shillings instead of the 400 training points.
+  - Cor Noth's Portal (254) and Put It to Practice (253) need nothing first.
+  - Put It to Practice gives the 400 points itself: its first step is `health` 1 with a step reward, which is done as the quest starts (`BeginStep` posts `CheckStateSteps`). Its `train` step follows.
+  - Spiders on the Merchant Way (129) takes 10 kills, not 15.
+  - New, beside it: Ants in the Flatlands (360), 10 `Ant` in the Flatlands (584) and at the river's source (563).
+  - Orc Raiders (131) is offered from 40 health.
+- **Ants are level 45** (`ant.kod` `viLevel`, was 40). Their health, damage, attack and defence all follow from it. Difficulty stays 4, as the spiders'.
+- **Rook's faction tour** (258-260) is offered from 40 health, still after Cor Noth's Portal. Each quest lost its `attune` step: talk to the liege, then report back to Rook.
+- **Each faction city's innkeeper has the portal quest** (`attune`, no needs, 40 health):
+  - The Gate Home (361), Paddock in Tos;
+  - The Royal Portal (362), Pritchett in Barloque;
+  - A Door to Jasper (363), Widow Qesino in Jasper.
+- **Mychel (`CorNothMuseumGuard`) has a story quest for each historic town**, after D'Franco's The Meridian Museum (255):
+  - The Young University (364): visit old Cor Noth, then its Hall of Genealogy (`RID_OLD_COR_UNIV`).
+  - Both Halves of the Crown (365): walk old Barloque's north town, then its south town.
+  - Snow on Old Jasper (366): talk to Tobin the crier, a placed giver in old Jasper (giver 2, 43,25).
+  - Marion Before the Temple (367): talk to Wenhal, a placed giver in old Marion (giver 3, 60,35).
+  - Each ends back at Mychel.
+  - The two givers stand a few squares in front of the portal's arrival point, on squares the room's sectors show are reachable. **No one has looked at them in the client yet.**
+- **A quest that loses steps:** `QuestBook.PlayerLoggedOn` puts a player whose step is past a quest's end on its last step. A player on the tour's old third step (report back) stays on report back.
+- **On a running world:** `reload system`, then `Recreate` old Jasper (9000) and old Marion (9001) so they place their givers.
+- **Tried in the testbench sandbox** (a clone of the local world): ants are level 45; the two givers stand on their squares after `Recreate`; at 40 health Rook offers 129, 252, 253, 254 and 360 together, and Pritchett and Widow Qesino their portal quests; Mychel offers 364-367 after 255; Put It to Practice goes to its `train` step with 400 more training points.
+- **Not yet tried:** the quests played through in the client, the givers' squares seen, and a player on the tour's old third step logging on.
+
+## Tos play-test changes (2026-11-01)
+
+- **Rats in the Cellar (1)** is the small rats only, from 40 health. **The Rat King (370)**, after it from 60 (the soldiers and the king are level 60): fifteen rat soldiers in the Dark Caves, through the secret passage from Paddock's cellar, then the king in the Abandoned Outpost. The inky caps went to 370.
+- **The Restless Dead of Tos (276) and Bones in the Graveyard (277)** are offered from 45.
+- **Castle Victoria is Drechx's chain** (`fourCouncilor`, outside the castle, `RID_CASTLE1C`):
+  - Paddock's quest 13 is now The Road to Castle Victoria (45): reach the castle, talk to Drechx. Its old health step and ghost went to 223.
+  - From 45, after 13: The Shambling Court (368), 10 zombies upstairs, and Broken Bones (369), 10 battered skeletons upstairs (`RID_CASTLE1B`).
+  - Bones of the Castle (220) from 50, after both: 15 skeletons in the main hall (`RID_CASTLE1` only).
+  - The Tusked Guard (222) from 70, after 220.
+  - The Mad King of Castle Victoria (223, was The Ghost of Far'Nohl) from 80, after 222. The ghost stays level 220, difficulty 9: the text says to bring a group. It took 13's 1,000 training points.
+  - Far'Nohl's Knights (221) is unchanged (95, after 220).
+  - The Brax guide (guide-brax) still needs 13, so players who beat the ghost under the old 13 keep it.
+- **The Queen of the Nest (371):** Frisconar (`TosApothecary`) asks for the queen spider in the Spider Nest, from 80. She stays level 165, difficulty 9; the text says to go in a group.
+- **The Underbasement crate** (`dungeon.kod`) gives each character one thing the first time they rummage, and tells them after that they have taken it. The things: the exotic undershirt (`Tanktop`), a shrunken head, a rose (+5 Mysticism for six hours of play, offered at Marion's mimosa tree), a ring of Far'nohl (`ReagentRing`, casting without reagents, with 50 charges here, not its usual 5; nothing else in the game makes one) and a ring of invisibility (also 50 charges, a minute worn each, not its usual 4-7). The lute, the guild shield, the book, the labelled wand, the vial of perfume (the old aphrodisiac), the junk and the monsters are gone, and so are the 50-hour timer and the last-finder rule. The mark is `PFLAG2_VICTORIA_CRATE` (0x020000), in `PFLAG2_MASK` so a flag reset keeps it. `ReagentRing`'s constructor takes `charges`.
+- **Players mid-quest:** quests 1 and 13 lost steps; at logon `PlayerLoggedOn` puts a player past the end on the last step.
+- **Tried in the testbench sandbox:** at 40 Paddock offers 1, with 13, 276 and 277 "soon"; Drechx offers 368 and 369 after 13, then 220 after both; a player mid-way through the old 13 can hand it to Drechx; Frisconar offers 371 above 80; the crate gave one curiosity and set the mark, gave nothing the second time, and the mark survived `ResetPlayerFlagList`. The world loads with the crate room's three removed properties (a one-time log line each).
+- **Not yet tried:** the chain and the Rat King played in the client, and a group against Far'Nohl or the queen at 80.
+- **Later the same day:**
+  - Far'Nohl's Knights (221) is in Drechx's chain from 80, after The Tusked Guard (222), beside The Mad King (223). Its text gives the way in: the door in the west wall of the main hall.
+  - The graveyard (276, 277) and every Castle Victoria kill quest (368, 369, 220, 221, 222, 223) repeat once a Meridian day (`cooldownHours` 2). The dead in the graveyard only rise at night, so that's once a night.
+  - Repeats pay what the first time pays (QuestBook has no first-time reward), so the big ones were trimmed: the main hall 500 shillings (was 1,000), the tusked guard and the knights 800 (were 3,000), Far'Nohl 2,500 (was 12,000) and no training points (were 1,000).
+  - The court's Restless Dead of Castle Victoria (342) stays a daily bounty.
+
+## Barloque and Jasper catch up with Tos (2026-11-01)
+
+A census of the quests by the town their giver stands in found the three faction cities level only with the faction leaders' quests taken out. Tos had about a dozen leveling kill quests from 40 to 100 (Paddock, Drechx, Frisconar). Barloque had one, beside the court's daily bounties. Jasper had none from 40 to 90. Castle Victoria, the Island and Brax were only pointed to from Tos.
+
+- **Every innkeeper points the way.** Each set of three is one quest offered in three cities: taking or finishing one hides the others (`notQuests`).
+  - **Castle Victoria from 45:** Paddock's The Road to Castle Victoria (13), Pritchett's The King's Old Castle (373), Widow Qesino's The Mad King's Castle (376). Each ends at Drechx.
+  - **The Island from 80:** The Island Beyond the Caves (372), An Island of Konima's Children (374), Konima's Lost Legion (377). Each goes through the Orc Caves to Ko'catan and ends at Cital ko'Manca (`KocatanCaptainGood`), whose Aid in the War opens at 80. The Duke's trade-treaty mission (19, 90) stays as it is.
+  - **Brax from 100:** Paddock's The Ancient City of Brax (20), Pritchett's The City Under the Earth (375), Widow Qesino's The Sunken City (378). Each is the same two steps and 2,000 training points.
+  - Drechx's first two quests (368, 369) no longer need 13: whoever reaches him may take them.
+- **New town kill quests, repeating once a Meridian day (2 hours):**
+  - **Jasper:**
+    - Rats Beneath Jasper (379, Pietro, 40): 10 rat soldiers in the Sewers of Jasper.
+    - Ants in the Crags (380, Quintor, 45): 10 mutant ants (`RedAnt`) in the Cragged Mountains (578).
+    - The King Below Jasper (382, Pietro, 55): the sewers' rat king.
+    - Frogmen on the King's Way (381, Widow Qesino, 60): 8 frogmen (576).
+    - Trolls in the Crags (383, Quintor, 65): 8 trolls (578).
+    - Dusk Rats in the Deep Tunnels (384, Widow Qesino, 80): 10 dusk rats in the sewers.
+  - **Barloque:**
+    - Fungus on the Shore (385, Meidei, 40): 12 fungus beasts (562).
+    - The Rats of the Royal Sewers (386, Pritchett, 55): 15 rat soldiers, then the rat king, in the Sewers of Barloque.
+    - Worms Under the Badlands (388, Fehr'loi Qan, 75): 10 groundworms (45, 860).
+    - Dusk Rats Under the Crown (387, Meidei, 80): 10 dusk rats in the sewers.
+    - The Smugglers' Beasts (389, Pritchett, 100): 6 lupoggs (380, 112).
+  - Each band starts where its monster gives full experience: the band ends just under the monster's level.
+- **Tried in the testbench sandbox:** every new quest is offered by its giver at its health, and shows as "soon" below it; the three pointers of a set are all offered until one is taken; no runtime errors.
+- **Not yet tried:** any of them played in the client.
