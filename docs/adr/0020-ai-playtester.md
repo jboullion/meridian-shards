@@ -68,6 +68,11 @@ So the agent can see what players see, and report visual bugs, `connect` takes a
 
 13. **The parts that need Node stay in Node:** reports, notes and the maintenance-port helpers. They ask the body where we are (`play.ts context`), so they work with either body.
 
+14. **The Godot body (`godotBody.ts`, 2026-11-01; meridian-godot's phase 5c).** `connect` with body `godot` plays in meridian-godot's client. That client answers the game tools itself, in the same words: `project/scripts/agent/` there ports `play.ts`, `actions.ts`, `walker.ts`, `describe.ts`, `body.ts` and `journal.ts` to GDScript, over its own session.
+    - **Starting it:** `godotBody.ts` starts `client.tscn` with `--auto --agent-port <port>` (`--godot` is the checkout, `--godot-port` the port, 7459 by default). The account goes in `MR_AGENT_USER` and `MR_AGENT_PASSWORD`, not on the command line, and the character in `--play-as`. The client logs in itself, and the body waits until its `context` says it's in the game.
+    - **The line:** TCP on 127.0.0.1, one JSON object a line: `{id, call, args}` out, `{id, ok, text}` back, as `inpage.ts PageAgent.call` answers. `context` and `screenshot` (`{hud}`, a base64 PNG) are calls too, and `quit` logs off and closes the client.
+    - **Kept the same:** meridian-godot's `tools/agent_compare.sh` plays the same steps in the headless body and in the Godot body on one character, and compares the answers with journal times, the maintenance port's timings and vigor masked (26 of 26 the same on 2026-11-01).
+
 ## Later phases
 
 - **Phase 3, players' own AI characters** (direction set 2026-10-20; the details are still to be thought through and tried).
@@ -90,6 +95,6 @@ So the agent can see what players see, and report visual bugs, `connect` takes a
 ## Consequences
 
 - An agent can play from Claude Code once the dev stack runs: `npm run dev`, then use the `meridian` MCP server's tools (or the `playtester` agent).
-- In the headless body the agent sees only what the protocol carries. The browser body adds the screen, at the cost of a browser and a slower start.
+- In the headless body the agent sees only what the protocol carries. The browser body adds the screen, at the cost of a browser and a slower start. The Godot body plays the other client, so one playtest prompt covers both.
 - Walking is our nav grid's idea of where people can walk, not `move.c`'s: a path the grid thinks clear can still meet a snap-back, which the walker reports. That's worth reporting too.
 - Found while building it: a monster placed in a player (a `NewHold` aimed at the player's id) makes the server fail every request that player sends, silently, until it's deleted. Our tools never do it (`admin.ts` takes the room from `GetOwner`'s return line), but a debug script did.
