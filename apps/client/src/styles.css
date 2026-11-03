@@ -4195,12 +4195,13 @@ canvas.server-wait {
 /* The chat down the left side. Idle, only lines newer than CHAT_FRESH_MS show (GameView .fresh),
    over the view; hovered or typed in, it's a panel with its tabs, scrollback and chat line. Moved
    by its tab strip and sized by its right and bottom edges (GameView chatPlace: settings chatAt,
-   chatWidth, chatTall). It's at the back of the HUD: the face, target, map and hotbar stay over it. */
+   chatWidth, chatTall). It's at the back of the HUD: the face, target, map and hotbar stay over it.
+   Unsized, it takes a third of the height below its top: the player makes it taller. */
 .game.modern-ui .chat {
   position: absolute;
   left: 10px;
   top: 190px;
-  bottom: 10px;
+  height: max(100px, (100% - 200px) / 3);
   z-index: 4;
   width: var(--chat-width, 340px);
   /* Left of the action bar (half its width, 245 px, and a gap) whatever the window's width, till

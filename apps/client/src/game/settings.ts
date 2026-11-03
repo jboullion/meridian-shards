@@ -417,7 +417,7 @@ export interface Settings {
   /**
    * The Modern layout's chat: where its tab strip was dragged to (left and top in the view's
    * pixels), or null for its place down the left; and its height in its own pixels (dragged by its
-   * bottom edge), or null to reach the view's bottom
+   * bottom edge), or null for its first height (a third of the view's)
    */
   chatAt: [number, number] | null;
   chatTall: number | null;

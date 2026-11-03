@@ -24,6 +24,7 @@ import { ArenaStore } from "./arenaBouts.ts";
 import { FactionWarStore } from "./factionWar.ts";
 import { FallenHallsStore } from "./fallenHalls.ts";
 import { AchievementsStore } from "./achievements.ts";
+import { ConnectionDiary } from "./connectionDiary.ts";
 import { ConnectingScreen, LoginScreen, rememberName } from "./LoginScreen.tsx";
 
 /** A tiny event relay: session events that arrive before (or without) a listener are dropped. */
@@ -115,6 +116,18 @@ function takeUpdatedNotice(): string | null {
   }
 }
 
+/** session.ts's message for a socket that closed in the game */
+const DISCONNECTED = "Disconnected from the server.";
+const diary = new ConnectionDiary(storage());
+
+function storage(): Storage | null {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
+
 export function Game({
   assets, rsb, retryLogin,
 }: {
@@ -165,16 +178,30 @@ export function Game({
   const upright = phase !== "entering" && phase !== "game";
   useEffect(() => allowPortrait(upright), [upright]);
 
-  // Keep-alive pings from a worker, so background tabs stay connected.
+  // Keep-alive pings from a worker, so background tabs stay connected. The diary notes when
+  // the page stops running (hidden, frozen, asleep), which is what drops a connection.
   useEffect(() => {
     if (!live) return;
+    diary.restart();
     const worker = new Worker(new URL("./pingWorker.ts", import.meta.url), { type: "module" });
-    worker.onmessage = () => live.session.ping();
+    worker.onmessage = () => {
+      diary.tick();
+      live.session.ping();
+    };
     const onUnload = () => live.session.close();
+    const onVisibility = () => diary.note(document.hidden ? "hidden" : "visible");
+    const onFreeze = () => diary.note("frozen");
+    const onResume = () => diary.note("resumed");
     window.addEventListener("beforeunload", onUnload);
+    document.addEventListener("visibilitychange", onVisibility);
+    document.addEventListener("freeze", onFreeze);
+    document.addEventListener("resume", onResume);
     return () => {
       worker.terminate();
       window.removeEventListener("beforeunload", onUnload);
+      document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener("freeze", onFreeze);
+      document.removeEventListener("resume", onResume);
       live.audio.dispose();
       // Closed already after logging off; not when the game is unmounted by an error (App.tsx GameCrashed)
       live.session.close();
@@ -264,6 +291,11 @@ export function Game({
         },
         error: (e) => {
           quickstart.current = false;
+          if (e === DISCONNECTED) {
+            diary.note("closed");
+            const why = diary.explain();
+            if (why) return setError(`${e} ${why}`);
+          }
           setError(e);
         },
         charInfo: (info) => {

@@ -2241,7 +2241,7 @@ export function GameView({
       : undefined;
 
   // The Modern chat where it was moved (kept in the window if that has shrunk since), and as tall
-  // as it was made; unmoved, down the left; unsized, down to the window's bottom. Its left and top
+  // as it was made; unmoved, down the left; unsized, a third of the window's height (styles.css). Its left and top
   // are in the window's pixels, divided by the HUD size it's zoomed by.
   const chatAt = dragChatAt ?? settings.chatAt;
   const chatTall = dragTall ?? settings.chatTall;
