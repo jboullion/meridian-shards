@@ -3043,14 +3043,14 @@ export class GameScene {
       return;
     }
     // Ours (the desktop, both interfaces): the right button turns the view while held and dragged,
-    // and acts as bound (Examine) only if let go without dragging. The mouse is captured while it's
-    // held (so a turn isn't stopped by the screen's edge) and freed again on letting go; the lock
-    // is asked for now, while the press still counts as the user's gesture. There's no other
+    // and acts as bound (Examine) only if let go without dragging. Once it drags, the mouse is
+    // captured (so a turn isn't stopped by the screen's edge) and freed again on letting go. The
+    // lock waits for the drag so a plain click doesn't bring up the browser's "Esc to show your
+    // cursor" notice; the press still counts as the user's gesture then. There's no other
     // mouselook: the original's (a click, or A_MOUSELOOK) is gone.
     if (e.button === 2 && !touchUi(this.settings) && !this.locked) {
       this.rightDrag = { x: e.clientX, y: e.clientY, travel: 0, moved: false, mods: { alt: e.altKey, ctrl: e.ctrlKey } };
       window.addEventListener("mouseup", this.onRightUp);
-      this.canvas.requestPointerLock().catch(() => {});
       return;
     }
     // Mouse buttons are bound like keys (config.ini mousetarget=mouse0, examine=mouse1)
@@ -3188,6 +3188,8 @@ export class GameScene {
         d.moved = true;
         // No cursor while it turns the view (styles.css .viewport[data-turning])
         this.canvas.setAttribute("data-turning", "");
+        // Let go before the lock came: free it again
+        this.canvas.requestPointerLock().then(() => { if (!this.rightDrag && this.locked) document.exitPointerLock(); }, () => {});
       }
       if (d.moved) this.look(e.movementX, e.movementY);
       return;
