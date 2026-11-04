@@ -27,6 +27,7 @@ if (!opt.from) {
 const origin = opt.from.replace(/\/+$/, "");
 const out = resolve(opt.out!);
 const PARALLEL = 8;
+const TRIES = 4;
 
 const hashOf = (b: Uint8Array) => createHash("sha1").update(b).digest("hex").slice(0, 16);
 
@@ -48,17 +49,28 @@ let failed = 0;
 const worker = async () => {
   for (let next = todo.shift(); next; next = todo.shift()) {
     const [name, f] = next;
-    try {
-      const res = await fetch(`${origin}/assets/${name}?v=${f.hash}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      if (hashOf(bytes) !== f.hash) throw new Error(`hash ${hashOf(bytes)}, expected ${f.hash}`);
-      mkdirSync(dirname(join(out, name)), { recursive: true });
-      writeFileSync(join(out, name), bytes);
-      if (++done % 500 === 0) console.log(`${done} downloaded`);
-    } catch (e) {
-      failed++;
-      console.error(`!! ${name}: ${(e as Error).message}`);
+    // A few tries each: four release runners download at once from one small VM, and one file
+    // failing once failed the Android build (v0.15.1)
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const res = await fetch(`${origin}/assets/${name}?v=${f.hash}`, { signal: AbortSignal.timeout(120_000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        if (hashOf(bytes) !== f.hash) throw new Error(`hash ${hashOf(bytes)}, expected ${f.hash}`);
+        mkdirSync(dirname(join(out, name)), { recursive: true });
+        writeFileSync(join(out, name), bytes);
+        if (++done % 500 === 0) console.log(`${done} downloaded`);
+        break;
+      } catch (e) {
+        if (attempt < TRIES) {
+          console.warn(`${name}: ${(e as Error).message}; trying again`);
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
+          continue;
+        }
+        failed++;
+        console.error(`!! ${name}: ${(e as Error).message}`);
+        break;
+      }
     }
   }
 };
