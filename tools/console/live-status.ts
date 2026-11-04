@@ -7,9 +7,12 @@
 //
 // Maintenance commands are skipped while the container is under 90 seconds old: commands sent
 // while blakserv loads have hung it (deploy/README.md).
+//
+// The file ~/.meridian-shards/live-paused stops the checks (every session's), for a VM that is
+// struggling: on 2026-11-04 the checks' docker commands piled up on a thrashing e2-micro.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +22,7 @@ import { inGame, parseStatus, parseWho, type ServerStatus, type Session } from "
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const ERROR_TAIL = 20;
 const SETTLE_SEC = 90;
+const PAUSE_FILE = join(homedir(), ".meridian-shards", "live-paused");
 
 export interface LiveStatus {
   at: string;
@@ -125,6 +129,7 @@ export function readLive(output: string): Omit<LiveStatus, "at" | "reachable" | 
 
 export function liveStatus(): LiveStatus {
   const base = { at: new Date().toISOString(), lastShip: lastShip() };
+  if (existsSync(PAUSE_FILE)) return { ...base, reachable: false, error: `paused (delete ${PAUSE_FILE} to resume)`, container: null, server: null, players: [], sessions: [], errors: null, logs: [] };
   const target = deployTarget();
   if (!target) return { ...base, reachable: false, error: "SHARDS_DEPLOY_HOST isn't set (.env)", container: null, server: null, players: [], sessions: [], errors: null, logs: [] };
   const r = ssh(target, "bash -s", { input: SCRIPT, timeoutMs: 45_000 });
