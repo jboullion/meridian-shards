@@ -7,7 +7,7 @@
 //   npm run release:major -- -m "What changed"   0.12.0 -> 1.0.0
 //
 // --skip-ship releases what's already deployed and pushed. --no-wait pushes the tag and leaves.
-// ship.ts's options pass through: -m/--message, --message-file, --skip-build, --skip-checks,
+// ship.ts's options pass through: -m/--message, --message-file, --skip-build, --skip-checks, --warn,
 // --dry-run (which also only prints the version it would release).
 
 import { spawnSync } from "node:child_process";
@@ -27,6 +27,7 @@ const { values: opt, positionals } = parseArgs({
     "skip-ship": { type: "boolean", default: false },
     "no-wait": { type: "boolean", default: false },
     "dry-run": { type: "boolean", default: false },
+    warn: { type: "string" },
   },
 });
 
@@ -58,6 +59,7 @@ if (!opt["skip-ship"]) {
   if (opt["skip-build"]) shipArgs.push("--skip-build");
   if (opt["skip-checks"]) shipArgs.push("--skip-checks");
   if (opt["dry-run"]) shipArgs.push("--dry-run");
+  if (opt.warn !== undefined) shipArgs.push("--warn", opt.warn);
   run("tools/deploy/ship.ts", shipArgs);
 }
 

@@ -5,15 +5,17 @@
 //   2. npm run check (typecheck, lint, tests)
 //   3. commit whatever is changed in meridian-browser and shards-server (server/src), and push
 //      both
-//   4. on the VM: save the game, then tools/deploy/push.ts (the game files only when they
+//   4. with players in the game, a countdown: "The servers restart in N minutes" at 30, 10 and
+//      2 minutes (--warn sets the first; --warn 0 skips it), and "restarting now" at the end
+//   5. on the VM: save the game, then tools/deploy/push.ts (the game files only when they
 //      changed since the last ship)
-//   5. wait for blakserv to listen again, then Recreate every room built from a .roo that
+//   6. wait for blakserv to listen again, then Recreate every room built from a .roo that
 //      changed (rooms.json maps files to rooms; Marion's file is RID 200 and its Death Realm
 //      copy)
-//   6. remember what was shipped in ~/.meridian-shards/last-ship.json
+//   7. remember what was shipped in ~/.meridian-shards/last-ship.json
 //
 //   npm run ship -- -m "What changed"
-//   npm run ship -- --message-file msg.txt [--skip-build] [--skip-checks] [--no-deploy] [--dry-run]
+//   npm run ship -- --message-file msg.txt [--skip-build] [--skip-checks] [--no-deploy] [--warn <minutes>] [--dry-run]
 //
 // The VM comes from .env (tools/deploy/remote.ts). Releases (tools/deploy/bump.ts) run this
 // first.
@@ -26,6 +28,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { COMPOSE, deployTarget } from "./remote.ts";
+import { inGame, parseWho } from "../console/blakserv.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const SERVER = realpathSync(join(ROOT, "server", "src"));
@@ -42,9 +45,15 @@ const { values: opt } = parseArgs({
     "skip-checks": { type: "boolean", default: false },
     "no-deploy": { type: "boolean", default: false },
     "dry-run": { type: "boolean", default: false },
+    warn: { type: "string", default: "30" },
   },
 });
 const dry = opt["dry-run"];
+const warnMinutes = Number(opt.warn);
+if (!Number.isInteger(warnMinutes) || warnMinutes < 0 || warnMinutes > 120) {
+  console.error(`--warn takes whole minutes up to 120 (0 for no countdown), not "${opt.warn}"`);
+  process.exit(2);
+}
 
 interface ShipState {
   browser: string;
@@ -138,6 +147,54 @@ function remote(host: string, sshArgs: string[], command: string, allowFail = fa
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** The characters in the game now (maint "who"); null when the VM didn't answer */
+function playersOnline(): number | null {
+  const out = remote(host, sshArgs, `${COMPOSE} exec -T blakserv maint "who"`, true);
+  if (!/^Name\s+Act\s+Ver/m.test(out)) return null;
+  return inGame(parseWho(out)).length;
+}
+
+/** A system message to everyone in the game: bold, with the [###] mark and a sound (dm.kod's "system!") */
+function tellPlayers(text: string) {
+  // The maintenance port's string is a quote, which must be the last parameter. blakserv keeps
+  // 119 characters of a command (admin.h MAX_ADMIN_COMMAND) and drops the rest without a word
+  const command = `send object 0 AdminSystemMessage bPrefix int 1 string quote ${text}`;
+  if (command.length > 119) fail(`the players' message is ${command.length - 119} characters too long for the maintenance port: ${text}`);
+  remote(host, sshArgs, `${COMPOSE} exec -T blakserv maint "${command}"`, true);
+}
+
+/**
+ * Warns the players in the game before the restart: at `minutes`, then at 30, 10 and 2 minutes
+ * as they come, and once more right before it. With nobody in the game (or nobody left), it
+ * goes ahead at once.
+ */
+async function countdown(minutes: number) {
+  if (minutes === 0) return;
+  step(`Warn the players (${minutes} minutes)`);
+  const online = dry ? 1 : playersOnline();
+  if (online === 0) {
+    console.log("Nobody is in the game: no countdown.");
+    return;
+  }
+  const marks = [...new Set([minutes, 30, 10, 2])].filter((m) => m > 0 && m <= minutes).sort((a, b) => b - a);
+  const end = Date.now() + minutes * 60_000;
+  for (const m of marks) {
+    const wait = end - m * 60_000 - Date.now();
+    if (wait > 0 && !dry) await sleep(wait);
+    if (m !== minutes && !dry && playersOnline() === 0) {
+      console.log("Everyone has left the game: restarting now.");
+      break;
+    }
+    const text = `The servers restart in ${m} minute${m === 1 ? "" : "s"}. Log off somewhere safe.`;
+    console.log(`${new Date().toLocaleTimeString()}: ${text}`);
+    tellPlayers(text);
+  }
+  const rest = end - Date.now();
+  if (rest > 0 && !dry && playersOnline() !== 0) await sleep(rest);
+  tellPlayers("The servers are restarting now. Back in a few minutes.");
+  if (!dry) await sleep(5000);
+}
+
 // ------------------------------------------------------------------------------------------
 
 const message = opt["message-file"] ? readFileSync(opt["message-file"], "utf8").trim() : (opt.message ?? null);
@@ -174,6 +231,8 @@ const { host, key, sshArgs } = target;
 const rooms = changedRooms(lastShippedServer(state));
 const assets = assetsHash();
 const sameAssets = !!state && state.assets === assets;
+
+await countdown(warnMinutes);
 
 // The run book: save before a redeploy (blakserv saves only every 30 minutes)
 remote(host, sshArgs, `${COMPOSE} exec -T blakserv maint "save game"`, true);
