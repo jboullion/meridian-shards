@@ -1,8 +1,10 @@
 // The intro module (module/intro/intro.c IntroShowSplash): the picture behind the login dialog,
 // and the main theme (main.ogg), fading in over 1 s (intro.c waits 3 s and starts it at full
-// volume). It's behind the login dialog at startup and after logging off. Ours: the music waits
-// for the login screen's sound toggle (LoginScreen.tsx AudioToggle), so nobody is startled and
-// the browser lets it play (it's started by that click).
+// volume). It's behind the login dialog at startup and after logging off. Ours: the music has
+// its own setting, apart from the game's Music and Sound options: the login screen's toggle
+// (LoginScreen.tsx AudioToggle), off until a player turns it on, so nobody is startled, and
+// remembered after that. A browser lets a page play sound only after a click or key press, so
+// there it starts with the player's first one.
 //
 // Unlike the original, there's no logo first (logo.bmp is Near Death Studios' logo), and there's
 // no "Click here to log on!" button: the login dialog is open over the picture from the start
@@ -16,6 +18,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AssetStore } from "../assets.ts";
 import type { GameAudio } from "./audio.ts";
+import { desktop } from "../host.ts";
 import { getSettings, touchUi } from "./settings.ts";
 
 /** Ours: the music fades in over this long, at once, where intro.c waits 3 s (ms) */
@@ -28,9 +31,31 @@ const SPLASH = "xsplash.bgf";
 const HOLD_MS = 6000;
 const FADE_MS = 1500;
 
+/** Ours: the login screen's music setting (localStorage), "on" or "off"; off when never set */
+const LOGIN_MUSIC_KEY = "shards.loginMusic";
+
+export function loginMusicSaved(): boolean {
+  try {
+    return localStorage.getItem(LOGIN_MUSIC_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
+export function saveLoginMusic(on: boolean): void {
+  try {
+    localStorage.setItem(LOGIN_MUSIC_KEY, on ? "on" : "off");
+  } catch {
+    // for this visit only
+  }
+}
+
+/** The gestures that let a page play sound (audio.ts UNLOCK_EVENTS) */
+const GESTURES = ["keydown", "pointerdown", "touchend"] as const;
+
 /**
- * The splash's music on or off (PlayMusicProc), by the login screen's toggle and not the Music
- * option; called from the toggle's click, so the browser lets it play.
+ * The splash's music on or off (PlayMusicProc), by the login screen's toggle and not the game's
+ * options; called from the toggle's click, so the browser lets it play.
  */
 export function setLoginMusic(audio: GameAudio, on: boolean): void {
   audio.setOwnMusic(on);
@@ -59,7 +84,23 @@ export function IntroBackdrop({ assets, audio, music }: { assets: AssetStore; au
   }, [assets]);
 
   useEffect(() => {
-    if (audio) setLoginMusic(audio, music);
+    if (!audio) return;
+    // Turned on at an earlier visit: in a browser not clicked yet, the first click or key starts
+    // it (one on the toggle turns it off instead). The apps may play at once.
+    const activation = (navigator as { userActivation?: { hasBeenActive: boolean } }).userActivation;
+    if (!music || desktop || activation?.hasBeenActive !== false) {
+      setLoginMusic(audio, music);
+      return;
+    }
+    const start = (e: Event) => {
+      stop();
+      if (!(e.target instanceof Element && e.target.closest(".login-audio"))) setLoginMusic(audio, true);
+    };
+    const stop = () => {
+      for (const type of GESTURES) window.removeEventListener(type, start, true);
+    };
+    for (const type of GESTURES) window.addEventListener(type, start, true);
+    return stop;
   }, [audio, music]);
 
   if (!pictures) return null;

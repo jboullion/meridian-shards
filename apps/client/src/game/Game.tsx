@@ -8,7 +8,7 @@ import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
 import { allowPortrait, desktop, gameSocketUrl, onAndroidAway, requiredUpdate, unreachableMessage, type RequiredUpdate } from "../host.ts";
 import { GameAudio } from "./audio.ts";
-import { IntroBackdrop, setLoginMusic } from "./Intro.tsx";
+import { IntroBackdrop, loginMusicSaved, saveLoginMusic, setLoginMusic } from "./Intro.tsx";
 import { CharacterCreator } from "./CharacterCreator.tsx";
 import { AssetDownload } from "./AssetDownload.tsx";
 import { CharacterSelect } from "./CharacterSelect.tsx";
@@ -158,10 +158,11 @@ export function Game({
   const [intro, setIntro] = useState(() => launch?.quickstart !== true);
   /** Plays the splash's music (main.ogg) until logging on, as the intro module does until it unloads */
   const [introAudio, setIntroAudio] = useState<GameAudio | null>(() => new GameAudio(assets));
-  /** Ours: the login screen's music toggle, off until turned on; the game's Music option is its own (LoginScreen.tsx AudioToggle) */
-  const [loginMusic, setLoginMusicOn] = useState(false);
+  /** Ours: the login screen's music setting, off until turned on; the game's Music and Sound options are their own (LoginScreen.tsx AudioToggle) */
+  const [loginMusic, setLoginMusicOn] = useState(loginMusicSaved);
   const toggleLoginMusic = (on: boolean) => {
     setLoginMusicOn(on);
+    saveLoginMusic(on);
     // In the click itself, so the browser lets it play
     if (introAudio) setLoginMusic(introAudio, on);
   };

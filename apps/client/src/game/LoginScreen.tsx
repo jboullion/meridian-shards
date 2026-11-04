@@ -75,9 +75,8 @@ function forgetName(name: string): string[] {
 }
 
 /**
- * Ours: the login screen's music on and off, at its top right. It's the login screen's alone: the
- * game's Music and Sound options are set in the game. It starts off each time the page loads, so
- * the music never starts by itself: turning it on starts it.
+ * Ours: the login screen's music on and off, at its top right: its own setting (Intro.tsx), apart
+ * from the game's Music and Sound options. Off until a player turns it on; remembered after that.
  */
 function AudioToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
   const label = on ? "Turn the music off" : "Turn the music on";
@@ -120,7 +119,7 @@ export function LoginScreen({
   onLogin: (u: string, p: string) => void;
   error: string | null;
   onClearError: () => void;
-  /** Ours: whether the login screen's music was turned on since the page loaded (AudioToggle); without them, there's no music and no toggle */
+  /** Ours: the login screen's music setting (AudioToggle); without them, there's no music and no toggle */
   music?: boolean;
   onMusic?: (on: boolean) => void;
 }) {

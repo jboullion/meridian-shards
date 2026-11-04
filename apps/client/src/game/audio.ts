@@ -417,11 +417,12 @@ export class GameAudio {
 
   /**
    * Ours: the login screen's music is on and off by its own toggle (LoginScreen.tsx AudioToggle),
-   * whatever the Music option says; null goes by the option, as the game does.
+   * at full volume, whatever the game's Music option and volume say; null goes by the options,
+   * as the game does.
    */
   private ownMusic: boolean | null = null;
 
-  /** Ours: the login screen's toggle; the Music option is left as it is */
+  /** Ours: the login screen's toggle; the game's options are left as they are */
   setOwnMusic(on: boolean): void {
     this.ownMusic = on;
     if (!on) this.stopMusic();
@@ -432,6 +433,11 @@ export class GameAudio {
     return this.ownMusic ?? this.settings.music;
   }
 
+  /** The music's gain: full for the login screen's, else the Music volume */
+  private musicLevel(): number {
+    return this.ownMusic === null ? this.settings.musicVolume / 100 : 1;
+  }
+
   private async playMusic(file: string, fadeInMs = 0): Promise<void> {
     const name = file.toLowerCase();
     this.wantedMusic = name;
@@ -439,7 +445,7 @@ export class GameAudio {
     this.stopMusic();
     const ctx = this.context();
     const gain = ctx.createGain();
-    gain.gain.value = this.settings.musicVolume / 100;
+    gain.gain.value = this.musicLevel();
     gain.connect(this.master!);
     const entry: NonNullable<GameAudio["music"]> = { file: name, source: null, gain };
     this.music = entry;
@@ -452,7 +458,7 @@ export class GameAudio {
     if (fadeInMs > 0) {
       const t = ctx.currentTime;
       gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(this.settings.musicVolume / 100, t + fadeInMs / 1000);
+      gain.gain.linearRampToValueAtTime(this.musicLevel(), t + fadeInMs / 1000);
     }
     src.start();
     entry.source = src;
@@ -539,12 +545,12 @@ export class GameAudio {
   private setSettings(s: Settings): void {
     const prev = this.settings;
     this.settings = s;
-    if (this.music && s.musicVolume !== prev.musicVolume) {
-      // Ends a fade-in (fadeInMusic) at the new volume
-      this.music.gain.gain.cancelScheduledValues(0);
-      this.music.gain.gain.value = s.musicVolume / 100;
-    }
     if (this.ownMusic === null) {
+      if (this.music && s.musicVolume !== prev.musicVolume) {
+        // Ends a fade-in (fadeInMusic) at the new volume
+        this.music.gain.gain.cancelScheduledValues(0);
+        this.music.gain.gain.value = s.musicVolume / 100;
+      }
       if (!s.music) this.stopMusic();
       else if (!prev.music && this.wantedMusic) void this.playMusic(this.wantedMusic);
     }
