@@ -129,6 +129,8 @@ for (const f of ["kodbase.txt", "blakston.khd", "protocol.khd"]) {
 }
 // The message of the day (server/config/motd.txt): blakserv moves it into memmap/ at startup
 copy(join(ROOT, "server", "config", "motd.txt"), join(STAGE, "gamedata", "motd.txt"));
+// The old client's download list: none, but blakserv logs an error at every start without the file
+writeFileSync(join(STAGE, "gamedata", "packages.txt"), "");
 
 // Linux file names are case-sensitive and Kod names rooms as it likes ("RazaBank.roo"
 // for razabank.roo). Windows can't hold both spellings, so list them in room-aliases.txt
