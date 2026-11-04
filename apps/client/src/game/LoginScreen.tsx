@@ -1,8 +1,8 @@
 // The login dialog (clientd3d/login.c LoginDialogProc, client.rc IDD_LOGIN 251 x 175 DLU) on
 // the tiled background. Our server makes an account the first time a name logs in, so the
-// "New to ..." box says so, as the Server 104 template does. In the browser there's one server
-// (the page's own), so the Server field is left out and the box moves up; the desktop app has
-// the template's Server field as a drop-down of the servers it knows.
+// "New to ..." box says so, as the Server 104 template does. There's one server (ours), so the
+// template's Server field is left out everywhere (the browser, the desktop and Android apps)
+// and the box moves up.
 //
 // Ours: the backgrounds (Intro.tsx) behind it all, with the game's logo over them and a Log in
 // button near the bottom; the dialog fades in over it all from the button (or Enter), moving
@@ -14,48 +14,29 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { AssetStore } from "../assets.ts";
 import logoUrl from "../icons/logo.webp";
-import { desktop, devPagesEnabled, isAndroid, type DesktopBridge, type DesktopUpdate, type RequiredUpdate } from "../host.ts";
+import { desktop, devPagesEnabled, isAndroid, type DesktopUpdate, type RequiredUpdate } from "../host.ts";
 import { getSettings, onSettings, updateSettings } from "./settings.ts";
 import { useInstallOffer } from "../webApp.ts";
-import { Backdrop, Button, GroupBox, MessageBox, Select, Text, TextField, Window, at, type Rect } from "./ui/kit.tsx";
+import { Backdrop, Button, GroupBox, MessageBox, Text, TextField, Window, at, type Rect } from "./ui/kit.tsx";
 
 /** Password resets and linking an email (docs/adr/0030-account-recovery.md) are on the website: the
  * page's own in a browser, the live site's in the apps (their page isn't on the site) */
 const FORGOT_URL = "https://m59-shards.com/account/forgot/";
 
-/** Control rectangles: client.rc IDD_LOGIN (251 x 175, a little roomier) for the desktop, the same less the Server row for the browser. */
-const LAYOUT = desktop
-  ? {
-      // Ours: 3 DLU more between the name and the password, 6 more before the Server
-      size: [251, 184] as const,
-      intro: [36, 6, 206, 18] as Rect,
-      newBox: [37, 33, 207, 49] as Rect,
-      newText: [45, 49, 190, 29] as Rect,
-      accountBox: [37, 94, 207, 78] as Rect,
-      nameLabel: [43, 110, 48, 10] as Rect,
-      name: [93, 107, 143, 13] as Rect,
-      passLabel: [43, 126, 48, 10] as Rect,
-      pass: [93, 124, 143, 13] as Rect,
-      serverLabel: [43, 148, 48, 10] as Rect,
-      server: [93, 146, 143, 13] as Rect,
-      ok: [137, 164, 100, 14] as Rect,
-      forgot: [37, 167, 95, 10] as Rect,
-    }
-  : {
-      size: [251, 160] as const,
-      intro: [36, 6, 206, 18] as Rect,
-      newBox: [37, 31, 207, 49] as Rect,
-      newText: [45, 47, 190, 29] as Rect,
-      accountBox: [37, 88, 207, 66] as Rect,
-      nameLabel: [43, 105, 48, 10] as Rect,
-      name: [93, 102, 143, 13] as Rect,
-      passLabel: [43, 121, 48, 10] as Rect,
-      pass: [93, 118, 143, 13] as Rect,
-      serverLabel: null,
-      server: null,
-      ok: [137, 136, 100, 14] as Rect,
-      forgot: [37, 139, 95, 10] as Rect,
-    };
+/** Control rectangles: client.rc IDD_LOGIN (251 x 175), less the Server row. */
+const LAYOUT = {
+  size: [251, 160] as const,
+  intro: [36, 6, 206, 18] as Rect,
+  newBox: [37, 31, 207, 49] as Rect,
+  newText: [45, 47, 190, 29] as Rect,
+  accountBox: [37, 88, 207, 66] as Rect,
+  nameLabel: [43, 105, 48, 10] as Rect,
+  name: [93, 102, 143, 13] as Rect,
+  passLabel: [43, 121, 48, 10] as Rect,
+  pass: [93, 118, 143, 13] as Rect,
+  ok: [137, 136, 100, 14] as Rect,
+  forgot: [37, 139, 95, 10] as Rect,
+};
 
 /** The login names used before, newest first (localStorage `shards.usernames`) */
 const NAMES_KEY = "shards.usernames";
@@ -199,9 +180,6 @@ export function LoginScreen({
                 autoFocus={!!username}
                 autoComplete="current-password"
               />
-              {desktop && LAYOUT.serverLabel && LAYOUT.server && (
-                <ServerField desktop={desktop} label={LAYOUT.serverLabel} field={LAYOUT.server} />
-              )}
               <Text at={LAYOUT.forgot} className="login-forgot">
                 <a href={FORGOT_URL} target="_blank" rel="noopener">
                   Forgot your password?
@@ -343,21 +321,6 @@ function NameField({
         </ul>
       )}
     </span>
-  );
-}
-
-/** The template's Server field: the desktop app's servers; picking one reloads with its files. */
-function ServerField({ desktop, label, field }: { desktop: DesktopBridge; label: Rect; field: Rect }) {
-  return (
-    <>
-      <Text at={label}>Server:</Text>
-      <Select
-        at={field}
-        value={desktop.server}
-        options={desktop.servers.map((s) => ({ key: s.origin, label: s.name }))}
-        onChange={(origin) => desktop.selectServer(origin)}
-      />
-    </>
   );
 }
 

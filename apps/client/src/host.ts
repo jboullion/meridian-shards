@@ -4,7 +4,8 @@
 // (/assets and /ws on the page's host). In the apps the page is app://shards or
 // https://localhost, the native side serves /assets from the chosen server, and the game
 // socket goes straight to that server's /ws. Both apps give the page a DesktopBridge, so
-// `desktop` below means "an app with a server list", whichever platform it is.
+// `desktop` below means "one of the apps", whichever platform it is. There's no choosing a
+// server: the apps always use ours (the desktop's /H can point a run elsewhere, for testing).
 
 import { apkOf, detectPlatform, installerOf, parseRelease, webBundleOf, type Platform, type Release } from "./updates.ts";
 
@@ -79,7 +80,7 @@ export interface DesktopLaunch {
 
 export interface DesktopConfig {
   version: string;
-  /** Set on the window's first page only (a reload, such as switching servers, doesn't get it) */
+  /** Set on the window's first page only (a reload doesn't get it) */
   launch?: DesktopLaunch | null;
   /** Running against the Vite dev server (npm run desktop) */
   dev: boolean;
@@ -90,8 +91,6 @@ export interface DesktopConfig {
 }
 
 export interface DesktopBridge extends DesktopConfig {
-  /** Remembers the choice and reloads the page, so the files come from the new server. */
-  selectServer(origin: string): void;
   /** The session phase, so closing the window mid-game can ask first. */
   setPhase(phase: string): void;
   toggleFullscreen(): void;
@@ -246,10 +245,6 @@ function androidBridge(a: AndroidHost): DesktopBridge {
   }
   return {
     ...config,
-    selectServer: (origin) => {
-      // The page's files (manifest, rsc0000.rsb, rooms) come from the server: start over
-      if (origin !== config.server && a.selectServer(origin)) location.reload();
-    },
     setPhase: (phase) => a.setPhase(phase),
     toggleFullscreen: () => {},
     onUpdate: (fn) => {

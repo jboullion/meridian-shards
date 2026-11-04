@@ -107,7 +107,7 @@ New characters start in the Inn of Raza, so the starting zone is the slice zone.
 - [x] `apps/desktop`: the page is `app://shards/`, with the client build and a caching proxy for the selected server's `/assets/`.
   - No reload or close shortcuts, no background throttling, sound without a click, F11 / Alt+Enter fullscreen, and the window remembered.
   - "Log off and quit?" when closing mid-game.
-- [x] The login dialog's Server field (the original `IDD_LOGIN` had one): Shards VM, Local (Docker), Local (dev), plus any in `servers.json`.
+- [x] The login dialog's Server field (the original `IDD_LOGIN` had one): Shards VM, Local (Docker), Local (dev), plus any in `servers.json`. Removed 2026-11-04: every client logs into our server (the desktop's `/H` still points a run elsewhere for testing).
 - [x] Tested on Windows on 2026-10-07:
   - logged in through the dev app and the packaged app (`app://`) and entered the Inn of Raza on the local server;
   - the VM's files load and the cache serves them on the next launch;

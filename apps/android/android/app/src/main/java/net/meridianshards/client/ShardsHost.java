@@ -20,7 +20,7 @@ import org.json.JSONObject;
  */
 public class ShardsHost {
 
-    static final String VM_ORIGIN = "https://35-206-75-121.sslip.io";
+    static final String VM_ORIGIN = "https://m59-shards.com";
     static final String DEV_ORIGIN = "http://localhost:5173";
     private static final String PREFS = "shards";
     private static final String KEY_SERVER = "server";

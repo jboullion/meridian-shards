@@ -1,6 +1,6 @@
 // The desktop app's own settings, in userData (%APPDATA%\Meridian Shards on Windows):
-//   settings.json  the chosen server and the window's size, position and state
-//   servers.json   optional extra servers, [{ "name": "...", "origin": "https://..." }]
+//   settings.json  the window's size, position and state
+// There's one server, ours (the command line's /H can point a run elsewhere, for testing).
 // Game settings (keys, sound) stay in the page's localStorage, as in the browser.
 
 import { app } from "electron";
@@ -10,15 +10,9 @@ import type { DesktopServer } from "../../client/src/host.ts";
 import { log } from "./log.ts";
 
 /** Our hosted server; the update feed lives on it too (deploy/README.md). */
-export const VM_ORIGIN = "https://35-206-75-121.sslip.io";
+export const VM_ORIGIN = "https://m59-shards.com";
 
-const DEFAULT_SERVERS: DesktopServer[] = [
-  { name: "Shards VM", origin: VM_ORIGIN },
-  // deploy/ run locally (docker compose with HTTP_PORT=8080)
-  { name: "Local (Docker)", origin: "http://localhost:8080" },
-  // npm run dev: Vite serves /assets and proxies /ws to the gateway
-  { name: "Local (dev)", origin: "http://localhost:5173" },
-];
+const SERVERS: DesktopServer[] = [{ name: "Meridian Shards", origin: VM_ORIGIN }];
 
 export interface WindowState {
   x?: number;
@@ -30,7 +24,6 @@ export interface WindowState {
 }
 
 interface Settings {
-  server?: string;
   window?: WindowState;
 }
 
@@ -42,16 +35,6 @@ function readJson<T>(name: string): T | undefined {
   } catch (e) {
     log(`${name}: ${(e as Error).message}`);
     return undefined;
-  }
-}
-
-/** "https://host:port" for an http(s) URL, else null. */
-export function normalizeOrigin(url: string): string | null {
-  try {
-    const u = new URL(url);
-    return u.protocol === "http:" || u.protocol === "https:" ? `${u.protocol}//${u.host}` : null;
-  } catch {
-    return null;
   }
 }
 
@@ -71,29 +54,13 @@ function save(): void {
   }
 }
 
-/** The built-in servers plus any in servers.json. */
+/** Ours, the only one. */
 export function servers(): DesktopServer[] {
-  const extra = readJson<unknown>("servers.json");
-  const list = [...DEFAULT_SERVERS];
-  if (Array.isArray(extra))
-    for (const s of extra as Partial<DesktopServer>[]) {
-      const origin = typeof s?.origin === "string" ? normalizeOrigin(s.origin) : null;
-      if (origin && !list.some((l) => l.origin === origin)) list.push({ name: String(s.name ?? origin), origin });
-    }
-  return list;
+  return [...SERVERS];
 }
 
 export function selectedServer(): string {
-  const list = servers();
-  const s = current().server;
-  return list.find((l) => l.origin === s)?.origin ?? list[0].origin;
-}
-
-export function selectServer(origin: string): boolean {
-  if (!servers().some((s) => s.origin === origin)) return false;
-  current().server = origin;
-  save();
-  return true;
+  return VM_ORIGIN;
 }
 
 export function windowState(): WindowState | undefined {

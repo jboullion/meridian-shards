@@ -15,8 +15,8 @@ describe("the original's command line (config.c ConfigOverride)", () => {
   });
 
   test("/H picks a listed server by host (and port), else https (http for localhost)", () => {
-    const listed = [{ origin: "https://35-206-75-121.sslip.io" }, { origin: "http://localhost:5173" }, { origin: "http://localhost:8080" }];
-    expect(serverFromCommandLine({ host: "35-206-75-121.sslip.io", quickstart: false }, listed)).toBe("https://35-206-75-121.sslip.io");
+    const listed = [{ origin: "https://m59-shards.com" }, { origin: "http://localhost:5173" }, { origin: "http://localhost:8080" }];
+    expect(serverFromCommandLine({ host: "m59-shards.com", quickstart: false }, listed)).toBe("https://m59-shards.com");
     expect(serverFromCommandLine({ host: "localhost", port: 8080, quickstart: false }, listed)).toBe("http://localhost:8080");
     expect(serverFromCommandLine({ host: "localhost", port: 9000, quickstart: false }, listed)).toBe("http://localhost:9000");
     expect(serverFromCommandLine({ host: "example.org", quickstart: false }, listed)).toBe("https://example.org");

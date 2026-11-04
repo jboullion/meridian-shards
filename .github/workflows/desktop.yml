@@ -22,7 +22,7 @@ permissions:
   contents: write
 
 env:
-  ASSETS_FROM: https://35-206-75-121.sslip.io
+  ASSETS_FROM: https://m59-shards.com
 
 jobs:
   # One draft for the three builds to upload into (each making its own can race into duplicates)

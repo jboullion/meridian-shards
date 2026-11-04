@@ -30,7 +30,6 @@ ipcRenderer.on("shards:window-state", (_e, s: DesktopWindowState) => {
 
 const bridge: DesktopBridge = {
   ...config,
-  selectServer: (origin) => ipcRenderer.send("shards:select-server", origin),
   setPhase: (phase) => ipcRenderer.send("shards:phase", phase),
   toggleFullscreen: () => ipcRenderer.send("shards:fullscreen"),
   onUpdate: (fn) => {

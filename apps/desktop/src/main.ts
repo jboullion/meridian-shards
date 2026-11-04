@@ -29,7 +29,7 @@ import type { DesktopAssetProgress, DesktopConfig, DesktopLaunch, DesktopUpdate 
 import { AssetCache, type DownloadRun } from "./assetCache.ts";
 import { parseCommandLine, serverFromCommandLine } from "./commandLine.ts";
 import { log } from "./log.ts";
-import { saveWindowState, selectServer, selectedServer, servers, windowState } from "./settings.ts";
+import { saveWindowState, selectedServer, servers, windowState } from "./settings.ts";
 
 const DEV_URL = process.env.SHARDS_DEV_URL;
 const DEVTOOLS = !!DEV_URL || process.argv.includes("--devtools");
@@ -40,8 +40,8 @@ const APP_URL = `${SCHEME}://${HOST}/`;
 // The original's command line (/H /P /U /W /Q): after the executable, and in development
 // after the app's path too
 const commandLine = parseCommandLine(process.argv.slice(app.isPackaged ? 1 : 2));
-/** /H and /P choose the server for this run, without changing the saved choice */
-let launchServer = DEV_URL ? null : serverFromCommandLine(commandLine, servers());
+/** /H and /P choose the server for this run (for testing against another) */
+const launchServer = DEV_URL ? null : serverFromCommandLine(commandLine, servers());
 /** /U, /W and /Q go to the first page only */
 let launch: DesktopLaunch | null =
   commandLine.username || commandLine.password || commandLine.quickstart
@@ -317,14 +317,6 @@ function setupIpc(): void {
       else if (win.isMaximized()) win.unmaximize();
       else win.maximize();
     } else if (action === "close") win.close();
-  });
-  ipcMain.on("shards:select-server", (_e, origin: unknown) => {
-    if (DEV_URL || typeof origin !== "string" || origin === currentServer()) return;
-    if (!selectServer(origin)) return;
-    launchServer = null;
-    log(`server: ${origin}`);
-    // The page's files (manifest, rsc0000.rsb, rooms) come from the server: start over
-    win?.webContents.reload();
   });
   ipcMain.on("shards:install-update", () => {
     if (update?.state && update.state !== "ready") return;
