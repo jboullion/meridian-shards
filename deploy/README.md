@@ -98,7 +98,7 @@ npm run ship -- -m "What changed"
 `tools/deploy/ship.ts`:
 - builds the server (`server\build.cmd`: the quests, the Kod, blakserv) and the game files, and runs `npm run check`;
 - commits whatever changed in both repositories (meridian-browser and shards-server, through `server/src`) with that message, and pushes both;
-- on the VM, saves the game, then deploys with `push.ts`. The game files go up only when they changed since the last ship;
+- on the VM, saves the game, then deploys with `push.ts`. The game files go up only when they changed since the last ship. `push.ts` builds the Docker images on this PC (Docker Desktop must be running) and uploads only the ones whose image ID differs from the VM's, about 50 MB for blakserv; the VM just loads and starts them. Building on the VM thrashed the e2-micro to a standstill on 2026-11-03. `--build-on-vm` on `push.ts` builds there as before;
 - waits for blakserv to listen again, then `Recreate`s every room built from a `.roo` that changed since the last ship (`dist/assets/rooms.json` maps files to rooms). With no record yet, it compares against shards-server as it was at the last release tag;
 - writes what it shipped to `~/.meridian-shards/last-ship.json`.
 
@@ -128,7 +128,7 @@ From the repo root on your PC:
 node tools/deploy/push.ts --host shards@<EXTERNAL_IP> --key $HOME/.ssh/meridian_shards
 ```
 
-The first push uploads about 450 MB (mostly the game assets). For code-only updates add `--skip-assets`. To update only the browser client, the website and Caddy's config, add `--web-only`: it rebuilds the client and the website, recreates only the `web` container and leaves blakserv and the gateway running, so nobody is disconnected. The first start takes a minute: Docker builds blakserv, and Caddy fetches the certificate. Then open `https://<dashed-ip>.sslip.io`, which should show the website, and `/play/`, which should show the browser client's log on screen.
+The first push uploads about 450 MB (mostly the game assets). For code-only updates add `--skip-assets`. To update only the browser client, the website and Caddy's config, add `--web-only`: it rebuilds the client and the website, recreates only the `web` container and leaves blakserv and the gateway running, so nobody is disconnected. The first start takes a minute while Caddy fetches the certificate. Then open `https://<dashed-ip>.sslip.io`, which should show the website, and `/play/`, which should show the browser client's log on screen.
 
 `stage.ts` builds the website from `../meridian-shards-website` (or the folder in `SHARDS_SITE`; run `npm install` there once). `SITE_URL`, the site's `https://` origin (`https://m59-shards.com`), turns on canonical URLs, the sitemap and indexing; it comes from the environment, or from `.env` beside `SHARDS_DEPLOY_HOST`. `--skip-site` leaves it out.
 
