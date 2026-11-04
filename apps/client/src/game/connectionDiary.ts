@@ -1,4 +1,4 @@
-// Why a connection dropped (ours). The server hangs up a session it hasn't heard from for 120 s
+// Why a connection dropped (ours). The server hangs up a session it hasn't heard from for 30 minutes
 // (blakserv.cfg [Inactive] Game; game.c GameProcessSessionTimer). The page pings every 5 s from
 // a worker (pingWorker.ts), so silence means the page itself stopped: hidden on a phone, frozen in
 // the background by the browser, or the computer asleep. The diary keeps the page's hidden,
