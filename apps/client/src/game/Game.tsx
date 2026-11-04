@@ -8,7 +8,7 @@ import type { RsbBundle } from "@shards/formats";
 import type { AssetStore } from "../assets.ts";
 import { allowPortrait, desktop, gameSocketUrl, onAndroidAway, requiredUpdate, unreachableMessage, type RequiredUpdate } from "../host.ts";
 import { GameAudio } from "./audio.ts";
-import { IntroBackdrop } from "./Intro.tsx";
+import { IntroBackdrop, setLoginMusic } from "./Intro.tsx";
 import { CharacterCreator } from "./CharacterCreator.tsx";
 import { AssetDownload } from "./AssetDownload.tsx";
 import { CharacterSelect } from "./CharacterSelect.tsx";
@@ -158,6 +158,13 @@ export function Game({
   const [intro, setIntro] = useState(() => launch?.quickstart !== true);
   /** Plays the splash's music (main.ogg) until logging on, as the intro module does until it unloads */
   const [introAudio, setIntroAudio] = useState<GameAudio | null>(() => new GameAudio(assets));
+  /** Ours: the login screen's music toggle, off until turned on; the game's Music option is its own (LoginScreen.tsx AudioToggle) */
+  const [loginMusic, setLoginMusicOn] = useState(false);
+  const toggleLoginMusic = (on: boolean) => {
+    setLoginMusicOn(on);
+    // In the click itself, so the browser lets it play
+    if (introAudio) setLoginMusic(introAudio, on);
+  };
 
   /** Ours: a newer version that must be installed before logging in (host.ts requiredUpdate) */
   const [required, setRequired] = useState<RequiredUpdate | null>(null);
@@ -398,7 +405,9 @@ export function Game({
           onClearError={() => setError(null)}
           initialUsername={launch?.username}
           initialPassword={launch?.password}
-          behind={intro ? <IntroBackdrop assets={assets} audio={introAudio} /> : undefined}
+          behind={intro ? <IntroBackdrop assets={assets} audio={introAudio} music={loginMusic} /> : undefined}
+          music={loginMusic}
+          onMusic={toggleLoginMusic}
         />
         <AssetDownload />
       </Framed>

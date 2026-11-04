@@ -1,6 +1,8 @@
 // The intro module (module/intro/intro.c IntroShowSplash): the picture behind the login dialog,
-// and the main theme (main.ogg), at once and fading in over 1 s (intro.c waits 3 s and starts it
-// at full volume). It's behind the login dialog at startup and after logging off.
+// and the main theme (main.ogg), fading in over 1 s (intro.c waits 3 s and starts it at full
+// volume). It's behind the login dialog at startup and after logging off. Ours: the music waits
+// for the login screen's sound toggle (LoginScreen.tsx AudioToggle), so nobody is startled and
+// the browser lets it play (it's started by that click).
 //
 // Unlike the original, there's no logo first (logo.bmp is Near Death Studios' logo), and there's
 // no "Click here to log on!" button: the login dialog is open over the picture from the start
@@ -26,8 +28,17 @@ const SPLASH = "xsplash.bgf";
 const HOLD_MS = 6000;
 const FADE_MS = 1500;
 
-/** The picture filling the screen behind the login dialog, and its music */
-export function IntroBackdrop({ assets, audio }: { assets: AssetStore; audio: GameAudio | null }) {
+/**
+ * The splash's music on or off (PlayMusicProc), by the login screen's toggle and not the Music
+ * option; called from the toggle's click, so the browser lets it play.
+ */
+export function setLoginMusic(audio: GameAudio, on: boolean): void {
+  audio.setOwnMusic(on);
+  if (on) audio.fadeInMusic(SPLASH_MUSIC, MUSIC_FADE_IN);
+}
+
+/** The picture filling the screen behind the login dialog, and its music once the login screen's toggle turns it on */
+export function IntroBackdrop({ assets, audio, music }: { assets: AssetStore; audio: GameAudio | null; music: boolean }) {
   /** The backgrounds for this layout; null until known, empty for the original's splash */
   const [pictures, setPictures] = useState<string[] | null>(null);
 
@@ -48,10 +59,8 @@ export function IntroBackdrop({ assets, audio }: { assets: AssetStore; audio: Ga
   }, [assets]);
 
   useEffect(() => {
-    if (!audio) return;
-    // PlayMusicProc (GameAudio checks the Music option)
-    audio.fadeInMusic(SPLASH_MUSIC, MUSIC_FADE_IN);
-  }, [audio]);
+    if (audio) setLoginMusic(audio, music);
+  }, [audio, music]);
 
   if (!pictures) return null;
   return pictures.length ? <Slideshow assets={assets} pictures={pictures} /> : <SplashPicture assets={assets} />;

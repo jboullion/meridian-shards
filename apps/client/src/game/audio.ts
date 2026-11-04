@@ -415,10 +415,27 @@ export class GameAudio {
     void this.playMusic(file, fadeInMs);
   }
 
+  /**
+   * Ours: the login screen's music is on and off by its own toggle (LoginScreen.tsx AudioToggle),
+   * whatever the Music option says; null goes by the option, as the game does.
+   */
+  private ownMusic: boolean | null = null;
+
+  /** Ours: the login screen's toggle; the Music option is left as it is */
+  setOwnMusic(on: boolean): void {
+    this.ownMusic = on;
+    if (!on) this.stopMusic();
+    else if (this.wantedMusic) void this.playMusic(this.wantedMusic);
+  }
+
+  private musicOn(): boolean {
+    return this.ownMusic ?? this.settings.music;
+  }
+
   private async playMusic(file: string, fadeInMs = 0): Promise<void> {
     const name = file.toLowerCase();
     this.wantedMusic = name;
-    if (!this.settings.music || this.music?.file === name) return;
+    if (!this.musicOn() || this.music?.file === name) return;
     this.stopMusic();
     const ctx = this.context();
     const gain = ctx.createGain();
@@ -527,8 +544,10 @@ export class GameAudio {
       this.music.gain.gain.cancelScheduledValues(0);
       this.music.gain.gain.value = s.musicVolume / 100;
     }
-    if (!s.music) this.stopMusic();
-    else if (!prev.music && this.wantedMusic) void this.playMusic(this.wantedMusic);
+    if (this.ownMusic === null) {
+      if (!s.music) this.stopMusic();
+      else if (!prev.music && this.wantedMusic) void this.playMusic(this.wantedMusic);
+    }
     if (!s.sound) this.stopWhere(() => true);
     if (!s.loopSounds) this.stopWhere((v) => (v.flags & SF.LOOP) !== 0);
     if (!s.randomSounds) this.stopWhere((v) => (v.flags & SF.RANDOM_PLACE) !== 0);

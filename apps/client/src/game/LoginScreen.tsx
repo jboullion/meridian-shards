@@ -15,7 +15,6 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { AssetStore } from "../assets.ts";
 import logoUrl from "../icons/logo.webp";
 import { desktop, devPagesEnabled, isAndroid, type DesktopUpdate, type RequiredUpdate } from "../host.ts";
-import { getSettings, onSettings, updateSettings } from "./settings.ts";
 import { useInstallOffer } from "../webApp.ts";
 import { Backdrop, Button, GroupBox, MessageBox, Text, TextField, Window, at, type Rect } from "./ui/kit.tsx";
 
@@ -76,17 +75,12 @@ function forgetName(name: string): string[] {
 }
 
 /**
- * Ours: the login screen's sound on and off, at its top right: the music and the sounds together
- * (the Options' Music and Sound), so the choice holds in the game too.
+ * Ours: the login screen's music on and off, at its top right. It's the login screen's alone: the
+ * game's Music and Sound options are set in the game. It starts off each time the page loads, so
+ * the music never starts by itself: turning it on starts it.
  */
-function AudioToggle() {
-  const audible = () => {
-    const s = getSettings();
-    return s.music || s.sound;
-  };
-  const [on, setOn] = useState(audible);
-  useEffect(() => onSettings(() => setOn(audible())), []);
-  const label = on ? "Turn the sound off" : "Turn the sound on";
+function AudioToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  const label = on ? "Turn the music off" : "Turn the music on";
   return (
     <button
       type="button"
@@ -95,7 +89,7 @@ function AudioToggle() {
       aria-pressed={!on}
       title={label}
       onClick={(e) => {
-        updateSettings({ music: !on, sound: !on });
+        onChange(!on);
         // Don't keep the focus: Enter goes on opening the login
         e.currentTarget.blur();
       }}
@@ -113,7 +107,7 @@ function AudioToggle() {
 }
 
 export function LoginScreen({
-  assets, required, onLogin, error, onClearError, initialUsername, initialPassword, behind,
+  assets, required, onLogin, error, onClearError, initialUsername, initialPassword, behind, music, onMusic,
 }: {
   assets: AssetStore;
   /** Ours: a newer version to install before anyone can log in (host.ts requiredUpdate) */
@@ -126,6 +120,9 @@ export function LoginScreen({
   onLogin: (u: string, p: string) => void;
   error: string | null;
   onClearError: () => void;
+  /** Ours: whether the login screen's music was turned on since the page loaded (AudioToggle); without them, there's no music and no toggle */
+  music?: boolean;
+  onMusic?: (on: boolean) => void;
 }) {
   const [names, setNames] = useState(savedNames);
   const [username, setUsername] = useState(() => initialUsername ?? names[0] ?? "");
@@ -218,7 +215,7 @@ export function LoginScreen({
           {desktop && update && <UpdateNotice update={update} install={() => desktop?.installUpdate()} />}
         </p>
       </div>
-      <AudioToggle />
+      {onMusic && <AudioToggle on={!!music} onChange={onMusic} />}
       {error && !required && <MessageBox text={error} onResult={onClearError} />}
       {required && <UpdateRequired required={required} update={update} />}
     </Backdrop>
