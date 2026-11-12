@@ -3188,8 +3188,8 @@ export class GameScene {
         d.moved = true;
         // No cursor while it turns the view (styles.css .viewport[data-turning])
         this.canvas.setAttribute("data-turning", "");
-        // Let go before the lock came: free it again
-        this.canvas.requestPointerLock().then(() => { if (!this.rightDrag && this.locked) document.exitPointerLock(); }, () => {});
+        // Let go before the lock came: free it again. (Older Safari returns no promise: hence resolve)
+        Promise.resolve(this.canvas.requestPointerLock()).then(() => { if (!this.rightDrag && this.locked) document.exitPointerLock(); }, () => {});
       }
       if (d.moved) this.look(e.movementX, e.movementY);
       return;

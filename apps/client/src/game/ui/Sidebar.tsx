@@ -512,8 +512,17 @@ export function PortraitIcon({ icons, object }: { icons: IconRenderer; object: O
     watch();
     window.addEventListener("resize", fit);
     const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => fit());
-    // device-pixel-content-box: the box's size in device pixels, which HUD Size's zoom changes
-    if (imgRef.current?.parentElement) ro?.observe(imgRef.current.parentElement, { box: "device-pixel-content-box" });
+    // device-pixel-content-box: the box's size in device pixels, which HUD Size's zoom changes.
+    // Safari has no such box and throws (a TypeError that crashed the game on iPhones and iPads):
+    // there the plain box, and HUD Size's redraw (the effect below) does the rest
+    const box = imgRef.current?.parentElement;
+    if (box && ro) {
+      try {
+        ro.observe(box, { box: "device-pixel-content-box" });
+      } catch {
+        ro.observe(box);
+      }
+    }
     return () => {
       mq?.removeEventListener("change", onDpr);
       window.removeEventListener("resize", fit);
